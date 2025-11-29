@@ -9,10 +9,6 @@ const toolLabels: Record<Tool, string> = {
   [Tool.Road]: 'Road',
   [Tool.Rail]: 'Rail',
   [Tool.PowerLine]: 'Power',
-  [Tool.HydroPlant]: 'Hydro',
-  [Tool.CoalPlant]: 'Coal',
-  [Tool.WindTurbine]: 'Wind',
-  [Tool.SolarFarm]: 'Solar',
   [Tool.WaterPump]: 'Pump',
   [Tool.Residential]: 'Res',
   [Tool.Commercial]: 'Com',
@@ -23,14 +19,6 @@ const toolLabels: Record<Tool, string> = {
 
 export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void, initial: Tool) {
   toolbar.innerHTML = '';
-  let powerMenu: HTMLDivElement | null = null;
-  let powerHoldTimer: number | null = null;
-
-  const closePowerMenu = () => {
-    powerMenu?.remove();
-    powerMenu = null;
-  };
-
   const powerOptions: Tool[] = [
     Tool.PowerLine,
     Tool.HydroPlant,
@@ -39,66 +27,53 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     Tool.SolarFarm
   ];
 
-  const createPowerMenu = (anchor: HTMLElement) => {
-    closePowerMenu();
-    const menu = document.createElement('div');
-    menu.className = 'power-menu';
-    powerOptions.forEach((tool) => {
-      const item = document.createElement('button');
-      item.textContent = toolLabels[tool];
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onSelect(tool);
-        closePowerMenu();
-        updateToolbar(toolbar, tool);
-      });
-      menu.appendChild(item);
-    });
-    const rect = anchor.getBoundingClientRect();
-    menu.style.left = `${rect.left}px`;
-    menu.style.top = `${rect.bottom + 4}px`;
-    document.body.appendChild(menu);
-    powerMenu = menu;
-  };
+  const primaryRow = document.createElement('div');
+  primaryRow.className = 'toolbar-row';
+  const powerRow = document.createElement('div');
+  powerRow.className = 'toolbar-sub';
+  toolbar.appendChild(primaryRow);
+  toolbar.appendChild(powerRow);
 
-  document.addEventListener('click', () => closePowerMenu());
+  const primaryTools = (Object.values(Tool) as Tool[]).filter(
+    (t) =>
+      ![Tool.HydroPlant, Tool.CoalPlant, Tool.WindTurbine, Tool.SolarFarm].includes(t)
+  );
 
-  (Object.values(Tool) as Tool[]).forEach((key) => {
+  primaryTools.forEach((key) => {
     const button = document.createElement('button');
     button.className = 'tool-button';
     button.textContent = toolLabels[key];
     button.dataset.tool = key;
-    if (key === Tool.PowerLine) {
-      button.addEventListener('pointerdown', () => {
-        powerHoldTimer = window.setTimeout(() => {
-          createPowerMenu(button);
-        }, 350);
-      });
-      button.addEventListener('pointerup', () => {
-        if (powerHoldTimer) {
-          clearTimeout(powerHoldTimer);
-          powerHoldTimer = null;
-          if (!powerMenu) {
-            onSelect(Tool.PowerLine);
-            updateToolbar(toolbar, Tool.PowerLine);
-          }
-        }
-      });
-      button.addEventListener('pointerleave', () => {
-        if (powerHoldTimer) {
-          clearTimeout(powerHoldTimer);
-          powerHoldTimer = null;
-        }
-      });
-    } else {
-      button.addEventListener('click', () => {
-        onSelect(key);
-        updateToolbar(toolbar, key);
-        closePowerMenu();
-      });
-    }
-    toolbar.appendChild(button);
+    button.addEventListener('click', () => {
+      onSelect(key);
+      updateToolbar(toolbar, key);
+      powerRow.style.display = key === Tool.PowerLine ? 'flex' : 'none';
+    });
+    primaryRow.appendChild(button);
   });
+
+  powerOptions.forEach((key) => {
+    const button = document.createElement('button');
+    button.className = 'tool-sub-button';
+    button.textContent = toolLabels[key];
+    button.dataset.tool = key;
+    button.addEventListener('click', () => {
+      onSelect(key);
+      updateToolbar(toolbar, key);
+      powerRow.style.display = 'flex';
+    });
+    powerRow.appendChild(button);
+  });
+
+  powerRow.style.display =
+    initial === Tool.PowerLine ||
+    initial === Tool.HydroPlant ||
+    initial === Tool.CoalPlant ||
+    initial === Tool.WindTurbine ||
+    initial === Tool.SolarFarm
+      ? 'flex'
+      : 'none';
+
   updateToolbar(toolbar, initial);
 }
 
@@ -113,5 +88,9 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
       active === Tool.SolarFarm;
     const isActive = key === active || (activePower && key === Tool.PowerLine);
     btn.classList.toggle('active', isActive);
+  });
+  toolbar.querySelectorAll('.tool-sub-button').forEach((btn) => {
+    const key = btn.getAttribute('data-tool');
+    btn.classList.toggle('active', key === active);
   });
 }
