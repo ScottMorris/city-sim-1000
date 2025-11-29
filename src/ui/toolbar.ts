@@ -8,7 +8,7 @@ const toolLabels: Record<Tool, string> = {
   [Tool.Tree]: 'Trees',
   [Tool.Road]: 'Road',
   [Tool.Rail]: 'Rail',
-  [Tool.PowerLine]: 'Power',
+  [Tool.PowerLine]: 'Lines',
   [Tool.WaterPump]: 'Pump',
   [Tool.Residential]: 'Res',
   [Tool.Commercial]: 'Com',
