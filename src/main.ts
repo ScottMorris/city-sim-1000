@@ -6,7 +6,7 @@ import { Tool } from './game/toolTypes';
 import { Simulation } from './game/simulation';
 import { loadFromBrowser } from './game/persistence';
 import { createCamera, centerCamera, screenToTile } from './rendering/camera';
-import { createRenderer, Position, Renderer } from './rendering/renderer';
+import { MapRenderer, Position } from './rendering/renderer';
 import { palette, TILE_SIZE } from './rendering/sprites';
 import { loadPaletteTexture } from './rendering/tileAtlas';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
@@ -160,12 +160,12 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
 }
 
 let lastFrame = performance.now();
-function gameLoop(renderer: Renderer, hud: ReturnType<typeof createHud>) {
+function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const now = performance.now();
   const deltaSeconds = (now - lastFrame) / 1000;
   lastFrame = now;
   simulation.update(deltaSeconds);
-  renderer.draw(state, hovered, selected);
+  renderer.render(state, hovered, selected);
   hud.update(state);
   hud.renderSelectionInfo(state, selected);
   requestAnimationFrame(() => gameLoop(renderer, hud));
@@ -175,7 +175,8 @@ function gameLoop(renderer: Renderer, hud: ReturnType<typeof createHud>) {
   const paletteTexture = await loadPaletteTexture();
   console.log('Palette texture loaded', paletteTexture);
 
-  const renderer = await createRenderer(app, wrapper, camera, TILE_SIZE, palette);
+  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette);
+  await renderer.init(wrapper);
   centerCamera(state, wrapper, TILE_SIZE, camera);
 
   const hud = createHud({
