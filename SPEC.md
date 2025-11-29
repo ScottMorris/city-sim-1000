@@ -195,7 +195,31 @@ export interface Tile {
 
 ---
 
-## 6.2 Camera
+## 6.2 Buildings
+
+### Building Model (v1)
+
+* Templates define **fixed buildings** the player places (non-generated) and carry:
+  * `id` (string), `name`, `category` (`power`, `civic`, etc.)
+  * `footprint` width × height (power plants: **2×2**)
+  * `cost`, `maintenance`, and stat contributions (e.g., `powerOutputMw`)
+  * `tileKind` to stamp and `spriteKey` (future) for the renderer
+* Instances track `instanceId`, `templateId`, origin tile, and a lightweight **state machine** (`status: active | inactive`). v1: the state machine is a stub that just returns the template’s static outputs while `active`.
+
+### Placement Rules
+
+* A building footprint **must fit on the map** and **cannot overlap** any existing building tiles.
+* One instance id is assigned per footprint (not per tile); all tiles in the footprint reference that id.
+* Placement helpers validate before charging cost and stamp every tile in the footprint.
+
+### Contributions
+
+* Buildings report their contributions (power output, maintenance, etc.) from the template/state pair so simulation totals stay per-building (not per-tile).
+* Future non-fixed/generated buildings can extend the same template/instance base and add richer state machines, but follow the same placement/footprint rules.
+
+---
+
+## 6.3 Camera
 
 * Pan with right-click drag
 * Zoom in discrete steps: 1.0 → 1.5 → 2.0
@@ -204,7 +228,7 @@ export interface Tile {
 
 ---
 
-## 6.3 Tools
+## 6.4 Tools
 
 ### Tool List
 
@@ -252,7 +276,7 @@ Bulldoze
 
 ---
 
-## 6.4 Simulation
+## 6.5 Simulation
 
 ### Tick Loop
 
@@ -296,7 +320,7 @@ Expenses:
 
 ---
 
-## 6.5 Persistence
+## 6.6 Persistence
 
 ### LocalStorage
 
