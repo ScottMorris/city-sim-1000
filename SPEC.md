@@ -141,6 +141,7 @@ Tiles include:
 
 * `MapRenderer` encapsulates Pixi rendering and draws tiles using existing palette colors; called each frame from `main.ts`.
 * Camera logic (`centerCamera`, `screenToTile`) lives in `rendering/camera.ts`; rendering is decoupled from UI/event handling.
+* Building centre markers are tinted by power status (green when powered, red when unpowered); these markers will later surface missing services (water, fire, waste, etc.).
 * Power lines
 * Hydro plant
 * Water pump
