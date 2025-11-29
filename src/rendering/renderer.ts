@@ -1,6 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { Camera } from './camera';
 import { GameState, TileKind, getTile } from '../game/gameState';
+import { getBuildingTemplate } from '../game/buildings';
 
 export interface Position {
   x: number;
@@ -58,6 +59,7 @@ export class MapRenderer {
     }
 
     this.overlayLayer.clear();
+    this.drawBuildingMarkers(state, size);
     if (hovered) {
       this.overlayLayer.lineStyle(2, 0xffffff);
       this.overlayLayer.drawRect(
@@ -80,6 +82,20 @@ export class MapRenderer {
 
   getCanvas() {
     return this.app.canvas;
+  }
+
+  private drawBuildingMarkers(state: GameState, size: number) {
+    const radius = Math.max(2, size * 0.12);
+    this.overlayLayer.beginFill(0xffffff, 0.8);
+    for (const building of state.buildings) {
+      const template = getBuildingTemplate(building.templateId);
+      const width = template?.footprint.width ?? 1;
+      const height = template?.footprint.height ?? 1;
+      const cx = this.camera.x + (building.origin.x + width / 2) * size;
+      const cy = this.camera.y + (building.origin.y + height / 2) * size;
+      this.overlayLayer.drawCircle(cx, cy, radius);
+    }
+    this.overlayLayer.endFill();
   }
 
   private getTileColor(tile: ReturnType<typeof getTile>) {
