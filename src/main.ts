@@ -110,7 +110,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     isPainting = true;
     lastPainted = tilePos;
-    logPaint('start', { tilePos, pointerId: e.pointerId, buttons: e.buttons });
+    logPaint('start', { tilePos, pointerId: e.pointerId, buttons: e.buttons, x: e.clientX, y: e.clientY });
     applyCurrentTool(tilePos);
   });
 
@@ -126,15 +126,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     hovered = tilePos;
     if (isPainting && tool !== Tool.Inspect) {
-      if (!(e.buttons & 1)) {
-        logPaint('buttons lost, stopping', { buttons: e.buttons });
-        stopPainting();
-        return;
-      }
       const alreadyPainted =
         lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
       if (!alreadyPainted) {
-        logPaint('paint move', { tilePos, pointerId: e.pointerId, buttons: e.buttons });
+        logPaint('paint move', { tilePos, pointerId: e.pointerId, buttons: e.buttons, x: e.clientX, y: e.clientY });
         applyCurrentTool(tilePos);
         lastPainted = tilePos;
       }
