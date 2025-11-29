@@ -99,6 +99,31 @@ body {
   border-color: #96d9ff;
 }
 
+.power-menu {
+  position: absolute;
+  background: #0d1a2f;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  display: grid;
+  gap: 6px;
+  z-index: 50;
+}
+
+.power-menu button {
+  background: #132644;
+  border: 2px solid #223557;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.power-menu button:hover {
+  border-color: var(--accent);
+}
+
 #viewport {
   position: relative;
   background: var(--bg);
