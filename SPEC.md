@@ -130,6 +130,17 @@ Tiles include:
 * Production: `powerProduced` sums plant outputs from `POWER_PLANT_CONFIGS`; `powerUsed` is `0` until consumers exist.
 * Maintenance: per-tile upkeep plus per-plant maintenance from configs.
 * Rendering is unchanged for v1; powered/unpowered lines share visuals for now.
+
+### 5.4 UI Patterns
+
+* Toolbar is two rows: the primary row and a contextual sub-row beneath it.
+* The main “Power” button reveals a sub-row of power tools (Lines, Hydro, Coal, Wind, Solar); the Power button stays active when any power tool is selected.
+* Buttons in sub-rows carry explicit labels/tooltips for clarity.
+
+### 5.5 Rendering
+
+* `MapRenderer` encapsulates Pixi rendering and draws tiles using existing palette colors; called each frame from `main.ts`.
+* Camera logic (`centerCamera`, `screenToTile`) lives in `rendering/camera.ts`; rendering is decoupled from UI/event handling.
 * Power lines
 * Hydro plant
 * Water pump
