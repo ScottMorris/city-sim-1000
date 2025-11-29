@@ -113,6 +113,15 @@ body {
   border-color: #96d9ff;
 }
 
+.tool-button:disabled,
+.tool-sub-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  border-color: #223557;
+  box-shadow: none;
+}
+
 
 #viewport {
   position: relative;

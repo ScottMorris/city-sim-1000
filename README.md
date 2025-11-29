@@ -14,6 +14,7 @@ Then open the provided local URL. The service worker caches assets after first l
 ## Features
 - WebGL canvas renderer with zoom and pan for fast navigation.
 - Terraform tools for land, water, trees, parks, bulldozing, and infrastructure (roads, rail, power lines).
+- Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers (pipes coming soon with an underground view).
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
 - Hydro generation, water pumping, and global utility balance that affects growth.
 - Budget ticker, population and jobs tracking, and happiness per tile.

@@ -244,6 +244,8 @@ Rail
 PowerLine
 Hydro
 Pump
+WaterTower
+WaterPipe (planned; requires underground view)
 Res
 Com
 Ind
@@ -277,6 +279,8 @@ Bulldoze
 
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
+* Water Tower: 2×2 footprint that boosts city water reserves, does not require power
+* Water Pipe: planned; placement UI stubbed until underground view exists
 * Power lines: graph-based connectivity
 
 ---
