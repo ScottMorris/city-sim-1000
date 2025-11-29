@@ -1,7 +1,7 @@
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
-import { listPowerPlants } from './buildings';
+import { listPowerPlants, updateBuildingStates } from './buildings';
 import { recomputePowerNetwork } from './power';
 
 export interface SimulationConfig {
@@ -34,6 +34,8 @@ export class Simulation {
   private tick() {
     this.state.tick++;
     this.state.day += this.dt / 1.5;
+
+    updateBuildingStates(this.state);
 
     let residential = 0;
     let commercial = 0;

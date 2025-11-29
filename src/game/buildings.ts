@@ -3,16 +3,19 @@ import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
 
 export enum BuildingCategory {
-  Power = 'power'
+  Power = 'power',
+  Civic = 'civic'
 }
 
 export enum BuildingStatus {
   Active = 'active',
-  Inactive = 'inactive'
+  InactiveNoPower = 'inactive_no_power',
+  InactiveDamaged = 'inactive_damaged'
 }
 
 export interface BuildingState {
   status: BuildingStatus;
+  health: number; // 0-100, v1 stub
 }
 
 export interface BuildingTemplate {
@@ -24,6 +27,7 @@ export interface BuildingTemplate {
   maintenance: number;
   tileKind: TileKind;
   spriteKey?: string;
+  requiresPower?: boolean;
   power?: { type: PowerPlantType; outputMw: number };
 }
 
@@ -49,6 +53,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].maintenancePerDay,
     tileKind: TileKind.HydroPlant,
+    requiresPower: false,
     power: { type: PowerPlantType.Hydro, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].outputMw }
   },
   [PowerPlantType.Coal]: {
@@ -59,6 +64,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Coal].maintenancePerDay,
     tileKind: TileKind.HydroPlant,
+    requiresPower: false,
     power: { type: PowerPlantType.Coal, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Coal].outputMw }
   },
   [PowerPlantType.Wind]: {
@@ -69,6 +75,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Wind].maintenancePerDay,
     tileKind: TileKind.HydroPlant,
+    requiresPower: false,
     power: { type: PowerPlantType.Wind, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Wind].outputMw }
   },
   [PowerPlantType.Solar]: {
@@ -79,14 +86,22 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Solar].maintenancePerDay,
     tileKind: TileKind.HydroPlant,
+    requiresPower: false,
     power: { type: PowerPlantType.Solar, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Solar].outputMw }
   }
 };
 
+const CUSTOM_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {};
+
 export function getBuildingTemplate(templateId: string): BuildingTemplate | undefined {
+  if (CUSTOM_BUILDING_TEMPLATES[templateId]) return CUSTOM_BUILDING_TEMPLATES[templateId];
   const powerTemplate = (POWER_PLANT_TEMPLATES as Record<string, BuildingTemplate>)[templateId];
   if (powerTemplate) return powerTemplate;
   return undefined;
+}
+
+export function registerBuildingTemplate(template: BuildingTemplate) {
+  CUSTOM_BUILDING_TEMPLATES[template.id] = template;
 }
 
 export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
@@ -94,7 +109,7 @@ export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
 }
 
 export function createBuildingState(): BuildingState {
-  return { status: BuildingStatus.Active };
+  return { status: BuildingStatus.Active, health: 100 };
 }
 
 export function placeBuilding(
@@ -153,6 +168,32 @@ export function removeBuilding(state: GameState, buildingId: number) {
       tile.powerPlantType = undefined;
       tile.powerPlantId = undefined;
       tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+    }
+  }
+}
+
+export function updateBuildingStates(state: GameState) {
+  for (const instance of state.buildings) {
+    const template = getBuildingTemplate(instance.templateId);
+    if (!template) continue;
+    if (instance.state.health <= 0) {
+      instance.state.status = BuildingStatus.InactiveDamaged;
+      continue;
+    }
+    const needsPower = template.requiresPower !== false;
+    if (needsPower) {
+      let poweredTiles = 0;
+      const { width, height } = template.footprint;
+      for (let dy = 0; dy < height; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+          const tile = getTile(state, instance.origin.x + dx, instance.origin.y + dy);
+          if (tile?.powered) poweredTiles++;
+        }
+      }
+      const fullyPowered = poweredTiles === template.footprint.width * template.footprint.height;
+      instance.state.status = fullyPowered ? BuildingStatus.Active : BuildingStatus.InactiveNoPower;
+    } else {
+      instance.state.status = BuildingStatus.Active;
     }
   }
 }

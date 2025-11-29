@@ -26,10 +26,15 @@ export function deserialize(payload: string): GameState {
     powerPlantId: tile.powerPlantId,
     buildingId: tile.buildingId ?? tile.powerPlantId
   }));
-  parsed.buildings = (parsed.buildings ?? []).map((building: any) => ({
-    ...building,
-    state: building.state ?? createBuildingState()
-  }));
+  parsed.buildings = (parsed.buildings ?? []).map((building: any) => {
+    const state = building.state ?? createBuildingState();
+    if (state.health === undefined) state.health = 100;
+    if (!state.status) state.status = createBuildingState().status;
+    return {
+      ...building,
+      state
+    };
+  });
   if (parsed.tick === undefined) {
     parsed.tick = 0;
   }

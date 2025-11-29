@@ -55,7 +55,7 @@ export function recomputePowerNetwork(state: GameState) {
         : 0;
     const output = templateOutput ?? fallbackOutput ?? 0;
     const isActive = plant.instance
-      ? plant.instance.state.status !== BuildingStatus.Inactive
+      ? plant.instance.state.status === BuildingStatus.Active
       : true;
     if (isActive) {
       produced += output;
