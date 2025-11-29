@@ -117,12 +117,17 @@ body {
 #viewport {
   position: relative;
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .canvas-wrapper {
   position: relative;
   width: 100%;
-  height: calc(100vh - 200px);
+  flex: 1;
+  min-height: 320px;
   overflow: hidden;
 }
 
