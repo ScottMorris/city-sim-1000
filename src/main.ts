@@ -89,6 +89,8 @@ function applyCurrentTool(tilePos: Position) {
 
 function attachViewportEvents(canvas: HTMLCanvasElement) {
   wrapper.addEventListener('contextmenu', (e) => e.preventDefault());
+  let activePointerId: number | null = null;
+
   wrapper.addEventListener('pointerdown', (e) => {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     hovered = tilePos;
@@ -98,12 +100,15 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       cameraStart = { ...camera };
       return;
     }
+    activePointerId = e.pointerId;
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     isPainting = true;
     lastPainted = tilePos;
     applyCurrentTool(tilePos);
   });
 
   wrapper.addEventListener('pointermove', (e) => {
+    if (activePointerId !== null && e.pointerId !== activePointerId) return;
     if (isPanning) {
       const dx = e.clientX - panStart.x;
       const dy = e.clientY - panStart.y;
@@ -114,6 +119,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     hovered = tilePos;
     if (isPainting && tool !== Tool.Inspect) {
+      if (!(e.buttons & 1)) {
+        stopPainting();
+        return;
+      }
       const alreadyPainted =
         lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
       if (!alreadyPainted) {
@@ -127,6 +136,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPanning = false;
     isPainting = false;
     lastPainted = null;
+    if (activePointerId !== null) {
+      wrapper.releasePointerCapture?.(activePointerId);
+    }
+    activePointerId = null;
   };
 
   wrapper.addEventListener('pointerup', stopPainting);
