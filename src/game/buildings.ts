@@ -302,8 +302,9 @@ export function updateBuildingStates(state: GameState) {
       const { width, height } = template.footprint;
       for (let dy = 0; dy < height; dy++) {
         for (let dx = 0; dx < width; dx++) {
-          const tile = getTile(state, instance.origin.x + dx, instance.origin.y + dy);
-          if (tile?.powered) poweredTiles++;
+          if (tileHasPower(state, instance.origin.x + dx, instance.origin.y + dy)) {
+            poweredTiles++;
+          }
         }
       }
       const fullyPowered = poweredTiles === template.footprint.width * template.footprint.height;

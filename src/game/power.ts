@@ -1,9 +1,23 @@
 import { BuildingStatus, listPowerPlants } from './buildings';
-import { GameState, TileKind } from './gameState';
+import { GameState, Tile, TileKind } from './gameState';
 import { POWER_PLANT_CONFIGS } from './constants';
 
 function getIndex(state: GameState, x: number, y: number) {
   return y * state.width + x;
+}
+
+function isPowerCarrier(tile: Tile): boolean {
+  if (!tile) return false;
+  if (tile.powerPlantType) return true;
+  if (tile.kind === TileKind.PowerLine) return true;
+  if (
+    tile.kind === TileKind.Residential ||
+    tile.kind === TileKind.Commercial ||
+    tile.kind === TileKind.Industrial
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function recomputePowerNetwork(state: GameState) {
@@ -35,10 +49,7 @@ export function recomputePowerNetwork(state: GameState) {
       if (nx < 0 || ny < 0 || nx >= state.width || ny >= state.height) continue;
       const nIndex = getIndex(state, nx, ny);
       const neighbour = state.tiles[nIndex];
-      if (
-        (neighbour.kind === TileKind.PowerLine || neighbour.powerPlantType) &&
-        !neighbour.powered
-      ) {
+      if (isPowerCarrier(neighbour) && !neighbour.powered) {
         neighbour.powered = true;
         queue.push(nIndex);
       }
