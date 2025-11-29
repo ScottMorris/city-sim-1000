@@ -45,7 +45,7 @@ export class MapRenderer {
     for (let y = 0; y < state.height; y++) {
       for (let x = 0; x < state.width; x++) {
         const tile = getTile(state, x, y)!;
-        const color = this.palette[tile.kind];
+        const color = this.getTileColor(tile);
         this.mapLayer.beginFill(color, 0.95);
         this.mapLayer.drawRect(
           this.camera.x + x * size,
@@ -81,4 +81,20 @@ export class MapRenderer {
   getCanvas() {
     return this.app.canvas;
   }
+
+  private getTileColor(tile: ReturnType<typeof getTile>) {
+    if (!tile) return 0x000000;
+    const base = this.palette[tile.kind];
+    const isPowerTile = tile.kind === TileKind.PowerLine || !!tile.powerPlantType;
+    if (!isPowerTile) return base;
+    const factor = tile.powered ? 1.35 : 0.7;
+    return scaleColor(base, factor);
+  }
+}
+
+function scaleColor(color: number, factor: number): number {
+  const r = Math.max(0, Math.min(255, ((color >> 16) & 0xff) * factor));
+  const g = Math.max(0, Math.min(255, ((color >> 8) & 0xff) * factor));
+  const b = Math.max(0, Math.min(255, (color & 0xff) * factor));
+  return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 }
