@@ -66,8 +66,10 @@ const camera = createCamera();
 let hovered: Position | null = null;
 let selected: Position | null = null;
 let isPanning = false;
+let isPainting = false;
 let panStart = { x: 0, y: 0 };
 let cameraStart = { x: 0, y: 0 };
+let lastPainted: Position | null = null;
 let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 
@@ -95,6 +97,8 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       cameraStart = { ...camera };
       return;
     }
+    isPainting = true;
+    lastPainted = tilePos;
     applyCurrentTool(tilePos);
   });
 
@@ -106,11 +110,25 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       camera.y = cameraStart.y + dy;
       return;
     }
-    hovered = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
+    const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
+    hovered = tilePos;
+    if (isPainting && tool !== Tool.Inspect) {
+      const alreadyPainted =
+        lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
+      const adjacent =
+        lastPainted &&
+        Math.abs(lastPainted.x - tilePos.x) + Math.abs(lastPainted.y - tilePos.y) === 1;
+      if (!alreadyPainted && adjacent) {
+        applyCurrentTool(tilePos);
+        lastPainted = tilePos;
+      }
+    }
   });
 
   wrapper.addEventListener('pointerup', () => {
     isPanning = false;
+    isPainting = false;
+    lastPainted = null;
   });
 
   wrapper.addEventListener(
