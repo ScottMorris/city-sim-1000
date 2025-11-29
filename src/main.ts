@@ -109,6 +109,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     activePointerId = e.pointerId;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     isPainting = true;
+    wrapper.style.cursor = 'crosshair';
     lastPainted = tilePos;
     logPaint('start', { tilePos, pointerId: e.pointerId, buttons: e.buttons, x: e.clientX, y: e.clientY });
     applyCurrentTool(tilePos);
@@ -140,6 +141,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPanning = false;
     isPainting = false;
     lastPainted = null;
+    wrapper.style.cursor = '';
     logPaint('stop', { pointerId: activePointerId });
     if (activePointerId !== null) {
       wrapper.releasePointerCapture?.(activePointerId);
