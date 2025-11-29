@@ -1,5 +1,5 @@
 import { TileKind } from './gameState';
-import { Tool } from './tools';
+import { Tool } from './toolTypes';
 
 export const BUILD_COST: Record<Tool, number> = {
   [Tool.Inspect]: 0,

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { BUILD_COST } from './constants';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
-import { applyTool, Tool } from './tools';
+import { applyTool } from './tools';
+import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
 
 describe('tools', () => {

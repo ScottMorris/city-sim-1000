@@ -1,4 +1,4 @@
-import { Tool } from '../game/tools';
+import { Tool } from '../game/toolTypes';
 
 const toolLabels: Record<Tool, string> = {
   [Tool.Inspect]: 'Inspect',
