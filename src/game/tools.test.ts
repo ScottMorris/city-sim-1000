@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { BUILD_COST } from './constants';
+import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
+import { recomputePowerNetwork } from './power';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
+import { BuildingStatus } from './buildings';
 
 describe('tools', () => {
   it('blocks tool usage when funds are insufficient', () => {
@@ -33,6 +35,62 @@ describe('tools', () => {
     applyTool(state, Tool.TerraformLower, 1, 1);
     expect(getTile(state, 1, 1)?.kind).toBe(TileKind.Water);
   });
+
+  it('places power plants as 2x2 footprints with a shared id and single cost', () => {
+    const state = createInitialState(6, 6);
+    state.money = 5000;
+    const before = state.money;
+    const result = applyTool(state, Tool.HydroPlant, 2, 2);
+    expect(result.success).toBe(true);
+    expect(state.buildings.length).toBe(1);
+    expect(state.buildings[0].state.status).toBe(BuildingStatus.Active);
+    const coords: Array<[number, number]> = [
+      [2, 2],
+      [3, 2],
+      [2, 3],
+      [3, 3]
+    ];
+    const ids = new Set<number>();
+    coords.forEach(([x, y]) => {
+      const tile = getTile(state, x, y)!;
+      expect(tile.powerPlantType).toBe(PowerPlantType.Hydro);
+      ids.add(tile.buildingId ?? -1);
+    });
+    expect(ids.size).toBe(1);
+    expect(state.money).toBe(before - BUILD_COST[Tool.HydroPlant]);
+  });
+
+  it('prevents overlapping building footprints and preserves funds', () => {
+    const state = createInitialState(6, 6);
+    state.money = 5000;
+    const first = applyTool(state, Tool.CoalPlant, 1, 1);
+    expect(first.success).toBe(true);
+    const moneyAfterFirst = state.money;
+    const second = applyTool(state, Tool.HydroPlant, 2, 2);
+    expect(second.success).toBe(false);
+    expect(state.money).toBe(moneyAfterFirst);
+  });
+
+  it('bulldozes an entire building footprint and removes the instance', () => {
+    const state = createInitialState(6, 6);
+    state.money = 5000;
+    applyTool(state, Tool.WindTurbine, 1, 1);
+    expect(state.buildings.length).toBe(1);
+    applyTool(state, Tool.Bulldoze, 1, 2); // inside the footprint
+    expect(state.buildings.length).toBe(0);
+    const clearedTiles: Array<[number, number]> = [
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2]
+    ];
+    clearedTiles.forEach(([x, y]) => {
+      const tile = getTile(state, x, y)!;
+      expect(tile.kind).toBe(TileKind.Land);
+      expect(tile.buildingId).toBeUndefined();
+      expect(tile.powerPlantType).toBeUndefined();
+    });
+  });
 });
 
 describe('simulation', () => {
@@ -51,5 +109,15 @@ describe('simulation', () => {
     expect(state.tick).toBe(0);
     sim.update(0.03);
     expect(state.tick).toBe(1);
+  });
+
+  it('counts a multi-tile power plant once when computing production', () => {
+    const state = createInitialState(6, 6);
+    state.money = 5000;
+    applyTool(state, Tool.HydroPlant, 1, 1);
+    recomputePowerNetwork(state);
+    expect(state.utilities.powerProduced).toBe(
+      POWER_PLANT_CONFIGS[PowerPlantType.Hydro].outputMw
+    );
   });
 });

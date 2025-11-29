@@ -1,4 +1,5 @@
 import { PowerPlantType } from './constants';
+import type { BuildingInstance } from './buildings';
 
 export enum TileKind {
   Land = 'land',
@@ -21,6 +22,8 @@ export interface Tile {
   happiness: number;
   powered: boolean;
   powerPlantType?: PowerPlantType;
+  powerPlantId?: number;
+  buildingId?: number;
 }
 
 export interface UtilityStats {
@@ -28,17 +31,6 @@ export interface UtilityStats {
   water: number;
   powerProduced: number;
   powerUsed: number;
-}
-
-export interface DemandStats {
-  residential: number;
-  commercial: number;
-  industrial: number;
-}
-
-export interface UtilityStats {
-  power: number;
-  water: number;
 }
 
 export interface DemandStats {
@@ -58,6 +50,8 @@ export interface GameState {
   jobs: number;
   utilities: UtilityStats;
   demand: DemandStats;
+  buildings: BuildingInstance[];
+  nextBuildingId: number;
 }
 
 export function createInitialState(width = 64, height = 64): GameState {
@@ -89,7 +83,9 @@ export function createInitialState(width = 64, height = 64): GameState {
       powerProduced: 0,
       powerUsed: 0
     },
-    demand: { residential: 30, commercial: 30, industrial: 30 }
+    demand: { residential: 30, commercial: 30, industrial: 30 },
+    buildings: [],
+    nextBuildingId: 1
   };
 }
 
@@ -109,5 +105,7 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
   tile.happiness = Math.min(1.5, tile.happiness + 0.05);
   if (kind !== TileKind.HydroPlant) {
     tile.powerPlantType = undefined;
+    tile.powerPlantId = undefined;
+    tile.buildingId = undefined;
   }
 }

@@ -14,6 +14,7 @@ export interface PowerPlantConfig {
   outputMw: number;
   buildCost: number;
   maintenancePerDay: number;
+  footprint: { width: number; height: number };
   requiresWaterEdge?: boolean;
 }
 
@@ -24,6 +25,7 @@ export const POWER_PLANT_CONFIGS: Record<PowerPlantType, PowerPlantConfig> = {
     outputMw: 60,
     buildCost: 20000,
     maintenancePerDay: 150,
+    footprint: { width: 2, height: 2 },
     requiresWaterEdge: true
   },
   [PowerPlantType.Coal]: {
@@ -31,21 +33,24 @@ export const POWER_PLANT_CONFIGS: Record<PowerPlantType, PowerPlantConfig> = {
     name: 'Coal Plant',
     outputMw: 80,
     buildCost: 25000,
-    maintenancePerDay: 300
+    maintenancePerDay: 300,
+    footprint: { width: 2, height: 2 }
   },
   [PowerPlantType.Wind]: {
     id: PowerPlantType.Wind,
     name: 'Wind Turbine',
     outputMw: 8,
     buildCost: 5000,
-    maintenancePerDay: 30
+    maintenancePerDay: 30,
+    footprint: { width: 2, height: 2 }
   },
   [PowerPlantType.Solar]: {
     id: PowerPlantType.Solar,
     name: 'Solar Farm',
     outputMw: 5,
     buildCost: 4000,
-    maintenancePerDay: 20
+    maintenancePerDay: 20,
+    footprint: { width: 2, height: 2 }
   }
 };
 

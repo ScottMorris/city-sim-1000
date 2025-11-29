@@ -1,5 +1,6 @@
+import { BuildingStatus, listPowerPlants } from './buildings';
 import { GameState, TileKind } from './gameState';
-import { POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
+import { POWER_PLANT_CONFIGS } from './constants';
 
 function getIndex(state: GameState, x: number, y: number) {
   return y * state.width + x;
@@ -45,11 +46,22 @@ export function recomputePowerNetwork(state: GameState) {
   }
 
   let produced = 0;
-  for (const tile of state.tiles) {
-    if (tile.powerPlantType) {
-      produced += POWER_PLANT_CONFIGS[tile.powerPlantType].outputMw;
+  const plants = listPowerPlants(state);
+  for (const plant of plants) {
+    const templateOutput = plant.template?.power?.outputMw;
+    const fallbackOutput =
+      plant.type && POWER_PLANT_CONFIGS[plant.type]
+        ? POWER_PLANT_CONFIGS[plant.type].outputMw
+        : 0;
+    const output = templateOutput ?? fallbackOutput ?? 0;
+    const isActive = plant.instance
+      ? plant.instance.state.status !== BuildingStatus.Inactive
+      : true;
+    if (isActive) {
+      produced += output;
     }
   }
+
   state.utilities.powerProduced = produced;
   state.utilities.powerUsed = 0;
   state.utilities.power = state.utilities.powerProduced - state.utilities.powerUsed;

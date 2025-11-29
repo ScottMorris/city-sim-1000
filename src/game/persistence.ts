@@ -1,5 +1,6 @@
 import { LOCAL_STORAGE_KEY } from './constants';
 import { GameState } from './gameState';
+import { createBuildingState } from './buildings';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -21,10 +22,30 @@ export function deserialize(payload: string): GameState {
   parsed.tiles = parsed.tiles.map((tile: any) => ({
     ...tile,
     powered: tile.powered ?? false,
-    powerPlantType: tile.powerPlantType
+    powerPlantType: tile.powerPlantType,
+    powerPlantId: tile.powerPlantId,
+    buildingId: tile.buildingId ?? tile.powerPlantId
+  }));
+  parsed.buildings = (parsed.buildings ?? []).map((building: any) => ({
+    ...building,
+    state: building.state ?? createBuildingState()
   }));
   if (parsed.tick === undefined) {
     parsed.tick = 0;
+  }
+  if (parsed.nextBuildingId === undefined) {
+    const maxBuildingIdFromTiles = parsed.tiles.reduce(
+      (max: number, tile: any) =>
+        tile.buildingId !== undefined ? Math.max(max, Number(tile.buildingId)) : max,
+      0
+    );
+    const maxBuildingIdFromList = parsed.buildings.reduce(
+      (max: number, building: any) =>
+        building.id !== undefined ? Math.max(max, Number(building.id)) : max,
+      0
+    );
+    const fallback = parsed.nextPowerPlantId ?? 0;
+    parsed.nextBuildingId = Math.max(maxBuildingIdFromTiles, maxBuildingIdFromList, fallback) + 1;
   }
   return parsed as GameState;
 }

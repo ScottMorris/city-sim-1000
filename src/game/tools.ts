@@ -1,4 +1,5 @@
 import { BUILD_COST, PowerPlantType } from './constants';
+import { getPowerPlantTemplate, placeBuilding, removeBuilding } from './buildings';
 import { GameState, Tile, TileKind, getTile, setTile } from './gameState';
 import { Tool } from './toolTypes';
 
@@ -17,6 +18,23 @@ export interface ToolContext {
 export type ToolHandler = (ctx: ToolContext) => ChangeResult;
 
 export type ToolRegistry = Record<Tool, ToolHandler>;
+
+function placePowerPlant(
+  state: GameState,
+  x: number,
+  y: number,
+  type: PowerPlantType,
+  tool: Tool
+): ChangeResult {
+  const template = getPowerPlantTemplate(type);
+  const result = placeBuilding(state, template, x, y, (tile, buildingId) => {
+    tile.powerPlantType = type;
+    tile.powerPlantId = buildingId;
+  });
+  if (!result.success) return result;
+  state.money -= BUILD_COST[tool];
+  return result;
+}
 
 const registry: ToolRegistry = {
   [Tool.Inspect]: () => ({ success: true }),
@@ -57,46 +75,14 @@ const registry: ToolRegistry = {
     setTile(state, x, y, TileKind.PowerLine);
     return { success: true };
   },
-  [Tool.HydroPlant]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.HydroPlant];
-    const tile = getTile(state, x, y);
-    if (tile) {
-      tile.kind = TileKind.HydroPlant;
-      tile.powerPlantType = PowerPlantType.Hydro;
-      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
-    }
-    return { success: true };
-  },
-  [Tool.CoalPlant]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.CoalPlant];
-    const tile = getTile(state, x, y);
-    if (tile) {
-      tile.kind = TileKind.HydroPlant;
-      tile.powerPlantType = PowerPlantType.Coal;
-      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
-    }
-    return { success: true };
-  },
-  [Tool.WindTurbine]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.WindTurbine];
-    const tile = getTile(state, x, y);
-    if (tile) {
-      tile.kind = TileKind.HydroPlant;
-      tile.powerPlantType = PowerPlantType.Wind;
-      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
-    }
-    return { success: true };
-  },
-  [Tool.SolarFarm]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.SolarFarm];
-    const tile = getTile(state, x, y);
-    if (tile) {
-      tile.kind = TileKind.HydroPlant;
-      tile.powerPlantType = PowerPlantType.Solar;
-      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
-    }
-    return { success: true };
-  },
+  [Tool.HydroPlant]: ({ state, x, y }) =>
+    placePowerPlant(state, x, y, PowerPlantType.Hydro, Tool.HydroPlant),
+  [Tool.CoalPlant]: ({ state, x, y }) =>
+    placePowerPlant(state, x, y, PowerPlantType.Coal, Tool.CoalPlant),
+  [Tool.WindTurbine]: ({ state, x, y }) =>
+    placePowerPlant(state, x, y, PowerPlantType.Wind, Tool.WindTurbine),
+  [Tool.SolarFarm]: ({ state, x, y }) =>
+    placePowerPlant(state, x, y, PowerPlantType.Solar, Tool.SolarFarm),
   [Tool.WaterPump]: ({ state, x, y }) => {
     state.money -= BUILD_COST[Tool.WaterPump];
     setTile(state, x, y, TileKind.WaterPump);
@@ -126,9 +112,15 @@ const registry: ToolRegistry = {
     state.money -= BUILD_COST[Tool.Bulldoze];
     const tile = getTile(state, x, y);
     if (tile) {
-      tile.kind = TileKind.Land;
-      tile.powerPlantType = undefined;
-      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+      if (tile.buildingId !== undefined) {
+        removeBuilding(state, tile.buildingId);
+      } else {
+        tile.kind = TileKind.Land;
+        tile.powerPlantType = undefined;
+        tile.powerPlantId = undefined;
+        tile.buildingId = undefined;
+        tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+      }
     }
     return { success: true };
   }

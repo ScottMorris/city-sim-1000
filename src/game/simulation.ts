@@ -1,6 +1,7 @@
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
+import { listPowerPlants } from './buildings';
 import { recomputePowerNetwork } from './power';
 
 export interface SimulationConfig {
@@ -46,11 +47,22 @@ export class Simulation {
       if (tile.kind === TileKind.Commercial) commercial++;
       if (tile.kind === TileKind.Industrial) industrial++;
       if (tile.kind === TileKind.WaterPump) pumps++;
-      if (tile.powerPlantType) {
-        plantMaintenance += POWER_PLANT_CONFIGS[tile.powerPlantType].maintenancePerDay;
-      }
       const upkeep = MAINTENANCE[tile.kind];
       if (upkeep) maintenance += upkeep;
+    }
+
+    const plants = listPowerPlants(this.state);
+    for (const plant of plants) {
+      const templateMaintenance = plant.template?.maintenance;
+      const fallbackMaintenance =
+        plant.type && POWER_PLANT_CONFIGS[plant.type]
+          ? POWER_PLANT_CONFIGS[plant.type].maintenancePerDay
+          : 0;
+      const maintenanceCost = templateMaintenance ?? fallbackMaintenance ?? 0;
+      // v1: maintenance is owed regardless of active state
+      if (maintenanceCost) {
+        plantMaintenance += maintenanceCost;
+      }
     }
 
     const populationCapacity = residential * 14;
