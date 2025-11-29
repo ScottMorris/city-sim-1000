@@ -110,6 +110,12 @@ const registry: ToolRegistry = {
     placePowerPlant(state, x, y, PowerPlantType.Solar, cost),
   [Tool.WaterPump]: ({ state, x, y }, cost) =>
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.WaterPump), x, y, cost),
+  [Tool.WaterTower]: ({ state, x, y }, cost) =>
+    placeTemplatedBuilding(state, getBuildingTemplate(TileKind.WaterTower), x, y, cost),
+  [Tool.WaterPipe]: () => ({
+    success: false,
+    message: 'Underground pipes view is coming soon.'
+  }),
   [Tool.Residential]: ({ state, x, y }, cost) => {
     state.money -= cost;
     setTile(state, x, y, TileKind.Residential);

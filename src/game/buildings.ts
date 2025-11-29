@@ -104,11 +104,22 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
     name: 'Water Pump',
     category: BuildingCategory.Civic,
     footprint: { width: 1, height: 1 },
-    cost: 400,
+    cost: BUILD_COST[Tool.WaterPump],
     maintenance: 5,
     tileKind: TileKind.WaterPump,
     requiresPower: true,
     waterOutput: 50
+  },
+  [TileKind.WaterTower]: {
+    id: TileKind.WaterTower,
+    name: 'Water Tower',
+    category: BuildingCategory.Civic,
+    footprint: { width: 2, height: 2 },
+    cost: BUILD_COST[Tool.WaterTower],
+    maintenance: 12,
+    tileKind: TileKind.WaterTower,
+    requiresPower: false,
+    waterOutput: 120
   },
   [TileKind.Park]: {
     id: TileKind.Park,

@@ -13,6 +13,8 @@ export enum TileKind {
   PowerLine = 'powerline',
   HydroPlant = 'hydro',
   WaterPump = 'pump',
+  WaterTower = 'water_tower',
+  WaterPipe = 'water_pipe',
   Park = 'park'
 }
 

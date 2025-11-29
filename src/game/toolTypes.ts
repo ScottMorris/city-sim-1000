@@ -12,6 +12,8 @@ export enum Tool {
   WindTurbine = 'wind',
   SolarFarm = 'solar',
   WaterPump = 'pump',
+  WaterTower = 'water_tower',
+  WaterPipe = 'water_pipe',
   Residential = 'residential',
   Commercial = 'commercial',
   Industrial = 'industrial',

@@ -14,5 +14,7 @@ export const palette: Record<TileKind, number> = {
   [TileKind.PowerLine]: 0xe9d985,
   [TileKind.HydroPlant]: 0x50d1ff,
   [TileKind.WaterPump]: 0x4ac6b7,
+  [TileKind.WaterTower]: 0x94d1ff,
+  [TileKind.WaterPipe]: 0x73c3c9,
   [TileKind.Park]: 0x2fa05a
 };

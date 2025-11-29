@@ -68,6 +68,8 @@ export const BUILD_COST: Record<Tool, number> = {
   [Tool.WindTurbine]: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
   [Tool.SolarFarm]: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
   [Tool.WaterPump]: 400,
+  [Tool.WaterTower]: 1200,
+  [Tool.WaterPipe]: 4,
   [Tool.Residential]: 40,
   [Tool.Commercial]: 60,
   [Tool.Industrial]: 80,
@@ -78,7 +80,8 @@ export const BUILD_COST: Record<Tool, number> = {
 export const MAINTENANCE: Partial<Record<TileKind, number>> = {
   [TileKind.Road]: 0.1,
   [TileKind.Rail]: 0.2,
-  [TileKind.PowerLine]: 0.08
+  [TileKind.PowerLine]: 0.08,
+  [TileKind.WaterPipe]: 0.04
 };
 
 export const BASE_INCOME = 120;

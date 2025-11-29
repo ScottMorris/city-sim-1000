@@ -58,7 +58,9 @@ export function deserialize(payload: string): GameState {
   parsed.tiles.forEach((tile: any, index: number) => {
     const template = getBuildingTemplate(tile.kind);
     const isLegacyCivic =
-      (tile.kind === TileKind.WaterPump || tile.kind === TileKind.Park) &&
+      (tile.kind === TileKind.WaterPump ||
+        tile.kind === TileKind.WaterTower ||
+        tile.kind === TileKind.Park) &&
       tile.buildingId === undefined;
     if (!template || !isLegacyCivic) return;
     const buildingId = nextBuildingId++;

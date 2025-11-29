@@ -99,6 +99,32 @@ describe('tools', () => {
     expect(state.utilities.water).toBeCloseTo(template.waterOutput ?? 0);
   });
 
+  it('adds a water tower with a 2x2 footprint that supplies water even without power', () => {
+    const state = createInitialState(8, 8);
+    const template = getBuildingTemplate(TileKind.WaterTower)!;
+    state.money = template.cost + 500;
+    const result = applyTool(state, Tool.WaterTower, 3, 3);
+    expect(result.success).toBe(true);
+    expect(state.buildings.length).toBe(1);
+    const ids = new Set<number>();
+    const footprint: Array<[number, number]> = [
+      [3, 3],
+      [4, 3],
+      [3, 4],
+      [4, 4]
+    ];
+    footprint.forEach(([x, y]) => {
+      const tile = getTile(state, x, y)!;
+      expect(tile.kind).toBe(TileKind.WaterTower);
+      ids.add(tile.buildingId ?? -1);
+    });
+    expect(ids.size).toBe(1);
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(1);
+    expect(state.buildings[0].state.status).toBe(BuildingStatus.Active);
+    expect(state.utilities.water).toBeCloseTo(template.waterOutput ?? 0);
+  });
+
   it('bulldozes an entire building footprint and removes the instance', () => {
     const state = createInitialState(6, 6);
     const windCost = getBuildingTemplate(PowerPlantType.Wind)!.cost;
