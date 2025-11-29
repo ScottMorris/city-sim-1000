@@ -95,7 +95,6 @@ function applyCurrentTool(tilePos: Position) {
 
 function attachViewportEvents(canvas: HTMLCanvasElement) {
   wrapper.addEventListener('contextmenu', (e) => e.preventDefault());
-  let activePointerId: number | null = null;
 
   wrapper.addEventListener('pointerdown', (e) => {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
@@ -106,8 +105,6 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       cameraStart = { ...camera };
       return;
     }
-    activePointerId = e.pointerId;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     isPainting = true;
     wrapper.style.cursor = 'crosshair';
     lastPainted = tilePos;
@@ -116,7 +113,6 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
   });
 
   wrapper.addEventListener('pointermove', (e) => {
-    if (activePointerId !== null && e.pointerId !== activePointerId) return;
     if (isPanning) {
       const dx = e.clientX - panStart.x;
       const dy = e.clientY - panStart.y;
@@ -126,7 +122,12 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     }
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     hovered = tilePos;
-    if (isPainting && tool !== Tool.Inspect) {
+    const primaryDown = (e.buttons & 1) !== 0;
+    if (primaryDown && tool !== Tool.Inspect) {
+      if (!isPainting) {
+        isPainting = true;
+        wrapper.style.cursor = 'crosshair';
+      }
       const alreadyPainted =
         lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
       if (!alreadyPainted) {
@@ -134,6 +135,8 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         applyCurrentTool(tilePos);
         lastPainted = tilePos;
       }
+    } else if (!primaryDown && isPainting) {
+      stopPainting();
     }
   });
 
@@ -142,11 +145,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPainting = false;
     lastPainted = null;
     wrapper.style.cursor = '';
-    logPaint('stop', { pointerId: activePointerId });
-    if (activePointerId !== null) {
-      wrapper.releasePointerCapture?.(activePointerId);
-    }
-    activePointerId = null;
+    logPaint('stop');
   };
 
   wrapper.addEventListener('pointerup', stopPainting);
