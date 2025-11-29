@@ -74,12 +74,6 @@ let lastPainted: Position | null = null;
 let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 const simulation = new Simulation(state, { ticksPerSecond: 20 });
-const debugPaint = window.location.hash.includes('debug-paint');
-
-function logPaint(...args: unknown[]) {
-  if (!debugPaint) return;
-  console.log('[paint]', ...args);
-}
 
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
@@ -107,9 +101,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       return;
     }
     isPainting = true;
-    wrapper.style.cursor = 'crosshair';
     lastPainted = tilePos;
-    logPaint('start', { tilePos, pointerId: e.pointerId, buttons: e.buttons, x: e.clientX, y: e.clientY });
     applyCurrentTool(tilePos);
   });
 
@@ -127,12 +119,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     if (primaryDown && tool !== Tool.Inspect) {
       if (!isPainting) {
         isPainting = true;
-        wrapper.style.cursor = 'crosshair';
       }
       const alreadyPainted =
         lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
       if (!alreadyPainted) {
-        logPaint('paint move', { tilePos, pointerId: e.pointerId, buttons: e.buttons, x: e.clientX, y: e.clientY });
         applyCurrentTool(tilePos);
         lastPainted = tilePos;
       }
@@ -145,8 +135,6 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPanning = false;
     isPainting = false;
     lastPainted = null;
-    wrapper.style.cursor = '';
-    logPaint('stop');
   };
 
   wrapper.addEventListener('pointerup', stopPainting);
