@@ -13,6 +13,9 @@ export function deserialize(payload: string): GameState {
       water: parsed.water ?? 0
     };
   }
+  if (parsed.tick === undefined) {
+    parsed.tick = 0;
+  }
   return parsed as GameState;
 }
 

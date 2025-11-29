@@ -2,7 +2,7 @@ import './style.css';
 import { Application } from 'pixi.js';
 import { createInitialState, GameState, getTile } from './game/gameState';
 import { applyTool, Tool } from './game/tools';
-import { tick } from './game/simulation';
+import { Simulation } from './game/simulation';
 import { loadFromBrowser } from './game/persistence';
 import { createCamera, centerCamera, screenToTile } from './rendering/camera';
 import { createRenderer, Position, Renderer } from './rendering/renderer';
@@ -72,6 +72,7 @@ let cameraStart = { x: 0, y: 0 };
 let lastPainted: Position | null = null;
 let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
+const simulation = new Simulation(state, { ticksPerSecond: 20 });
 
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
@@ -148,9 +149,12 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
   );
 }
 
+let lastFrame = performance.now();
 function gameLoop(renderer: Renderer, hud: ReturnType<typeof createHud>) {
-  const dt = 1 / 60;
-  tick(state, dt);
+  const now = performance.now();
+  const deltaSeconds = (now - lastFrame) / 1000;
+  lastFrame = now;
+  simulation.update(deltaSeconds);
   renderer.draw(state, hovered, selected);
   hud.update(state);
   hud.renderSelectionInfo(state, selected);

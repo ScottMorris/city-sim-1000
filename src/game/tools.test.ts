@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BUILD_COST } from './constants';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { applyTool, Tool } from './tools';
-import { tick } from './simulation';
+import { Simulation } from './simulation';
 
 describe('tools', () => {
   it('blocks tool usage when funds are insufficient', () => {
@@ -35,13 +35,20 @@ describe('tools', () => {
 });
 
 describe('simulation', () => {
-  it('updates utility balances based on generators and pumps', () => {
+  it('advances ticks and day in fixed steps', () => {
     const state = createInitialState(4, 4);
-    state.money = 0;
-    setTile(state, 0, 0, TileKind.HydroPlant);
-    setTile(state, 1, 0, TileKind.WaterPump);
-    tick(state, 1);
-    expect(state.utilities.power).toBeGreaterThan(0);
-    expect(state.utilities.water).toBeGreaterThan(0);
+    const sim = new Simulation(state, { ticksPerSecond: 20 });
+    sim.update(1); // 1 second = 20 ticks
+    expect(state.tick).toBe(20);
+    expect(state.day).toBe(2);
+  });
+
+  it('accumulates partial frames before ticking', () => {
+    const state = createInitialState(4, 4);
+    const sim = new Simulation(state, { ticksPerSecond: 20 });
+    sim.update(0.02); // less than dt (0.05)
+    expect(state.tick).toBe(0);
+    sim.update(0.03);
+    expect(state.tick).toBe(1);
   });
 });

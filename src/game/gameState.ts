@@ -36,6 +36,7 @@ export interface GameState {
   tiles: Tile[];
   money: number;
   day: number;
+  tick: number;
   population: number;
   jobs: number;
   utilities: UtilityStats;
@@ -61,6 +62,7 @@ export function createInitialState(width = 64, height = 64): GameState {
     tiles,
     money: 100000,
     day: 1,
+    tick: 0,
     population: 12,
     jobs: 4,
     utilities: {
