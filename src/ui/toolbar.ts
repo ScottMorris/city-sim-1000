@@ -56,6 +56,7 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     const button = document.createElement('button');
     button.className = 'tool-sub-button';
     button.textContent = key === Tool.PowerLine ? 'Lines' : toolLabels[key];
+    button.title = toolLabels[key];
     button.dataset.tool = key;
     button.addEventListener('click', () => {
       onSelect(key);
