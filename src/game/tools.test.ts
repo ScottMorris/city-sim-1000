@@ -5,7 +5,7 @@ import { recomputePowerNetwork } from './power';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
-import { BuildingStatus } from './buildings';
+import { BuildingStatus, getBuildingTemplate } from './buildings';
 
 describe('tools', () => {
   it('blocks tool usage when funds are insufficient', () => {
@@ -38,7 +38,8 @@ describe('tools', () => {
 
   it('places power plants as 2x2 footprints with a shared id and single cost', () => {
     const state = createInitialState(6, 6);
-    state.money = 5000;
+    const template = getBuildingTemplate(PowerPlantType.Hydro)!;
+    state.money = template.cost + 1000;
     const before = state.money;
     const result = applyTool(state, Tool.HydroPlant, 2, 2);
     expect(result.success).toBe(true);
@@ -57,12 +58,14 @@ describe('tools', () => {
       ids.add(tile.buildingId ?? -1);
     });
     expect(ids.size).toBe(1);
-    expect(state.money).toBe(before - BUILD_COST[Tool.HydroPlant]);
+    expect(state.money).toBe(before - template.cost);
   });
 
   it('prevents overlapping building footprints and preserves funds', () => {
     const state = createInitialState(6, 6);
-    state.money = 5000;
+    const coalCost = getBuildingTemplate(PowerPlantType.Coal)!.cost;
+    const hydroCost = getBuildingTemplate(PowerPlantType.Hydro)!.cost;
+    state.money = coalCost + hydroCost;
     const first = applyTool(state, Tool.CoalPlant, 1, 1);
     expect(first.success).toBe(true);
     const moneyAfterFirst = state.money;
@@ -71,9 +74,35 @@ describe('tools', () => {
     expect(state.money).toBe(moneyAfterFirst);
   });
 
+  it('places pumps as building instances with template-driven costs and output', () => {
+    const state = createInitialState(6, 6);
+    const template = getBuildingTemplate(TileKind.WaterPump)!;
+    const initialMoney =
+      template.cost + 200 + BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3;
+    state.money = initialMoney;
+    applyTool(state, Tool.WindTurbine, 2, 0);
+    applyTool(state, Tool.PowerLine, 1, 0);
+    applyTool(state, Tool.PowerLine, 1, 1);
+    applyTool(state, Tool.PowerLine, 0, 1);
+    const result = applyTool(state, Tool.WaterPump, 0, 0);
+    expect(result.success).toBe(true);
+    const pump = state.buildings.find((b) => b.templateId === template.id);
+    expect(pump).toBeDefined();
+    const spent = initialMoney - state.money;
+    expect(spent).toBeCloseTo(
+      BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3 + template.cost
+    );
+    const pumpTile = getTile(state, 0, 0)!;
+    expect(pumpTile.buildingId).toBe(pump?.id);
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(1);
+    expect(state.utilities.water).toBeCloseTo(template.waterOutput ?? 0);
+  });
+
   it('bulldozes an entire building footprint and removes the instance', () => {
     const state = createInitialState(6, 6);
-    state.money = 5000;
+    const windCost = getBuildingTemplate(PowerPlantType.Wind)!.cost;
+    state.money = windCost + 1000;
     applyTool(state, Tool.WindTurbine, 1, 1);
     expect(state.buildings.length).toBe(1);
     applyTool(state, Tool.Bulldoze, 1, 2); // inside the footprint
@@ -113,11 +142,44 @@ describe('simulation', () => {
 
   it('counts a multi-tile power plant once when computing production', () => {
     const state = createInitialState(6, 6);
-    state.money = 5000;
+    const template = getBuildingTemplate(PowerPlantType.Hydro)!;
+    state.money = template.cost + 1000;
     applyTool(state, Tool.HydroPlant, 1, 1);
     recomputePowerNetwork(state);
     expect(state.utilities.powerProduced).toBe(
       POWER_PLANT_CONFIGS[PowerPlantType.Hydro].outputMw
     );
+  });
+
+  it('spawns zone buildings that consume utilities and provide capacity', () => {
+    const state = createInitialState(6, 6);
+    state.money = 100000;
+    applyTool(state, Tool.WindTurbine, 0, 0);
+    applyTool(state, Tool.PowerLine, 2, 0);
+    applyTool(state, Tool.PowerLine, 2, 1);
+    applyTool(state, Tool.PowerLine, 2, 2);
+    applyTool(state, Tool.Residential, 3, 2);
+    state.demand.residential = 80;
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(1);
+    const zoneBuilding = state.buildings.find((b) => b.templateId === 'zone-residential');
+    expect(zoneBuilding).toBeDefined();
+    const template = getBuildingTemplate(zoneBuilding!.templateId)!;
+    expect(state.utilities.powerUsed).toBeCloseTo(template.powerUse ?? 0);
+    expect(state.utilities.water).toBeCloseTo(
+      (template.waterOutput ?? 0) - (template.waterUse ?? 0)
+    );
+  });
+
+  it('propagates power across contiguous zone tiles', () => {
+    const state = createInitialState(6, 6);
+    state.money = 20000;
+    applyTool(state, Tool.WindTurbine, 0, 0);
+    applyTool(state, Tool.PowerLine, 2, 0);
+    applyTool(state, Tool.Residential, 3, 0);
+    applyTool(state, Tool.Residential, 3, 1);
+    recomputePowerNetwork(state);
+    expect(getTile(state, 3, 0)?.powered).toBe(true);
+    expect(getTile(state, 3, 1)?.powered).toBe(true);
   });
 });

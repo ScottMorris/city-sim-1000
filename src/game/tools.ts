@@ -1,5 +1,11 @@
 import { BUILD_COST, PowerPlantType } from './constants';
-import { getPowerPlantTemplate, placeBuilding, removeBuilding } from './buildings';
+import {
+  type BuildingTemplate,
+  getBuildingTemplate,
+  getPowerPlantTemplate,
+  placeBuilding,
+  removeBuilding
+} from './buildings';
 import { GameState, Tile, TileKind, getTile, setTile } from './gameState';
 import { Tool } from './toolTypes';
 
@@ -15,101 +21,114 @@ export interface ToolContext {
   y: number;
 }
 
-export type ToolHandler = (ctx: ToolContext) => ChangeResult;
+export type ToolHandler = (ctx: ToolContext, cost: number) => ChangeResult;
 
 export type ToolRegistry = Record<Tool, ToolHandler>;
+
+function getToolCost(tool: Tool): number {
+  const templateCost = getBuildingTemplate(tool)?.cost;
+  if (templateCost !== undefined) return templateCost;
+  return BUILD_COST[tool] ?? 0;
+}
+
+function placeTemplatedBuilding(
+  state: GameState,
+  template: BuildingTemplate | undefined,
+  x: number,
+  y: number,
+  cost: number
+): ChangeResult {
+  if (!template) return { success: false, message: 'Unknown building type' };
+  const result = placeBuilding(state, template, x, y, (tile, buildingId) => {
+    if (template.power) {
+      tile.powerPlantType = template.power.type;
+      tile.powerPlantId = buildingId;
+    }
+  });
+  if (!result.success) return result;
+  state.money -= cost;
+  return result;
+}
 
 function placePowerPlant(
   state: GameState,
   x: number,
   y: number,
   type: PowerPlantType,
-  tool: Tool
+  cost: number
 ): ChangeResult {
   const template = getPowerPlantTemplate(type);
-  const result = placeBuilding(state, template, x, y, (tile, buildingId) => {
-    tile.powerPlantType = type;
-    tile.powerPlantId = buildingId;
-  });
-  if (!result.success) return result;
-  state.money -= BUILD_COST[tool];
-  return result;
+  return placeTemplatedBuilding(state, template, x, y, cost);
 }
 
 const registry: ToolRegistry = {
-  [Tool.Inspect]: () => ({ success: true }),
-  [Tool.TerraformRaise]: ({ state, x, y }) => {
+  [Tool.Inspect]: (_ctx, _cost) => ({ success: true }),
+  [Tool.TerraformRaise]: ({ state, x, y }, cost) => {
     console.log('Terraform raise at', x, y);
-    state.money -= BUILD_COST[Tool.TerraformRaise];
+    state.money -= cost;
     setTile(state, x, y, TileKind.Land);
     return { success: true };
   },
-  [Tool.TerraformLower]: ({ state, x, y }) => {
+  [Tool.TerraformLower]: ({ state, x, y }, cost) => {
     console.log('Terraform lower at', x, y);
-    state.money -= BUILD_COST[Tool.TerraformLower];
+    state.money -= cost;
     setTile(state, x, y, TileKind.Water);
     return { success: true };
   },
-  [Tool.Water]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Water];
+  [Tool.Water]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Water);
     return { success: true };
   },
-  [Tool.Tree]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Tree];
+  [Tool.Tree]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Tree);
     return { success: true };
   },
-  [Tool.Road]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Road];
+  [Tool.Road]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Road);
     return { success: true };
   },
-  [Tool.Rail]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Rail];
+  [Tool.Rail]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Rail);
     return { success: true };
   },
-  [Tool.PowerLine]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.PowerLine];
+  [Tool.PowerLine]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.PowerLine);
     return { success: true };
   },
-  [Tool.HydroPlant]: ({ state, x, y }) =>
-    placePowerPlant(state, x, y, PowerPlantType.Hydro, Tool.HydroPlant),
-  [Tool.CoalPlant]: ({ state, x, y }) =>
-    placePowerPlant(state, x, y, PowerPlantType.Coal, Tool.CoalPlant),
-  [Tool.WindTurbine]: ({ state, x, y }) =>
-    placePowerPlant(state, x, y, PowerPlantType.Wind, Tool.WindTurbine),
-  [Tool.SolarFarm]: ({ state, x, y }) =>
-    placePowerPlant(state, x, y, PowerPlantType.Solar, Tool.SolarFarm),
-  [Tool.WaterPump]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.WaterPump];
-    setTile(state, x, y, TileKind.WaterPump);
-    return { success: true };
-  },
-  [Tool.Residential]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Residential];
+  [Tool.HydroPlant]: ({ state, x, y }, cost) =>
+    placePowerPlant(state, x, y, PowerPlantType.Hydro, cost),
+  [Tool.CoalPlant]: ({ state, x, y }, cost) =>
+    placePowerPlant(state, x, y, PowerPlantType.Coal, cost),
+  [Tool.WindTurbine]: ({ state, x, y }, cost) =>
+    placePowerPlant(state, x, y, PowerPlantType.Wind, cost),
+  [Tool.SolarFarm]: ({ state, x, y }, cost) =>
+    placePowerPlant(state, x, y, PowerPlantType.Solar, cost),
+  [Tool.WaterPump]: ({ state, x, y }, cost) =>
+    placeTemplatedBuilding(state, getBuildingTemplate(TileKind.WaterPump), x, y, cost),
+  [Tool.Residential]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Residential);
     return { success: true };
   },
-  [Tool.Commercial]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Commercial];
+  [Tool.Commercial]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Commercial);
     return { success: true };
   },
-  [Tool.Industrial]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Industrial];
+  [Tool.Industrial]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     setTile(state, x, y, TileKind.Industrial);
     return { success: true };
   },
-  [Tool.Park]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Park];
-    setTile(state, x, y, TileKind.Park);
-    return { success: true };
-  },
-  [Tool.Bulldoze]: ({ state, x, y }) => {
-    state.money -= BUILD_COST[Tool.Bulldoze];
+  [Tool.Park]: ({ state, x, y }, cost) =>
+    placeTemplatedBuilding(state, getBuildingTemplate(TileKind.Park), x, y, cost),
+  [Tool.Bulldoze]: ({ state, x, y }, cost) => {
+    state.money -= cost;
     const tile = getTile(state, x, y);
     if (tile) {
       if (tile.buildingId !== undefined) {
@@ -129,12 +148,12 @@ const registry: ToolRegistry = {
 export function applyTool(state: GameState, tool: Tool, x: number, y: number): ChangeResult {
   const tile = getTile(state, x, y);
   if (!tile) return { success: false };
-  const cost = BUILD_COST[tool];
+  const cost = getToolCost(tool);
   if (state.money < cost) {
     return { success: false, message: 'Not enough funds' };
   }
 
   const handler = registry[tool];
   if (!handler) return { success: false };
-  return handler({ state, tile, x, y });
+  return handler({ state, tile, x, y }, cost);
 }

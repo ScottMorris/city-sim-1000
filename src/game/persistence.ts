@@ -1,6 +1,6 @@
 import { LOCAL_STORAGE_KEY } from './constants';
-import { GameState } from './gameState';
-import { createBuildingState } from './buildings';
+import { GameState, TileKind } from './gameState';
+import { createBuildingState, getBuildingTemplate } from './buildings';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -38,7 +38,7 @@ export function deserialize(payload: string): GameState {
   if (parsed.tick === undefined) {
     parsed.tick = 0;
   }
-  if (parsed.nextBuildingId === undefined) {
+  const computeNextBuildingId = () => {
     const maxBuildingIdFromTiles = parsed.tiles.reduce(
       (max: number, tile: any) =>
         tile.buildingId !== undefined ? Math.max(max, Number(tile.buildingId)) : max,
@@ -50,8 +50,28 @@ export function deserialize(payload: string): GameState {
       0
     );
     const fallback = parsed.nextPowerPlantId ?? 0;
-    parsed.nextBuildingId = Math.max(maxBuildingIdFromTiles, maxBuildingIdFromList, fallback) + 1;
-  }
+    return Math.max(maxBuildingIdFromTiles, maxBuildingIdFromList, fallback) + 1;
+  };
+
+  let nextBuildingId = Math.max(parsed.nextBuildingId ?? 0, computeNextBuildingId());
+
+  parsed.tiles.forEach((tile: any, index: number) => {
+    const template = getBuildingTemplate(tile.kind);
+    const isLegacyCivic =
+      (tile.kind === TileKind.WaterPump || tile.kind === TileKind.Park) &&
+      tile.buildingId === undefined;
+    if (!template || !isLegacyCivic) return;
+    const buildingId = nextBuildingId++;
+    tile.buildingId = buildingId;
+    parsed.buildings.push({
+      id: buildingId,
+      templateId: template.id,
+      origin: { x: index % parsed.width, y: Math.floor(index / parsed.width) },
+      state: createBuildingState()
+    });
+  });
+
+  parsed.nextBuildingId = nextBuildingId;
   return parsed as GameState;
 }
 

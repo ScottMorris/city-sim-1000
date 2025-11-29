@@ -1,10 +1,12 @@
-import { POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
+import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
+import { Tool } from './toolTypes';
 
 export enum BuildingCategory {
   Power = 'power',
-  Civic = 'civic'
+  Civic = 'civic',
+  Zone = 'zone'
 }
 
 export enum BuildingStatus {
@@ -29,6 +31,11 @@ export interface BuildingTemplate {
   spriteKey?: string;
   requiresPower?: boolean;
   power?: { type: PowerPlantType; outputMw: number };
+  powerUse?: number;
+  waterUse?: number;
+  waterOutput?: number;
+  populationCapacity?: number;
+  jobsCapacity?: number;
 }
 
 export interface BuildingInstance {
@@ -91,12 +98,93 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   }
 };
 
+export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
+  [TileKind.WaterPump]: {
+    id: TileKind.WaterPump,
+    name: 'Water Pump',
+    category: BuildingCategory.Civic,
+    footprint: { width: 1, height: 1 },
+    cost: 400,
+    maintenance: 5,
+    tileKind: TileKind.WaterPump,
+    requiresPower: true,
+    waterOutput: 50
+  },
+  [TileKind.Park]: {
+    id: TileKind.Park,
+    name: 'Park',
+    category: BuildingCategory.Civic,
+    footprint: { width: 1, height: 1 },
+    cost: 10,
+    maintenance: 0.05,
+    tileKind: TileKind.Park,
+    requiresPower: false
+  }
+};
+
+export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
+  [TileKind.Residential]: {
+    id: 'zone-residential',
+    name: 'Residential Lot',
+    category: BuildingCategory.Zone,
+    footprint: { width: 1, height: 1 },
+    cost: BUILD_COST[Tool.Residential],
+    maintenance: 1,
+    tileKind: TileKind.Residential,
+    requiresPower: true,
+    powerUse: 1.5,
+    waterUse: 1,
+    populationCapacity: 14
+  },
+  [TileKind.Commercial]: {
+    id: 'zone-commercial',
+    name: 'Commercial Lot',
+    category: BuildingCategory.Zone,
+    footprint: { width: 1, height: 1 },
+    cost: BUILD_COST[Tool.Commercial],
+    maintenance: 1.2,
+    tileKind: TileKind.Commercial,
+    requiresPower: true,
+    powerUse: 2.5,
+    waterUse: 1.5,
+    jobsCapacity: 8
+  },
+  [TileKind.Industrial]: {
+    id: 'zone-industrial',
+    name: 'Industrial Lot',
+    category: BuildingCategory.Zone,
+    footprint: { width: 1, height: 1 },
+    cost: BUILD_COST[Tool.Industrial],
+    maintenance: 1.4,
+    tileKind: TileKind.Industrial,
+    requiresPower: true,
+    powerUse: 3,
+    waterUse: 2,
+    jobsCapacity: 12
+  }
+};
+
+const ZONE_TEMPLATES_BY_ID = Object.values(ZONE_BUILDING_TEMPLATES).reduce(
+  (acc, template) => {
+    acc[template.id] = template;
+    return acc;
+  },
+  {} as Record<string, BuildingTemplate>
+);
+
+const STATIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
+  ...POWER_PLANT_TEMPLATES,
+  ...CIVIC_BUILDING_TEMPLATES,
+  ...ZONE_BUILDING_TEMPLATES,
+  ...ZONE_TEMPLATES_BY_ID
+};
+
 const CUSTOM_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {};
 
 export function getBuildingTemplate(templateId: string): BuildingTemplate | undefined {
   if (CUSTOM_BUILDING_TEMPLATES[templateId]) return CUSTOM_BUILDING_TEMPLATES[templateId];
-  const powerTemplate = (POWER_PLANT_TEMPLATES as Record<string, BuildingTemplate>)[templateId];
-  if (powerTemplate) return powerTemplate;
+  const staticTemplate = STATIC_BUILDING_TEMPLATES[templateId];
+  if (staticTemplate) return staticTemplate;
   return undefined;
 }
 
@@ -170,6 +258,34 @@ export function removeBuilding(state: GameState, buildingId: number) {
       tile.happiness = Math.min(1.5, tile.happiness + 0.05);
     }
   }
+}
+
+function tileHasPower(state: GameState, x: number, y: number): boolean {
+  const tile = getTile(state, x, y);
+  if (!tile) return false;
+  if (tile.powered) return true;
+  const isZoneTile =
+    tile.kind === TileKind.Residential ||
+    tile.kind === TileKind.Commercial ||
+    tile.kind === TileKind.Industrial;
+  if (isZoneTile && tile.powered) return true;
+  const neighbours: Array<[number, number]> = [
+    [x, y - 1],
+    [x + 1, y],
+    [x, y + 1],
+    [x - 1, y]
+  ];
+  return neighbours.some(([nx, ny]) => {
+    const neighbour = getTile(state, nx, ny);
+    return (
+      neighbour?.powered &&
+      (neighbour.kind === TileKind.PowerLine ||
+        neighbour.powerPlantType !== undefined ||
+        neighbour.kind === TileKind.Residential ||
+        neighbour.kind === TileKind.Commercial ||
+        neighbour.kind === TileKind.Industrial)
+    );
+  });
 }
 
 export function updateBuildingStates(state: GameState) {

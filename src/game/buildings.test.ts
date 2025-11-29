@@ -8,6 +8,7 @@ import {
   registerBuildingTemplate,
   updateBuildingStates
 } from './buildings';
+import { deserialize, serialize } from './persistence';
 
 const poweredTemplate: BuildingTemplate = {
   id: 'test-power-requirer',
@@ -43,5 +44,16 @@ describe('buildings state machine', () => {
     state.buildings[0].state.health = 0;
     updateBuildingStates(state);
     expect(state.buildings[0].state.status).toBe(BuildingStatus.InactiveDamaged);
+  });
+
+  it('rebuilds legacy civic tiles into building instances on load', () => {
+    const state = createInitialState(4, 4);
+    const tile = getTile(state, 1, 1)!;
+    tile.kind = TileKind.WaterPump;
+    const restored = deserialize(serialize(state));
+    const pumpTile = getTile(restored, 1, 1)!;
+    expect(pumpTile.buildingId).toBeDefined();
+    const building = restored.buildings.find((b) => b.id === pumpTile.buildingId);
+    expect(building?.templateId).toBe(TileKind.WaterPump);
   });
 });
