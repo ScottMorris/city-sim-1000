@@ -116,21 +116,23 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     if (isPainting && tool !== Tool.Inspect) {
       const alreadyPainted =
         lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
-      const adjacent =
-        lastPainted &&
-        Math.abs(lastPainted.x - tilePos.x) + Math.abs(lastPainted.y - tilePos.y) === 1;
-      if (!alreadyPainted && adjacent) {
+      if (!alreadyPainted) {
         applyCurrentTool(tilePos);
         lastPainted = tilePos;
       }
     }
   });
 
-  wrapper.addEventListener('pointerup', () => {
+  const stopPainting = () => {
     isPanning = false;
     isPainting = false;
     lastPainted = null;
-  });
+  };
+
+  wrapper.addEventListener('pointerup', stopPainting);
+  window.addEventListener('pointerup', stopPainting);
+  wrapper.addEventListener('pointercancel', stopPainting);
+  window.addEventListener('pointercancel', stopPainting);
 
   wrapper.addEventListener(
     'wheel',
