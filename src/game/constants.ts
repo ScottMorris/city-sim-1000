@@ -1,8 +1,10 @@
-import { TileKind, Tool } from './gameState';
+import { TileKind } from './gameState';
+import { Tool } from './tools';
 
 export const BUILD_COST: Record<Tool, number> = {
   [Tool.Inspect]: 0,
-  [Tool.Terraform]: 10,
+  [Tool.TerraformRaise]: 10,
+  [Tool.TerraformLower]: 10,
   [Tool.Water]: 12,
   [Tool.Tree]: 8,
   [Tool.Road]: 5,

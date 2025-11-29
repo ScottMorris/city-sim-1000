@@ -38,14 +38,15 @@ export function tick(state: GameState, dtSeconds: number) {
   const waterSupply = pumps * 50;
   const powerUse = residential * 1.5 + commercial * 2.5 + industrial * 3;
   const waterUse = residential * 1 + commercial * 1.5 + industrial * 2;
-  state.power = powerSupply - powerUse;
-  state.water = waterSupply - waterUse;
+  state.utilities.power = powerSupply - powerUse;
+  state.utilities.water = waterSupply - waterUse;
 
   state.demand.residential = clamp(60 - residential * 2 + Math.max(0, state.jobs - state.population), 0, 100);
   state.demand.commercial = clamp(50 - commercial * 3 + state.population * 0.2, 0, 100);
   state.demand.industrial = clamp(50 - industrial * 3 + state.population * 0.15, 0, 100);
 
-  const utilityPenalty = (state.power < 0 ? 15 : 0) + (state.water < 0 ? 10 : 0);
+  const utilityPenalty =
+    (state.utilities.power < 0 ? 15 : 0) + (state.utilities.water < 0 ? 10 : 0);
   state.demand.residential = clamp(state.demand.residential - utilityPenalty, 0, 100);
 
   const revenue = BASE_INCOME + state.population * 1.5 + commercial * 6 + industrial * 8;

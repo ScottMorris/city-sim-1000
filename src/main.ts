@@ -1,7 +1,7 @@
 import './style.css';
 import { Application } from 'pixi.js';
-import { createInitialState, GameState, Tool, getTile } from './game/gameState';
-import { applyTool } from './game/tools';
+import { createInitialState, GameState, getTile } from './game/gameState';
+import { applyTool, Tool } from './game/tools';
 import { tick } from './game/simulation';
 import { loadFromBrowser } from './game/persistence';
 import { createCamera, centerCamera, screenToTile } from './rendering/camera';

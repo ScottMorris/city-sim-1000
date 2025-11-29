@@ -1,8 +1,9 @@
-import { Tool } from '../game/gameState';
+import { Tool } from '../game/tools';
 
 const toolLabels: Record<Tool, string> = {
   [Tool.Inspect]: 'Inspect',
-  [Tool.Terraform]: 'Land',
+  [Tool.TerraformRaise]: 'Raise',
+  [Tool.TerraformLower]: 'Lower',
   [Tool.Water]: 'Water',
   [Tool.Tree]: 'Trees',
   [Tool.Road]: 'Road',

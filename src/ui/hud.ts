@@ -19,8 +19,8 @@ export function createHud(elements: HudElements) {
 
   const update = (state: GameState) => {
     elements.moneyEl.textContent = `$${Math.floor(state.money).toLocaleString()}`;
-    elements.powerEl.textContent = `⚡ ${state.power.toFixed(1)} MW`;
-    elements.waterEl.textContent = `💧 ${state.water.toFixed(1)} m³`;
+    elements.powerEl.textContent = `⚡ ${state.utilities.power.toFixed(1)} MW`;
+    elements.waterEl.textContent = `💧 ${state.utilities.water.toFixed(1)} m³`;
     elements.resBar.style.width = `${state.demand.residential}%`;
     elements.comBar.style.width = `${state.demand.commercial}%`;
     elements.indBar.style.width = `${state.demand.industrial}%`;

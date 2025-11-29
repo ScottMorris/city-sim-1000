@@ -7,6 +7,12 @@ export function serialize(state: GameState): string {
 
 export function deserialize(payload: string): GameState {
   const parsed = JSON.parse(payload);
+  if (!parsed.utilities) {
+    parsed.utilities = {
+      power: parsed.power ?? 0,
+      water: parsed.water ?? 0
+    };
+  }
   return parsed as GameState;
 }
 

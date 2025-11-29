@@ -13,48 +13,37 @@ export enum TileKind {
   Park = 'park'
 }
 
-export enum Tool {
-  Inspect = 'inspect',
-  Terraform = 'terraform',
-  Water = 'water',
-  Tree = 'tree',
-  Road = 'road',
-  Rail = 'rail',
-  PowerLine = 'powerline',
-  HydroPlant = 'hydro',
-  WaterPump = 'pump',
-  Residential = 'residential',
-  Commercial = 'commercial',
-  Industrial = 'industrial',
-  Bulldoze = 'bulldoze',
-  Park = 'park'
-}
-
-export interface TileState {
+export interface Tile {
   kind: TileKind;
   elevation: number;
   happiness: number;
 }
 
+export interface UtilityStats {
+  power: number;
+  water: number;
+}
+
+export interface DemandStats {
+  residential: number;
+  commercial: number;
+  industrial: number;
+}
+
 export interface GameState {
   width: number;
   height: number;
-  tiles: TileState[];
+  tiles: Tile[];
   money: number;
   day: number;
   population: number;
   jobs: number;
-  power: number;
-  water: number;
-  demand: {
-    residential: number;
-    commercial: number;
-    industrial: number;
-  };
+  utilities: UtilityStats;
+  demand: DemandStats;
 }
 
 export function createInitialState(width = 64, height = 64): GameState {
-  const tiles: TileState[] = [];
+  const tiles: Tile[] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const edge = x < 3 || y < 3 || x > width - 4 || y > height - 4;
@@ -74,8 +63,10 @@ export function createInitialState(width = 64, height = 64): GameState {
     day: 1,
     population: 12,
     jobs: 4,
-    power: 10,
-    water: 10,
+    utilities: {
+      power: 10,
+      water: 10
+    },
     demand: { residential: 30, commercial: 30, industrial: 30 }
   };
 }
@@ -84,7 +75,7 @@ function getIndex(state: GameState, x: number, y: number): number {
   return y * state.width + x;
 }
 
-export function getTile(state: GameState, x: number, y: number): TileState | undefined {
+export function getTile(state: GameState, x: number, y: number): Tile | undefined {
   if (x < 0 || y < 0 || x >= state.width || y >= state.height) return undefined;
   return state.tiles[getIndex(state, x, y)];
 }
