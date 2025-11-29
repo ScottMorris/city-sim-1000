@@ -8,7 +8,7 @@ const toolLabels: Record<Tool, string> = {
   [Tool.Tree]: 'Trees',
   [Tool.Road]: 'Road',
   [Tool.Rail]: 'Rail',
-  [Tool.PowerLine]: 'Lines',
+  [Tool.PowerLine]: 'Power',
   [Tool.WaterPump]: 'Pump',
   [Tool.Residential]: 'Res',
   [Tool.Commercial]: 'Com',
@@ -55,7 +55,7 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
   powerOptions.forEach((key) => {
     const button = document.createElement('button');
     button.className = 'tool-sub-button';
-    button.textContent = toolLabels[key];
+    button.textContent = key === Tool.PowerLine ? 'Lines' : toolLabels[key];
     button.dataset.tool = key;
     button.addEventListener('click', () => {
       onSelect(key);
