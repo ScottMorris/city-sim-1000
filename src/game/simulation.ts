@@ -1,6 +1,7 @@
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
-import { BASE_INCOME, MAINTENANCE } from './constants';
+import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
+import { recomputePowerNetwork } from './power';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -36,16 +37,18 @@ export class Simulation {
     let residential = 0;
     let commercial = 0;
     let industrial = 0;
-    let generators = 0;
     let pumps = 0;
     let maintenance = 0;
+    let plantMaintenance = 0;
 
     for (const tile of this.state.tiles) {
       if (tile.kind === TileKind.Residential) residential++;
       if (tile.kind === TileKind.Commercial) commercial++;
       if (tile.kind === TileKind.Industrial) industrial++;
-      if (tile.kind === TileKind.HydroPlant) generators++;
       if (tile.kind === TileKind.WaterPump) pumps++;
+      if (tile.powerPlantType) {
+        plantMaintenance += POWER_PLANT_CONFIGS[tile.powerPlantType].maintenancePerDay;
+      }
       const upkeep = MAINTENANCE[tile.kind];
       if (upkeep) maintenance += upkeep;
     }
@@ -65,10 +68,13 @@ export class Simulation {
     this.state.population = clamp(this.state.population + growth, 0, populationCapacity);
     this.state.jobs = clamp(this.state.jobs + jobGrowth, 0, jobCapacity);
 
-    const powerSupply = generators * 50;
+    recomputePowerNetwork(this.state);
+
+    const powerSupply = this.state.utilities.powerProduced;
     const waterSupply = pumps * 50;
     const powerUse = residential * 1.5 + commercial * 2.5 + industrial * 3;
     const waterUse = residential * 1 + commercial * 1.5 + industrial * 2;
+    this.state.utilities.powerUsed = powerUse;
     this.state.utilities.power = powerSupply - powerUse;
     this.state.utilities.water = waterSupply - waterUse;
 
@@ -94,7 +100,7 @@ export class Simulation {
 
     const revenue =
       BASE_INCOME + this.state.population * 1.5 + commercial * 6 + industrial * 8;
-    const expenses = maintenance + generators * 4 + pumps * 3;
+    const expenses = maintenance + plantMaintenance + pumps * 3;
     this.state.money = Math.max(0, this.state.money + (revenue - expenses) * this.dt * 0.2);
   }
 }

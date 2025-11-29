@@ -75,8 +75,10 @@ Game saves are stored in **LocalStorage** with optional import/export.
 │  │  ├─ gameState.ts
 │  │  ├─ simulation.ts
 │  │  ├─ tools.ts
+│  │  ├─ toolTypes.ts
 │  │  ├─ persistence.ts
-│  │  └─ constants.ts
+│  │  ├─ constants.ts
+│  │  └─ power.ts
 │  ├─ rendering/
 │  │  ├─ renderer.ts
 │  │  ├─ sprites.ts
@@ -118,6 +120,16 @@ Tiles include:
 * Rail (auto-connect)
 * Trees
 * Parks
+
+### 5.3 Power Network (v1)
+
+* Tiles carry a `powered` flag and optional `powerPlantType` (Hydro, Coal, Wind, Solar).
+* Power sources: any tile with `powerPlantType` set.
+* Network edges: `TileKind.PowerLine` tiles.
+* Connectivity: 4-directional BFS flood-fill from sources through power lines; reachable lines/plants are marked `powered: true`.
+* Production: `powerProduced` sums plant outputs from `POWER_PLANT_CONFIGS`; `powerUsed` is `0` until consumers exist.
+* Maintenance: per-tile upkeep plus per-plant maintenance from configs.
+* Rendering is unchanged for v1; powered/unpowered lines share visuals for now.
 * Power lines
 * Hydro plant
 * Water pump

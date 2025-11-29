@@ -10,9 +10,19 @@ export function deserialize(payload: string): GameState {
   if (!parsed.utilities) {
     parsed.utilities = {
       power: parsed.power ?? 0,
-      water: parsed.water ?? 0
+      water: parsed.water ?? 0,
+      powerProduced: 0,
+      powerUsed: 0
     };
+  } else {
+    parsed.utilities.powerProduced = parsed.utilities.powerProduced ?? 0;
+    parsed.utilities.powerUsed = parsed.utilities.powerUsed ?? 0;
   }
+  parsed.tiles = parsed.tiles.map((tile: any) => ({
+    ...tile,
+    powered: tile.powered ?? false,
+    powerPlantType: tile.powerPlantType
+  }));
   if (parsed.tick === undefined) {
     parsed.tick = 0;
   }

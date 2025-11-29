@@ -1,6 +1,54 @@
 import { TileKind } from './gameState';
 import { Tool } from './toolTypes';
 
+export enum PowerPlantType {
+  Hydro = 'hydro',
+  Coal = 'coal',
+  Wind = 'wind',
+  Solar = 'solar'
+}
+
+export interface PowerPlantConfig {
+  id: PowerPlantType;
+  name: string;
+  outputMw: number;
+  buildCost: number;
+  maintenancePerDay: number;
+  requiresWaterEdge?: boolean;
+}
+
+export const POWER_PLANT_CONFIGS: Record<PowerPlantType, PowerPlantConfig> = {
+  [PowerPlantType.Hydro]: {
+    id: PowerPlantType.Hydro,
+    name: 'Hydro Plant',
+    outputMw: 60,
+    buildCost: 20000,
+    maintenancePerDay: 150,
+    requiresWaterEdge: true
+  },
+  [PowerPlantType.Coal]: {
+    id: PowerPlantType.Coal,
+    name: 'Coal Plant',
+    outputMw: 80,
+    buildCost: 25000,
+    maintenancePerDay: 300
+  },
+  [PowerPlantType.Wind]: {
+    id: PowerPlantType.Wind,
+    name: 'Wind Turbine',
+    outputMw: 8,
+    buildCost: 5000,
+    maintenancePerDay: 30
+  },
+  [PowerPlantType.Solar]: {
+    id: PowerPlantType.Solar,
+    name: 'Solar Farm',
+    outputMw: 5,
+    buildCost: 4000,
+    maintenancePerDay: 20
+  }
+};
+
 export const BUILD_COST: Record<Tool, number> = {
   [Tool.Inspect]: 0,
   [Tool.TerraformRaise]: 10,
@@ -11,6 +59,9 @@ export const BUILD_COST: Record<Tool, number> = {
   [Tool.Rail]: 15,
   [Tool.PowerLine]: 6,
   [Tool.HydroPlant]: 600,
+  [Tool.CoalPlant]: 800,
+  [Tool.WindTurbine]: 300,
+  [Tool.SolarFarm]: 250,
   [Tool.WaterPump]: 400,
   [Tool.Residential]: 40,
   [Tool.Commercial]: 60,
@@ -23,7 +74,6 @@ export const MAINTENANCE: Partial<Record<TileKind, number>> = {
   [TileKind.Road]: 0.1,
   [TileKind.Rail]: 0.2,
   [TileKind.PowerLine]: 0.08,
-  [TileKind.HydroPlant]: 3,
   [TileKind.WaterPump]: 2,
   [TileKind.Park]: 0.05
 };

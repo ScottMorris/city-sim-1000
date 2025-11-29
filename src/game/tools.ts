@@ -1,4 +1,4 @@
-import { BUILD_COST } from './constants';
+import { BUILD_COST, PowerPlantType } from './constants';
 import { GameState, Tile, TileKind, getTile, setTile } from './gameState';
 import { Tool } from './toolTypes';
 
@@ -59,7 +59,42 @@ const registry: ToolRegistry = {
   },
   [Tool.HydroPlant]: ({ state, x, y }) => {
     state.money -= BUILD_COST[Tool.HydroPlant];
-    setTile(state, x, y, TileKind.HydroPlant);
+    const tile = getTile(state, x, y);
+    if (tile) {
+      tile.kind = TileKind.HydroPlant;
+      tile.powerPlantType = PowerPlantType.Hydro;
+      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+    }
+    return { success: true };
+  },
+  [Tool.CoalPlant]: ({ state, x, y }) => {
+    state.money -= BUILD_COST[Tool.CoalPlant];
+    const tile = getTile(state, x, y);
+    if (tile) {
+      tile.kind = TileKind.HydroPlant;
+      tile.powerPlantType = PowerPlantType.Coal;
+      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+    }
+    return { success: true };
+  },
+  [Tool.WindTurbine]: ({ state, x, y }) => {
+    state.money -= BUILD_COST[Tool.WindTurbine];
+    const tile = getTile(state, x, y);
+    if (tile) {
+      tile.kind = TileKind.HydroPlant;
+      tile.powerPlantType = PowerPlantType.Wind;
+      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+    }
+    return { success: true };
+  },
+  [Tool.SolarFarm]: ({ state, x, y }) => {
+    state.money -= BUILD_COST[Tool.SolarFarm];
+    const tile = getTile(state, x, y);
+    if (tile) {
+      tile.kind = TileKind.HydroPlant;
+      tile.powerPlantType = PowerPlantType.Solar;
+      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+    }
     return { success: true };
   },
   [Tool.WaterPump]: ({ state, x, y }) => {
@@ -89,7 +124,12 @@ const registry: ToolRegistry = {
   },
   [Tool.Bulldoze]: ({ state, x, y }) => {
     state.money -= BUILD_COST[Tool.Bulldoze];
-    setTile(state, x, y, TileKind.Land);
+    const tile = getTile(state, x, y);
+    if (tile) {
+      tile.kind = TileKind.Land;
+      tile.powerPlantType = undefined;
+      tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+    }
     return { success: true };
   }
 };
