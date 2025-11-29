@@ -11,6 +11,7 @@ import {
   serialize,
   deserialize
 } from './game';
+import { loadPaletteTexture } from './rendering/tileAtlas';
 
 const LOCAL_STORAGE_KEY = 'city-sim-1000-save';
 const TILE_SIZE = 28;
@@ -351,6 +352,8 @@ function gameLoop(now: number) {
 
 (async function bootstrap() {
   loadExistingSave();
+  const paletteTexture = await loadPaletteTexture();
+  console.log('Palette texture loaded', paletteTexture);
   createToolbar();
   attachEvents();
   await initPixi();
