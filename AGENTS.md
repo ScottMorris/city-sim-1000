@@ -11,3 +11,16 @@
 
 - Remember to update the readme or documentation if your changes affect usage or functionality.
 - Test your changes thoroughly before committing to ensure stability and reliability.
+
+## Canadian English Spelling
+
+Documentation, code comments and variables use Canadian English:
+
+- colour (not color)
+- centre (not center)
+- licence (not license - noun)
+- organise (not organize)
+- behaviour (not behavior)
+- favour (not favor)
+
+Code identifiers follow web standards (e.g., `color` in CSS, `center` in alignment).
