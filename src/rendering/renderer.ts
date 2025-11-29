@@ -9,6 +9,7 @@ export interface Position {
 
 export class MapRenderer {
   readonly app: Application;
+  private parent: HTMLElement;
   private mapLayer: Graphics;
   private overlayLayer: Graphics;
   private container: Container;
@@ -18,6 +19,7 @@ export class MapRenderer {
 
   constructor(parent: HTMLElement, camera: Camera, tileSize: number, palette: Record<TileKind, number>) {
     this.app = new Application();
+    this.parent = parent;
     this.camera = camera;
     this.tileSize = tileSize;
     this.palette = palette;
@@ -25,7 +27,6 @@ export class MapRenderer {
     this.overlayLayer = new Graphics();
     this.container = new Container();
     this.container.addChild(this.mapLayer, this.overlayLayer);
-    parent.appendChild(this.app.canvas);
   }
 
   async init(resizeTo: HTMLElement) {
@@ -34,6 +35,7 @@ export class MapRenderer {
       resizeTo,
       antialias: true
     });
+    this.parent.appendChild(this.app.canvas);
     this.app.stage.addChild(this.container);
   }
 
