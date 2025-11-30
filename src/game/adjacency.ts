@@ -25,7 +25,7 @@ export function getOrthogonalNeighbourCoords(
 export function hasRoadAccess(state: GameState, x: number, y: number): boolean {
   return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
     const neighbour = getTile(state, nx, ny);
-    return neighbour?.kind === TileKind.Road;
+    return neighbour?.kind === TileKind.Road || neighbour?.kind === TileKind.PowerLine;
   });
 }
 

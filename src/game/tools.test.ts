@@ -231,6 +231,20 @@ describe('simulation', () => {
     expect(getTile(state, 5, 2)?.powered).toBe(true);
   });
 
+  it('keeps road access when a segment is converted to a power line', () => {
+    const state = createInitialState(8, 6);
+    state.money = 50000;
+    applyTool(state, Tool.Residential, 5, 3);
+    // road on both sides of the future powerline crossing
+    for (let x = 2; x <= 6; x++) {
+      applyTool(state, Tool.Road, x, 3);
+    }
+    // drop a power line on the middle tile to simulate an over-road line
+    applyTool(state, Tool.PowerLine, 4, 3);
+    expect(getTile(state, 4, 3)?.kind).toBe(TileKind.PowerLine);
+    expect(hasRoadAccess(state, 5, 3)).toBe(true);
+  });
+
   it('grows frontier zones even without roads, but roads still trigger growth', () => {
     const state = createInitialState(6, 6);
     state.money = 50000;
