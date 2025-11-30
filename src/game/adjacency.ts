@@ -51,6 +51,7 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.powerPlantType) return true;
   if (tile.kind === TileKind.PowerLine) return true;
+  if (tile.kind === TileKind.Road || tile.kind === TileKind.Rail) return true;
   if (isZone(tile)) {
     return true;
   }

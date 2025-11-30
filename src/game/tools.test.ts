@@ -209,6 +209,28 @@ describe('simulation', () => {
     expect(getTile(state, 3, 1)?.powered).toBe(true);
   });
 
+  it('propagates power along roads and rail as carriers', () => {
+    const state = createInitialState(8, 4);
+    state.money = 20000;
+    applyTool(state, Tool.WindTurbine, 0, 1);
+    // road chain to the right
+    for (let x = 1; x <= 5; x++) {
+      applyTool(state, Tool.Road, x, 1);
+    }
+    applyTool(state, Tool.Commercial, 6, 1);
+    recomputePowerNetwork(state);
+    expect(getTile(state, 6, 1)?.powered).toBe(true);
+
+    // rail should also carry
+    applyTool(state, Tool.Rail, 1, 2);
+    applyTool(state, Tool.Rail, 2, 2);
+    applyTool(state, Tool.Rail, 3, 2);
+    applyTool(state, Tool.Rail, 4, 2);
+    applyTool(state, Tool.Commercial, 5, 2);
+    recomputePowerNetwork(state);
+    expect(getTile(state, 5, 2)?.powered).toBe(true);
+  });
+
   it('grows frontier zones even without roads, but roads still trigger growth', () => {
     const state = createInitialState(6, 6);
     state.money = 50000;
