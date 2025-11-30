@@ -12,6 +12,7 @@ import { loadPaletteTexture } from './rendering/tileAtlas';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import { createHud } from './ui/hud';
 import { bindPersistenceControls, showToast } from './ui/dialogs';
+import { initDebugOverlay } from './ui/debugOverlay';
 import { initToolbar } from './ui/toolbar';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
@@ -28,6 +29,7 @@ appRoot.innerHTML = `
       <div class="panel"><h4>Demands</h4><div class="demand-labels"><span>R</span><span>C</span><span>I</span></div><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div>
       <div class="panel"><h4>City</h4><div id="population">Population 0</div><div id="jobs">Jobs 0</div><div id="day">Day 1</div></div>
       <div class="panel"><h4>Saves</h4><div class="controls-row"><button id="save-btn" class="secondary">Save</button><button id="load-btn" class="secondary">Load</button></div><div class="controls-row"><button id="download-btn" class="primary">Download</button><button id="upload-btn" class="secondary">Upload</button><input type="file" id="file-input" accept="application/json" style="display:none" /></div></div>
+      <div class="panel"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
     </div>
   </div>
   <div id="viewport">
@@ -61,6 +63,8 @@ const loadBtn = requireElement<HTMLButtonElement>('#load-btn');
 const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
 const uploadBtn = requireElement<HTMLButtonElement>('#upload-btn');
 const fileInput = requireElement<HTMLInputElement>('#file-input');
+const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
+const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 
 const app = new Application();
 const camera = createCamera();
@@ -74,6 +78,7 @@ let lastPainted: Position | null = null;
 let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 const simulation = new Simulation(state, { ticksPerSecond: 20 });
+let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
@@ -168,6 +173,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   renderer.render(state, hovered, selected);
   hud.update(state);
   hud.renderSelectionInfo(state, selected);
+  debugOverlay?.update(state);
   requestAnimationFrame(() => gameLoop(renderer, hud));
 }
 
@@ -211,6 +217,13 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       state = loaded;
       centerCamera(state, wrapper, TILE_SIZE, camera);
     }
+  });
+
+  debugOverlay = initDebugOverlay({
+    root: wrapper,
+    toggleBtn: debugOverlayBtn,
+    copyBtn: debugCopyBtn,
+    getState: () => state
   });
 
   attachViewportEvents(renderer.getCanvas());

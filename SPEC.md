@@ -15,6 +15,8 @@ The game is inspired by classic city-building titles and retro pixel-art aesthet
 * visually consistent with a pixel-art theme
 * simple but expandable
 
+For a concise overview of systems, balancing levers, and player-facing options, see **Systems Outline** in [`docs/game-parameters.md`](docs/game-parameters.md).
+
 Game saves are stored in **LocalStorage** with optional import/export.
 
 ---
