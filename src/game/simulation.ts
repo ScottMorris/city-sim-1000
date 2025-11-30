@@ -30,6 +30,7 @@ export class Simulation {
   private readonly dt: number;
   private readonly zoneGrowthDelayTicks: number;
   private zoneGrowthTimers = new Map<number, number>();
+  private readonly waterEnabled = false;
 
   constructor(state: GameState, config: SimulationConfig) {
     this.state = state;
@@ -78,7 +79,8 @@ export class Simulation {
       if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
         const active = pumpTemplate.requiresPower === false ? true : tile.powered;
         if (pumpTemplate.maintenance) buildingMaintenance += pumpTemplate.maintenance;
-        if (active && pumpTemplate.waterOutput) buildingWaterOutput += pumpTemplate.waterOutput;
+        if (this.waterEnabled && active && pumpTemplate.waterOutput)
+          buildingWaterOutput += pumpTemplate.waterOutput;
       }
       if (tile.buildingId === undefined && tile.kind === TileKind.Park && parkTemplate) {
         if (parkTemplate.maintenance) buildingMaintenance += parkTemplate.maintenance;
@@ -91,9 +93,9 @@ export class Simulation {
       if (template.maintenance) buildingMaintenance += template.maintenance;
       const isActive = building.state.status === BuildingStatus.Active;
       if (isActive) {
-        if (template.waterOutput) buildingWaterOutput += template.waterOutput;
+        if (this.waterEnabled && template.waterOutput) buildingWaterOutput += template.waterOutput;
         if (template.powerUse) buildingPowerUse += template.powerUse;
-        if (template.waterUse) buildingWaterUse += template.waterUse;
+        if (this.waterEnabled && template.waterUse) buildingWaterUse += template.waterUse;
         if (template.populationCapacity) populationCapacity += template.populationCapacity;
         if (template.jobsCapacity) jobCapacity += template.jobsCapacity;
       }
@@ -127,9 +129,9 @@ export class Simulation {
     this.state.jobs = clamp(this.state.jobs + jobGrowth, 0, jobCapacity);
 
     const powerSupply = this.state.utilities.powerProduced;
-    const waterSupply = buildingWaterOutput;
+    const waterSupply = this.waterEnabled ? buildingWaterOutput : 1e6;
     const powerUse = buildingPowerUse;
-    const waterUse = buildingWaterUse;
+    const waterUse = this.waterEnabled ? buildingWaterUse : 0;
     this.state.utilities.powerUsed = powerUse;
     this.state.utilities.power = powerSupply - powerUse;
     this.state.utilities.water = waterSupply - waterUse;
@@ -150,8 +152,7 @@ export class Simulation {
       100
     );
 
-    const utilityPenalty =
-      (this.state.utilities.power < 0 ? 15 : 0) + (this.state.utilities.water < 0 ? 10 : 0);
+    const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
     this.state.demand.residential = clamp(this.state.demand.residential - utilityPenalty, 0, 100);
 
     const revenue =
@@ -187,7 +188,7 @@ export class Simulation {
         this.zoneGrowthTimers.delete(idx);
         const demand = this.getDemandForZone(tile.kind);
         if (demand <= 5) continue;
-        if (this.state.utilities.power < 0 || this.state.utilities.water < 0) continue;
+        if (this.state.utilities.power < 0) continue;
         const template = getBuildingTemplate(tile.kind);
         if (!template) continue;
         const result = placeBuilding(this.state, template, x, y);
