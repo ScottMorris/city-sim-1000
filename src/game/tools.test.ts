@@ -245,6 +245,25 @@ describe('simulation', () => {
     expect(hasRoadAccess(state, 5, 3)).toBe(true);
   });
 
+  it('lets rail cross roads while keeping road access and power flow', () => {
+    const state = createInitialState(10, 6);
+    state.money = 50000;
+    // road spine
+    for (let x = 2; x <= 7; x++) {
+      applyTool(state, Tool.Road, x, 3);
+    }
+    applyTool(state, Tool.Residential, 8, 3);
+    // rail crossing
+    applyTool(state, Tool.Rail, 5, 2);
+    applyTool(state, Tool.Rail, 5, 3);
+    applyTool(state, Tool.Rail, 5, 4);
+    // power source on the left
+    applyTool(state, Tool.WindTurbine, 1, 3);
+    recomputePowerNetwork(state);
+    expect(hasRoadAccess(state, 8, 3)).toBe(true);
+    expect(getTile(state, 8, 3)?.powered).toBe(true);
+  });
+
   it('grows frontier zones even without roads, but roads still trigger growth', () => {
     const state = createInitialState(6, 6);
     state.money = 50000;

@@ -87,17 +87,32 @@ const registry: ToolRegistry = {
   },
   [Tool.Road]: ({ state, x, y }, cost) => {
     state.money -= cost;
+    const tile = getTile(state, x, y);
+    const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
     setTile(state, x, y, TileKind.Road);
+    const updated = getTile(state, x, y);
+    if (updated && hadRail) updated.railUnderlay = true; // remember rail for render/crossing
     return { success: true };
   },
   [Tool.Rail]: ({ state, x, y }, cost) => {
     state.money -= cost;
+    const tile = getTile(state, x, y);
+    const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
     setTile(state, x, y, TileKind.Rail);
+    const updated = getTile(state, x, y);
+    if (updated && hadRoad) updated.roadUnderlay = true; // rail over road
     return { success: true };
   },
   [Tool.PowerLine]: ({ state, x, y }, cost) => {
     state.money -= cost;
+    const tile = getTile(state, x, y);
+    const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
+    const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
     setTile(state, x, y, TileKind.PowerLine);
+    const updated = getTile(state, x, y);
+    if (updated && hadRoad) updated.roadUnderlay = true;
+    if (updated && hadRail) updated.railUnderlay = true;
+    if (updated) updated.powerOverlay = true;
     return { success: true };
   },
   [Tool.HydroPlant]: ({ state, x, y }, cost) =>

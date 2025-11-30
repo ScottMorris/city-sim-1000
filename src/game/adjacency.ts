@@ -25,7 +25,11 @@ export function getOrthogonalNeighbourCoords(
 export function hasRoadAccess(state: GameState, x: number, y: number): boolean {
   return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
     const neighbour = getTile(state, nx, ny);
-    return neighbour?.kind === TileKind.Road || neighbour?.kind === TileKind.PowerLine;
+    return (
+      neighbour?.kind === TileKind.Road ||
+      neighbour?.roadUnderlay === true ||
+      neighbour?.kind === TileKind.PowerLine
+    );
   });
 }
 
@@ -51,7 +55,8 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.powerPlantType) return true;
   if (tile.kind === TileKind.PowerLine) return true;
-  if (tile.kind === TileKind.Road || tile.kind === TileKind.Rail) return true;
+  if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
+  if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;
   if (isZone(tile)) {
     return true;
   }

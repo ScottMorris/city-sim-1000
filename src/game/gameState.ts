@@ -23,6 +23,9 @@ export interface Tile {
   elevation: number;
   happiness: number;
   powered: boolean;
+  roadUnderlay?: boolean;
+  railUnderlay?: boolean;
+  powerOverlay?: boolean;
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
   buildingId?: number;
@@ -104,6 +107,9 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
   const tile = getTile(state, x, y);
   if (!tile) return;
   tile.kind = kind;
+  tile.roadUnderlay = undefined;
+  tile.railUnderlay = undefined;
+  tile.powerOverlay = undefined;
   tile.happiness = Math.min(1.5, tile.happiness + 0.05);
   if (kind !== TileKind.HydroPlant) {
     tile.powerPlantType = undefined;
