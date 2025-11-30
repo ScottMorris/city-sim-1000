@@ -211,7 +211,7 @@ describe('simulation', () => {
     expect(getTile(state, 3, 1)?.powered).toBe(true);
   });
 
-  it('requires road adjacency before spawning zone buildings', () => {
+  it('grows frontier zones even without roads, but roads still trigger growth', () => {
     const state = createInitialState(6, 6);
     state.money = 50000;
     applyTool(state, Tool.Residential, 3, 3);
@@ -219,24 +219,32 @@ describe('simulation', () => {
     const sim = new Simulation(state, { ticksPerSecond: 1 });
     sim.update(1);
     expect(hasRoadAccess(state, 3, 3)).toBe(false);
-    expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeUndefined();
+    expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeDefined();
 
-    applyTool(state, Tool.Road, 3, 2);
-    expect(hasRoadAccess(state, 3, 3)).toBe(true);
+    // Second tile grows once road is added (still valid path)
+    applyTool(state, Tool.Residential, 4, 3);
+    applyTool(state, Tool.Road, 4, 2);
     sim.update(1);
-    const zoneBuilding = state.buildings.find((b) => b.templateId === 'zone-residential');
-    expect(zoneBuilding).toBeDefined();
+    const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
+    expect(secondZone.length).toBeGreaterThan(1);
   });
 
-  it('does not grow fully isolated zones without any road chain', () => {
-    const state = createInitialState(6, 6);
+  it('allows frontier zones to grow without roads but blocks fully enclosed interiors', () => {
+    const state = createInitialState(8, 8);
     state.money = 50000;
-    applyTool(state, Tool.Residential, 3, 3);
-    applyTool(state, Tool.Residential, 4, 3);
+    // 3x3 block of zones with no roads
+    for (let y = 2; y <= 4; y++) {
+      for (let x = 2; x <= 4; x++) {
+        applyTool(state, Tool.Residential, x, y);
+      }
+    }
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
     sim.update(1);
-    expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeUndefined();
+    const built = state.buildings.filter((b) => b.templateId === 'zone-residential');
+    expect(built.length).toBeGreaterThan(0);
+    const centerTile = getTile(state, 3, 3)!;
+    expect(centerTile.buildingId).toBeUndefined();
   });
 
   it('allows interior zone tiles to grow when adjacent to a road-served zone', () => {

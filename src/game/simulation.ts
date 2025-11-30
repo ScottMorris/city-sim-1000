@@ -9,7 +9,12 @@ import {
   updateBuildingStates
 } from './buildings';
 import { recomputePowerNetwork } from './power';
-import { getOrthogonalNeighbourCoords, hasRoadAccess, zoneHasRoadPath } from './adjacency';
+import {
+  getOrthogonalNeighbourCoords,
+  hasRoadAccess,
+  isFrontierZone,
+  zoneHasRoadPath
+} from './adjacency';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -165,7 +170,8 @@ export class Simulation {
           continue;
         }
         const hasRoadChain = zoneHasRoadPath(this.state, x, y);
-        if (!hasRoadAccess(this.state, x, y) && !hasRoadChain) continue;
+        const frontierAllowed = isFrontierZone(this.state, x, y);
+        if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) continue;
         const demand = this.getDemandForZone(tile.kind);
         if (demand <= 5) continue;
         if (this.state.utilities.power < 0 || this.state.utilities.water < 0) continue;

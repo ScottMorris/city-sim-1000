@@ -5,7 +5,7 @@
 - **People as Outcome and Fuel**: Population and jobs are the payoff for capacity, but also drive revenue and unlock higher-value builds. They consume utilities and need access; deficits hurt happiness/demand, surpluses fund expansion. Jobs attract people; people fill jobs—keep both in balance.
 
 ## Interactions to Lock In
-- **Adjacency rules**: What counts as connected for zones (road edge vs corner), rail freight/passenger bonus, power via lines only, water via pipes only. Zones can grow away from a road if they are orthogonally chained to a road-served zone.
+- **Adjacency rules**: What counts as connected for zones (road edge vs corner), rail freight/passenger bonus, power via lines only, water via pipes only. Zones can grow away from a road if they are orthogonally chained to a road-served zone; otherwise only frontier tiles (touching empty land) can start without a road.
 - **Adjacency draft**:
   - Roads: 4-way orthogonal connectivity (no diagonal) for zoning reach, services, and traffic assumptions. Intersections auto-connect; roads and rail may cross with rules (rail over/under or shared tile if allowed).
   - Rail: 4-way network; gives freight/passenger bonus if a zone is road-adjacent to any rail tile within 1 tile (orthogonal) or directly orthogonal if sharing tiles is disallowed.

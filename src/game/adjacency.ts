@@ -38,6 +38,15 @@ export function isZone(tile: Tile | undefined): boolean {
   );
 }
 
+export function isFrontierZone(state: GameState, x: number, y: number): boolean {
+  const tile = getTile(state, x, y);
+  if (!isZone(tile)) return false;
+  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
+    const neighbour = getTile(state, nx, ny);
+    return !isZone(neighbour);
+  });
+}
+
 export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.powerPlantType) return true;
