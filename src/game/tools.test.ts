@@ -189,7 +189,7 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 2);
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(1);
+    sim.update(2.5);
     const zoneBuilding = state.buildings.find((b) => b.templateId === 'zone-residential');
     expect(zoneBuilding).toBeDefined();
     const template = getBuildingTemplate(zoneBuilding!.templateId)!;
@@ -217,14 +217,14 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 3);
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(1);
+    sim.update(2.5);
     expect(hasRoadAccess(state, 3, 3)).toBe(false);
     expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeDefined();
 
     // Second tile grows once road is added (still valid path)
     applyTool(state, Tool.Residential, 4, 3);
     applyTool(state, Tool.Road, 4, 2);
-    sim.update(1);
+    sim.update(2.5);
     const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(secondZone.length).toBeGreaterThan(1);
   });
@@ -240,7 +240,7 @@ describe('simulation', () => {
     }
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(1);
+    sim.update(2.5);
     const built = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(built.length).toBeGreaterThan(0);
     const centerTile = getTile(state, 3, 3)!;
@@ -255,10 +255,10 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 3); // interior tile with no road access
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(1);
+    sim.update(2.5);
     const firstZone = state.buildings.find((b) => b.templateId === 'zone-residential');
     expect(firstZone).toBeDefined();
-    sim.update(1);
+    sim.update(2.5);
     const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(secondZone.length).toBeGreaterThan(1);
   });

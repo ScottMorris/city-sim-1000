@@ -28,10 +28,13 @@ export class Simulation {
   private state: GameState;
   private accumulator = 0;
   private readonly dt: number;
+  private readonly zoneGrowthDelayTicks: number;
+  private zoneGrowthTimers = new Map<number, number>();
 
   constructor(state: GameState, config: SimulationConfig) {
     this.state = state;
     this.dt = 1 / config.ticksPerSecond;
+    this.zoneGrowthDelayTicks = Math.max(1, Math.round(config.ticksPerSecond * 2)); // ~2s delay
   }
 
   update(elapsedSeconds: number) {
@@ -171,7 +174,17 @@ export class Simulation {
         }
         const hasRoadChain = zoneHasRoadPath(this.state, x, y);
         const frontierAllowed = isFrontierZone(this.state, x, y);
-        if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) continue;
+        if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) {
+          this.zoneGrowthTimers.delete(y * this.state.width + x);
+          continue;
+        }
+        const idx = y * this.state.width + x;
+        const currentTimer = this.zoneGrowthTimers.get(idx) ?? this.zoneGrowthDelayTicks;
+        if (currentTimer > 1) {
+          this.zoneGrowthTimers.set(idx, currentTimer - 1);
+          continue;
+        }
+        this.zoneGrowthTimers.delete(idx);
         const demand = this.getDemandForZone(tile.kind);
         if (demand <= 5) continue;
         if (this.state.utilities.power < 0 || this.state.utilities.water < 0) continue;
