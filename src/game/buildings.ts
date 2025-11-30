@@ -1,6 +1,7 @@
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
+import { getOrthogonalNeighbourCoords, isPowerCarrier } from './adjacency';
 import { Tool } from './toolTypes';
 
 export enum BuildingCategory {
@@ -275,27 +276,9 @@ function tileHasPower(state: GameState, x: number, y: number): boolean {
   const tile = getTile(state, x, y);
   if (!tile) return false;
   if (tile.powered) return true;
-  const isZoneTile =
-    tile.kind === TileKind.Residential ||
-    tile.kind === TileKind.Commercial ||
-    tile.kind === TileKind.Industrial;
-  if (isZoneTile && tile.powered) return true;
-  const neighbours: Array<[number, number]> = [
-    [x, y - 1],
-    [x + 1, y],
-    [x, y + 1],
-    [x - 1, y]
-  ];
-  return neighbours.some(([nx, ny]) => {
+  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
     const neighbour = getTile(state, nx, ny);
-    return (
-      neighbour?.powered &&
-      (neighbour.kind === TileKind.PowerLine ||
-        neighbour.powerPlantType !== undefined ||
-        neighbour.kind === TileKind.Residential ||
-        neighbour.kind === TileKind.Commercial ||
-        neighbour.kind === TileKind.Industrial)
-    );
+    return neighbour?.powered && isPowerCarrier(neighbour);
   });
 }
 

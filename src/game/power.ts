@@ -1,23 +1,10 @@
 import { BuildingStatus, listPowerPlants } from './buildings';
-import { GameState, Tile, TileKind } from './gameState';
+import { GameState } from './gameState';
 import { POWER_PLANT_CONFIGS } from './constants';
+import { getOrthogonalNeighbourCoords, isPowerCarrier } from './adjacency';
 
 function getIndex(state: GameState, x: number, y: number) {
   return y * state.width + x;
-}
-
-function isPowerCarrier(tile: Tile): boolean {
-  if (!tile) return false;
-  if (tile.powerPlantType) return true;
-  if (tile.kind === TileKind.PowerLine) return true;
-  if (
-    tile.kind === TileKind.Residential ||
-    tile.kind === TileKind.Commercial ||
-    tile.kind === TileKind.Industrial
-  ) {
-    return true;
-  }
-  return false;
 }
 
 export function recomputePowerNetwork(state: GameState) {
@@ -39,20 +26,12 @@ export function recomputePowerNetwork(state: GameState) {
     const index = queue.shift()!;
     const x = index % state.width;
     const y = Math.floor(index / state.width);
-    const neighbours: Array<[number, number]> = [
-      [x, y - 1],
-      [x + 1, y],
-      [x, y + 1],
-      [x - 1, y]
-    ];
-    for (const [nx, ny] of neighbours) {
-      if (nx < 0 || ny < 0 || nx >= state.width || ny >= state.height) continue;
+    for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
       const nIndex = getIndex(state, nx, ny);
       const neighbour = state.tiles[nIndex];
-      if (isPowerCarrier(neighbour) && !neighbour.powered) {
-        neighbour.powered = true;
-        queue.push(nIndex);
-      }
+      if (!isPowerCarrier(neighbour) || neighbour.powered) continue;
+      neighbour.powered = true;
+      queue.push(nIndex);
     }
   }
 

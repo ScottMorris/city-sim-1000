@@ -6,6 +6,7 @@ import { applyTool } from './tools';
 import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
 import { BuildingStatus, getBuildingTemplate } from './buildings';
+import { hasRoadAccess } from './adjacency';
 
 describe('tools', () => {
   it('blocks tool usage when funds are insufficient', () => {
@@ -184,6 +185,7 @@ describe('simulation', () => {
     applyTool(state, Tool.PowerLine, 2, 0);
     applyTool(state, Tool.PowerLine, 2, 1);
     applyTool(state, Tool.PowerLine, 2, 2);
+    applyTool(state, Tool.Road, 3, 1);
     applyTool(state, Tool.Residential, 3, 2);
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
@@ -207,5 +209,22 @@ describe('simulation', () => {
     recomputePowerNetwork(state);
     expect(getTile(state, 3, 0)?.powered).toBe(true);
     expect(getTile(state, 3, 1)?.powered).toBe(true);
+  });
+
+  it('requires road adjacency before spawning zone buildings', () => {
+    const state = createInitialState(6, 6);
+    state.money = 50000;
+    applyTool(state, Tool.Residential, 3, 3);
+    state.demand.residential = 80;
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(1);
+    expect(hasRoadAccess(state, 3, 3)).toBe(false);
+    expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeUndefined();
+
+    applyTool(state, Tool.Road, 3, 2);
+    expect(hasRoadAccess(state, 3, 3)).toBe(true);
+    sim.update(1);
+    const zoneBuilding = state.buildings.find((b) => b.templateId === 'zone-residential');
+    expect(zoneBuilding).toBeDefined();
   });
 });

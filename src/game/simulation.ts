@@ -9,6 +9,7 @@ import {
   updateBuildingStates
 } from './buildings';
 import { recomputePowerNetwork } from './power';
+import { hasRoadAccess } from './adjacency';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -163,6 +164,7 @@ export class Simulation {
         ) {
           continue;
         }
+        if (!hasRoadAccess(this.state, x, y)) continue;
         const demand = this.getDemandForZone(tile.kind);
         if (demand <= 5) continue;
         if (this.state.utilities.power < 0 || this.state.utilities.water < 0) continue;

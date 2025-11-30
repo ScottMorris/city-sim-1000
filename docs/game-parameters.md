@@ -6,6 +6,12 @@
 
 ## Interactions to Lock In
 - **Adjacency rules**: What counts as connected for zones (road edge vs corner), rail freight/passenger bonus, power via lines only, water via pipes only.
+- **Adjacency draft**:
+  - Roads: 4-way orthogonal connectivity (no diagonal) for zoning reach, services, and traffic assumptions. Intersections auto-connect; roads and rail may cross with rules (rail over/under or shared tile if allowed).
+  - Rail: 4-way network; gives freight/passenger bonus if a zone is road-adjacent to any rail tile within 1 tile (orthogonal) or directly orthogonal if sharing tiles is disallowed.
+  - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power); no diagonal hops.
+  - Water: 4-way flood fill through pipes and water facilities; surface buildings do not conduct water unless explicitly a pipe.
+  - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe for water).
 - **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties.
 - **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build.
 - **Upgrade paths**: Pumps/towers → pipes; lines → plants; low → mid density; terraforming pricing that makes space trade-offs matter.
