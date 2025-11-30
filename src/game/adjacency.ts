@@ -29,16 +29,46 @@ export function hasRoadAccess(state: GameState, x: number, y: number): boolean {
   });
 }
 
+export function isZone(tile: Tile | undefined): boolean {
+  if (!tile) return false;
+  return (
+    tile.kind === TileKind.Residential ||
+    tile.kind === TileKind.Commercial ||
+    tile.kind === TileKind.Industrial
+  );
+}
+
 export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.powerPlantType) return true;
   if (tile.kind === TileKind.PowerLine) return true;
-  if (
-    tile.kind === TileKind.Residential ||
-    tile.kind === TileKind.Commercial ||
-    tile.kind === TileKind.Industrial
-  ) {
+  if (isZone(tile)) {
     return true;
+  }
+  return false;
+}
+
+/**
+ * Returns true if a zone tile can reach a road by walking orthogonally through other zone tiles.
+ */
+export function zoneHasRoadPath(state: GameState, startX: number, startY: number): boolean {
+  const start = getTile(state, startX, startY);
+  if (!isZone(start)) return false;
+  if (hasRoadAccess(state, startX, startY)) return true;
+  const visited = new Set<number>();
+  const queue: Array<[number, number]> = [[startX, startY]];
+  const toIndex = (x: number, y: number) => y * state.width + x;
+  while (queue.length) {
+    const [x, y] = queue.shift()!;
+    for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
+      const idx = toIndex(nx, ny);
+      if (visited.has(idx)) continue;
+      visited.add(idx);
+      const neighbour = getTile(state, nx, ny);
+      if (!isZone(neighbour)) continue;
+      if (hasRoadAccess(state, nx, ny)) return true;
+      queue.push([nx, ny]);
+    }
   }
   return false;
 }

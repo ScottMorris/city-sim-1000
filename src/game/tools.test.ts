@@ -228,6 +228,17 @@ describe('simulation', () => {
     expect(zoneBuilding).toBeDefined();
   });
 
+  it('does not grow fully isolated zones without any road chain', () => {
+    const state = createInitialState(6, 6);
+    state.money = 50000;
+    applyTool(state, Tool.Residential, 3, 3);
+    applyTool(state, Tool.Residential, 4, 3);
+    state.demand.residential = 80;
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(1);
+    expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeUndefined();
+  });
+
   it('allows interior zone tiles to grow when adjacent to a road-served zone', () => {
     const state = createInitialState(8, 8);
     state.money = 50000;

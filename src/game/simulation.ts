@@ -9,7 +9,7 @@ import {
   updateBuildingStates
 } from './buildings';
 import { recomputePowerNetwork } from './power';
-import { getOrthogonalNeighbourCoords, hasRoadAccess } from './adjacency';
+import { getOrthogonalNeighbourCoords, hasRoadAccess, zoneHasRoadPath } from './adjacency';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -164,15 +164,8 @@ export class Simulation {
         ) {
           continue;
         }
-        const hasAdjacentZone = getOrthogonalNeighbourCoords(this.state, x, y).some(([nx, ny]) => {
-          const neighbour = this.state.tiles[ny * this.state.width + nx];
-          return (
-            neighbour.kind === TileKind.Residential ||
-            neighbour.kind === TileKind.Commercial ||
-            neighbour.kind === TileKind.Industrial
-          );
-        });
-        if (!hasRoadAccess(this.state, x, y) && !hasAdjacentZone) continue;
+        const hasRoadChain = zoneHasRoadPath(this.state, x, y);
+        if (!hasRoadAccess(this.state, x, y) && !hasRoadChain) continue;
         const demand = this.getDemandForZone(tile.kind);
         if (demand <= 5) continue;
         if (this.state.utilities.power < 0 || this.state.utilities.water < 0) continue;
