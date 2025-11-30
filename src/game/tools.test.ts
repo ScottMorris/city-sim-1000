@@ -227,4 +227,20 @@ describe('simulation', () => {
     const zoneBuilding = state.buildings.find((b) => b.templateId === 'zone-residential');
     expect(zoneBuilding).toBeDefined();
   });
+
+  it('allows interior zone tiles to grow when adjacent to a road-served zone', () => {
+    const state = createInitialState(8, 8);
+    state.money = 50000;
+    applyTool(state, Tool.Road, 2, 2);
+    applyTool(state, Tool.Residential, 2, 3); // edge tile with road access
+    applyTool(state, Tool.Residential, 3, 3); // interior tile with no road access
+    state.demand.residential = 80;
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(1);
+    const firstZone = state.buildings.find((b) => b.templateId === 'zone-residential');
+    expect(firstZone).toBeDefined();
+    sim.update(1);
+    const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
+    expect(secondZone.length).toBeGreaterThan(1);
+  });
 });
