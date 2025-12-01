@@ -325,7 +325,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state,
     onStateLoaded: (loaded) => {
       state = loaded;
-       state.settings = state.settings ?? { pendingPenaltyEnabled: true };
+      state.settings = state.settings ?? { pendingPenaltyEnabled: true };
+      simulation.setState(state);
       centerCamera(state, wrapper, TILE_SIZE, camera);
       updatePendingPenaltyBtn();
     }
