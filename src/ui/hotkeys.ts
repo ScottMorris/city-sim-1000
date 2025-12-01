@@ -18,7 +18,10 @@ export type HotkeyAction =
   | 'selectCommercial'
   | 'selectIndustrial'
   | 'selectPark'
-  | 'selectBulldoze';
+  | 'selectBulldoze'
+  | 'speedSlow'
+  | 'speedFast'
+  | 'speedLudicrous';
 
 export type HotkeyBindings = Record<HotkeyAction, string[]>;
 
@@ -42,7 +45,10 @@ export const defaultHotkeys: HotkeyBindings = {
   selectCommercial: ['KeyX'],
   selectIndustrial: ['KeyC'],
   selectPark: ['KeyK'],
-  selectBulldoze: ['KeyB']
+  selectBulldoze: ['KeyB'],
+  speedSlow: ['Digit1'],
+  speedFast: ['Digit2'],
+  speedLudicrous: ['Digit3']
 };
 
 interface HotkeyOptions {

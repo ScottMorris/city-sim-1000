@@ -31,6 +31,7 @@ export class Simulation {
   private readonly zoneGrowthDelayTicks: number;
   private zoneGrowthTimers = new Map<number, number>();
   private readonly waterEnabled = false;
+  private speedMultiplier = 1;
 
   constructor(state: GameState, config: SimulationConfig) {
     this.state = state;
@@ -38,8 +39,12 @@ export class Simulation {
     this.zoneGrowthDelayTicks = Math.max(1, Math.round(config.ticksPerSecond * 2)); // ~2s delay
   }
 
+  setSpeed(multiplier: number) {
+    this.speedMultiplier = Math.max(0.1, multiplier);
+  }
+
   update(elapsedSeconds: number) {
-    this.accumulator += elapsedSeconds;
+    this.accumulator += elapsedSeconds * this.speedMultiplier;
     const epsilon = 1e-9;
     while (this.accumulator + epsilon >= this.dt) {
       this.tick();

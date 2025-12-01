@@ -29,6 +29,7 @@ appRoot.innerHTML = `
       <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
       <div class="panel"><h4>Demands</h4><div class="demand-labels"><span>R</span><span>C</span><span>I</span></div><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div>
       <div class="panel"><h4>City</h4><div id="population">Population 0</div><div id="jobs">Jobs 0</div><div id="day">Day 1</div></div>
+      <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
       <div class="panel"><h4>Saves</h4><div class="controls-row"><button id="save-btn" class="secondary">Save</button><button id="load-btn" class="secondary">Load</button></div><div class="controls-row"><button id="download-btn" class="primary">Download</button><button id="upload-btn" class="secondary">Upload</button><input type="file" id="file-input" accept="application/json" style="display:none" /></div></div>
       <div class="panel"><h4>Manual</h4><div class="controls-row"><button id="manual-btn" class="secondary">Open manual</button></div><div class="panel-hint">Opens the in-game guide in a popup.</div></div>
       <div class="panel"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
@@ -60,6 +61,9 @@ const indBar = requireElement<HTMLDivElement>('#ind-bar');
 const popEl = requireElement<HTMLDivElement>('#population');
 const jobsEl = requireElement<HTMLDivElement>('#jobs');
 const dayEl = requireElement<HTMLDivElement>('#day');
+const speedSlowBtn = requireElement<HTMLButtonElement>('#speed-slow');
+const speedFastBtn = requireElement<HTMLButtonElement>('#speed-fast');
+const speedLudicrousBtn = requireElement<HTMLButtonElement>('#speed-ludicrous');
 const saveBtn = requireElement<HTMLButtonElement>('#save-btn');
 const loadBtn = requireElement<HTMLButtonElement>('#load-btn');
 const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
@@ -84,6 +88,13 @@ const simulation = new Simulation(state, { ticksPerSecond: 20 });
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
 const KEYBOARD_PAN_SPEED = 700;
+const simSpeeds = {
+  slow: 0.5,
+  fast: 1,
+  ludicrous: 3
+} as const;
+type SimSpeedKey = keyof typeof simSpeeds;
+let simSpeed: SimSpeedKey = 'fast';
 
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
@@ -213,6 +224,19 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     updateToolbar(toolbar, nextTool);
   };
 
+  const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
+    simSpeed = speed;
+    simulation.setSpeed(simSpeeds[speed]);
+    speedSlowBtn.classList.toggle('active', speed === 'slow');
+    speedFastBtn.classList.toggle('active', speed === 'fast');
+    speedLudicrousBtn.classList.toggle('active', speed === 'ludicrous');
+    if (!opts.silent) {
+      showToast(
+        `Speed: ${speed === 'slow' ? 'Slow (0.5x)' : speed === 'fast' ? 'Fast (1x)' : 'Ludicrous (3x)'}`
+      );
+    }
+  };
+
   initToolbar(
     toolbar,
     (nextTool) => {
@@ -273,6 +297,15 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
         case 'selectBulldoze':
           setTool(Tool.Bulldoze);
           return;
+        case 'speedSlow':
+          setSimSpeed('slow');
+          return;
+        case 'speedFast':
+          setSimSpeed('fast');
+          return;
+        case 'speedLudicrous':
+          setSimSpeed('ludicrous');
+          return;
       }
     }
   });
@@ -298,6 +331,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     copyBtn: debugCopyBtn,
     getState: () => state
   });
+
+  speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));
+  speedFastBtn.addEventListener('click', () => setSimSpeed('fast'));
+  speedLudicrousBtn.addEventListener('click', () => setSimSpeed('ludicrous'));
+  setSimSpeed(simSpeed, { silent: true });
 
   attachViewportEvents(renderer.getCanvas());
 
