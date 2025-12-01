@@ -33,6 +33,7 @@ const SIZE_PRESETS: Record<MinimapSize, number> = {
   medium: 220
 };
 const MIN_PANEL_WIDTH = 220;
+const PANEL_PADDING = 10 * 2; // matches .minimap-panel padding
 
 interface LayoutInfo {
   sizePx: number;
@@ -194,7 +195,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
     body.style.display = settings.open ? 'block' : 'none';
-    const widthPx = Math.max(SIZE_PRESETS[settings.size] + 16, MIN_PANEL_WIDTH);
+    const widthPx = Math.max(SIZE_PRESETS[settings.size] + PANEL_PADDING + 12, MIN_PANEL_WIDTH);
     container.style.width = `${widthPx}px`;
   }
 
@@ -204,13 +205,13 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     [baseCanvas, overlayCanvas].forEach((canvas) => {
       canvas.width = sizePx * dpr;
       canvas.height = sizePx * dpr;
-      canvas.style.width = `${sizePx}px`;
-      canvas.style.height = `${sizePx}px`;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
     });
     baseCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    canvasWrapper.style.width = `${sizePx}px`;
-    canvasWrapper.style.height = `${sizePx}px`;
+    canvasWrapper.style.width = '100%';
+    canvasWrapper.style.height = 'auto';
     layout = {
       sizePx,
       step: layout?.step ?? 1,
