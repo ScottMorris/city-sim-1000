@@ -1,19 +1,46 @@
 import { downloadState, loadFromBrowser, saveToBrowser, uploadState } from '../game/persistence';
 import { GameState } from '../game/gameState';
 
+let toastRoot: HTMLDivElement | null = null;
+
 export function showToast(message: string) {
+  if (!toastRoot) {
+    toastRoot = document.createElement('div');
+    toastRoot.style.position = 'fixed';
+    toastRoot.style.right = '12px';
+    toastRoot.style.top = '12px';
+    toastRoot.style.display = 'flex';
+    toastRoot.style.flexDirection = 'column';
+    toastRoot.style.gap = '8px';
+    toastRoot.style.alignItems = 'flex-end';
+    toastRoot.style.pointerEvents = 'none';
+    toastRoot.style.zIndex = '40';
+    document.body.appendChild(toastRoot);
+  }
+
   const div = document.createElement('div');
   div.textContent = message;
-  div.style.position = 'absolute';
-  div.style.right = '12px';
-  div.style.top = '12px';
   div.style.padding = '10px 12px';
   div.style.background = '#1f2c4b';
   div.style.border = '1px solid #7bffb7';
   div.style.borderRadius = '10px';
   div.style.color = '#e8f1ff';
-  document.body.appendChild(div);
-  setTimeout(() => div.remove(), 1400);
+  div.style.boxShadow = '0 6px 12px rgba(0,0,0,0.35)';
+  div.style.pointerEvents = 'auto';
+  div.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+  toastRoot.appendChild(div);
+
+  setTimeout(() => {
+    div.style.opacity = '0';
+    div.style.transform = 'translateY(-6px)';
+    setTimeout(() => {
+      div.remove();
+      if (toastRoot && toastRoot.childElementCount === 0) {
+        toastRoot.remove();
+        toastRoot = null;
+      }
+    }, 200);
+  }, 1400);
 }
 
 interface PersistenceOptions {
