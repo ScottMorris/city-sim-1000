@@ -15,6 +15,7 @@
 - Test your changes thoroughly before committing to ensure stability and reliability.
 - Use `npm test -- --pool=threads --poolOptions.threads.singleThread=true` (vitest multi-thread crashes here).
 - Manual is available in-game via the “Open manual” button (modal iframe at `public/manual.html`); keep the manual in sync with behaviour changes.
+- When docs/specs change, commit those updates alongside the related code change.
 
 ## Project Notes
 
@@ -24,6 +25,7 @@
   - `README.md`
   - `docs/game-parameters.md`
   - `public/manual.html`
+  - `SPEC.md`
 
 ## Canadian English Spelling
 
