@@ -96,15 +96,19 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   toggleBtn.className = 'chip-button';
   toggleBtn.addEventListener('click', () => toggleOpen());
 
-  header.append(titleBlock);
+  const headerControls = document.createElement('div');
+  headerControls.className = 'minimap-header-controls';
+  headerControls.append(toggleBtn);
+
+  header.append(titleBlock, headerControls);
 
   const body = document.createElement('div');
   body.className = 'minimap-body';
 
   const actions = document.createElement('div');
   actions.className = 'minimap-actions';
-  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, sizeBtn, toggleBtn].forEach((btn) => {
-    if (btn === sizeBtn || btn === toggleBtn) {
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, sizeBtn].forEach((btn) => {
+    if (btn === sizeBtn) {
       btn.classList.add('minimap-span');
     }
     actions.append(btn);

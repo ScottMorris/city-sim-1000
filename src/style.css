@@ -171,6 +171,11 @@ body {
   align-items: flex-start;
 }
 
+.minimap-header-controls {
+  display: flex;
+  gap: 6px;
+}
+
 .minimap-title {
   color: var(--accent);
   font-size: 12px;
