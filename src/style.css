@@ -292,11 +292,14 @@ button.secondary.active {
   cursor: pointer;
   font-size: 11px;
   white-space: nowrap;
+  transition: border-color 0.1s ease, background 0.1s ease, color 0.1s ease;
 }
 
 .chip-button.active {
   border-color: var(--accent);
+  background: rgba(123, 255, 183, 0.16);
   color: #fff;
+  box-shadow: 0 0 0 1px rgba(123, 255, 183, 0.15);
 }
 
 .tool-hints {

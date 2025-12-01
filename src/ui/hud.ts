@@ -49,7 +49,7 @@ export function createHud(elements: HudElements) {
   };
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
-    const showToolInfo = activeTool !== Tool.Inspect || toolInfoPinned;
+    const showToolInfo = true; // always show so pin is reachable even on Inspect
     const tile = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
 
     if (!showToolInfo && !tile) {
@@ -71,7 +71,7 @@ export function createHud(elements: HudElements) {
             details.hints.length > 0
               ? `<div class="tool-hints">${details.hints.map((hint) => `<div>${hint}</div>`).join('')}</div>`
               : '';
-          const pinLabel = toolInfoPinned ? 'Pinned' : 'Pin';
+          const pinLabel = toolInfoPinned ? '📌 Pinned' : '📍 Pin';
           return `
             <div class="info-section">
               <div class="info-header">
