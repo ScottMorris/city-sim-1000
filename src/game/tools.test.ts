@@ -327,6 +327,15 @@ describe('simulation', () => {
     expect(centerTile.buildingId).toBeUndefined();
   });
 
+  it('provides starter demand when city is empty', () => {
+    const state = createInitialState(6, 6);
+    state.money = 50000;
+    applyTool(state, Tool.Residential, 2, 2);
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    sim.update(0.1);
+    expect(state.demand.residential).toBeGreaterThan(0);
+  });
+
   it('allows interior zone tiles to grow when adjacent to a road-served zone', () => {
     const state = createInitialState(8, 8);
     state.money = 50000;

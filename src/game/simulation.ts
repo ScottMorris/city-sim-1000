@@ -136,24 +136,34 @@ export class Simulation {
     this.state.utilities.power = powerSupply - powerUse;
     this.state.utilities.water = waterSupply - waterUse;
 
-    this.state.demand.residential = clamp(
-      60 - residentialZones * 2 + Math.max(0, this.state.jobs - this.state.population),
-      0,
-      100
-    );
-    this.state.demand.commercial = clamp(
-      50 - commercialZones * 3 + this.state.population * 0.2,
-      0,
-      100
-    );
-    this.state.demand.industrial = clamp(
-      50 - industrialZones * 3 + this.state.population * 0.15,
-      0,
-      100
-    );
-
-    const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
-    this.state.demand.residential = clamp(this.state.demand.residential - utilityPenalty, 0, 100);
+    if (this.state.population === 0 && this.state.jobs === 0) {
+      // Starter boost so the first builds can happen even if many zones are prepainted.
+      this.state.demand.residential = 50;
+      this.state.demand.commercial = 30;
+      this.state.demand.industrial = 30;
+    } else {
+      this.state.demand.residential = clamp(
+        60 - residentialZones * 2 + Math.max(0, this.state.jobs - this.state.population),
+        0,
+        100
+      );
+      this.state.demand.commercial = clamp(
+        50 - commercialZones * 3 + this.state.population * 0.2,
+        0,
+        100
+      );
+      this.state.demand.industrial = clamp(
+        50 - industrialZones * 3 + this.state.population * 0.15,
+        0,
+        100
+      );
+      const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
+      this.state.demand.residential = clamp(
+        this.state.demand.residential - utilityPenalty,
+        0,
+        100
+      );
+    }
 
     const revenue =
       BASE_INCOME + this.state.population * 1.5 + commercialZones * 6 + industrialZones * 8;
