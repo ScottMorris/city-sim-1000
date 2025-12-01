@@ -132,16 +132,28 @@ const registry: ToolRegistry = {
     message: 'Underground pipes view is coming soon.'
   }),
   [Tool.Residential]: ({ state, x, y }, cost) => {
+    const tile = getTile(state, x, y);
+    if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
+      return { success: false, message: 'Cannot zone over roads or rail. Bulldoze first.' };
+    }
     state.money -= cost;
     setTile(state, x, y, TileKind.Residential);
     return { success: true };
   },
   [Tool.Commercial]: ({ state, x, y }, cost) => {
+    const tile = getTile(state, x, y);
+    if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
+      return { success: false, message: 'Cannot zone over roads or rail. Bulldoze first.' };
+    }
     state.money -= cost;
     setTile(state, x, y, TileKind.Commercial);
     return { success: true };
   },
   [Tool.Industrial]: ({ state, x, y }, cost) => {
+    const tile = getTile(state, x, y);
+    if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
+      return { success: false, message: 'Cannot zone over roads or rail. Bulldoze first.' };
+    }
     state.money -= cost;
     setTile(state, x, y, TileKind.Industrial);
     return { success: true };

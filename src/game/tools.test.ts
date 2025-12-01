@@ -126,6 +126,18 @@ describe('tools', () => {
     expect(state.utilities.water).toBeGreaterThan(0);
   });
 
+  it('blocks zoning over transport tiles', () => {
+    const state = createInitialState(5, 5);
+    const cost = BUILD_COST[Tool.Commercial];
+    state.money = cost + 50;
+    applyTool(state, Tool.Road, 2, 2);
+    const before = state.money;
+    const result = applyTool(state, Tool.Commercial, 2, 2);
+    expect(result.success).toBe(false);
+    expect(getTile(state, 2, 2)?.kind).toBe(TileKind.Road);
+    expect(state.money).toBe(before); // no charge on failure
+  });
+
   it('bulldozes an entire building footprint and removes the instance', () => {
     const state = createInitialState(6, 6);
     const windCost = getBuildingTemplate(PowerPlantType.Wind)!.cost;
