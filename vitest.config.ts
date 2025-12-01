@@ -4,9 +4,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     api: false,
-    pool: 'forks',
+    pool: 'threads',
     poolOptions: {
-      forks: {
+      threads: {
         singleThread: true
       }
     }
