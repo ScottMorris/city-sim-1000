@@ -215,13 +215,16 @@ button.secondary.active {
 button.primary:hover,
 button.secondary:hover {
   border-color: #96d9ff;
-  transform: translateY(-2px);
   box-shadow: 0 4px 0 #0a1020;
 }
 
 button.primary:active,
 button.secondary:active {
   transform: translateY(0);
+}
+
+button.secondary.active {
+  transform: translateY(-2px);
 }
 
 .info-box {
