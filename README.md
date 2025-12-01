@@ -27,7 +27,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Budget ticker, population and jobs tracking, and happiness per tile.
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.
-- Minimap planned for the bottom-right HUD: base map view with click-to-jump navigation first, with overlay modes to follow.
+- Minimap in the bottom-right HUD: base map view with click-to-jump navigation and viewport framing; overlay modes coming soon.
 
 ## Offline & PWA
 - `public/service-worker.js` caches core pages and dynamically caches other assets.

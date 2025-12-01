@@ -21,7 +21,8 @@ export type HotkeyAction =
   | 'selectBulldoze'
   | 'speedSlow'
   | 'speedFast'
-  | 'speedLudicrous';
+  | 'speedLudicrous'
+  | 'toggleMinimap';
 
 export type HotkeyBindings = Record<HotkeyAction, string[]>;
 
@@ -48,7 +49,8 @@ export const defaultHotkeys: HotkeyBindings = {
   selectBulldoze: ['KeyB'],
   speedSlow: ['Digit1'],
   speedFast: ['Digit2'],
-  speedLudicrous: ['Digit3']
+  speedLudicrous: ['Digit3'],
+  toggleMinimap: ['KeyM']
 };
 
 interface HotkeyOptions {

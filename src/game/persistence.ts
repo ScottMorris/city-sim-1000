@@ -1,5 +1,10 @@
 import { LOCAL_STORAGE_KEY } from './constants';
-import { GameState, TileKind } from './gameState';
+import {
+  GameState,
+  TileKind,
+  createDefaultMinimapSettings,
+  createDefaultSettings
+} from './gameState';
 import { createBuildingState, getBuildingTemplate } from './buildings';
 import {
   createEmptyServiceLoad,
@@ -86,7 +91,16 @@ export function deserialize(payload: string): GameState {
   });
 
   parsed.nextBuildingId = nextBuildingId;
-  parsed.settings = parsed.settings ?? { pendingPenaltyEnabled: true };
+  const defaultSettings = createDefaultSettings();
+  const incomingSettings = parsed.settings ?? {};
+  parsed.settings = {
+    ...defaultSettings,
+    ...incomingSettings,
+    minimap: {
+      ...createDefaultMinimapSettings(),
+      ...(incomingSettings.minimap ?? {})
+    }
+  };
   return parsed as GameState;
 }
 

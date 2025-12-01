@@ -1,6 +1,6 @@
 import './style.css';
 import { Application } from 'pixi.js';
-import { createInitialState, GameState, getTile } from './game/gameState';
+import { createDefaultMinimapSettings, createInitialState, GameState, getTile } from './game/gameState';
 import { applyTool } from './game/tools';
 import { Tool } from './game/toolTypes';
 import { Simulation } from './game/simulation';
@@ -16,6 +16,7 @@ import { initDebugOverlay } from './ui/debugOverlay';
 import { initHotkeys, defaultHotkeys, type HotkeyController } from './ui/hotkeys';
 import { initToolbar, updateToolbar } from './ui/toolbar';
 import { createNotificationCenter } from './ui/notifications';
+import { initMinimap } from './ui/minimap';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -86,6 +87,7 @@ let cameraStart = { x: 0, y: 0 };
 let lastPainted: Position | null = null;
 let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
+state.settings = ensureSettingsShape(state.settings);
 const notifications = createNotificationCenter();
 const simulation = new Simulation(state, {
   ticksPerSecond: 20,
@@ -93,6 +95,7 @@ const simulation = new Simulation(state, {
 });
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
+let minimap: ReturnType<typeof initMinimap> | null = null;
 const KEYBOARD_PAN_SPEED = 700;
 const simSpeeds = {
   slow: 0.5,
@@ -101,6 +104,25 @@ const simSpeeds = {
 } as const;
 type SimSpeedKey = keyof typeof simSpeeds;
 let simSpeed: SimSpeedKey = 'fast';
+const ensureSettingsShape = (settings?: GameState['settings']) => ({
+  pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
+  minimap: {
+    ...createDefaultMinimapSettings(),
+    ...(settings?.minimap ?? {})
+  }
+});
+const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+const centerCameraOnTile = (tileX: number, tileY: number) => {
+  const size = TILE_SIZE * camera.scale;
+  const viewTilesX = wrapper.clientWidth / size;
+  const viewTilesY = wrapper.clientHeight / size;
+  const halfX = Math.min(viewTilesX / 2, state.width / 2);
+  const halfY = Math.min(viewTilesY / 2, state.height / 2);
+  const targetX = clamp(tileX, halfX - 0.5, state.width - halfX - 0.5);
+  const targetY = clamp(tileY, halfY - 0.5, state.height - halfY - 0.5);
+  camera.x = wrapper.clientWidth / 2 - (targetX + 0.5) * size;
+  camera.y = wrapper.clientHeight / 2 - (targetY + 0.5) * size;
+};
 
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
@@ -111,6 +133,8 @@ function applyCurrentTool(tilePos: Position) {
   const result = applyTool(state, tool, tilePos.x, tilePos.y);
   if (!result.success && result.message) {
     showToast(result.message);
+  } else if (result.success) {
+    minimap?.markDirty();
   }
   selected = tilePos;
 }
@@ -200,6 +224,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   renderer.render(state, hovered, selected);
   hud.update(state);
   hud.renderOverlays(state, selected, tool);
+  minimap?.update(state, camera);
   debugOverlay?.update(state);
   requestAnimationFrame(() => gameLoop(renderer, hud));
 }
@@ -223,6 +248,25 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     jobsEl,
     dayEl,
     overlayRoot: wrapper
+  });
+
+  const minimapViewport = () => {
+    const canvas = renderer.getCanvas();
+    return {
+      width: canvas?.clientWidth ?? wrapper.clientWidth,
+      height: canvas?.clientHeight ?? wrapper.clientHeight
+    };
+  };
+
+  minimap = initMinimap({
+    root: wrapper,
+    settings: state.settings.minimap,
+    onSettingsChange: (next) => {
+      state.settings.minimap = next;
+    },
+    onJumpToTile: ({ x, y }) => centerCameraOnTile(x, y),
+    getViewportSize: minimapViewport,
+    palette
   });
 
   const setTool = (nextTool: Tool) => {
@@ -312,6 +356,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
         case 'speedLudicrous':
           setSimSpeed('ludicrous');
           return;
+        case 'toggleMinimap':
+          minimap?.toggleOpen();
+          minimap?.markDirty();
+          return;
       }
     }
   });
@@ -325,9 +373,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state,
     onStateLoaded: (loaded) => {
       state = loaded;
-      state.settings = state.settings ?? { pendingPenaltyEnabled: true };
+      state.settings = ensureSettingsShape(state.settings);
       simulation.setState(state);
       centerCamera(state, wrapper, TILE_SIZE, camera);
+      minimap?.syncSettings(state.settings.minimap);
+      minimap?.markDirty();
       updatePendingPenaltyBtn();
     }
   });

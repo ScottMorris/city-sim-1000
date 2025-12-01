@@ -34,6 +34,21 @@ export interface Tile {
   services: TileServiceState;
 }
 
+export type MinimapMode = 'base';
+
+export type MinimapSize = 'small' | 'medium';
+
+export interface MinimapSettings {
+  open: boolean;
+  size: MinimapSize;
+  mode: MinimapMode;
+}
+
+export interface GameSettings {
+  pendingPenaltyEnabled: boolean;
+  minimap: MinimapSettings;
+}
+
 export interface UtilityStats {
   power: number;
   water: number;
@@ -61,8 +76,17 @@ export interface GameState {
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
-  settings: {
-    pendingPenaltyEnabled: boolean;
+  settings: GameSettings;
+}
+
+export function createDefaultMinimapSettings(): MinimapSettings {
+  return { open: true, size: 'medium', mode: 'base' };
+}
+
+export function createDefaultSettings(): GameSettings {
+  return {
+    pendingPenaltyEnabled: true,
+    minimap: createDefaultMinimapSettings()
   };
 }
 
@@ -100,9 +124,7 @@ export function createInitialState(width = 64, height = 64): GameState {
     buildings: [],
     nextBuildingId: 1,
     services: createServiceSystemState(),
-    settings: {
-      pendingPenaltyEnabled: true
-    }
+    settings: createDefaultSettings()
   };
 }
 
