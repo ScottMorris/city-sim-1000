@@ -75,6 +75,10 @@ export function showManualModal(url = 'manual.html') {
   frame.title = 'Manual';
   frame.loading = 'lazy';
 
+  const handleEsc = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') cleanup();
+  };
+
   modal.appendChild(closeBtn);
   modal.appendChild(frame);
   backdrop.appendChild(modal);
@@ -85,7 +89,12 @@ export function showManualModal(url = 'manual.html') {
   backdrop.addEventListener('click', (e) => {
     if (e.target === backdrop) cleanup();
   });
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') cleanup();
+  window.addEventListener('keydown', handleEsc);
+  frame.addEventListener('load', () => {
+    try {
+      frame.contentWindow?.addEventListener('keydown', handleEsc);
+    } catch {
+      // ignore cross-origin issues (should not happen for local manual)
+    }
   });
 }
