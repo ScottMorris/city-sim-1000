@@ -59,3 +59,33 @@ export function bindPersistenceControls(options: PersistenceOptions) {
     });
   });
 }
+
+export function showManualModal(url = 'manual.html') {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.className = 'secondary modal-close';
+
+  const frame = document.createElement('iframe');
+  frame.src = url;
+  frame.title = 'Manual';
+  frame.loading = 'lazy';
+
+  modal.appendChild(closeBtn);
+  modal.appendChild(frame);
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  const cleanup = () => backdrop.remove();
+  closeBtn.addEventListener('click', cleanup);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) cleanup();
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cleanup();
+  });
+}

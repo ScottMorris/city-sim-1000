@@ -273,6 +273,40 @@ footer {
   margin-top: 2px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 20, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  background: #0f1b2f;
+  border: 2px solid #223557;
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  width: min(90vw, 960px);
+  height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal iframe {
+  flex: 1;
+  border: none;
+  background: #0f1629;
+}
+
+.modal-close {
+  align-self: flex-end;
+  margin: 8px 8px 0 0;
+}
+
 @media (max-width: 900px) {
   body { font-size: 12px; }
   .hud { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
