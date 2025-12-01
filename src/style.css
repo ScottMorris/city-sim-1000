@@ -189,7 +189,7 @@ body {
 
 .minimap-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   margin-top: 8px;
   width: 100%;
@@ -197,6 +197,11 @@ body {
 
 .minimap-panel .chip-button {
   padding: 8px 10px;
+}
+
+.minimap-actions .chip-button {
+  width: 100%;
+  min-width: 0;
 }
 
 .minimap-actions .minimap-span {
