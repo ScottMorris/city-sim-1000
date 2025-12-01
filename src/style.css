@@ -147,6 +147,8 @@ body {
   display: grid;
   gap: 8px;
   width: 300px;
+  z-index: 5;
+  pointer-events: auto;
 }
 
 .status-line {
