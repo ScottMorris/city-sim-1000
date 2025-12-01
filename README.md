@@ -23,6 +23,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers (pipes coming soon with an underground view).
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
 - Hydro generation, water pumping, and global utility balance that affects growth.
+- Tool info card beside the tile inspector that surfaces cost, upkeep, and stats for the active tool with a pin toggle when you want it always-on.
 - Budget ticker, population and jobs tracking, and happiness per tile.
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.

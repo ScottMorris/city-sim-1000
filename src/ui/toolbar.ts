@@ -1,50 +1,5 @@
 import { Tool } from '../game/toolTypes';
-
-const toolLabels: Record<Tool, string> = {
-  [Tool.Inspect]: '🔍 Inspect',
-  [Tool.TerraformRaise]: '⛰️ Raise',
-  [Tool.TerraformLower]: '🕳️ Lower',
-  [Tool.Water]: '🌊 Water',
-  [Tool.Tree]: '🌲 Trees',
-  [Tool.Road]: '🛣️ Road',
-  [Tool.Rail]: '🚆 Rail',
-  [Tool.PowerLine]: '⚡ Power',
-  [Tool.HydroPlant]: '🌊 Hydro',
-  [Tool.CoalPlant]: '🏭 Coal',
-  [Tool.WindTurbine]: '🌬️ Wind',
-  [Tool.SolarFarm]: '☀️ Solar',
-  [Tool.WaterPump]: '🚰 Pump',
-  [Tool.WaterTower]: '🗼 Tower',
-  [Tool.WaterPipe]: '🔧 Pipes',
-  [Tool.Residential]: '🏘️ Res',
-  [Tool.Commercial]: '🏪 Com',
-  [Tool.Industrial]: '🏭 Ind',
-  [Tool.Bulldoze]: '🪓 Bulldoze',
-  [Tool.Park]: '🌳 Park'
-};
-
-const primaryLabelOverrides: Partial<Record<Tool, string>> = {
-  [Tool.WaterPump]: '🚰 Water'
-};
-
-const toolHotkeys: Partial<Record<Tool, string>> = {
-  [Tool.Inspect]: 'I',
-  [Tool.TerraformRaise]: 'E',
-  [Tool.TerraformLower]: 'Q',
-  [Tool.Water]: 'F',
-  [Tool.Tree]: 'T',
-  [Tool.Road]: 'R',
-  [Tool.Rail]: 'L',
-  [Tool.PowerLine]: 'P',
-  [Tool.HydroPlant]: 'H',
-  [Tool.WaterPump]: 'U',
-  [Tool.WaterTower]: 'Y',
-  [Tool.Residential]: 'Z',
-  [Tool.Commercial]: 'X',
-  [Tool.Industrial]: 'C',
-  [Tool.Park]: 'K',
-  [Tool.Bulldoze]: 'B'
-};
+import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
 
 const powerOptions: Tool[] = [
   Tool.PowerLine,
@@ -87,7 +42,7 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     const button = document.createElement('button');
     button.className = 'tool-button';
     button.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
-    const hotkey = toolHotkeys[key];
+    const hotkey = getToolHotkey(key);
     button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
     button.addEventListener('click', () => {
@@ -101,7 +56,7 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     const button = document.createElement('button');
     button.className = 'tool-sub-button';
     button.textContent = labelOverride ?? toolLabels[key];
-    const hotkey = toolHotkeys[key];
+    const hotkey = getToolHotkey(key);
     button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
     if (key === Tool.WaterPipe) {

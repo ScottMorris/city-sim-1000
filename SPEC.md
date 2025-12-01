@@ -138,6 +138,7 @@ Tiles include:
 * Toolbar is two rows: the primary row and a contextual sub-row beneath it.
 * The main “Power” button reveals a sub-row of power tools (Lines, Hydro, Coal, Wind, Solar); the Power button stays active when any power tool is selected.
 * Buttons in sub-rows carry explicit labels/tooltips for clarity.
+* Tile inspector lives in the bottom-left; the neighbouring tool info card shows cost/upkeep/output for the active tool with a pin toggle. The inspector only appears while the Inspect tool is active.
 
 ### 5.5 Rendering
 

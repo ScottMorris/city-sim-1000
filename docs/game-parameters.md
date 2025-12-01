@@ -14,6 +14,7 @@
   - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe for water).
 - **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties.
 - **Feedback hooks**: Sticky warnings fire when utilities go negative (power/water) and a follow-up toast confirms recovery once the balance returns above zero.
+- **Tool clarity**: Tool info card sits with the tile inspector; it shows cost/upkeep/output plus hints and can be pinned always-on. Tile inspector only appears while the Inspect tool is active.
 - **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build.
 - **Upgrade paths**: Pumps/towers → pipes; lines → plants; low → mid density; terraforming pricing that makes space trade-offs matter.
 - **Space trade-offs**: Footprint of utilities/parks vs valuable zones; underground view to reduce surface clutter.
@@ -53,6 +54,7 @@
 - **Services/Amenities**: Parks impact radius; add fire/health placeholders; basic pollution/happiness modifiers for industrial proximity.
 - **Persistence/UX**: Manual modal (done), add hotkeys/help overlay, autosave cadence toggle; seed maps (random vs flat); settings panel for input options (e.g., invert keyboard pan).
 - **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
+- **UI/Navigation**: Minimap overlay for quick orientation and snapshots when the map grows large.
 
 ## Controls & Hotkeys
 - Movement: `WASD` or arrow keys for panning; scroll wheel/pinch to zoom.

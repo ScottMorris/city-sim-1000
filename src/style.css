@@ -234,6 +234,70 @@ button.secondary.active {
   border-radius: 8px;
 }
 
+.info-box.muted {
+  opacity: 0.65;
+}
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.info-label {
+  font-size: 11px;
+  color: #9fb2d1;
+}
+
+.info-name {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.info-meta {
+  font-size: 11px;
+  color: #9fb2d1;
+  margin-top: 2px;
+}
+
+.tool-rows {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.chip-button {
+  background: #162236;
+  border: 1px solid #223557;
+  color: #d9e6ff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chip-button.active {
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.tool-hints {
+  margin-top: 8px;
+  color: #9fb2d1;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tool-hints.warning {
+  color: #f08c42;
+}
+
+.tool-hints.subtle {
+  opacity: 0.9;
+}
+
 .demand-rows {
   display: grid;
   gap: 6px;

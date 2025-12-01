@@ -1,6 +1,8 @@
-import { GameState, getTile } from '../game/gameState';
 import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
+import { GameState, getTile } from '../game/gameState';
 import { Position } from '../rendering/renderer';
+import { Tool } from '../game/toolTypes';
+import { getToolDetails } from './toolInfo';
 
 export interface HudElements {
   moneyEl: HTMLElement;
@@ -16,7 +18,25 @@ export interface HudElements {
 }
 
 export function createHud(elements: HudElements) {
-  let overlayDiv: HTMLDivElement | null = null;
+  let overlayContainer: HTMLDivElement | null = null;
+  let tileOverlay: HTMLDivElement | null = null;
+  let toolOverlay: HTMLDivElement | null = null;
+  let toolInfoPinned = false;
+
+  const ensureOverlayContainer = () => {
+    if (!overlayContainer) {
+      overlayContainer = document.createElement('div');
+      overlayContainer.className = 'overlay';
+      elements.overlayRoot.appendChild(overlayContainer);
+    }
+  };
+
+  const cleanupOverlayContainer = () => {
+    if (overlayContainer && overlayContainer.childElementCount === 0) {
+      overlayContainer.remove();
+      overlayContainer = null;
+    }
+  };
 
   const update = (state: GameState) => {
     elements.moneyEl.textContent = `$${Math.floor(state.money).toLocaleString()}`;
@@ -30,18 +50,19 @@ export function createHud(elements: HudElements) {
     elements.dayEl.textContent = `Day ${Math.floor(state.day)}`;
   };
 
-  const renderSelectionInfo = (state: GameState, selected: Position | null) => {
-    if (!selected) {
-      overlayDiv?.remove();
-      overlayDiv = null;
+  const renderTileInspector = (state: GameState, selected: Position | null, activeTool: Tool) => {
+    if (!selected || activeTool !== Tool.Inspect) {
+      tileOverlay?.remove();
+      tileOverlay = null;
+      cleanupOverlayContainer();
       return;
     }
     const tile = getTile(state, selected.x, selected.y);
     if (!tile) return;
-    if (!overlayDiv) {
-      overlayDiv = document.createElement('div');
-      overlayDiv.className = 'overlay';
-      elements.overlayRoot.appendChild(overlayDiv);
+    ensureOverlayContainer();
+    if (!tileOverlay) {
+      tileOverlay = document.createElement('div');
+      overlayContainer?.appendChild(tileOverlay);
     }
     const building =
       tile.buildingId !== undefined
@@ -77,7 +98,7 @@ export function createHud(elements: HudElements) {
       template && template.maintenance !== undefined
         ? `$${template.maintenance.toLocaleString()} / day`
         : null;
-    overlayDiv.innerHTML = `
+    tileOverlay.innerHTML = `
       <div class="info-box">
         <div class="status-line"><span>Tile</span><strong>${selected.x},${selected.y}</strong></div>
         <div class="status-line"><span>Type</span><strong>${tile.kind}</strong></div>
@@ -118,5 +139,62 @@ export function createHud(elements: HudElements) {
     `;
   };
 
-  return { update, renderSelectionInfo };
+  const renderToolInfo = (activeTool: Tool) => {
+    const showToolPanel = activeTool !== Tool.Inspect || toolInfoPinned;
+    if (!showToolPanel) {
+      toolOverlay?.remove();
+      toolOverlay = null;
+      cleanupOverlayContainer();
+      return;
+    }
+
+    const details = getToolDetails(activeTool);
+    ensureOverlayContainer();
+    if (!toolOverlay) {
+      toolOverlay = document.createElement('div');
+      overlayContainer?.appendChild(toolOverlay);
+    }
+
+    toolOverlay.innerHTML = `
+      <div class="info-box tool-info-box ${details.unavailable ? 'muted' : ''}">
+        <div class="info-header">
+          <div class="info-title">
+            <div class="info-label">Tool</div>
+            <div class="info-name">${details.name}</div>
+            <div class="info-meta">${details.hotkey ? `Hotkey: ${details.hotkey}` : 'Click a tool to see stats'}</div>
+          </div>
+          <button class="chip-button ${toolInfoPinned ? 'active' : ''}" data-pin="true">${toolInfoPinned ? 'Pinned' : 'Pin'}</button>
+        </div>
+        <div class="tool-rows">
+          ${details.rows
+            .map((row) => `<div class="status-line"><span>${row.label}</span><strong>${row.value}</strong></div>`)
+            .join('')}
+        </div>
+        ${
+          details.hints.length
+            ? `<div class="tool-hints">${details.hints.map((hint) => `<div>${hint}</div>`).join('')}</div>`
+            : ''
+        }
+        ${
+          details.unavailable
+            ? `<div class="tool-hints warning">Coming soon: pipes and underground view.</div>`
+            : '<div class="tool-hints subtle">Press Esc to cancel the active tool.</div>'
+        }
+      </div>
+    `;
+
+    const pinButton = toolOverlay.querySelector<HTMLButtonElement>('button[data-pin="true"]');
+    pinButton?.addEventListener('click', () => {
+      toolInfoPinned = !toolInfoPinned;
+      renderToolInfo(activeTool);
+    });
+  };
+
+  const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
+    renderTileInspector(state, selected, activeTool);
+    renderToolInfo(activeTool);
+    cleanupOverlayContainer();
+  };
+
+  return { update, renderOverlays };
 }

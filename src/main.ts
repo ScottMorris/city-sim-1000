@@ -199,7 +199,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   simulation.update(deltaSeconds);
   renderer.render(state, hovered, selected);
   hud.update(state);
-  hud.renderSelectionInfo(state, selected);
+  hud.renderOverlays(state, selected, tool);
   debugOverlay?.update(state);
   requestAnimationFrame(() => gameLoop(renderer, hud));
 }
@@ -361,6 +361,27 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   updatePendingPenaltyBtn();
 
   attachViewportEvents(renderer.getCanvas());
+
+  const cancelCurrentTool = () => {
+    const wasInspect = tool === Tool.Inspect;
+    isPainting = false;
+    lastPainted = null;
+    setTool(Tool.Inspect);
+    if (wasInspect) {
+      selected = null;
+    }
+  };
+
+  window.addEventListener('keydown', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelCurrentTool();
+    }
+  });
 
   hud.update(state);
   registerServiceWorker();
