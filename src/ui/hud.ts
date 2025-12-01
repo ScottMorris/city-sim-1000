@@ -20,16 +20,24 @@ export interface HudElements {
 export function createHud(elements: HudElements) {
   let overlayContainer: HTMLDivElement | null = null;
   let toolInfoPinned = false;
-  let overlayEventsBound = false;
+  let overlayFrozen = false;
 
   const ensureOverlayContainer = () => {
     if (!overlayContainer) {
       overlayContainer = document.createElement('div');
       overlayContainer.className = 'overlay';
       // Prevent overlay clicks from triggering canvas interactions.
-      overlayContainer.addEventListener('pointerdown', (e) => e.stopPropagation());
+      overlayContainer.addEventListener('pointerdown', (e) => {
+        overlayFrozen = true;
+        e.stopPropagation();
+      });
+      overlayContainer.addEventListener('pointerup', () => {
+        overlayFrozen = false;
+      });
+      overlayContainer.addEventListener('pointerleave', () => {
+        overlayFrozen = false;
+      });
       overlayContainer.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
-      overlayEventsBound = true;
       elements.overlayRoot.appendChild(overlayContainer);
     }
   };
@@ -38,6 +46,7 @@ export function createHud(elements: HudElements) {
     if (overlayContainer && overlayContainer.childElementCount === 0) {
       overlayContainer.remove();
       overlayContainer = null;
+      overlayFrozen = false;
     }
   };
 
@@ -54,6 +63,7 @@ export function createHud(elements: HudElements) {
   };
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
+    if (overlayFrozen) return;
     const showToolInfo = true; // always show so pin is reachable even on Inspect
     const tile = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
 
