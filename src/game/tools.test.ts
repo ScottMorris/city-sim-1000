@@ -5,7 +5,7 @@ import { recomputePowerNetwork } from './power';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
-import { BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingStatus, getBuildingTemplate, placeBuilding } from './buildings';
 import { hasRoadAccess } from './adjacency';
 
 describe('tools', () => {
@@ -138,6 +138,22 @@ describe('tools', () => {
     expect(state.money).toBe(before); // no charge on failure
   });
 
+  it('clears existing buildings when placing transport tools over them', () => {
+    const state = createInitialState(6, 6);
+    const template = getBuildingTemplate(TileKind.Residential)!;
+    // seed a zone building manually
+    setTile(state, 3, 3, TileKind.Residential);
+    placeBuilding(state, template, 3, 3);
+    expect(state.buildings.length).toBe(1);
+    const buildingId = state.buildings[0].id;
+    const moneyBefore = state.money;
+    applyTool(state, Tool.Road, 3, 3);
+    expect(state.buildings.find((b) => b.id === buildingId)).toBeUndefined();
+    expect(getTile(state, 3, 3)?.buildingId).toBeUndefined();
+    expect(getTile(state, 3, 3)?.kind).toBe(TileKind.Road);
+    expect(state.money).toBeLessThan(moneyBefore); // cost applied
+  });
+
   it('bulldozes an entire building footprint and removes the instance', () => {
     const state = createInitialState(6, 6);
     const windCost = getBuildingTemplate(PowerPlantType.Wind)!.cost;
@@ -226,7 +242,7 @@ describe('simulation', () => {
     state.money = 20000;
     applyTool(state, Tool.WindTurbine, 0, 1);
     // road chain to the right
-    for (let x = 1; x <= 5; x++) {
+    for (let x = 2; x <= 5; x++) {
       applyTool(state, Tool.Road, x, 1);
     }
     applyTool(state, Tool.Commercial, 6, 1);
@@ -234,7 +250,6 @@ describe('simulation', () => {
     expect(getTile(state, 6, 1)?.powered).toBe(true);
 
     // rail should also carry
-    applyTool(state, Tool.Rail, 1, 2);
     applyTool(state, Tool.Rail, 2, 2);
     applyTool(state, Tool.Rail, 3, 2);
     applyTool(state, Tool.Rail, 4, 2);

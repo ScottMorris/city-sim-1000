@@ -61,6 +61,13 @@ function placePowerPlant(
   return placeTemplatedBuilding(state, template, x, y, cost);
 }
 
+function clearBuildingAt(state: GameState, x: number, y: number) {
+  const tile = getTile(state, x, y);
+  if (tile?.buildingId !== undefined) {
+    removeBuilding(state, tile.buildingId);
+  }
+}
+
 const registry: ToolRegistry = {
   [Tool.Inspect]: (_ctx, _cost) => ({ success: true }),
   [Tool.TerraformRaise]: ({ state, x, y }, cost) => {
@@ -87,6 +94,7 @@ const registry: ToolRegistry = {
   },
   [Tool.Road]: ({ state, x, y }, cost) => {
     state.money -= cost;
+    clearBuildingAt(state, x, y);
     const tile = getTile(state, x, y);
     const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
     setTile(state, x, y, TileKind.Road);
@@ -96,6 +104,7 @@ const registry: ToolRegistry = {
   },
   [Tool.Rail]: ({ state, x, y }, cost) => {
     state.money -= cost;
+    clearBuildingAt(state, x, y);
     const tile = getTile(state, x, y);
     const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
     setTile(state, x, y, TileKind.Rail);
@@ -105,6 +114,7 @@ const registry: ToolRegistry = {
   },
   [Tool.PowerLine]: ({ state, x, y }, cost) => {
     state.money -= cost;
+    clearBuildingAt(state, x, y);
     const tile = getTile(state, x, y);
     const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
     const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
