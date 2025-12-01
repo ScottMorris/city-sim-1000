@@ -64,10 +64,10 @@ export function createHud(elements: HudElements) {
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
     if (overlayFrozen) return;
-    const showToolInfo = true; // always show so pin is reachable even on Inspect
-    const tile = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
+    const hasTileSelection = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
+    const showToolInfo = toolInfoPinned || activeTool !== Tool.Inspect;
 
-    if (!showToolInfo && !tile) {
+    if (!showToolInfo && !hasTileSelection) {
       overlayContainer?.remove();
       overlayContainer = null;
       return;
@@ -112,16 +112,16 @@ export function createHud(elements: HudElements) {
       : '';
 
     const tileSection =
-      tile && selected
+      hasTileSelection && selected
         ? (() => {
             const building =
-              tile.buildingId !== undefined
-                ? state.buildings.find((b) => b.id === tile.buildingId)
+              hasTileSelection.buildingId !== undefined
+                ? state.buildings.find((b) => b.id === hasTileSelection.buildingId)
                 : undefined;
             const template = building ? getBuildingTemplate(building.templateId) : undefined;
             const buildingStatus = building
               ? building.state.status
-              : template?.requiresPower === false || tile.powered
+              : template?.requiresPower === false || hasTileSelection.powered
                 ? BuildingStatus.Active
                 : BuildingStatus.InactiveNoPower;
             const statusLabel =
@@ -184,9 +184,9 @@ export function createHud(elements: HudElements) {
                   <div class="info-label">Tile</div>
                   <div class="info-name">${selected.x},${selected.y}</div>
                 </div>
-                <div class="status-line"><span>Type</span><strong>${tile.kind}</strong></div>
-                <div class="status-line"><span>Happy</span><strong>${tile.happiness.toFixed(2)}</strong></div>
-                <div class="status-line"><span>Power</span><strong>${tile.powered ? 'On' : 'Off'}</strong></div>
+                <div class="status-line"><span>Type</span><strong>${hasTileSelection.kind}</strong></div>
+                <div class="status-line"><span>Happy</span><strong>${hasTileSelection.happiness.toFixed(2)}</strong></div>
+                <div class="status-line"><span>Power</span><strong>${hasTileSelection.powered ? 'On' : 'Off'}</strong></div>
                 ${buildingBlock ? `<div class="divider"></div>${buildingBlock}` : ''}
                 <div class="map-stats">Utilities are modeled globally; keep power and water above zero to grow.</div>
               </div>
