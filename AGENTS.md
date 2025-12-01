@@ -14,9 +14,16 @@
 - Commit often to avoid large, unwieldy commits.
 - Test your changes thoroughly before committing to ensure stability and reliability.
 - Use `npm test -- --pool=threads --poolOptions.threads.singleThread=true` (vitest multi-thread crashes here).
+- Manual is available in-game via the “Open manual” button (modal iframe at `public/manual.html`); keep the manual in sync with behaviour changes.
+
+## Project Notes
+
 - Water simulation is temporarily stubbed to a high balance; only power deficits gate growth until pipes/underground view ship.
 - Roads and rail conduct power; power lines can overlay roads/rail without breaking access. Zoning cannot overwrite transport—bulldoze first. Transport tools clear existing buildings they overwrite.
-- Manual is available in-game via the “Open manual” button (modal iframe at `public/manual.html`); keep the manual in sync with behaviour changes.
+- Docs to keep aligned:
+  - `README.md`
+  - `docs/game-parameters.md`
+  - `public/manual.html`
 
 ## Canadian English Spelling
 
