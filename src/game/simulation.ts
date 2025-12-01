@@ -221,7 +221,17 @@ export class Simulation {
     const revenue =
       BASE_INCOME + this.state.population * 1.5 + commercialZones * 6 + industrialZones * 8;
     const expenses = maintenance + buildingMaintenance;
-    this.state.money = Math.max(0, this.state.money + (revenue - expenses) * this.dt * 0.2);
+    const net = revenue - expenses;
+    const netPerDay = net * 0.2 * 1.5;
+    const netPerMonth = netPerDay * 30;
+    this.state.budget = {
+      revenue,
+      expenses,
+      net,
+      netPerDay,
+      netPerMonth
+    };
+    this.state.money = Math.max(0, this.state.money + netPerDay * (this.dt / 1.5));
   }
 
   private spawnZoneBuildings() {

@@ -28,7 +28,7 @@ appRoot.innerHTML = `
   <div class="topbar">
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
     <div class="hud">
-      <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
+      <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="budget-net" class="budget-net">+$0 / month</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
       <div class="panel"><h4>Demands</h4><div class="demand-rows"><div class="demand-row"><span class="demand-label">R</span><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">C</span><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">I</span><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div></div></div>
       <div class="panel"><h4>City</h4><div id="population">Population 0</div><div id="jobs">Jobs 0</div><div id="day">Day 1</div></div>
       <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
@@ -55,6 +55,7 @@ function requireElement<T extends Element>(selector: string): T {
 const toolbar = requireElement<HTMLDivElement>('#toolbar');
 const wrapper = requireElement<HTMLDivElement>('#canvas-wrapper');
 const moneyEl = requireElement<HTMLDivElement>('#money');
+const budgetNetEl = requireElement<HTMLDivElement>('#budget-net');
 const powerEl = requireElement<HTMLDivElement>('#power');
 const waterEl = requireElement<HTMLDivElement>('#water');
 const resBar = requireElement<HTMLDivElement>('#res-bar');
@@ -242,6 +243,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   const hud = createHud({
     moneyEl,
+    budgetNetEl,
     powerEl,
     waterEl,
     resBar,

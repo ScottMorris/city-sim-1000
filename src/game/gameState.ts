@@ -62,6 +62,14 @@ export interface DemandStats {
   industrial: number;
 }
 
+export interface BudgetStats {
+  revenue: number;
+  expenses: number;
+  net: number;
+  netPerDay: number;
+  netPerMonth: number;
+}
+
 export interface GameState {
   width: number;
   height: number;
@@ -73,6 +81,7 @@ export interface GameState {
   jobs: number;
   utilities: UtilityStats;
   demand: DemandStats;
+  budget: BudgetStats;
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
@@ -119,6 +128,13 @@ export function createInitialState(width = 64, height = 64): GameState {
       water: 10,
       powerProduced: 0,
       powerUsed: 0
+    },
+    budget: {
+      revenue: 0,
+      expenses: 0,
+      net: 0,
+      netPerDay: 0,
+      netPerMonth: 0
     },
     demand: { residential: 30, commercial: 30, industrial: 30 },
     buildings: [],

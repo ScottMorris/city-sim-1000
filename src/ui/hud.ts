@@ -6,6 +6,7 @@ import { getToolDetails } from './toolInfo';
 
 export interface HudElements {
   moneyEl: HTMLElement;
+  budgetNetEl: HTMLElement;
   powerEl: HTMLElement;
   waterEl: HTMLElement;
   resBar: HTMLElement;
@@ -52,6 +53,11 @@ export function createHud(elements: HudElements) {
 
   const update = (state: GameState) => {
     elements.moneyEl.textContent = `$${Math.floor(state.money).toLocaleString()}`;
+    const net = state.budget?.netPerMonth ?? 0;
+    const netClass = net > 0 ? 'positive' : net < 0 ? 'negative' : 'neutral';
+    const netPrefix = net > 0 ? '+$' : net < 0 ? '-$' : '$';
+    elements.budgetNetEl.textContent = `${netPrefix}${Math.round(Math.abs(net)).toLocaleString()} / month`;
+    elements.budgetNetEl.className = `budget-net ${netClass}`;
     elements.powerEl.textContent = `⚡ ${state.utilities.power.toFixed(1)} MW`;
     elements.waterEl.textContent = `💧 ${state.utilities.water.toFixed(1)} m³`;
     elements.resBar.style.width = `${state.demand.residential}%`;

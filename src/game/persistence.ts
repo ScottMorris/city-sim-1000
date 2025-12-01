@@ -55,6 +55,21 @@ export function deserialize(payload: string): GameState {
   if (parsed.tick === undefined) {
     parsed.tick = 0;
   }
+  if (!parsed.budget) {
+    parsed.budget = {
+      revenue: 0,
+      expenses: 0,
+      net: 0,
+      netPerDay: 0,
+      netPerMonth: 0
+    };
+  } else {
+    parsed.budget.revenue = parsed.budget.revenue ?? 0;
+    parsed.budget.expenses = parsed.budget.expenses ?? 0;
+    parsed.budget.net = parsed.budget.net ?? 0;
+    parsed.budget.netPerDay = parsed.budget.netPerDay ?? 0;
+    parsed.budget.netPerMonth = parsed.budget.netPerMonth ?? 0;
+  }
   const computeNextBuildingId = () => {
     const maxBuildingIdFromTiles = parsed.tiles.reduce(
       (max: number, tile: any) =>

@@ -67,6 +67,15 @@ body {
   color: #fff;
 }
 
+.budget-net {
+  margin-top: 4px;
+  font-weight: bold;
+}
+
+.budget-net.positive { color: #7bffb7; }
+.budget-net.negative { color: #ff8c8c; }
+.budget-net.neutral { color: var(--text); }
+
 .toolbar {
   display: flex;
   flex-direction: column;
