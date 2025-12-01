@@ -76,6 +76,16 @@ const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
 
+function ensureSettingsShape(settings?: GameState['settings']): GameState['settings'] {
+  return {
+    pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
+    minimap: {
+      ...createDefaultMinimapSettings(),
+      ...(settings?.minimap ?? {})
+    }
+  };
+}
+
 const app = new Application();
 const camera = createCamera();
 let hovered: Position | null = null;
@@ -104,13 +114,6 @@ const simSpeeds = {
 } as const;
 type SimSpeedKey = keyof typeof simSpeeds;
 let simSpeed: SimSpeedKey = 'fast';
-const ensureSettingsShape = (settings?: GameState['settings']) => ({
-  pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
-  minimap: {
-    ...createDefaultMinimapSettings(),
-    ...(settings?.minimap ?? {})
-  }
-});
 const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
 const centerCameraOnTile = (tileX: number, tileY: number) => {
   const size = TILE_SIZE * camera.scale;
