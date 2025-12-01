@@ -177,11 +177,7 @@ const registry: ToolRegistry = {
       if (tile.buildingId !== undefined) {
         removeBuilding(state, tile.buildingId);
       } else {
-        tile.kind = TileKind.Land;
-        tile.powerPlantType = undefined;
-        tile.powerPlantId = undefined;
-        tile.buildingId = undefined;
-        tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+        setTile(state, x, y, TileKind.Land);
       }
     }
     return { success: true };

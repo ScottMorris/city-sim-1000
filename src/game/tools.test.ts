@@ -291,6 +291,30 @@ describe('simulation', () => {
     expect(getTile(state, 8, 3)?.powered).toBe(true);
   });
 
+  it('removes transport underlays when bulldozing a crossing', () => {
+    const state = createInitialState(8, 8);
+    state.money = 50000;
+    // lay a rail spine
+    applyTool(state, Tool.Rail, 3, 2);
+    applyTool(state, Tool.Rail, 3, 3);
+    applyTool(state, Tool.Rail, 3, 4);
+    // draw a road across it, creating a rail underlay
+    applyTool(state, Tool.Road, 2, 3);
+    applyTool(state, Tool.Road, 3, 3);
+    applyTool(state, Tool.Road, 4, 3);
+    const crossing = getTile(state, 3, 3)!;
+    expect(crossing.kind).toBe(TileKind.Road);
+    expect(crossing.railUnderlay).toBe(true);
+
+    applyTool(state, Tool.Bulldoze, 3, 3);
+
+    const cleared = getTile(state, 3, 3)!;
+    expect(cleared.kind).toBe(TileKind.Land);
+    expect(cleared.railUnderlay).toBeUndefined();
+    expect(cleared.roadUnderlay).toBeUndefined();
+    expect(cleared.powerOverlay).toBeUndefined();
+  });
+
   it('grows frontier zones even without roads, but roads still trigger growth', () => {
     const state = createInitialState(6, 6);
     state.money = 50000;
