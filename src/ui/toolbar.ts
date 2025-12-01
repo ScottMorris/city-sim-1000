@@ -1,30 +1,30 @@
 import { Tool } from '../game/toolTypes';
 
 const toolLabels: Record<Tool, string> = {
-  [Tool.Inspect]: 'Inspect',
-  [Tool.TerraformRaise]: 'Raise',
-  [Tool.TerraformLower]: 'Lower',
-  [Tool.Water]: 'Water',
-  [Tool.Tree]: 'Trees',
-  [Tool.Road]: 'Road',
-  [Tool.Rail]: 'Rail',
-  [Tool.PowerLine]: 'Power',
-  [Tool.HydroPlant]: 'Hydro',
-  [Tool.CoalPlant]: 'Coal',
-  [Tool.WindTurbine]: 'Wind',
-  [Tool.SolarFarm]: 'Solar',
-  [Tool.WaterPump]: 'Pump',
-  [Tool.WaterTower]: 'Tower',
-  [Tool.WaterPipe]: 'Pipes',
-  [Tool.Residential]: 'Res',
-  [Tool.Commercial]: 'Com',
-  [Tool.Industrial]: 'Ind',
-  [Tool.Bulldoze]: 'Bulldoze',
-  [Tool.Park]: 'Park'
+  [Tool.Inspect]: '🔍 Inspect',
+  [Tool.TerraformRaise]: '⛰️ Raise',
+  [Tool.TerraformLower]: '🕳️ Lower',
+  [Tool.Water]: '🌊 Water',
+  [Tool.Tree]: '🌲 Trees',
+  [Tool.Road]: '🛣️ Road',
+  [Tool.Rail]: '🚆 Rail',
+  [Tool.PowerLine]: '⚡ Power',
+  [Tool.HydroPlant]: '🌊 Hydro',
+  [Tool.CoalPlant]: '🏭 Coal',
+  [Tool.WindTurbine]: '🌬️ Wind',
+  [Tool.SolarFarm]: '☀️ Solar',
+  [Tool.WaterPump]: '🚰 Pump',
+  [Tool.WaterTower]: '🗼 Tower',
+  [Tool.WaterPipe]: '🔧 Pipes',
+  [Tool.Residential]: '🏘️ Res',
+  [Tool.Commercial]: '🏪 Com',
+  [Tool.Industrial]: '🏭 Ind',
+  [Tool.Bulldoze]: '🪓 Bulldoze',
+  [Tool.Park]: '🌳 Park'
 };
 
 const primaryLabelOverrides: Partial<Record<Tool, string>> = {
-  [Tool.WaterPump]: 'Water'
+  [Tool.WaterPump]: '🚰 Water'
 };
 
 const powerOptions: Tool[] = [
@@ -95,8 +95,8 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     row.appendChild(button);
   };
 
-  powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? 'Lines' : undefined));
-  waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? 'Pump' : undefined));
+  powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? '⚡ Lines' : undefined));
+  waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? '🚰 Pump' : undefined));
 
   updateToolbar(toolbar, initial);
 }
