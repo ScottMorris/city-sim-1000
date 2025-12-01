@@ -52,6 +52,7 @@
 - Transport & Utilities: Road `R`, Rail `L`, Power Lines `P`, Hydro Plant `H`, Water Pump `U`, Water Tower `Y`.
 - Zoning & Amenities: Residential `Z`, Commercial `X`, Industrial `C`, Park `K`.
 - Bulldoze: `B`.
+- Simulation Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x).
 
 ### Settings Backlog (Input)
 - Toggle for keyboard pan inversion and pan speed preset.
