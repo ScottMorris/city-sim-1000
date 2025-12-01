@@ -54,7 +54,7 @@
 - **Services/Amenities**: Parks impact radius; add fire/health placeholders; basic pollution/happiness modifiers for industrial proximity.
 - **Persistence/UX**: Manual modal (done), add hotkeys/help overlay, autosave cadence toggle; seed maps (random vs flat); settings panel for input options (e.g., invert keyboard pan).
 - **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
-- **UI/Navigation**: Minimap overlay for quick orientation and snapshots when the map grows large.
+- **UI/Navigation**: Minimap anchored to the bottom-right HUD for quick orientation on large maps. Start with a base view (terrain/zones/roads/rail/power lines/buildings) and click-to-jump camera controls; draw the main viewport rectangle so players can see where they are. Keep a mode switch scaffold in the UI but only expose the “Base” mode until overlays (power, water, alerts) ship. Limit canvas size and coarsen sampling on huge maps to stay performant.
 
 ## Controls & Hotkeys
 - Movement: `WASD` or arrow keys for panning; scroll wheel/pinch to zoom.
