@@ -34,7 +34,12 @@
 - **Amenities**: Parks/trees for happiness; future services can reuse road reach.
 
 ## Next Steps (Suggested)
-1. Choose connection rules and deficit penalties (hard stop vs gradual decay) to guide balancing.
-2. Rough in target economy numbers (income per pop/job, upkeep per tile/building) and simulate a 10–15 minute new-city arc.
-3. Define overlays: road/rail connectivity, power, water, happiness so players can see what they are tuning.
-4. Re-enable water once pipes/underground view are in; remove the temporary water stub and adjust demand penalties.
+- **Visuals**: Build a sprite atlas (road/rail crossings, power-over-road, zone variants, construction states); add subtle animations (water tiles, lit windows at night).
+- **Pipes & Underground**: Finish water network with pipes + underground view toggle; water deficit penalties; overlay for pressure/flow; restore water sim (remove stub).
+- **Economy & Demand**: Tune upkeep vs revenue; add service costs; consider tax sliders or policy modifiers; introduce happiness-driven decay for underserved zones.
+- **Feedback/Overlays**: Add road/rail connectivity overlay, power overlay, happiness/land-value heatmap; show build timers; add on-tile icons for “no road/power”.
+- **Transport Depth**: Rail freight bonus for industrial; intersections sprites; bridges/tunnels later; maybe one-way roads or avenue upgrade.
+- **Zoning Depth**: Density upgrade paths; abandoned/derelict states; small construction delay visuals; prevent isolated clusters from staying forever if cut off.
+- **Services/Amenities**: Parks impact radius; add fire/health placeholders; basic pollution/happiness modifiers for industrial proximity.
+- **Persistence/UX**: Manual modal (done), add hotkeys/help overlay, autosave cadence toggle; seed maps (random vs flat).
+- **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
