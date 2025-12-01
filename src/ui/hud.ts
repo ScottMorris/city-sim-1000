@@ -19,8 +19,6 @@ export interface HudElements {
 
 export function createHud(elements: HudElements) {
   let overlayContainer: HTMLDivElement | null = null;
-  let tileOverlay: HTMLDivElement | null = null;
-  let toolOverlay: HTMLDivElement | null = null;
   let toolInfoPinned = false;
 
   const ensureOverlayContainer = () => {
@@ -50,149 +48,156 @@ export function createHud(elements: HudElements) {
     elements.dayEl.textContent = `Day ${Math.floor(state.day)}`;
   };
 
-  const renderTileInspector = (state: GameState, selected: Position | null, activeTool: Tool) => {
-    if (!selected || activeTool !== Tool.Inspect) {
-      tileOverlay?.remove();
-      tileOverlay = null;
-      cleanupOverlayContainer();
-      return;
-    }
-    const tile = getTile(state, selected.x, selected.y);
-    if (!tile) return;
-    ensureOverlayContainer();
-    if (!tileOverlay) {
-      tileOverlay = document.createElement('div');
-      overlayContainer?.appendChild(tileOverlay);
-    }
-    const building =
-      tile.buildingId !== undefined
-        ? state.buildings.find((b) => b.id === tile.buildingId)
-        : undefined;
-    const template = building ? getBuildingTemplate(building.templateId) : undefined;
-    const buildingStatus = building
-      ? building.state.status
-      : template?.requiresPower === false || tile.powered
-        ? BuildingStatus.Active
-        : BuildingStatus.InactiveNoPower;
-    const statusLabel =
-      buildingStatus === BuildingStatus.Active
-        ? 'Active'
-        : buildingStatus === BuildingStatus.InactiveNoPower
-          ? 'No Power'
-          : 'Damaged';
-    const powerUse =
-      template && template.powerUse !== undefined ? `${template.powerUse.toFixed(1)} MW` : null;
-    const waterUse =
-      template && template.waterUse !== undefined ? `${template.waterUse.toFixed(1)} m³` : null;
-    const waterOut =
-      template && template.waterOutput !== undefined
-        ? `${template.waterOutput.toFixed(1)} m³`
-        : null;
-    const popCap =
-      template && template.populationCapacity !== undefined
-        ? `${template.populationCapacity} pop cap`
-        : null;
-    const jobCap =
-      template && template.jobsCapacity !== undefined ? `${template.jobsCapacity} jobs cap` : null;
-    const maintenance =
-      template && template.maintenance !== undefined
-        ? `$${template.maintenance.toLocaleString()} / day`
-        : null;
-    tileOverlay.innerHTML = `
-      <div class="info-box">
-        <div class="status-line"><span>Tile</span><strong>${selected.x},${selected.y}</strong></div>
-        <div class="status-line"><span>Type</span><strong>${tile.kind}</strong></div>
-        <div class="status-line"><span>Happy</span><strong>${tile.happiness.toFixed(2)}</strong></div>
-        <div class="status-line"><span>Power</span><strong>${tile.powered ? 'On' : 'Off'}</strong></div>
-        ${
-          building || template
-            ? `<div class="divider"></div>
-        <div class="status-line"><span>Building</span><strong>${template?.name ?? 'Unknown'}</strong></div>
-        <div class="status-line"><span>Status</span><strong>${statusLabel}</strong></div>
-        ${
-          maintenance
-            ? `<div class="status-line"><span>Maintenance</span><strong>${maintenance}</strong></div>`
-            : ''
-        }
-        ${
-          powerUse || waterUse || waterOut
-            ? `<div class="status-line"><span>Utilities</span><strong>${[
-                powerUse && `⚡ ${powerUse}`,
-                waterUse && `💧 ${waterUse}`,
-                waterOut && `↥ ${waterOut}`
-              ]
-                .filter(Boolean)
-                .join(' • ')}</strong></div>`
-            : ''
-        }
-        ${
-          popCap || jobCap
-            ? `<div class="status-line"><span>Capacity</span><strong>${[popCap, jobCap]
-                .filter(Boolean)
-                .join(' • ')}</strong></div>`
-            : ''
-        }`
-            : ''
-        }
-        <div class="map-stats">Utilities are modeled globally; keep power and water above zero to grow.</div>
-      </div>
-    `;
-  };
+  const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
+    const showToolInfo = activeTool !== Tool.Inspect || toolInfoPinned;
+    const tile = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
 
-  const renderToolInfo = (activeTool: Tool) => {
-    const showToolPanel = activeTool !== Tool.Inspect || toolInfoPinned;
-    if (!showToolPanel) {
-      toolOverlay?.remove();
-      toolOverlay = null;
-      cleanupOverlayContainer();
+    if (!showToolInfo && !tile) {
+      overlayContainer?.remove();
+      overlayContainer = null;
       return;
     }
 
-    const details = getToolDetails(activeTool);
     ensureOverlayContainer();
-    if (!toolOverlay) {
-      toolOverlay = document.createElement('div');
-      overlayContainer?.appendChild(toolOverlay);
-    }
+    const infoBox = overlayContainer?.querySelector<HTMLDivElement>('.info-box') ?? document.createElement('div');
 
-    toolOverlay.innerHTML = `
-      <div class="info-box tool-info-box ${details.unavailable ? 'muted' : ''}">
-        <div class="info-header">
-          <div class="info-title">
-            <div class="info-label">Tool</div>
-            <div class="info-name">${details.name}</div>
-            <div class="info-meta">${details.hotkey ? `Hotkey: ${details.hotkey}` : 'Click a tool to see stats'}</div>
-          </div>
-          <button class="chip-button ${toolInfoPinned ? 'active' : ''}" data-pin="true">${toolInfoPinned ? 'Pinned' : 'Pin'}</button>
-        </div>
-        <div class="tool-rows">
-          ${details.rows
+    const toolSection = showToolInfo
+      ? (() => {
+          const details = getToolDetails(activeTool);
+          const rowsHtml = details.rows
             .map((row) => `<div class="status-line"><span>${row.label}</span><strong>${row.value}</strong></div>`)
-            .join('')}
-        </div>
-        ${
-          details.hints.length
-            ? `<div class="tool-hints">${details.hints.map((hint) => `<div>${hint}</div>`).join('')}</div>`
-            : ''
-        }
-        ${
-          details.unavailable
-            ? `<div class="tool-hints warning">Coming soon: pipes and underground view.</div>`
-            : '<div class="tool-hints subtle">Press Esc to cancel the active tool.</div>'
-        }
-      </div>
+            .join('');
+          const hintsHtml =
+            details.hints.length > 0
+              ? `<div class="tool-hints">${details.hints.map((hint) => `<div>${hint}</div>`).join('')}</div>`
+              : '';
+          const pinLabel = toolInfoPinned ? 'Pinned' : 'Pin';
+          return `
+            <div class="info-section">
+              <div class="info-header">
+                <div class="info-title">
+                  <div class="info-label">Tool</div>
+                  <div class="info-name">${details.name}</div>
+                  <div class="info-meta">${details.hotkey ? `Hotkey: ${details.hotkey}` : 'Select a tool'}</div>
+                </div>
+                <button class="chip-button ${toolInfoPinned ? 'active' : ''}" data-pin="true">${pinLabel}</button>
+              </div>
+              <div class="tool-rows">
+                ${rowsHtml}
+              </div>
+              ${hintsHtml}
+              ${
+                details.unavailable
+                  ? `<div class="tool-hints warning">Coming soon: pipes and underground view.</div>`
+                  : '<div class="tool-hints subtle">Press Esc to cancel the active tool.</div>'
+              }
+            </div>
+          `;
+        })()
+      : '';
+
+    const tileSection =
+      tile && selected
+        ? (() => {
+            const building =
+              tile.buildingId !== undefined
+                ? state.buildings.find((b) => b.id === tile.buildingId)
+                : undefined;
+            const template = building ? getBuildingTemplate(building.templateId) : undefined;
+            const buildingStatus = building
+              ? building.state.status
+              : template?.requiresPower === false || tile.powered
+                ? BuildingStatus.Active
+                : BuildingStatus.InactiveNoPower;
+            const statusLabel =
+              buildingStatus === BuildingStatus.Active
+                ? 'Active'
+                : buildingStatus === BuildingStatus.InactiveNoPower
+                  ? 'No Power'
+                  : 'Damaged';
+            const powerUse =
+              template && template.powerUse !== undefined ? `${template.powerUse.toFixed(1)} MW` : null;
+            const waterUse =
+              template && template.waterUse !== undefined ? `${template.waterUse.toFixed(1)} m³` : null;
+            const waterOut =
+              template && template.waterOutput !== undefined
+                ? `${template.waterOutput.toFixed(1)} m³`
+                : null;
+            const popCap =
+              template && template.populationCapacity !== undefined
+                ? `${template.populationCapacity} pop cap`
+                : null;
+            const jobCap =
+              template && template.jobsCapacity !== undefined ? `${template.jobsCapacity} jobs cap` : null;
+            const maintenance =
+              template && template.maintenance !== undefined
+                ? `$${template.maintenance.toLocaleString()} / day`
+                : null;
+            const buildingBlock =
+              building || template
+                ? `<div class="info-subtitle">Building</div>
+              <div class="status-line"><span>Name</span><strong>${template?.name ?? 'Unknown'}</strong></div>
+              <div class="status-line"><span>Status</span><strong>${statusLabel}</strong></div>
+              ${
+                maintenance
+                  ? `<div class="status-line"><span>Maintenance</span><strong>${maintenance}</strong></div>`
+                  : ''
+              }
+              ${
+                powerUse || waterUse || waterOut
+                  ? `<div class="status-line"><span>Utilities</span><strong>${[
+                      powerUse && `⚡ ${powerUse}`,
+                      waterUse && `💧 ${waterUse}`,
+                      waterOut && `↥ ${waterOut}`
+                    ]
+                      .filter(Boolean)
+                      .join(' • ')}</strong></div>`
+                  : ''
+              }
+              ${
+                popCap || jobCap
+                  ? `<div class="status-line"><span>Capacity</span><strong>${[popCap, jobCap]
+                      .filter(Boolean)
+                      .join(' • ')}</strong></div>`
+                  : ''
+              }`
+                : '';
+
+            return `
+              <div class="info-section">
+                <div class="info-title">
+                  <div class="info-label">Tile</div>
+                  <div class="info-name">${selected.x},${selected.y}</div>
+                </div>
+                <div class="status-line"><span>Type</span><strong>${tile.kind}</strong></div>
+                <div class="status-line"><span>Happy</span><strong>${tile.happiness.toFixed(2)}</strong></div>
+                <div class="status-line"><span>Power</span><strong>${tile.powered ? 'On' : 'Off'}</strong></div>
+                ${buildingBlock ? `<div class="divider"></div>${buildingBlock}` : ''}
+                <div class="map-stats">Utilities are modeled globally; keep power and water above zero to grow.</div>
+              </div>
+            `;
+          })()
+        : '';
+
+    if (!infoBox.parentElement) {
+      overlayContainer?.appendChild(infoBox);
+    }
+
+    const unavailableClass =
+      showToolInfo && getToolDetails(activeTool).unavailable ? ' muted' : '';
+    infoBox.className = `info-box${unavailableClass}`;
+    infoBox.innerHTML = `
+      ${toolSection}
+      ${toolSection && tileSection ? '<div class="divider"></div>' : ''}
+      ${tileSection}
     `;
 
-    const pinButton = toolOverlay.querySelector<HTMLButtonElement>('button[data-pin="true"]');
+    const pinButton = infoBox.querySelector<HTMLButtonElement>('button[data-pin="true"]');
     pinButton?.addEventListener('click', () => {
       toolInfoPinned = !toolInfoPinned;
-      renderToolInfo(activeTool);
+      renderOverlays(state, selected, activeTool);
     });
-  };
 
-  const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
-    renderTileInspector(state, selected, activeTool);
-    renderToolInfo(activeTool);
     cleanupOverlayContainer();
   };
 

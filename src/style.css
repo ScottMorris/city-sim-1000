@@ -267,6 +267,22 @@ button.secondary.active {
   margin-top: 6px;
 }
 
+.info-section {
+  display: grid;
+  gap: 6px;
+}
+
+.info-title {
+  display: grid;
+  gap: 2px;
+}
+
+.info-subtitle {
+  font-size: 11px;
+  color: #9fb2d1;
+  margin-top: 2px;
+}
+
 .chip-button {
   background: #162236;
   border: 1px solid #223557;
