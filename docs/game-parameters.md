@@ -41,5 +41,14 @@
 - **Transport Depth**: Rail freight bonus for industrial; intersections sprites; bridges/tunnels later; maybe one-way roads or avenue upgrade.
 - **Zoning Depth**: Density upgrade paths; abandoned/derelict states; small construction delay visuals; prevent isolated clusters from staying forever if cut off.
 - **Services/Amenities**: Parks impact radius; add fire/health placeholders; basic pollution/happiness modifiers for industrial proximity.
-- **Persistence/UX**: Manual modal (done), add hotkeys/help overlay, autosave cadence toggle; seed maps (random vs flat).
+- **Persistence/UX**: Manual modal (done), add hotkeys/help overlay, autosave cadence toggle; seed maps (random vs flat); settings panel for input options (e.g., invert keyboard pan).
 - **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
+
+## Controls & Hotkeys
+- Movement: `WASD` or arrow keys for panning; scroll wheel/pinch to zoom.
+- Inspect: `I`.
+- Terraform: Raise `E`, Lower `Q`.
+- Painting: Water `F`, Trees `T`.
+- Transport & Utilities: Road `R`, Rail `L`, Power Lines `P`, Hydro Plant `H`, Water Pump `U`, Water Tower `Y`.
+- Zoning & Amenities: Residential `Z`, Commercial `X`, Industrial `C`, Park `K`.
+- Bulldoze: `B`.
