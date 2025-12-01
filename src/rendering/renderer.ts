@@ -15,6 +15,7 @@ export class MapRenderer {
   private overlayLayer: Graphics;
   private labelLayer: Container;
   private container: Container;
+  private tileLabels: Map<number, Text>;
   private palette: Record<TileKind, number>;
   private camera: Camera;
   private tileSize: number;
@@ -30,6 +31,7 @@ export class MapRenderer {
     this.labelLayer = new Container();
     this.container = new Container();
     this.container.addChild(this.mapLayer, this.overlayLayer, this.labelLayer);
+    this.tileLabels = new Map();
   }
 
   async init(resizeTo: HTMLElement) {
@@ -61,7 +63,6 @@ export class MapRenderer {
     }
 
     this.overlayLayer.clear();
-    this.labelLayer.removeChildren();
     this.drawBuildingMarkers(state, size);
     this.drawTileLabels(state, size);
     if (hovered) {
@@ -106,6 +107,10 @@ export class MapRenderer {
 
   private drawTileLabels(state: GameState, size: number) {
     const fontSize = Math.max(8, Math.min(14, size * 0.35));
+    for (const [, text] of this.tileLabels) {
+      text.visible = false;
+    }
+
     for (let y = 0; y < state.height; y++) {
       for (let x = 0; x < state.width; x++) {
         const tile = getTile(state, x, y);
@@ -115,21 +120,42 @@ export class MapRenderer {
         if (tile.kind === TileKind.Road || tile.roadUnderlay) label += 'R';
         if (tile.kind === TileKind.Rail || tile.railUnderlay) label += 'L';
         if (!label) continue;
-        const text = new Text({
-          text: label,
-          style: {
-            fontSize,
-            fill: 0xffffff,
-            fontFamily: 'monospace'
+        const idx = y * state.width + x;
+        let text = this.tileLabels.get(idx);
+        if (!text) {
+          text = new Text({
+            text: label,
+            style: {
+              fontSize,
+              fill: 0xffffff,
+              fontFamily: 'monospace'
+            }
+          });
+          text.alpha = 0.8;
+          text.anchor.set(0.5);
+          this.tileLabels.set(idx, text);
+          this.labelLayer.addChild(text);
+        } else {
+          if (text.text !== label) {
+            text.text = label;
           }
-        });
-        text.alpha = 0.8;
-        text.anchor.set(0.5);
+          if (text.style.fontSize !== fontSize) {
+            text.style.fontSize = fontSize;
+          }
+        }
+        text.visible = true;
         text.position.set(
           this.camera.x + x * size + size / 2,
           this.camera.y + y * size + size / 2
         );
-        this.labelLayer.addChild(text);
+      }
+    }
+
+    for (const [idx, text] of this.tileLabels) {
+      if (!text.visible) {
+        this.labelLayer.removeChild(text);
+        text.destroy();
+        this.tileLabels.delete(idx);
       }
     }
   }

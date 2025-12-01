@@ -2,6 +2,74 @@ import { getSimulationDebugStats } from '../game/debugStats';
 import { GameState } from '../game/gameState';
 import { showToast } from './dialogs';
 
+interface HeapSnapshot {
+  available: boolean;
+  usedMB?: number;
+  limitMB?: number;
+  allocatedMB?: number;
+  reason?: string;
+}
+
+type PerformanceWithMemory = Performance & {
+  memory?: {
+    usedJSHeapSize: number;
+    totalJSHeapSize: number;
+    jsHeapSizeLimit: number;
+  };
+  measureUserAgentSpecificMemory?: () => Promise<{ bytes: number }>;
+};
+
+const heapSampler = {
+  snapshot: { available: false, reason: 'Sampling…' } as HeapSnapshot,
+  lastSample: 0,
+  sampling: false
+};
+
+async function sampleHeap(force = false) {
+  const now = performance.now();
+  if (!force && (heapSampler.sampling || now - heapSampler.lastSample < 1500)) return;
+  heapSampler.sampling = true;
+  try {
+    const perf = performance as PerformanceWithMemory;
+    if (typeof perf.measureUserAgentSpecificMemory === 'function') {
+      const result = await perf.measureUserAgentSpecificMemory();
+      const toMB = (bytes: number) => bytes / (1024 * 1024);
+      heapSampler.snapshot = {
+        available: true,
+        usedMB: toMB(result.bytes)
+      };
+    } else if (perf.memory) {
+      const { usedJSHeapSize, totalJSHeapSize, jsHeapSizeLimit } = perf.memory;
+      const toMB = (bytes: number) => bytes / (1024 * 1024);
+      heapSampler.snapshot = {
+        available: true,
+        usedMB: toMB(usedJSHeapSize),
+        allocatedMB: toMB(totalJSHeapSize),
+        limitMB: toMB(jsHeapSizeLimit)
+      };
+    } else {
+      heapSampler.snapshot = {
+        available: false,
+        reason: 'Browser hides JS heap. Try Chrome or enable Firefox memory prefs.'
+      };
+    }
+  } catch (err) {
+    console.error('Heap sample failed', err);
+    heapSampler.snapshot = {
+      available: false,
+      reason: 'Memory probe failed. See console.'
+    };
+  } finally {
+    heapSampler.lastSample = performance.now();
+    heapSampler.sampling = false;
+  }
+}
+
+function getHeapSnapshot() {
+  void sampleHeap();
+  return heapSampler.snapshot;
+}
+
 interface DebugOverlayOptions {
   root: HTMLElement;
   toggleBtn: HTMLButtonElement;
@@ -21,6 +89,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   const renderStats = (state: GameState) => {
     if (!visible) return;
     const stats = getSimulationDebugStats(state);
+    const heap = getHeapSnapshot();
 
     overlay.innerHTML = `
       <div class="debug-section">
@@ -57,6 +126,23 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         )} out / ${stats.utilities.waterUse.toFixed(1)} use</strong></div>
         <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
       </div>
+      <div class="debug-section">
+        <div class="debug-heading">Memory</div>
+        ${
+          heap.available
+            ? `
+          <div class="debug-row"><span>JS heap</span><strong>${heap.usedMB?.toFixed(1)}${
+               heap.limitMB ? ` / ${heap.limitMB.toFixed(0)}` : ''
+             } MB</strong></div>
+          ${
+            heap.allocatedMB
+              ? `<div class="debug-hint">Allocated ${heap.allocatedMB.toFixed(0)} MB</div>`
+              : ''
+          }
+        `
+            : `<div class="debug-row"><span>Status</span><strong>${heap.reason}</strong></div>`
+        }
+      </div>
     `;
   };
 
@@ -65,6 +151,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
     overlay.classList.toggle('hidden', !visible);
     overlay.classList.toggle('visible', visible);
     toggleBtn.textContent = visible ? 'Hide overlay' : 'Show overlay';
+    if (visible) void sampleHeap(true);
     renderStats(getState());
   });
 
