@@ -27,6 +27,25 @@ const primaryLabelOverrides: Partial<Record<Tool, string>> = {
   [Tool.WaterPump]: '🚰 Water'
 };
 
+const toolHotkeys: Partial<Record<Tool, string>> = {
+  [Tool.Inspect]: 'I',
+  [Tool.TerraformRaise]: 'E',
+  [Tool.TerraformLower]: 'Q',
+  [Tool.Water]: 'F',
+  [Tool.Tree]: 'T',
+  [Tool.Road]: 'R',
+  [Tool.Rail]: 'L',
+  [Tool.PowerLine]: 'P',
+  [Tool.HydroPlant]: 'H',
+  [Tool.WaterPump]: 'U',
+  [Tool.WaterTower]: 'Y',
+  [Tool.Residential]: 'Z',
+  [Tool.Commercial]: 'X',
+  [Tool.Industrial]: 'C',
+  [Tool.Park]: 'K',
+  [Tool.Bulldoze]: 'B'
+};
+
 const powerOptions: Tool[] = [
   Tool.PowerLine,
   Tool.HydroPlant,
@@ -68,7 +87,8 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     const button = document.createElement('button');
     button.className = 'tool-button';
     button.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
-    button.title = toolLabels[key];
+    const hotkey = toolHotkeys[key];
+    button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
     button.addEventListener('click', () => {
       onSelect(key);
@@ -81,7 +101,8 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     const button = document.createElement('button');
     button.className = 'tool-sub-button';
     button.textContent = labelOverride ?? toolLabels[key];
-    button.title = toolLabels[key];
+    const hotkey = toolHotkeys[key];
+    button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
     if (key === Tool.WaterPipe) {
       button.disabled = true;

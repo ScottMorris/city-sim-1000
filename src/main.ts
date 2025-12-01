@@ -13,7 +13,8 @@ import { registerServiceWorker } from './pwa/registerServiceWorker';
 import { createHud } from './ui/hud';
 import { bindPersistenceControls, showManualModal, showToast } from './ui/dialogs';
 import { initDebugOverlay } from './ui/debugOverlay';
-import { initToolbar } from './ui/toolbar';
+import { initHotkeys, defaultHotkeys, type HotkeyController } from './ui/hotkeys';
+import { initToolbar, updateToolbar } from './ui/toolbar';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -81,6 +82,8 @@ let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 const simulation = new Simulation(state, { ticksPerSecond: 20 });
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
+let hotkeys: HotkeyController | null = null;
+const KEYBOARD_PAN_SPEED = 700;
 
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
@@ -171,6 +174,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const now = performance.now();
   const deltaSeconds = (now - lastFrame) / 1000;
   lastFrame = now;
+  const movement = hotkeys?.getMovementVector();
+  if (movement) {
+    camera.x -= movement.x * KEYBOARD_PAN_SPEED * deltaSeconds;
+    camera.y -= movement.y * KEYBOARD_PAN_SPEED * deltaSeconds;
+  }
   simulation.update(deltaSeconds);
   renderer.render(state, hovered, selected);
   hud.update(state);
@@ -200,13 +208,74 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     overlayRoot: wrapper
   });
 
+  const setTool = (nextTool: Tool) => {
+    tool = nextTool;
+    updateToolbar(toolbar, nextTool);
+  };
+
   initToolbar(
     toolbar,
     (nextTool) => {
-      tool = nextTool;
+      setTool(nextTool);
     },
     tool
   );
+
+  hotkeys = initHotkeys({
+    bindings: defaultHotkeys,
+    onAction: (action) => {
+      switch (action) {
+        case 'selectInspect':
+          setTool(Tool.Inspect);
+          return;
+        case 'selectTerraformRaise':
+          setTool(Tool.TerraformRaise);
+          return;
+        case 'selectTerraformLower':
+          setTool(Tool.TerraformLower);
+          return;
+        case 'selectWater':
+          setTool(Tool.Water);
+          return;
+        case 'selectTrees':
+          setTool(Tool.Tree);
+          return;
+        case 'selectRoad':
+          setTool(Tool.Road);
+          return;
+        case 'selectRail':
+          setTool(Tool.Rail);
+          return;
+        case 'selectPower':
+          setTool(Tool.PowerLine);
+          return;
+        case 'selectHydro':
+          setTool(Tool.HydroPlant);
+          return;
+        case 'selectWaterPump':
+          setTool(Tool.WaterPump);
+          return;
+        case 'selectWaterTower':
+          setTool(Tool.WaterTower);
+          return;
+        case 'selectResidential':
+          setTool(Tool.Residential);
+          return;
+        case 'selectCommercial':
+          setTool(Tool.Commercial);
+          return;
+        case 'selectIndustrial':
+          setTool(Tool.Industrial);
+          return;
+        case 'selectPark':
+          setTool(Tool.Park);
+          return;
+        case 'selectBulldoze':
+          setTool(Tool.Bulldoze);
+          return;
+      }
+    }
+  });
 
   bindPersistenceControls({
     saveBtn,
