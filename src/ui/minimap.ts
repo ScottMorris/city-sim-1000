@@ -29,9 +29,10 @@ export interface MinimapController {
 }
 
 const SIZE_PRESETS: Record<MinimapSize, number> = {
-  small: 160,
+  small: 200,
   medium: 220
 };
+const MIN_PANEL_WIDTH = 220;
 
 interface LayoutInfo {
   sizePx: number;
@@ -193,7 +194,8 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
     body.style.display = settings.open ? 'block' : 'none';
-    container.style.width = `${SIZE_PRESETS[settings.size] + 16}px`;
+    const widthPx = Math.max(SIZE_PRESETS[settings.size] + 16, MIN_PANEL_WIDTH);
+    container.style.width = `${widthPx}px`;
   }
 
   function layoutCanvases() {
