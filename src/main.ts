@@ -15,6 +15,7 @@ import { bindPersistenceControls, showManualModal, showToast } from './ui/dialog
 import { initDebugOverlay } from './ui/debugOverlay';
 import { initHotkeys, defaultHotkeys, type HotkeyController } from './ui/hotkeys';
 import { initToolbar, updateToolbar } from './ui/toolbar';
+import { createNotificationCenter } from './ui/notifications';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -85,7 +86,11 @@ let cameraStart = { x: 0, y: 0 };
 let lastPainted: Position | null = null;
 let tool: Tool = Tool.Inspect;
 let state: GameState = loadFromBrowser() ?? createInitialState();
-const simulation = new Simulation(state, { ticksPerSecond: 20 });
+const notifications = createNotificationCenter();
+const simulation = new Simulation(state, {
+  ticksPerSecond: 20,
+  notify: notifications.publish
+});
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
 const KEYBOARD_PAN_SPEED = 700;

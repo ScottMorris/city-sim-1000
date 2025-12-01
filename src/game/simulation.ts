@@ -18,6 +18,16 @@ import {
 
 export interface SimulationConfig {
   ticksPerSecond: number;
+  notify?: (alert: SimulationAlert) => void;
+}
+
+export type SimulationAlertSeverity = 'info' | 'warning' | 'success';
+
+export interface SimulationAlert {
+  id: string;
+  message: string;
+  severity?: SimulationAlertSeverity;
+  sticky?: boolean;
 }
 
 function clamp(val: number, min: number, max: number) {
@@ -32,11 +42,23 @@ export class Simulation {
   private zoneGrowthTimers = new Map<number, number>();
   private readonly waterEnabled = false;
   private speedMultiplier = 1;
+  private notify?: (alert: SimulationAlert) => void;
+  private powerDeficitActive = false;
+  private waterDeficitActive = false;
 
   constructor(state: GameState, config: SimulationConfig) {
     this.state = state;
     this.dt = 1 / config.ticksPerSecond;
     this.zoneGrowthDelayTicks = Math.max(1, Math.round(config.ticksPerSecond * 2)); // ~2s delay
+    this.notify = config.notify;
+  }
+
+  setState(state: GameState) {
+    this.state = state;
+    this.zoneGrowthTimers = new Map();
+    this.accumulator = 0;
+    this.powerDeficitActive = false;
+    this.waterDeficitActive = false;
   }
 
   setSpeed(multiplier: number) {
@@ -152,6 +174,7 @@ export class Simulation {
     this.state.utilities.powerUsed = powerUse;
     this.state.utilities.power = powerSupply - powerUse;
     this.state.utilities.water = waterSupply - waterUse;
+    this.handleResourceAlerts(this.state.utilities.power, this.state.utilities.water);
 
     const cappedResidentialFill =
       populationCapacity > 0 ? Math.min(1, this.state.population / populationCapacity) : 0;
@@ -242,5 +265,46 @@ export class Simulation {
     if (kind === TileKind.Commercial) return this.state.demand.commercial;
     if (kind === TileKind.Industrial) return this.state.demand.industrial;
     return 0;
+  }
+
+  private handleResourceAlerts(powerBalance: number, waterBalance: number) {
+    if (!this.notify) return;
+
+    if (powerBalance < 0 && !this.powerDeficitActive) {
+      this.powerDeficitActive = true;
+      this.notify({
+        id: 'power-deficit',
+        message: 'Power deficit detected. Build more plants or reduce demand to restore growth.',
+        severity: 'warning',
+        sticky: true
+      });
+    } else if (powerBalance >= 0 && this.powerDeficitActive) {
+      this.powerDeficitActive = false;
+      this.notify({
+        id: 'power-deficit',
+        message: 'Power restored. Zones can grow again.',
+        severity: 'success',
+        sticky: false
+      });
+    }
+
+    if (!this.waterEnabled) return;
+    if (waterBalance < 0 && !this.waterDeficitActive) {
+      this.waterDeficitActive = true;
+      this.notify({
+        id: 'water-deficit',
+        message: 'Water deficit detected. Add pumps/towers or cut usage.',
+        severity: 'warning',
+        sticky: true
+      });
+    } else if (waterBalance >= 0 && this.waterDeficitActive) {
+      this.waterDeficitActive = false;
+      this.notify({
+        id: 'water-deficit',
+        message: 'Water restored. Supply is stable again.',
+        severity: 'success',
+        sticky: false
+      });
+    }
   }
 }

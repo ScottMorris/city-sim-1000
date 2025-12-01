@@ -2,8 +2,41 @@ import { downloadState, loadFromBrowser, saveToBrowser, uploadState } from '../g
 import { GameState } from '../game/gameState';
 
 let toastRoot: HTMLDivElement | null = null;
+const toastsById = new Map<string, HTMLDivElement>();
 
-export function showToast(message: string) {
+type ToastSeverity = 'info' | 'warning' | 'success';
+
+export interface ToastOptions {
+  severity?: ToastSeverity;
+  sticky?: boolean;
+  id?: string;
+  durationMs?: number;
+}
+
+function removeToast(div: HTMLDivElement, id?: string) {
+  if (div.dataset.closing === 'true') return;
+  div.dataset.closing = 'true';
+  div.style.opacity = '0';
+  div.style.transform = 'translateY(-6px)';
+  setTimeout(() => {
+    div.remove();
+    if (id) toastsById.delete(id);
+    if (toastRoot && toastRoot.childElementCount === 0) {
+      toastRoot.remove();
+      toastRoot = null;
+    }
+  }, 200);
+}
+
+export function dismissToast(id: string) {
+  const existing = toastsById.get(id);
+  if (existing) {
+    removeToast(existing, id);
+  }
+}
+
+export function showToast(message: string, options: ToastOptions = {}) {
+  const { severity = 'info', sticky = false, id, durationMs = 1400 } = options;
   if (!toastRoot) {
     toastRoot = document.createElement('div');
     toastRoot.style.position = 'fixed';
@@ -18,29 +51,51 @@ export function showToast(message: string) {
     document.body.appendChild(toastRoot);
   }
 
+  if (id && toastsById.has(id)) {
+    dismissToast(id);
+  }
+
   const div = document.createElement('div');
   div.textContent = message;
   div.style.padding = '10px 12px';
-  div.style.background = '#1f2c4b';
-  div.style.border = '1px solid #7bffb7';
+  const severityStyles: Record<ToastSeverity, { background: string; border: string }> = {
+    info: { background: '#1f2c4b', border: '#7bffb7' },
+    success: { background: '#1f2c4b', border: '#7bffb7' },
+    warning: { background: '#2a1f0f', border: '#f08c42' }
+  };
+  const palette = severityStyles[severity] ?? severityStyles.info;
+  div.style.background = palette.background;
+  div.style.border = `1px solid ${palette.border}`;
   div.style.borderRadius = '10px';
   div.style.color = '#e8f1ff';
   div.style.boxShadow = '0 6px 12px rgba(0,0,0,0.35)';
   div.style.pointerEvents = 'auto';
   div.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+  div.style.position = 'relative';
+
+  if (sticky) {
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '4px';
+    closeBtn.style.right = '6px';
+    closeBtn.style.background = 'transparent';
+    closeBtn.style.border = 'none';
+    closeBtn.style.color = '#e8f1ff';
+    closeBtn.style.fontSize = '14px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.addEventListener('click', () => removeToast(div, id));
+    div.appendChild(closeBtn);
+  }
+
+  if (id) {
+    toastsById.set(id, div);
+  }
   toastRoot.appendChild(div);
 
-  setTimeout(() => {
-    div.style.opacity = '0';
-    div.style.transform = 'translateY(-6px)';
-    setTimeout(() => {
-      div.remove();
-      if (toastRoot && toastRoot.childElementCount === 0) {
-        toastRoot.remove();
-        toastRoot = null;
-      }
-    }, 200);
-  }, 1400);
+  if (!sticky) {
+    setTimeout(() => removeToast(div, id), durationMs);
+  }
 }
 
 interface PersistenceOptions {
