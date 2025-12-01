@@ -1,5 +1,7 @@
 import { PowerPlantType } from './constants';
 import type { BuildingInstance } from './buildings';
+import type { ServiceSystemState, TileServiceState } from './services';
+import { createServiceSystemState, createTileServiceState } from './services';
 
 export enum TileKind {
   Land = 'land',
@@ -29,6 +31,7 @@ export interface Tile {
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
   buildingId?: number;
+  services: TileServiceState;
 }
 
 export interface UtilityStats {
@@ -57,6 +60,7 @@ export interface GameState {
   demand: DemandStats;
   buildings: BuildingInstance[];
   nextBuildingId: number;
+  services: ServiceSystemState;
 }
 
 export function createInitialState(width = 64, height = 64): GameState {
@@ -69,7 +73,8 @@ export function createInitialState(width = 64, height = 64): GameState {
         kind: edge ? TileKind.Water : isWater ? TileKind.Water : TileKind.Land,
         elevation: 0,
         happiness: 1,
-        powered: false
+        powered: false,
+        services: createTileServiceState()
       });
     }
   }
@@ -90,7 +95,8 @@ export function createInitialState(width = 64, height = 64): GameState {
     },
     demand: { residential: 30, commercial: 30, industrial: 30 },
     buildings: [],
-    nextBuildingId: 1
+    nextBuildingId: 1,
+    services: createServiceSystemState()
   };
 }
 

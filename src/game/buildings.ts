@@ -3,6 +3,7 @@ import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
 import { getOrthogonalNeighbourCoords, isPowerCarrier } from './adjacency';
 import { Tool } from './toolTypes';
+import { createEmptyServiceLoad, ServiceLoad } from './services';
 
 export enum BuildingCategory {
   Power = 'power',
@@ -19,6 +20,7 @@ export enum BuildingStatus {
 export interface BuildingState {
   status: BuildingStatus;
   health: number; // 0-100, v1 stub
+  serviceLoad: ServiceLoad;
 }
 
 export interface BuildingTemplate {
@@ -209,7 +211,7 @@ export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
 }
 
 export function createBuildingState(): BuildingState {
-  return { status: BuildingStatus.Active, health: 100 };
+  return { status: BuildingStatus.Active, health: 100, serviceLoad: createEmptyServiceLoad() };
 }
 
 export function placeBuilding(

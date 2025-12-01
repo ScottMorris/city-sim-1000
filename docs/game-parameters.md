@@ -33,6 +33,15 @@
 - **Zoning**: R/C/I with demand bars; growth tied to services and connectivity.
 - **Amenities**: Parks/trees for happiness; future services can reuse road reach.
 
+## Services & Amenities Draft (Stub)
+- **Scope**: Police, fire, and health share the same pattern for now. Each has a coverage radius that travels along roads, a per-building capacity (how many tiles/people can be “served”), build cost, and upkeep. No dispatch sim yet—just reach + capacity.
+- **Service definitions**: Add a `ServiceType` shape with id/name, build cost, upkeep, coverage radius (in tiles), capacity, and a base happiness/decay modifier when served vs unserved. Keep numbers modest (e.g., radius 6–10 tiles, upkeep scaled to early-game budgets).
+- **Map state hooks**: Track per-tile `serviceScores` (0–100) keyed by service id plus a boolean `isServed`. Coverage is road-flood-fill within radius until capacity runs out; powered/road-connected stations only. Scores feed overlays and growth gating.
+- **Building state hooks**: Service buildings maintain `slotsUsed` (load) vs capacity. Zones track whether each service is available for growth/decay calculations. Parks stay as a pure happiness bonus; do not consume capacity.
+- **Effects for now**: Served tiles avoid a small decay penalty and gain a small happiness boost; unserved tiles incur a mild penalty. Industrial tiles add a small fire risk multiplier that can later drive incidents.
+- **UI hooks**: Overlays per service reading `serviceScores`; build tooltip shows cost, upkeep, radius, capacity. A shared “underserved” icon can appear on tiles/zones missing required coverage.
+- **Future depth (later)**: Incident spawning by density/hazard, dispatch travel time on roads, queues per station, staffing/budget sliders, and specialised buildings (clinic vs hospital). These plug into the same data shapes without reshaping state.
+
 ## Next Steps (Suggested)
 - **Visuals**: Build a sprite atlas (road/rail crossings, power-over-road, zone variants, construction states); add subtle animations (water tiles, lit windows at night).
 - **Pipes & Underground**: Finish water network with pipes + underground view toggle; water deficit penalties; overlay for pressure/flow; restore water sim (remove stub).

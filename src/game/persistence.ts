@@ -1,6 +1,12 @@
 import { LOCAL_STORAGE_KEY } from './constants';
 import { GameState, TileKind } from './gameState';
 import { createBuildingState, getBuildingTemplate } from './buildings';
+import {
+  createEmptyServiceLoad,
+  createServiceSystemState,
+  createTileServiceState,
+  DEFAULT_SERVICE_DEFINITIONS
+} from './services';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -19,17 +25,23 @@ export function deserialize(payload: string): GameState {
     parsed.utilities.powerProduced = parsed.utilities.powerProduced ?? 0;
     parsed.utilities.powerUsed = parsed.utilities.powerUsed ?? 0;
   }
+  parsed.services = parsed.services ?? createServiceSystemState();
+  parsed.services.definitions = parsed.services.definitions ?? {
+    ...DEFAULT_SERVICE_DEFINITIONS
+  };
   parsed.tiles = parsed.tiles.map((tile: any) => ({
     ...tile,
     powered: tile.powered ?? false,
     powerPlantType: tile.powerPlantType,
     powerPlantId: tile.powerPlantId,
-    buildingId: tile.buildingId ?? tile.powerPlantId
+    buildingId: tile.buildingId ?? tile.powerPlantId,
+    services: tile.services ?? createTileServiceState()
   }));
   parsed.buildings = (parsed.buildings ?? []).map((building: any) => {
     const state = building.state ?? createBuildingState();
     if (state.health === undefined) state.health = 100;
     if (!state.status) state.status = createBuildingState().status;
+    if (!state.serviceLoad) state.serviceLoad = createEmptyServiceLoad();
     return {
       ...building,
       state
