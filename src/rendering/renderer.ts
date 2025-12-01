@@ -1,4 +1,4 @@
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Text } from 'pixi.js';
 import { Camera } from './camera';
 import { GameState, TileKind, getTile } from '../game/gameState';
 import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
@@ -13,6 +13,7 @@ export class MapRenderer {
   private parent: HTMLElement;
   private mapLayer: Graphics;
   private overlayLayer: Graphics;
+  private labelLayer: Container;
   private container: Container;
   private palette: Record<TileKind, number>;
   private camera: Camera;
@@ -26,8 +27,9 @@ export class MapRenderer {
     this.palette = palette;
     this.mapLayer = new Graphics();
     this.overlayLayer = new Graphics();
+    this.labelLayer = new Container();
     this.container = new Container();
-    this.container.addChild(this.mapLayer, this.overlayLayer);
+    this.container.addChild(this.mapLayer, this.overlayLayer, this.labelLayer);
   }
 
   async init(resizeTo: HTMLElement) {
@@ -59,7 +61,9 @@ export class MapRenderer {
     }
 
     this.overlayLayer.clear();
+    this.labelLayer.removeChildren();
     this.drawBuildingMarkers(state, size);
+    this.drawTileLabels(state, size);
     if (hovered) {
       this.overlayLayer.lineStyle(2, 0xffffff);
       this.overlayLayer.drawRect(
@@ -97,6 +101,36 @@ export class MapRenderer {
       this.overlayLayer.beginFill(color, 0.9);
       this.overlayLayer.drawCircle(cx, cy, radius);
       this.overlayLayer.endFill();
+    }
+  }
+
+  private drawTileLabels(state: GameState, size: number) {
+    const fontSize = Math.max(8, Math.min(14, size * 0.35));
+    for (let y = 0; y < state.height; y++) {
+      for (let x = 0; x < state.width; x++) {
+        const tile = getTile(state, x, y);
+        if (!tile) continue;
+        let label = '';
+        if (tile.kind === TileKind.PowerLine || tile.powerOverlay) label += 'P';
+        if (tile.kind === TileKind.Road || tile.roadUnderlay) label += 'R';
+        if (tile.kind === TileKind.Rail || tile.railUnderlay) label += 'L';
+        if (!label) continue;
+        const text = new Text({
+          text: label,
+          style: {
+            fontSize,
+            fill: 0xffffff,
+            fontFamily: 'monospace'
+          }
+        });
+        text.alpha = 0.8;
+        text.anchor.set(0.5);
+        text.position.set(
+          this.camera.x + x * size + size / 2,
+          this.camera.y + y * size + size / 2
+        );
+        this.labelLayer.addChild(text);
+      }
     }
   }
 
