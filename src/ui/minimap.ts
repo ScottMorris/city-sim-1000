@@ -77,11 +77,6 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   subtitle.textContent = 'Base view';
   titleBlock.append(title, subtitle);
 
-  const controls = document.createElement('div');
-  controls.className = 'minimap-controls';
-
-  const modeRow = document.createElement('div');
-  modeRow.className = 'minimap-modes';
   const baseModeBtn = document.createElement('button');
   baseModeBtn.className = 'chip-button';
   baseModeBtn.textContent = 'Base';
@@ -89,7 +84,6 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   const powerModeBtn = createDisabledModeButton('Power');
   const waterModeBtn = createDisabledModeButton('Water');
   const alertsModeBtn = createDisabledModeButton('Alerts');
-  modeRow.append(baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn);
 
   const sizeBtn = document.createElement('button');
   sizeBtn.className = 'chip-button';
@@ -102,11 +96,16 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   toggleBtn.className = 'chip-button';
   toggleBtn.addEventListener('click', () => toggleOpen());
 
-  controls.append(modeRow, sizeBtn, toggleBtn);
-  header.append(titleBlock, controls);
+  header.append(titleBlock);
 
   const body = document.createElement('div');
   body.className = 'minimap-body';
+
+  const actions = document.createElement('div');
+  actions.className = 'minimap-actions';
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, sizeBtn, toggleBtn].forEach((btn) =>
+    actions.append(btn)
+  );
 
   const canvasWrapper = document.createElement('div');
   canvasWrapper.className = 'minimap-canvas-wrapper';
@@ -115,7 +114,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   const overlayCanvas = document.createElement('canvas');
   overlayCanvas.className = 'minimap-overlay-canvas';
   canvasWrapper.append(baseCanvas, overlayCanvas);
-  body.append(canvasWrapper);
+  body.append(actions, canvasWrapper);
 
   const hint = document.createElement('div');
   hint.className = 'minimap-hint';
