@@ -52,3 +52,10 @@
 - Transport & Utilities: Road `R`, Rail `L`, Power Lines `P`, Hydro Plant `H`, Water Pump `U`, Water Tower `Y`.
 - Zoning & Amenities: Residential `Z`, Commercial `X`, Industrial `C`, Park `K`.
 - Bulldoze: `B`.
+
+### Settings Backlog (Input)
+- Toggle for keyboard pan inversion and pan speed preset.
+- Hotkey remapping with conflict hints and reset-to-defaults.
+- Edge scroll enable/disable and speed when added.
+- Zoom sensitivity clamp and optional Shift+scroll to pan instead of zoom.
+- Accessibility toggles: reduced motion and higher-contrast overlays/tooltips.
