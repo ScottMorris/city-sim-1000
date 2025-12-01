@@ -105,15 +105,13 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
       </div>
       <div class="debug-section">
         <div class="debug-heading">Demand</div>
+        <div class="debug-hint">Over-zoning penalty: ${state.settings?.pendingPenaltyEnabled ?? true ? 'On' : 'Off'}</div>
         <div class="debug-row"><span>Residential</span><strong>${stats.demand.residential.toFixed(1)}%</strong></div>
-        <div class="debug-hint">60 - 2x${stats.zones.residential} + max(0, jobs - pop = ${Math.max(
-          0,
-          Math.floor(stats.jobs - stats.population)
-        )}) ${stats.demandDetails.residential.utilityPenalty ? `- penalty ${stats.demandDetails.residential.utilityPenalty}` : ''}</div>
+        <div class="debug-hint">${stats.demandDetails.residential.seeded ? 'Starter seed' : `${stats.demandDetails.residential.base}×(1 - fill ${Math.round(stats.demandDetails.residential.fillFraction * 100)}%) = ${stats.demandDetails.residential.fillTerm.toFixed(1)}, jobs gap term ${stats.demandDetails.residential.workforceTerm.toFixed(1)}, pending ${stats.demandDetails.residential.pendingZones} → -${stats.demandDetails.residential.pendingPenalty.toFixed(1)}${stats.demandDetails.residential.utilityPenalty ? `, power penalty -${stats.demandDetails.residential.utilityPenalty}` : ''}`}</div>
         <div class="debug-row"><span>Commercial</span><strong>${stats.demand.commercial.toFixed(1)}%</strong></div>
-        <div class="debug-hint">50 - 3x${stats.zones.commercial} + pop*0.2 = ${stats.demandDetails.commercial.final.toFixed(1)}</div>
+        <div class="debug-hint">${stats.demandDetails.commercial.seeded ? 'Starter seed' : `${stats.demandDetails.commercial.base}×(1 - fill ${Math.round(stats.demandDetails.commercial.fillFraction * 100)}%) = ${stats.demandDetails.commercial.fillTerm.toFixed(1)}, workforce gap ${stats.demandDetails.commercial.workforceTerm.toFixed(1)}, pending ${stats.demandDetails.commercial.pendingZones} → -${stats.demandDetails.commercial.pendingPenalty.toFixed(1)}${stats.demandDetails.commercial.utilityPenalty ? `, power penalty -${stats.demandDetails.commercial.utilityPenalty.toFixed(1)}` : ''}`}</div>
         <div class="debug-row"><span>Industrial</span><strong>${stats.demand.industrial.toFixed(1)}%</strong></div>
-        <div class="debug-hint">50 - 3x${stats.zones.industrial} + pop*0.15 = ${stats.demandDetails.industrial.final.toFixed(1)}</div>
+        <div class="debug-hint">${stats.demandDetails.industrial.seeded ? 'Starter seed' : `${stats.demandDetails.industrial.base}×(1 - fill ${Math.round(stats.demandDetails.industrial.fillFraction * 100)}%) = ${stats.demandDetails.industrial.fillTerm.toFixed(1)}, workforce gap ${stats.demandDetails.industrial.workforceTerm.toFixed(1)}, pending ${stats.demandDetails.industrial.pendingZones} → -${stats.demandDetails.industrial.pendingPenalty.toFixed(1)}${stats.demandDetails.industrial.utilityPenalty ? `, power penalty -${stats.demandDetails.industrial.utilityPenalty.toFixed(1)}` : ''}`}</div>
       </div>
       <div class="debug-section">
         <div class="debug-heading">Utilities</div>

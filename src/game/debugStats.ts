@@ -7,10 +7,14 @@ function clamp(val: number, min: number, max: number) {
 
 export interface DemandDetails {
   base: number;
-  zonePenalty: number;
-  populationTerm: number;
-  jobsTerm: number;
+  fillFraction: number;
+  fillTerm: number;
+  pendingZones: number;
+  pendingPenalty: number;
+  workforceGap: number;
+  workforceTerm: number;
   utilityPenalty: number;
+  seeded: boolean;
   final: number;
 }
 
@@ -60,13 +64,25 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
   let buildingPowerUse = 0;
   let buildingWaterUse = 0;
   let buildingWaterOutput = 0;
+  let developedResidentialZones = 0;
+  let developedCommercialZones = 0;
+  let developedIndustrialZones = 0;
 
   const pumpTemplate = getBuildingTemplate(TileKind.WaterPump);
 
   for (const tile of state.tiles) {
-    if (tile.kind === TileKind.Residential) residentialZones++;
-    if (tile.kind === TileKind.Commercial) commercialZones++;
-    if (tile.kind === TileKind.Industrial) industrialZones++;
+    if (tile.kind === TileKind.Residential) {
+      residentialZones++;
+      if (tile.buildingId !== undefined) developedResidentialZones++;
+    }
+    if (tile.kind === TileKind.Commercial) {
+      commercialZones++;
+      if (tile.buildingId !== undefined) developedCommercialZones++;
+    }
+    if (tile.kind === TileKind.Industrial) {
+      industrialZones++;
+      if (tile.buildingId !== undefined) developedIndustrialZones++;
+    }
 
     const isLegacyPump = tile.buildingId === undefined && tile.kind === TileKind.WaterPump;
     if (isLegacyPump && pumpTemplate) {
@@ -87,17 +103,44 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     if (template.jobsCapacity) jobCapacity += template.jobsCapacity;
   }
 
-  const utilityPenalty =
-    (state.utilities.power < 0 ? 15 : 0) + (state.utilities.water < 0 ? 10 : 0);
-  const jobsTerm = Math.max(0, state.jobs - state.population);
-  const resZonePenalty = residentialZones * 2;
-  const comZonePenalty = commercialZones * 3;
-  const indZonePenalty = industrialZones * 3;
+  const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
+  const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
+  const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
+  const cappedResidentialFill =
+    populationCapacity > 0 ? Math.min(1, state.population / populationCapacity) : 0;
+  const cappedJobFill = jobCapacity > 0 ? Math.min(1, state.jobs / jobCapacity) : 0;
+  const workforceGap = Math.max(0, state.population - state.jobs);
+  const jobsOverPopulation = Math.max(0, state.jobs - state.population);
+  const utilityPenalty = state.utilities.power < 0 ? 15 : 0;
+  const pendingPenaltyEnabled = state.settings?.pendingPenaltyEnabled ?? true;
 
-  const residentialBase = 60 - resZonePenalty + jobsTerm;
-  const residentialAfterPenalty = clamp(clamp(residentialBase, 0, 100) - utilityPenalty, 0, 100);
-  const commercialBase = 50 - comZonePenalty + state.population * 0.2;
-  const industrialBase = 50 - indZonePenalty + state.population * 0.15;
+  const seeded = state.population === 0 && state.jobs === 0;
+
+  const residentialFillTerm = 70 * (1 - cappedResidentialFill);
+  const residentialPendingPenalty = pendingPenaltyEnabled ? pendingResidentialZones * 1.2 : 0;
+  const residentialValue = seeded
+    ? 50
+    : clamp(residentialFillTerm + jobsOverPopulation * 0.6 - residentialPendingPenalty - utilityPenalty, 0, 100);
+
+  const commercialFillTerm = 50 * (1 - cappedJobFill);
+  const commercialPendingPenalty = pendingPenaltyEnabled ? pendingCommercialZones * 1.1 : 0;
+  const commercialValue = seeded
+    ? 30
+    : clamp(
+        commercialFillTerm + workforceGap * 0.2 - commercialPendingPenalty - utilityPenalty * 0.5,
+        0,
+        100
+      );
+
+  const industrialFillTerm = 55 * (1 - cappedJobFill);
+  const industrialPendingPenalty = pendingPenaltyEnabled ? pendingIndustrialZones * 1.1 : 0;
+  const industrialValue = seeded
+    ? 30
+    : clamp(
+        industrialFillTerm + workforceGap * 0.25 - industrialPendingPenalty - utilityPenalty * 0.5,
+        0,
+        100
+      );
 
   return {
     tick: state.tick,
@@ -115,34 +158,46 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
       waterBalance: state.utilities.water
     },
     demand: {
-      residential: residentialAfterPenalty,
-      commercial: clamp(commercialBase, 0, 100),
-      industrial: clamp(industrialBase, 0, 100)
+      residential: residentialValue,
+      commercial: commercialValue,
+      industrial: industrialValue
     },
     demandDetails: {
       residential: {
-        base: 60,
-        zonePenalty: resZonePenalty,
-        populationTerm: 0,
-        jobsTerm,
+        base: 70,
+        fillFraction: cappedResidentialFill,
+        fillTerm: residentialFillTerm,
+        pendingZones: pendingResidentialZones,
+        pendingPenalty: residentialPendingPenalty,
+        workforceGap: jobsOverPopulation,
+        workforceTerm: jobsOverPopulation * 0.6,
         utilityPenalty,
-        final: residentialAfterPenalty
+        seeded,
+        final: residentialValue
       },
       commercial: {
         base: 50,
-        zonePenalty: comZonePenalty,
-        populationTerm: state.population * 0.2,
-        jobsTerm: 0,
-        utilityPenalty: 0,
-        final: clamp(commercialBase, 0, 100)
+        fillFraction: cappedJobFill,
+        fillTerm: commercialFillTerm,
+        pendingZones: pendingCommercialZones,
+        pendingPenalty: commercialPendingPenalty,
+        workforceGap,
+        workforceTerm: workforceGap * 0.2,
+        utilityPenalty: utilityPenalty * 0.5,
+        seeded,
+        final: commercialValue
       },
       industrial: {
-        base: 50,
-        zonePenalty: indZonePenalty,
-        populationTerm: state.population * 0.15,
-        jobsTerm: 0,
-        utilityPenalty: 0,
-        final: clamp(industrialBase, 0, 100)
+        base: 55,
+        fillFraction: cappedJobFill,
+        fillTerm: industrialFillTerm,
+        pendingZones: pendingIndustrialZones,
+        pendingPenalty: industrialPendingPenalty,
+        workforceGap,
+        workforceTerm: workforceGap * 0.25,
+        utilityPenalty: utilityPenalty * 0.5,
+        seeded,
+        final: industrialValue
       }
     }
   };

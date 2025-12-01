@@ -86,6 +86,7 @@ export function deserialize(payload: string): GameState {
   });
 
   parsed.nextBuildingId = nextBuildingId;
+  parsed.settings = parsed.settings ?? { pendingPenaltyEnabled: true };
   return parsed as GameState;
 }
 

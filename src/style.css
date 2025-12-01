@@ -234,11 +234,21 @@ button.secondary.active {
   border-radius: 8px;
 }
 
-.demand-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
+.demand-rows {
+  display: grid;
+  gap: 6px;
   margin-top: 4px;
+}
+
+.demand-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.demand-label {
+  font-size: 11px;
   color: #9fb2d1;
 }
 

@@ -64,6 +64,9 @@ export class Simulation {
     let residentialZones = 0;
     let commercialZones = 0;
     let industrialZones = 0;
+    let developedResidentialZones = 0;
+    let developedCommercialZones = 0;
+    let developedIndustrialZones = 0;
     let maintenance = 0;
     let buildingMaintenance = 0;
     let buildingWaterOutput = 0;
@@ -75,9 +78,18 @@ export class Simulation {
     const parkTemplate = getBuildingTemplate(TileKind.Park);
 
     for (const tile of this.state.tiles) {
-      if (tile.kind === TileKind.Residential) residentialZones++;
-      if (tile.kind === TileKind.Commercial) commercialZones++;
-      if (tile.kind === TileKind.Industrial) industrialZones++;
+      if (tile.kind === TileKind.Residential) {
+        residentialZones++;
+        if (tile.buildingId !== undefined) developedResidentialZones++;
+      }
+      if (tile.kind === TileKind.Commercial) {
+        commercialZones++;
+        if (tile.buildingId !== undefined) developedCommercialZones++;
+      }
+      if (tile.kind === TileKind.Industrial) {
+        industrialZones++;
+        if (tile.buildingId !== undefined) developedIndustrialZones++;
+      }
       const upkeep = MAINTENANCE[tile.kind];
       if (upkeep && tile.buildingId === undefined) maintenance += upkeep;
 
@@ -141,6 +153,16 @@ export class Simulation {
     this.state.utilities.power = powerSupply - powerUse;
     this.state.utilities.water = waterSupply - waterUse;
 
+    const cappedResidentialFill =
+      populationCapacity > 0 ? Math.min(1, this.state.population / populationCapacity) : 0;
+    const cappedJobFill = jobCapacity > 0 ? Math.min(1, this.state.jobs / jobCapacity) : 0;
+    const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
+    const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
+    const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
+    const workforceGap = Math.max(0, this.state.population - this.state.jobs);
+    const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
+    const pendingPenaltyEnabled = this.state.settings?.pendingPenaltyEnabled ?? true;
+
     if (this.state.population === 0 && this.state.jobs === 0) {
       // Starter boost so the first builds can happen even if many zones are prepainted.
       this.state.demand.residential = 50;
@@ -148,23 +170,26 @@ export class Simulation {
       this.state.demand.industrial = 30;
     } else {
       this.state.demand.residential = clamp(
-        60 - residentialZones * 2 + Math.max(0, this.state.jobs - this.state.population),
+        70 * (1 - cappedResidentialFill) +
+          Math.max(0, this.state.jobs - this.state.population) * 0.6 -
+          (pendingPenaltyEnabled ? pendingResidentialZones * 1.2 : 0) -
+          utilityPenalty,
         0,
         100
       );
       this.state.demand.commercial = clamp(
-        50 - commercialZones * 3 + this.state.population * 0.2,
+        50 * (1 - cappedJobFill) +
+          workforceGap * 0.2 -
+          (pendingPenaltyEnabled ? pendingCommercialZones * 1.1 : 0) -
+          utilityPenalty * 0.5,
         0,
         100
       );
       this.state.demand.industrial = clamp(
-        50 - industrialZones * 3 + this.state.population * 0.15,
-        0,
-        100
-      );
-      const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
-      this.state.demand.residential = clamp(
-        this.state.demand.residential - utilityPenalty,
+        55 * (1 - cappedJobFill) +
+          workforceGap * 0.25 -
+          (pendingPenaltyEnabled ? pendingIndustrialZones * 1.1 : 0) -
+          utilityPenalty * 0.5,
         0,
         100
       );

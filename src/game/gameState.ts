@@ -61,6 +61,9 @@ export interface GameState {
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
+  settings: {
+    pendingPenaltyEnabled: boolean;
+  };
 }
 
 export function createInitialState(width = 64, height = 64): GameState {
@@ -96,7 +99,10 @@ export function createInitialState(width = 64, height = 64): GameState {
     demand: { residential: 30, commercial: 30, industrial: 30 },
     buildings: [],
     nextBuildingId: 1,
-    services: createServiceSystemState()
+    services: createServiceSystemState(),
+    settings: {
+      pendingPenaltyEnabled: true
+    }
   };
 }
 

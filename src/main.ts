@@ -27,12 +27,12 @@ appRoot.innerHTML = `
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
     <div class="hud">
       <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
-      <div class="panel"><h4>Demands</h4><div class="demand-labels"><span>R</span><span>C</span><span>I</span></div><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div>
+      <div class="panel"><h4>Demands</h4><div class="demand-rows"><div class="demand-row"><span class="demand-label">R</span><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">C</span><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">I</span><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div></div></div>
       <div class="panel"><h4>City</h4><div id="population">Population 0</div><div id="jobs">Jobs 0</div><div id="day">Day 1</div></div>
       <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
       <div class="panel"><h4>Saves</h4><div class="controls-row"><button id="save-btn" class="secondary">Save</button><button id="load-btn" class="secondary">Load</button></div><div class="controls-row"><button id="download-btn" class="primary">Download</button><button id="upload-btn" class="secondary">Upload</button><input type="file" id="file-input" accept="application/json" style="display:none" /></div></div>
       <div class="panel"><h4>Manual</h4><div class="controls-row"><button id="manual-btn" class="secondary">Open manual</button></div><div class="panel-hint">Opens the in-game guide in a popup.</div></div>
-      <div class="panel"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
+      <div class="panel"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button><button id="pending-penalty-btn" class="secondary">Penalties: On</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
     </div>
   </div>
   <div id="viewport">
@@ -72,6 +72,7 @@ const fileInput = requireElement<HTMLInputElement>('#file-input');
 const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
+const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
 
 const app = new Application();
 const camera = createCamera();
@@ -319,7 +320,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state,
     onStateLoaded: (loaded) => {
       state = loaded;
+       state.settings = state.settings ?? { pendingPenaltyEnabled: true };
       centerCamera(state, wrapper, TILE_SIZE, camera);
+      updatePendingPenaltyBtn();
     }
   });
 
@@ -332,10 +335,24 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state
   });
 
+  const updatePendingPenaltyBtn = () => {
+    const enabled = state.settings?.pendingPenaltyEnabled ?? true;
+    pendingPenaltyBtn.textContent = `Penalties: ${enabled ? 'On' : 'Off'}`;
+    pendingPenaltyBtn.classList.toggle('active', enabled);
+  };
+
+  pendingPenaltyBtn.addEventListener('click', () => {
+    const current = state.settings?.pendingPenaltyEnabled ?? true;
+    state.settings.pendingPenaltyEnabled = !current;
+    updatePendingPenaltyBtn();
+    showToast(`Over-zoning penalty ${state.settings.pendingPenaltyEnabled ? 'enabled' : 'disabled'}`);
+  });
+
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));
   speedFastBtn.addEventListener('click', () => setSimSpeed('fast'));
   speedLudicrousBtn.addEventListener('click', () => setSimSpeed('ludicrous'));
   setSimSpeed(simSpeed, { silent: true });
+  updatePendingPenaltyBtn();
 
   attachViewportEvents(renderer.getCanvas());
 
