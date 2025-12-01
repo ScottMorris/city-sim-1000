@@ -103,9 +103,12 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   const actions = document.createElement('div');
   actions.className = 'minimap-actions';
-  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, sizeBtn, toggleBtn].forEach((btn) =>
-    actions.append(btn)
-  );
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, sizeBtn, toggleBtn].forEach((btn) => {
+    if (btn === sizeBtn || btn === toggleBtn) {
+      btn.classList.add('minimap-span');
+    }
+    actions.append(btn);
+  });
 
   const canvasWrapper = document.createElement('div');
   canvasWrapper.className = 'minimap-canvas-wrapper';
