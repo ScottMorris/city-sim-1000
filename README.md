@@ -2,6 +2,12 @@
 
 A browser-based, offline-ready city simulator built with TypeScript, Vite, and WebGL-powered rendering via PixiJS. Grow a skyline with roads, rail, hydro power, water pumps, zoning, trees, and parks while balancing demand and budget.
 
+## Tech stack
+- TypeScript + Vite
+- PixiJS for WebGL rendering
+- Vanilla CSS for UI
+- Service worker + PWA manifest for offline play
+
 ## Getting started
 
 ```bash

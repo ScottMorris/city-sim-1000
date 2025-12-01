@@ -9,8 +9,8 @@
 - **Adjacency draft**:
   - Roads: 4-way orthogonal connectivity (no diagonal) for zoning reach, services, and traffic assumptions. Intersections auto-connect; roads and rail may cross with rules (rail over/under or shared tile if allowed).
   - Rail: 4-way network; gives freight/passenger bonus if a zone is road-adjacent to any rail tile within 1 tile (orthogonal) or directly orthogonal if sharing tiles is disallowed.
-  - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power); no diagonal hops.
-  - Water: 4-way flood fill through pipes and water facilities; surface buildings do not conduct water unless explicitly a pipe.
+  - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power). Roads and rail also conduct power; power lines can overlay road/rail without breaking access. No diagonal hops.
+  - Water: 4-way flood fill through pipes and water facilities; surface buildings do not conduct water unless explicitly a pipe. (Temporarily disabled in simulation—water balance is fixed high while plumbing is built out.)
   - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe for water).
 - **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties.
 - **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build.
@@ -28,8 +28,8 @@
 ## Player Options in Terms of the Core
 - **Terraform**: Unlocks buildable land and shapes flow; must be priced to matter.
 - **Road/Rail**: Primary connectivity; rail as mid/late-game freight/passenger efficiency.
-- **Power**: Plants with upkeep; lines as network graph; outages visibly stall zones.
-- **Water**: Pumps/towers and pipes; underground view for clean management.
+- **Power**: Plants with upkeep; lines as network graph; outages visibly stall zones. Roads/rail can conduct power; power lines can overlay roads/rail.
+- **Water**: Pumps/towers and pipes; underground view for clean management. (Temporarily disabled in sim until pipes arrive.)
 - **Zoning**: R/C/I with demand bars; growth tied to services and connectivity.
 - **Amenities**: Parks/trees for happiness; future services can reuse road reach.
 
@@ -37,3 +37,4 @@
 1. Choose connection rules and deficit penalties (hard stop vs gradual decay) to guide balancing.
 2. Rough in target economy numbers (income per pop/job, upkeep per tile/building) and simulate a 10–15 minute new-city arc.
 3. Define overlays: road/rail connectivity, power, water, happiness so players can see what they are tuning.
+4. Re-enable water once pipes/underground view are in; remove the temporary water stub and adjust demand penalties.
