@@ -184,9 +184,10 @@ body {
 
 .minimap-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(90px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 6px;
   margin-top: 8px;
+  width: 100%;
 }
 
 .minimap-panel .chip-button {
