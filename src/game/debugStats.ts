@@ -166,8 +166,9 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
   const industrialDemand = computeDemand({
     base: 55,
     fillFraction: fillIndustrial,
-    workforceTerm: labourStats.unemploymentRate * 80,
-    labourTerm: labourStats.vacancyRate * -40,
+    workforceTerm:
+      labourStats.unemploymentRate * 80 + Math.max(0, 0.95 - fillIndustrial) * 20,
+    labourTerm: labourStats.vacancyRate * -20,
     pendingZones: pendingIndustrialZones,
     pendingSlope: 0.35,
     utilityPenalty: utilityPenalty * 0.5,

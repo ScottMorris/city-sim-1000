@@ -51,12 +51,12 @@ export class Simulation {
   private powerDeficitActive = false;
   private waterDeficitActive = false;
   private readonly decayConfig = {
-    demandLowThreshold: 10,
+    demandLowThreshold: 5,
     happinessThreshold: 0.4,
     troubleIncrement: 1,
-    troublePowerPenalty: 2,
-    troubleDecay: 1,
-    troubleAbandonThreshold: 8
+    troublePowerPenalty: 3,
+    troubleDecay: 2,
+    troubleAbandonThreshold: 12
   };
 
   constructor(state: GameState, config: SimulationConfig) {
@@ -290,8 +290,10 @@ export class Simulation {
     const industrialDemand = computeDemand({
       base: 55, // fill coefficient for industrial job slots
       fillFraction: fillIndustrial,
-      workforceTerm: labourStats.unemploymentRate * 80,
-      labourTerm: labourStats.vacancyRate * -40,
+      // Unemployment pulls industry, and slightly underfilled tiles push it; vacancy cools but softly.
+      workforceTerm:
+        labourStats.unemploymentRate * 80 + Math.max(0, 0.95 - fillIndustrial) * 20,
+      labourTerm: labourStats.vacancyRate * -20,
       pendingZones: pendingIndustrialZones,
       pendingSlope: 0.35,
       utilityPenalty: utilityPenalty * 0.5,
@@ -467,15 +469,14 @@ export class Simulation {
       const noPower = building.state.status === BuildingStatus.InactiveNoPower;
       const unhappy = tile.happiness < happinessThreshold;
 
-      // Pressure from low demand, bad services, and missing power.
-      if (demand < demandLowThreshold) trouble += troubleIncrement;
-      if (unhappy) trouble += troubleIncrement;
+      // Pressure from low demand combined with bad services/power; avoid punishing stable equilibrium.
+      const lowDemand = demand < demandLowThreshold;
+      if (lowDemand && (unhappy || noPower)) trouble += troubleIncrement;
+      if (unhappy && noPower) trouble += troubleIncrement; // stack when both are bad
       if (noPower) trouble += troublePowerPenalty;
 
       // If conditions are fine, bleed trouble down slowly.
-      if (demand >= demandLowThreshold && !unhappy && !noPower) {
-        trouble = Math.max(0, trouble - troubleDecay);
-      }
+      if (!lowDemand && !unhappy && !noPower) trouble = Math.max(0, trouble - troubleDecay);
 
       building.state.troubleTicks = trouble;
 
