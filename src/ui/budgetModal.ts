@@ -119,6 +119,16 @@ function renderQuarterSection(state: GameState) {
   `;
 }
 
+function renderTotal(label: string, value: number, tone?: 'positive' | 'negative') {
+  const toneClass = tone ? ` ${tone}` : '';
+  return `
+    <div class="budget-total">
+      <div class="budget-total-label">${label}</div>
+      <div class="budget-total-value${toneClass}">${formatCurrency(value)}</div>
+    </div>
+  `;
+}
+
 export function initBudgetModal(options: BudgetModalOptions) {
   const { triggerBtn, getState } = options;
 
@@ -235,13 +245,16 @@ export function initBudgetModal(options: BudgetModalOptions) {
         ${renderQuarterSection(state)}
       </div>
       <div class="budget-column">
+        ${renderTotal('Revenue total', revenueTotal, revenueTotal >= 0 ? 'positive' : 'negative')}
         ${revenueSection}
         <div class="budget-divider"></div>
+        ${renderTotal('Expenses total', expensesTotal, 'negative')}
         ${expenseSection}
         <div class="budget-subsection">
           ${transportDetails}
           <div class="budget-divider subtle"></div>
           ${buildingDetails}
+          <div class="budget-detail-hint">Details below are included in expenses above (no double counting).</div>
           <div class="budget-divider subtle"></div>
           ${powerPlantDetails}
           <div class="budget-divider subtle"></div>

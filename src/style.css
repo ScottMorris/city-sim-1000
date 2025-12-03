@@ -689,6 +689,28 @@ footer {
   color: #f08c42;
 }
 
+.budget-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: #e8f1ff;
+}
+
+.budget-total-label {
+  color: #c7d5f1;
+}
+
+.budget-total-value.positive {
+  color: #7bffb7;
+}
+
+.budget-total-value.negative {
+  color: #f08c42;
+}
+
 .budget-row-bar {
   height: 4px;
   background: #0f1b2f;
@@ -742,6 +764,12 @@ footer {
   font-size: 13px;
   margin-bottom: 2px;
   font-weight: 600;
+}
+
+.budget-detail-hint {
+  color: #9fb2d1;
+  font-size: 11px;
+  margin-top: -2px;
 }
 
 .budget-divider.subtle {
