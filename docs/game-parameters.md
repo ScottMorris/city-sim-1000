@@ -78,6 +78,12 @@
 - **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
 - **UI/Navigation**: Minimap anchored to the bottom-right HUD for quick orientation on large maps. Base view is live (terrain/zones/roads/rail/power lines/buildings) with click-to-jump camera controls and a viewport rectangle; overlays (power, water, alerts) remain on deck but the mode switch scaffold is in place. Limit canvas size and coarsen sampling on huge maps to stay performant.
 
+## Radio widget (toolbar)
+- Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) and a short marquee showing `Artist — Title`; the marquee pauses while paused and resets on track changes.
+- Hover/focus reveals a small popover above the toolbar with full title/artist details and a larger cover preview when provided; if a track has no cover or it fails to load, the thumbnail remains hidden.
+- Playlist lives at `public/audio/radio/playlist.json` with `{ version, tracks: [{ id, title, artist, src, cover?, duration?, loudnessLufs?, loop?, fallbackSrc? }] }`. Prefer Opus (48 kHz, ~64–96 kbps); add fallbacks (`.ogg`/`.mp3`) only if needed and list them in `fallbackSrc`.
+- Loudness normalisation can lean on optional `loudnessLufs` hints per track. If the playlist is missing or empty, the widget stays in “Radio offline” and controls disable until files are added.
+
 ## Controls & Hotkeys
 - Movement: `WASD` or arrow keys for panning; scroll wheel/pinch to zoom.
 - Inspect: `I`.

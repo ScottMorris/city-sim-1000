@@ -137,6 +137,7 @@ Tiles include:
 
 * Toolbar is two rows: the primary row and a contextual sub-row beneath it.
 * The main “Power” button reveals a sub-row of power tools (Lines, Hydro, Coal, Wind, Solar); the Power button stays active when any power tool is selected.
+* Toolbar hosts a radio widget to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️), a compact marquee for artist/title, and a hover/focus popover showing larger cover art plus details. If the playlist at `/public/audio/radio/playlist.json` is missing or empty, it shows “Radio offline”; audio prefers Opus with optional fallbacks listed in `fallbackSrc` and covers in `/public/audio/radio/covers/`.
 * Buttons in sub-rows carry explicit labels/tooltips for clarity.
 * Tile inspector lives in the bottom-left; the neighbouring tool info card shows cost/upkeep/output for the active tool with a pin toggle. The inspector only appears while the Inspect tool is active.
 * Minimap sits in the bottom-right HUD corner with click-to-jump navigation, a visible viewport rectangle, and a toggle/hotkey (`M`) to collapse or expand it. Base mode renders terrain, zones, roads, rail, power lines, and buildings; a mode switch UI is scaffolded but only the “Base” option is live until overlays (power/water/alerts) arrive. Use an offscreen canvas for redraws, throttle updates, and coarsen sampling on very large maps to protect performance.

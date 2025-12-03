@@ -36,6 +36,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.
 - Minimap in the bottom-right HUD: base map view with click-to-jump navigation and viewport framing; overlay modes coming soon.
+- Toolbar radio widget with emoji controls (previous/play/pause/next), a scrolling marquee for artist/title, hover/focus popover for details, and an offline state when no playlist exists.
 
 ## Budget and economy
 - Money updates every in-game day; the HUD shows the current month/day on a 30-day calendar and the ticker shows a projected net per month (green surplus, red deficit, neutral when flat). The Budget screen (from the HUD) shows quarterly totals, per-month net, and cash runway based on your current burn, plus revenue/expense details.
@@ -44,6 +45,12 @@ Then open the provided local URL. The service worker caches assets after first l
 - Revenue: base income plus per-population and per-zone contributions (commercial + industrial).
 - Expenses: upkeep from transport tiles, power lines, and all buildings (plants, zones, parks, pumps/towers, future services).
 - A power deficit halts new growth until restored; water is stubbed high until pipes ship.
+
+## Radio assets (drop-in)
+- Put audio files in `public/audio/radio/` (prefer Opus at 48 kHz, ~64–96 kbps). Add fallbacks like `.ogg`/`.mp3` only if you need broader browser coverage.
+- Create `public/audio/radio/playlist.json` with a `version` string and `tracks` array of `{ id, title, artist, src, cover?, duration?, loudnessLufs?, loop?, fallbackSrc? }`. The radio loads this JSON on start and cycles tracks; missing or empty playlists leave the widget in “Radio offline”.
+- Optional covers live in `public/audio/radio/covers/` (WebP/AVIF/PNG). If a track declares `cover`, a tiny thumbnail appears in the toolbar and the hover popover shows a larger preview; no cover means no image shown.
+- Playback buttons use emoji to save space; the marquee pauses while paused and resets on track changes. Hover/focus reveals a compact popover for more detail without changing toolbar height.
 
 ## Controls (quick reference)
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.
