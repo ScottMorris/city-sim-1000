@@ -1,5 +1,6 @@
 import { Tool } from '../game/toolTypes';
 import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
+import { initRadioWidget } from './radio';
 
 const powerOptions: Tool[] = [
   Tool.PowerLine,
@@ -58,10 +59,15 @@ export function initToolbar(
     primaryRow.appendChild(button);
   });
 
+  const radioHost = document.createElement('div');
+  radioHost.className = 'toolbar-radio-slot';
+  primaryRow.appendChild(radioHost);
+
+  const spacer = document.createElement('div');
+  spacer.className = 'toolbar-spacer';
+  primaryRow.appendChild(spacer);
+
   if (onOpenBudget) {
-    const spacer = document.createElement('div');
-    spacer.className = 'toolbar-spacer';
-    primaryRow.appendChild(spacer);
     const budgetBtn = document.createElement('button');
     budgetBtn.id = 'budget-modal-btn';
     budgetBtn.className = 'tool-button budget-button';
@@ -93,6 +99,7 @@ export function initToolbar(
   powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? '⚡ Lines' : undefined));
   waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? '🚰 Pump' : undefined));
 
+  initRadioWidget(radioHost);
   updateToolbar(toolbar, initial);
 }
 

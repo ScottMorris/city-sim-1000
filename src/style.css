@@ -96,6 +96,7 @@ body {
 .toolbar-sub {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .toolbar-spacer {
@@ -142,6 +143,168 @@ body {
   transform: none;
   border-color: #223557;
   box-shadow: none;
+}
+
+.toolbar-radio-slot {
+  display: flex;
+  flex: 0 1 320px;
+  min-width: 220px;
+}
+
+.radio-widget {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 12px;
+  padding: 6px 8px;
+  height: 44px;
+  box-shadow: 0 4px 0 #0a1020;
+  overflow: hidden;
+}
+
+.radio-cover {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #223557;
+  display: none;
+  flex-shrink: 0;
+  background: #0b1424;
+}
+
+.radio-cover.visible {
+  display: block;
+}
+
+.radio-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.radio-icon-button {
+  background: #1a2d4f;
+  border: 1px solid #2a3f63;
+  border-radius: 8px;
+  color: var(--text);
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: 0 2px 0 #0a1020;
+  transition: border-color 0.1s ease, transform 0.1s ease;
+}
+
+.radio-icon-button:hover {
+  border-color: #96d9ff;
+}
+
+.radio-icon-button:active {
+  transform: translateY(1px);
+}
+
+.radio-icon-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.radio-marquee-viewport {
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 220px;
+  overflow: hidden;
+}
+
+.radio-marquee-text {
+  white-space: nowrap;
+  font-size: 11px;
+  color: #e8f1ff;
+}
+
+.radio-marquee-text.scrolling {
+  animation: radio-scroll var(--radio-marquee-duration, 14s) linear infinite;
+}
+
+.radio-marquee-text.paused {
+  animation-play-state: paused;
+}
+
+@keyframes radio-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+.radio-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  display: flex;
+  gap: 10px;
+  background: #101c34;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  padding: 8px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  min-width: 180px;
+  z-index: 8;
+}
+
+.radio-popover-cover {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid #223557;
+  display: none;
+  background: #0b1424;
+}
+
+.radio-popover-cover.visible {
+  display: block;
+}
+
+.radio-popover-info {
+  display: grid;
+  gap: 4px;
+  align-content: center;
+  min-width: 0;
+}
+
+.radio-popover-title {
+  font-weight: bold;
+  color: #7bffb7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radio-popover-artist {
+  font-size: 12px;
+  color: #d0e4ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.radio-popover-status {
+  font-size: 11px;
+  color: #96d9ff;
+}
+
+.radio-popover-open .radio-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 
