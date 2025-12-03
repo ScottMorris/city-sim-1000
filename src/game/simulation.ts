@@ -347,6 +347,10 @@ export class Simulation {
   }
 
   private spawnZoneBuildings() {
+    const residentialCandidates: Array<{ x: number; y: number }> = [];
+    const commercialCandidates: Array<{ x: number; y: number }> = [];
+    const industrialCandidates: Array<{ x: number; y: number }> = [];
+
     for (let y = 0; y < this.state.height; y++) {
       for (let x = 0; x < this.state.width; x++) {
         const tile = this.state.tiles[y * this.state.width + x];
@@ -358,12 +362,16 @@ export class Simulation {
         ) {
           continue;
         }
+
+        // Keep existing road access gating.
         const hasRoadChain = zoneHasRoadPath(this.state, x, y);
         const frontierAllowed = isFrontierZone(this.state, x, y);
         if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) {
           this.zoneGrowthTimers.delete(y * this.state.width + x);
           continue;
         }
+
+        // Preserve the per-tile growth delay before a lot is eligible.
         const idx = y * this.state.width + x;
         const currentTimer = this.zoneGrowthTimers.get(idx) ?? this.zoneGrowthDelayTicks;
         if (currentTimer > 1) {
@@ -371,14 +379,59 @@ export class Simulation {
           continue;
         }
         this.zoneGrowthTimers.delete(idx);
-        const demand = this.getDemandForZone(tile.kind);
-        if (demand <= 5) continue;
-        if (this.state.utilities.power < 0) continue;
-        const template = getBuildingTemplate(tile.kind);
-        if (!template) continue;
-        const result = placeBuilding(this.state, template, x, y);
-        if (!result.success) continue;
+
+        if (tile.kind === TileKind.Residential) residentialCandidates.push({ x, y });
+        if (tile.kind === TileKind.Commercial) commercialCandidates.push({ x, y });
+        if (tile.kind === TileKind.Industrial) industrialCandidates.push({ x, y });
       }
+    }
+
+    // Early-out if power is negative; growth is blocked.
+    if (this.state.utilities.power < 0) return;
+
+    this.applyZoneGrowthForType(TileKind.Residential, this.state.demand.residential, residentialCandidates);
+    this.applyZoneGrowthForType(TileKind.Commercial, this.state.demand.commercial, commercialCandidates);
+    this.applyZoneGrowthForType(TileKind.Industrial, this.state.demand.industrial, industrialCandidates);
+  }
+
+  /**
+   * Applies wave-like growth for a single zone type using demand as both
+   * a cap and a probability driver. Demand is in 0–100; the cap and probability
+   * scale modestly so growth arrives in small batches instead of instantly.
+   */
+  private applyZoneGrowthForType(
+    kind: TileKind,
+    demand: number,
+    candidates: Array<{ x: number; y: number }>
+  ) {
+    if (candidates.length === 0) return;
+    const debugWave = typeof process !== 'undefined' && process?.env?.WAVE_DEBUG === '1';
+
+    // Cap how many lots can start growing this tick. At demand 0 this is 1; it rises gently
+    // with demand and is hard-capped to avoid big bursts.
+    const maxNewLots = clamp(1 + Math.floor(demand / 40), 0, 4);
+    if (maxNewLots <= 0) return;
+
+    // Growth chance per candidate. Demand below ~20 yields ~0 probability; high demand is near 1.
+    const pGrow = demand >= 50 ? 1 : demand <= 0 ? 0 : clamp((demand + 20) / 120, 0, 1);
+    if (debugWave) {
+      console.log(`Grow ${kind}: demand=${demand.toFixed(1)} candidates=${candidates.length} max=${maxNewLots} p=${pGrow.toFixed(2)}`);
+    }
+
+    // Shuffle candidates to avoid biasing toward map order.
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    let grown = 0;
+    for (const { x, y } of candidates) {
+      if (grown >= maxNewLots) break;
+      if (Math.random() > pGrow) continue;
+      const template = getBuildingTemplate(kind);
+      if (!template) continue;
+      const result = placeBuilding(this.state, template, x, y);
+      if (result.success) grown++;
     }
   }
 
