@@ -22,6 +22,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Terraform tools for land, water, trees, parks, bulldozing, and infrastructure (roads, rail, power lines).
 - Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers (pipes coming soon with an underground view).
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
+- Soft over-zoning: pending zones only trim demand with caps/floors so big paint jobs trickle-build, and high demand can still break through.
 - Hydro generation, water pumping, and global utility balance that affects growth.
 - Tool info card beside the tile inspector that surfaces cost, upkeep, and stats for the active tool with a pin toggle when you want it always-on.
 - Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile.

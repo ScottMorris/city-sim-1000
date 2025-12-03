@@ -316,6 +316,7 @@ Demand influenced by:
 * available land
 * happiness
 * utilities availability
+* over-zoning: pending zones now apply a soft penalty (Res -0.45 each, Com/Ind -0.35) capped to min(35, 60% of the base term) with a pressure relief when base demand exceeds 60 and a floor of 8 (while <92% full) so large paint jobs trickle instead of stalling; power deficits still pull demand down after the floor.
 
 ### Budget System
 

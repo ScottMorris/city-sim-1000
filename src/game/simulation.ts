@@ -16,6 +16,7 @@ import {
   zoneHasRoadPath
 } from './adjacency';
 import { DAYS_PER_MONTH } from './time';
+import { computeDemand } from './demand';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -184,40 +185,48 @@ export class Simulation {
     const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
     const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
     const workforceGap = Math.max(0, this.state.population - this.state.jobs);
+    const jobsOverPopulation = Math.max(0, this.state.jobs - this.state.population);
     const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
     const pendingPenaltyEnabled = this.state.settings?.pendingPenaltyEnabled ?? true;
+    const seeded = this.state.population === 0 && this.state.jobs === 0;
 
-    if (this.state.population === 0 && this.state.jobs === 0) {
-      // Starter boost so the first builds can happen even if many zones are prepainted.
-      this.state.demand.residential = 50;
-      this.state.demand.commercial = 30;
-      this.state.demand.industrial = 30;
-    } else {
-      this.state.demand.residential = clamp(
-        70 * (1 - cappedResidentialFill) +
-          Math.max(0, this.state.jobs - this.state.population) * 0.6 -
-          (pendingPenaltyEnabled ? pendingResidentialZones * 1.2 : 0) -
-          utilityPenalty,
-        0,
-        100
-      );
-      this.state.demand.commercial = clamp(
-        50 * (1 - cappedJobFill) +
-          workforceGap * 0.2 -
-          (pendingPenaltyEnabled ? pendingCommercialZones * 1.1 : 0) -
-          utilityPenalty * 0.5,
-        0,
-        100
-      );
-      this.state.demand.industrial = clamp(
-        55 * (1 - cappedJobFill) +
-          workforceGap * 0.25 -
-          (pendingPenaltyEnabled ? pendingIndustrialZones * 1.1 : 0) -
-          utilityPenalty * 0.5,
-        0,
-        100
-      );
-    }
+    const residentialDemand = computeDemand({
+      base: 70,
+      fillFraction: cappedResidentialFill,
+      workforceTerm: jobsOverPopulation * 0.6,
+      pendingZones: pendingResidentialZones,
+      pendingSlope: 0.45,
+      utilityPenalty,
+      seeded,
+      seededValue: 50,
+      pendingPenaltyEnabled
+    });
+    const commercialDemand = computeDemand({
+      base: 50,
+      fillFraction: cappedJobFill,
+      workforceTerm: workforceGap * 0.2,
+      pendingZones: pendingCommercialZones,
+      pendingSlope: 0.35,
+      utilityPenalty: utilityPenalty * 0.5,
+      seeded,
+      seededValue: 30,
+      pendingPenaltyEnabled
+    });
+    const industrialDemand = computeDemand({
+      base: 55,
+      fillFraction: cappedJobFill,
+      workforceTerm: workforceGap * 0.25,
+      pendingZones: pendingIndustrialZones,
+      pendingSlope: 0.35,
+      utilityPenalty: utilityPenalty * 0.5,
+      seeded,
+      seededValue: 30,
+      pendingPenaltyEnabled
+    });
+
+    this.state.demand.residential = residentialDemand.value;
+    this.state.demand.commercial = commercialDemand.value;
+    this.state.demand.industrial = industrialDemand.value;
 
     const revenue =
       BASE_INCOME + this.state.population * 1.5 + commercialZones * 6 + industrialZones * 8;

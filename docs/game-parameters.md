@@ -35,6 +35,12 @@
 - **Zoning**: R/C/I with demand bars; growth tied to services and connectivity.
 - **Amenities**: Parks/trees for happiness; future services can reuse road reach.
 
+## Demand & Over-zoning
+- Starter demand is seeded at 50/30/30 when the city is empty so pre-painted zones can begin to grow before normal formulas take over.
+- Base demand terms: Residential `70×(1 - fill)` plus jobs surplus ×0.6; Commercial `50×(1 - fill)` plus workforce gap ×0.2; Industrial `55×(1 - fill)` plus workforce gap ×0.25.
+- Soft over-zoning: pending zones apply a mild penalty (Res -0.45 each, Com/Ind -0.35 each) capped to the lower of 35 or 60% of the current base term. High pressure (base > 60) shaves half of that penalty so strong demand can punch through.
+- Trickle floor: when a zone type is under 92% full, demand is floored at 8 before utility penalties so large painted areas grow slowly instead of stalling at 0. Power deficits still subtract 15 (7.5 for Com/Ind) after the floor.
+
 ## Services & Amenities Draft (Stub)
 - **Scope**: Police, fire, and health share the same pattern for now. Each has a coverage radius that travels along roads, a per-building capacity (how many tiles/people can be “served”), build cost, and upkeep. No dispatch sim yet—just reach + capacity.
 - **Service definitions**: Add a `ServiceType` shape with id/name, build cost, upkeep, coverage radius (in tiles), capacity, and a base happiness/decay modifier when served vs unserved. Keep numbers modest (e.g., radius 6–10 tiles, upkeep scaled to early-game budgets).
