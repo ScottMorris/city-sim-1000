@@ -21,6 +21,8 @@ export interface BuildingState {
   status: BuildingStatus;
   health: number; // 0-100, v1 stub
   serviceLoad: ServiceLoad;
+  troubleTicks: number;
+  abandoned: boolean;
 }
 
 export interface BuildingTemplate {
@@ -211,7 +213,13 @@ export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
 }
 
 export function createBuildingState(): BuildingState {
-  return { status: BuildingStatus.Active, health: 100, serviceLoad: createEmptyServiceLoad() };
+  return {
+    status: BuildingStatus.Active,
+    health: 100,
+    serviceLoad: createEmptyServiceLoad(),
+    troubleTicks: 0,
+    abandoned: false
+  };
 }
 
 export function placeBuilding(
@@ -252,6 +260,7 @@ export function placeBuilding(
   for (const tile of tiles) {
     tile.kind = template.tileKind;
     tile.buildingId = buildingId;
+    tile.abandoned = false;
     tile.powerPlantId = undefined;
     tile.happiness = Math.min(1.5, tile.happiness + 0.05);
     decorateTile?.(tile, buildingId);

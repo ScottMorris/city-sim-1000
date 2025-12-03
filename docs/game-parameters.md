@@ -45,6 +45,10 @@
 - Soft over-zoning: pending zones apply a mild penalty (Res -0.45 each, Com/Ind -0.35 each) capped to the lower of 35 or 60% of the current base term. High pressure (base > 60) shaves half of that penalty so strong demand can punch through.
 - Trickle floor: when a zone type is under 92% full, demand is floored at 8 before utility penalties so large painted areas grow slowly instead of stalling at 0. Power deficits still subtract 15 (7.5 for Com/Ind) after the floor.
 
+## Decay & Abandonment
+- Each zone building tracks `troubleTicks`. Low demand (<10), no power, or unhappy tiles (<0.4 happiness) add pressure; healthy conditions bleed it down.
+- When `troubleTicks` passes the abandon threshold, the building is cleared and marked abandoned: capacity drops to 0 so demand can rebound, and the zoned tile is left ready to regrow automatically. A future option toggle/downgrade path can replace auto-regrow later.
+
 ## Services & Amenities Draft (Stub)
 - **Scope**: Police, fire, and health share the same pattern for now. Each has a coverage radius that travels along roads, a per-building capacity (how many tiles/people can be “served”), build cost, and upkeep. No dispatch sim yet—just reach + capacity.
 - **Service definitions**: Add a `ServiceType` shape with id/name, build cost, upkeep, coverage radius (in tiles), capacity, and a base happiness/decay modifier when served vs unserved. Keep numbers modest (e.g., radius 6–10 tiles, upkeep scaled to early-game budgets).

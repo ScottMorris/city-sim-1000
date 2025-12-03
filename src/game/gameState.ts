@@ -26,6 +26,7 @@ export interface Tile {
   elevation: number;
   happiness: number;
   powered: boolean;
+  abandoned?: boolean;
   roadUnderlay?: boolean;
   railUnderlay?: boolean;
   powerOverlay?: boolean;

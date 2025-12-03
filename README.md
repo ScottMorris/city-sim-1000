@@ -24,6 +24,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
 - Soft over-zoning: pending zones only trim demand with caps/floors so big paint jobs trickle-build, and high demand can still break through.
 - Labour-aware demand: aggregate unemployment and job vacancies nudge R/C/I demand without simulating individual citizens.
+- Light decay: zone buildings slowly abandon under sustained low demand, no power, or unhappy tiles; abandoned lots auto-clear to zoned tiles and can regrow.
 - Hydro generation, water pumping, and global utility balance that affects growth.
 - Tool info card beside the tile inspector that surfaces cost, upkeep, and stats for the active tool with a pin toggle when you want it always-on.
 - Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile. Open the Budget screen for a quarterly breakdown, detailed revenue/expense shares, and runway.

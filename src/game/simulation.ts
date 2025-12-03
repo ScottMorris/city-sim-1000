@@ -1,5 +1,5 @@
 import type { GameState } from './gameState';
-import { TileKind } from './gameState';
+import { getTile, TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import {
   BuildingStatus,
@@ -50,6 +50,14 @@ export class Simulation {
   private notify?: (alert: SimulationAlert) => void;
   private powerDeficitActive = false;
   private waterDeficitActive = false;
+  private readonly decayConfig = {
+    demandLowThreshold: 10,
+    happinessThreshold: 0.4,
+    troubleIncrement: 1,
+    troublePowerPenalty: 2,
+    troubleDecay: 1,
+    troubleAbandonThreshold: 8
+  };
 
   constructor(state: GameState, config: SimulationConfig) {
     this.state = state;
@@ -392,6 +400,8 @@ export class Simulation {
     this.applyZoneGrowthForType(TileKind.Residential, this.state.demand.residential, residentialCandidates);
     this.applyZoneGrowthForType(TileKind.Commercial, this.state.demand.commercial, commercialCandidates);
     this.applyZoneGrowthForType(TileKind.Industrial, this.state.demand.industrial, industrialCandidates);
+
+    this.applyBuildingDecay();
   }
 
   /**
@@ -433,6 +443,61 @@ export class Simulation {
       const result = placeBuilding(this.state, template, x, y);
       if (result.success) grown++;
     }
+  }
+
+  /**
+   * Slow decay loop: when demand is very low, a building lacks power, or happiness is poor,
+   * increment trouble ticks. Otherwise bleed them down. Abandon when the threshold is exceeded,
+   * freeing capacity and letting demand recover. Decay is intentionally slower than growth.
+   */
+  private applyBuildingDecay() {
+    const { demandLowThreshold, happinessThreshold, troubleIncrement, troublePowerPenalty, troubleDecay, troubleAbandonThreshold } =
+      this.decayConfig;
+
+    for (const building of this.state.buildings.slice()) {
+      const template = getBuildingTemplate(building.templateId);
+      if (!template) continue;
+      if (template.category !== BuildingCategory.Zone) continue;
+
+      const tile = getTile(this.state, building.origin.x, building.origin.y);
+      if (!tile) continue;
+
+      let trouble = building.state.troubleTicks ?? 0;
+      const demand = this.getDemandForZone(template.tileKind);
+      const noPower = building.state.status === BuildingStatus.InactiveNoPower;
+      const unhappy = tile.happiness < happinessThreshold;
+
+      // Pressure from low demand, bad services, and missing power.
+      if (demand < demandLowThreshold) trouble += troubleIncrement;
+      if (unhappy) trouble += troubleIncrement;
+      if (noPower) trouble += troublePowerPenalty;
+
+      // If conditions are fine, bleed trouble down slowly.
+      if (demand >= demandLowThreshold && !unhappy && !noPower) {
+        trouble = Math.max(0, trouble - troubleDecay);
+      }
+
+      building.state.troubleTicks = trouble;
+
+      if (trouble >= troubleAbandonThreshold) {
+        this.abandonZoneBuilding(building, tile);
+      }
+    }
+  }
+
+  /**
+   * Clears a zone building when decay wins: remove the building instance and leave the zoned tile
+   * ready to regrow. Capacity drops to 0, which naturally nudges demand upward again.
+   */
+  private abandonZoneBuilding(building: import('./buildings').BuildingInstance, tile: import('./gameState').Tile) {
+    // Remove building instance
+    this.state.buildings = this.state.buildings.filter((b) => b.id !== building.id);
+    // Clear building references but keep the zone kind so it can regrow.
+    tile.buildingId = undefined;
+    tile.powerPlantType = undefined;
+    tile.powerPlantId = undefined;
+    tile.abandoned = true;
+    tile.happiness = Math.max(0.1, tile.happiness - 0.1);
   }
 
   private getDemandForZone(kind: TileKind): number {

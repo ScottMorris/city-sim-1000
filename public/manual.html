@@ -71,6 +71,7 @@
       <li>When power drops below zero you'll see a sticky warning toast; it clears with a follow-up notice once supply returns. Water alerts will join when pipes are live.</li>
       <li>Starter demand is seeded when the city is empty so pre-painted zones can begin to grow; normal demand formulas resume after the first builds.</li>
       <li>Unemployment and job vacancies are aggregate signals: vacancies nudge Residential demand up while unemployment nudges Commercial/Industrial up. They’re gentle modifiers, not individual citizens.</li>
+      <li>Zones can abandon if demand stays very low, power is missing, or tiles are unhappy. Abandoned lots auto-clear back to zoned tiles and will regrow when demand recovers.</li>
       <li>Over-zoning is soft: pending zones gently trim demand with caps and a small floor so big paint jobs trickle-build instead of stalling. Strong demand will still punch through, but power deficits can drive it to zero.</li>
       <li>Demand bars show where citizens want you to grow next.</li>
     </ul>
