@@ -29,7 +29,13 @@ function formatRunway(runwayDays: number) {
 
 function renderBreakdownList(
   title: string,
-  entries: { label: string; value: number; total: number; tone?: 'positive' | 'negative'; hint?: string }[],
+  entries: {
+    label: string;
+    value: number;
+    total: number;
+    tone?: 'positive' | 'negative';
+    tooltip?: string;
+  }[],
   options: { compact?: boolean } = {}
 ) {
   const { compact = false } = options;
@@ -37,14 +43,13 @@ function renderBreakdownList(
     const pct = entry.total === 0 ? 0 : Math.min(100, (Math.abs(entry.value) / entry.total) * 100);
     const barClass = entry.tone === 'negative' ? 'bar-negative' : 'bar-positive';
     return `
-      <div class="budget-row${compact ? ' small' : ''}">
+      <div class="budget-row${compact ? ' small' : ''}" ${entry.tooltip ? `title="${entry.tooltip}"` : ''}>
         <div class="budget-row-label">${entry.label}</div>
         <div class="budget-row-value">${formatCurrency(entry.value)}</div>
       </div>
       <div class="budget-row-bar">
         <div class="budget-bar ${barClass}" style="width:${pct}%"></div>
       </div>
-      ${entry.hint ? `<div class="budget-hint tight">${entry.hint}</div>` : ''}
     `;
   });
   return `
@@ -175,17 +180,17 @@ export function initBudgetModal(options: BudgetModalOptions) {
         value: budget.breakdown.revenue.base,
         total: revenueTotal,
         tone: 'positive',
-        hint: 'Flat civic stipend each day'
+        tooltip: 'Flat civic stipend each day'
       },
       {
-        label: 'Residents',
+        label: 'Residential',
         value: budget.breakdown.revenue.residents,
         total: revenueTotal,
         tone: 'positive',
-        hint: 'Income from population across residential zones'
+        tooltip: 'Income from population across residential zones'
       },
-      { label: 'Commercial zones', value: budget.breakdown.revenue.commercial, total: revenueTotal, tone: 'positive' },
-      { label: 'Industrial zones', value: budget.breakdown.revenue.industrial, total: revenueTotal, tone: 'positive' }
+      { label: 'Commercial', value: budget.breakdown.revenue.commercial, total: revenueTotal, tone: 'positive' },
+      { label: 'Industrial', value: budget.breakdown.revenue.industrial, total: revenueTotal, tone: 'positive' }
     ]);
     const expenseSection = renderBreakdownList('Expenses', [
       { label: 'Transport upkeep', value: budget.breakdown.expenses.transport, total: expensesTotal, tone: 'negative' },

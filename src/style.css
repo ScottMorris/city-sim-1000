@@ -607,6 +607,7 @@ footer {
   gap: 12px;
   flex: 1;
   min-height: 0;
+  height: 100%;
 }
 
 .budget-column {
@@ -617,12 +618,16 @@ footer {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
+  max-height: 100%;
 }
 
 .budget-section-title {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   color: #e8f1ff;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
 .budget-hint {
@@ -722,9 +727,10 @@ footer {
 }
 
 .budget-detail-title {
-  color: #9fb2d1;
-  font-size: 12px;
-  margin-bottom: 4px;
+  color: #c7d5f1;
+  font-size: 13px;
+  margin-bottom: 2px;
+  font-weight: 600;
 }
 
 .budget-divider.subtle {
