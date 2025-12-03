@@ -56,6 +56,10 @@ body {
   box-shadow: 0 6px 0 #0a1020;
 }
 
+.panel.panel-right {
+  justify-self: end;
+}
+
 .panel h4 {
   margin: 0 0 8px 0;
   font-size: 12px;
@@ -627,7 +631,6 @@ footer {
   font-size: 15px;
   color: #e8f1ff;
   letter-spacing: 0.01em;
-  text-transform: uppercase;
 }
 
 .budget-hint {
@@ -731,8 +734,6 @@ footer {
   font-size: 13px;
   margin-bottom: 2px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
 }
 
 .budget-divider.subtle {
