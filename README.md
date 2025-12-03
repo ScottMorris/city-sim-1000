@@ -52,6 +52,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Optional covers live in `public/audio/radio/covers/` (WebP/AVIF/PNG). If a track declares `cover`, a tiny thumbnail appears in the toolbar and the hover popover shows a larger preview; no cover means no image shown.
 - Playback buttons use emoji to save space; the marquee pauses while paused and resets on track changes. Hover/focus reveals a compact popover for more detail without changing toolbar height.
 - Use `public/audio/radio/playlist.sample.json` as a starter; copy it to `playlist.json` and swap in your own filenames once you drop audio and cover files.
+- To fill `loudnessLufs`, measure each track with `ffmpeg -i track.opus -filter_complex ebur128=peak=true -f null -` and read the “Integrated loudness” value (in LUFS) from stderr; target roughly -14 LUFS so tracks feel even.
 
 ## Controls (quick reference)
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.
