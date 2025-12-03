@@ -3,6 +3,7 @@ import { GameState, getTile } from '../game/gameState';
 import { Position } from '../rendering/renderer';
 import { Tool } from '../game/toolTypes';
 import { getToolDetails } from './toolInfo';
+import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 
 export interface HudElements {
   moneyEl: HTMLElement;
@@ -14,6 +15,7 @@ export interface HudElements {
   indBar: HTMLElement;
   popEl: HTMLElement;
   jobsEl: HTMLElement;
+  monthEl: HTMLElement;
   dayEl: HTMLElement;
   overlayRoot: HTMLElement;
 }
@@ -65,7 +67,9 @@ export function createHud(elements: HudElements) {
     elements.indBar.style.width = `${state.demand.industrial}%`;
     elements.popEl.textContent = `Population ${Math.floor(state.population)}`;
     elements.jobsEl.textContent = `Jobs ${Math.floor(state.jobs)}`;
-    elements.dayEl.textContent = `Day ${Math.floor(state.day)}`;
+    const calendar = getCalendarPosition(state.day);
+    elements.monthEl.textContent = `Month ${calendar.month}`;
+    elements.dayEl.textContent = `Day ${calendar.dayOfMonth} of ${DAYS_PER_MONTH}`;
   };
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {

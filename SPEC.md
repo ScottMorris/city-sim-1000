@@ -140,6 +140,7 @@ Tiles include:
 * Buttons in sub-rows carry explicit labels/tooltips for clarity.
 * Tile inspector lives in the bottom-left; the neighbouring tool info card shows cost/upkeep/output for the active tool with a pin toggle. The inspector only appears while the Inspect tool is active.
 * Minimap sits in the bottom-right HUD corner with click-to-jump navigation, a visible viewport rectangle, and a toggle/hotkey (`M`) to collapse or expand it. Base mode renders terrain, zones, roads, rail, power lines, and buildings; a mode switch UI is scaffolded but only the “Base” option is live until overlays (power/water/alerts) arrive. Use an offscreen canvas for redraws, throttle updates, and coarsen sampling on very large maps to protect performance.
+* Budget panel shows cash, a colour-coded monthly net projection, and a calendar month/day readout (30-day months) so per-month numbers have visible context.
 
 ### 5.5 Rendering
 

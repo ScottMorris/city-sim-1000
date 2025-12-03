@@ -15,6 +15,7 @@ import {
   isFrontierZone,
   zoneHasRoadPath
 } from './adjacency';
+import { DAYS_PER_MONTH } from './time';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -223,7 +224,7 @@ export class Simulation {
     const expenses = maintenance + buildingMaintenance;
     const net = revenue - expenses;
     const netPerDay = net * 0.2 * 1.5;
-    const netPerMonth = netPerDay * 30;
+    const netPerMonth = netPerDay * DAYS_PER_MONTH;
     this.state.budget = {
       revenue,
       expenses,

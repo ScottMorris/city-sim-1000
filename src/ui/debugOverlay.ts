@@ -1,5 +1,6 @@
 import { getSimulationDebugStats } from '../game/debugStats';
 import { GameState } from '../game/gameState';
+import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 import { showToast } from './dialogs';
 
 interface HeapSnapshot {
@@ -90,10 +91,12 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
     if (!visible) return;
     const stats = getSimulationDebugStats(state);
     const heap = getHeapSnapshot();
+    const calendar = getCalendarPosition(stats.day);
+    const totalDays = Math.floor(stats.day);
 
     overlay.innerHTML = `
       <div class="debug-section">
-        <div class="debug-heading">Tick ${stats.tick} • Day ${Math.floor(stats.day)}</div>
+        <div class="debug-heading">Tick ${stats.tick} • Day ${totalDays} (Month ${calendar.month}, Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH})</div>
         <div class="debug-row"><span>Population</span><strong>${Math.floor(stats.population)} / ${Math.floor(stats.capacities.population)}</strong></div>
         <div class="debug-row"><span>Jobs</span><strong>${Math.floor(stats.jobs)} / ${Math.floor(stats.capacities.jobs)}</strong></div>
       </div>
