@@ -113,6 +113,12 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         <div class="debug-heading">Tick ${stats.tick} • Day ${totalDays} (Month ${calendar.month}, Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH})</div>
         <div class="debug-row"><span>Population</span><strong>${Math.floor(stats.population)} / ${Math.floor(stats.capacities.population)}</strong></div>
         <div class="debug-row"><span>Jobs</span><strong>${Math.floor(stats.jobs)} / ${Math.floor(stats.capacities.jobs)}</strong></div>
+        <div class="debug-row"><span>Workers</span><strong>${stats.labour.employed.toFixed(
+          0
+        )} / ${stats.labour.workers.toFixed(0)}</strong></div>
+        <div class="debug-hint">Unemployment ${(stats.labour.unemploymentRate * 100).toFixed(
+          1
+        )}% • Vacancy ${(stats.labour.vacancyRate * 100).toFixed(1)}% • Job cap ${stats.labour.jobCapacity.toFixed(0)}</div>
       </div>
       <div class="debug-section">
         <div class="debug-heading">Zones</div>
@@ -129,12 +135,6 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         <div class="debug-hint">${formatDemandHint(stats.demandDetails.commercial)}</div>
         <div class="debug-row"><span>Industrial</span><strong>${stats.demand.industrial.toFixed(1)}%</strong></div>
         <div class="debug-hint">${formatDemandHint(stats.demandDetails.industrial)}</div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-heading">Labour</div>
-        <div class="debug-row"><span>Unemployment</span><strong>${(stats.labour.unemploymentRate * 100).toFixed(1)}%</strong></div>
-        <div class="debug-row"><span>Vacancy</span><strong>${(stats.labour.vacancyRate * 100).toFixed(1)}%</strong></div>
-        <div class="debug-hint">Workers ${stats.labour.workers.toFixed(0)} / Jobs ${stats.labour.jobCapacity.toFixed(0)}</div>
       </div>
       <div class="debug-section">
         <div class="debug-heading">Utilities</div>
