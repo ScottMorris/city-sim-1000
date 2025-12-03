@@ -27,6 +27,10 @@ function formatRunway(runwayDays: number) {
   return `${Math.floor(runwayDays)} days`;
 }
 
+function toNumber(value: number | undefined): number {
+  return Number.isFinite(value) ? Number(value) : 0;
+}
+
 function renderBreakdownList(
   title: string,
   entries: {
@@ -231,15 +235,12 @@ export function initBudgetModal(options: BudgetModalOptions) {
       transportEntries.map((entry) => ({ ...entry, total: Math.max(transportTotal, 1) }))
     );
 
-    const powerGroup = `
-      ${renderBreakdownList('Power', [
-        { label: 'Power lines', value: powerLinesValue, total: expensesTotal, tone: 'negative' },
-        { label: 'Power plants', value: powerPlantsTotal, total: expensesTotal, tone: 'negative' }
-      ])}
-      ${powerPlantDetails}
-    `;
+    const powerSection = renderBreakdownList('Power', [
+      { label: 'Power lines', value: powerLinesValue, total: powerLinesValue + powerPlantsTotal || 1, tone: 'negative' },
+      { label: 'Power plants', value: powerPlantsTotal, total: powerLinesValue + powerPlantsTotal || 1, tone: 'negative' }
+    ]);
 
-    const civicGroup = renderDetailGroup('Civic', [
+    const civicSection = renderDetailGroup('Civic', [
       { label: 'Parks', value: toNumber(budget.breakdown.details.buildings.civicByType.park), total: Math.max(civicTotal, 1), tone: 'negative' },
       { label: 'Water pumps', value: toNumber(budget.breakdown.details.buildings.civicByType.pump), total: Math.max(civicTotal, 1), tone: 'negative' },
       { label: 'Water towers', value: toNumber(budget.breakdown.details.buildings.civicByType.water_tower), total: Math.max(civicTotal, 1), tone: 'negative' }
@@ -272,11 +273,10 @@ export function initBudgetModal(options: BudgetModalOptions) {
         <div class="budget-subsection">
           ${transportSection}
           <div class="budget-divider subtle"></div>
+          ${powerSection}
           ${powerPlantDetails}
           <div class="budget-divider subtle"></div>
-          ${powerGroup}
-          <div class="budget-divider subtle"></div>
-          ${civicGroup}
+          ${civicSection}
           <div class="budget-divider subtle"></div>
           ${zoneDetails}
         </div>
