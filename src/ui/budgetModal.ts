@@ -136,8 +136,20 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const state = getState();
     const budget = state.budget;
     const runwayDays = computeRunwayDays(state.money, budget.netPerDay);
-    const revenueTotal = budget.breakdown.revenue.base + budget.breakdown.revenue.population + budget.breakdown.revenue.commercial + budget.breakdown.revenue.industrial;
-    const expensesTotal = budget.breakdown.expenses.transport + budget.breakdown.expenses.buildings;
+    const revenueEntries = [
+      { label: 'Base', value: toNumber(budget.breakdown.revenue.base), tone: 'positive', tooltip: 'Flat civic stipend each day' },
+      {
+        label: 'Residential',
+        value: toNumber(budget.breakdown.revenue.residents ?? budget.breakdown.revenue.population),
+        tone: 'positive',
+        tooltip: 'Income from population across residential zones'
+      },
+      { label: 'Commercial', value: toNumber(budget.breakdown.revenue.commercial), tone: 'positive' },
+      { label: 'Industrial', value: toNumber(budget.breakdown.revenue.industrial), tone: 'positive' }
+    ];
+    const revenueTotal = revenueEntries.reduce((sum, entry) => sum + entry.value, 0);
+    const expensesTotal =
+      toNumber(budget.breakdown.expenses.transport) + toNumber(budget.breakdown.expenses.buildings);
 
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
@@ -190,54 +202,60 @@ export function initBudgetModal(options: BudgetModalOptions) {
 
     const body = document.createElement('div');
     body.className = 'budget-body';
-    const revenueSection = renderBreakdownList('Revenue', [
-      {
-        label: 'Base',
-        value: budget.breakdown.revenue.base,
-        total: revenueTotal,
-        tone: 'positive',
-        tooltip: 'Flat civic stipend each day'
-      },
-      {
-        label: 'Residential',
-        value: budget.breakdown.revenue.residents,
-        total: revenueTotal,
-        tone: 'positive',
-        tooltip: 'Income from population across residential zones'
-      },
-      { label: 'Commercial', value: budget.breakdown.revenue.commercial, total: revenueTotal, tone: 'positive' },
-      { label: 'Industrial', value: budget.breakdown.revenue.industrial, total: revenueTotal, tone: 'positive' }
+    const revenueSection = renderBreakdownList(
+      'Revenue',
+      revenueEntries.map((entry) => ({ ...entry, total: revenueTotal }))
+    );
+
+    const transportEntries = [
+      { label: 'Roads', value: toNumber(budget.breakdown.details.transport.roads), tone: 'negative' },
+      { label: 'Rail', value: toNumber(budget.breakdown.details.transport.rail), tone: 'negative' },
+      { label: 'Water pipes', value: toNumber(budget.breakdown.details.transport.waterPipes), tone: 'negative' }
+    ];
+    const transportTotal = transportEntries.reduce((sum, entry) => sum + entry.value, 0);
+
+    const powerLinesValue = toNumber(budget.breakdown.details.transport.powerLines);
+    const powerPlantsTotal = toNumber(budget.breakdown.details.buildings.power);
+    const civicTotal = toNumber(budget.breakdown.details.buildings.civic);
+    const zoneTotal = toNumber(budget.breakdown.details.buildings.zones);
+
+    const powerPlantDetails = renderDetailGroup('Power Plants', [
+      { label: 'Hydro', value: toNumber(budget.breakdown.details.buildings.powerByType.hydro), total: Math.max(powerPlantsTotal, 1), tone: 'negative' },
+      { label: 'Coal', value: toNumber(budget.breakdown.details.buildings.powerByType.coal), total: Math.max(powerPlantsTotal, 1), tone: 'negative' },
+      { label: 'Wind', value: toNumber(budget.breakdown.details.buildings.powerByType.wind), total: Math.max(powerPlantsTotal, 1), tone: 'negative' },
+      { label: 'Solar', value: toNumber(budget.breakdown.details.buildings.powerByType.solar), total: Math.max(powerPlantsTotal, 1), tone: 'negative' }
     ]);
-    const expenseSection = renderBreakdownList('Expenses', [
-      { label: 'Transport upkeep', value: budget.breakdown.expenses.transport, total: expensesTotal, tone: 'negative' },
-      { label: 'Buildings upkeep', value: budget.breakdown.expenses.buildings, total: expensesTotal, tone: 'negative' }
+
+    const transportSection = renderDetailGroup(
+      'Transportation',
+      transportEntries.map((entry) => ({ ...entry, total: Math.max(transportTotal, 1) }))
+    );
+
+    const powerGroup = `
+      ${renderBreakdownList('Power', [
+        { label: 'Power lines', value: powerLinesValue, total: expensesTotal, tone: 'negative' },
+        { label: 'Power plants', value: powerPlantsTotal, total: expensesTotal, tone: 'negative' }
+      ])}
+      ${powerPlantDetails}
+    `;
+
+    const civicGroup = renderDetailGroup('Civic', [
+      { label: 'Parks', value: toNumber(budget.breakdown.details.buildings.civicByType.park), total: Math.max(civicTotal, 1), tone: 'negative' },
+      { label: 'Water pumps', value: toNumber(budget.breakdown.details.buildings.civicByType.pump), total: Math.max(civicTotal, 1), tone: 'negative' },
+      { label: 'Water towers', value: toNumber(budget.breakdown.details.buildings.civicByType.water_tower), total: Math.max(civicTotal, 1), tone: 'negative' }
     ]);
-    const transportDetails = renderDetailGroup('Transport details', [
-      { label: 'Roads', value: budget.breakdown.details.transport.roads, total: budget.breakdown.expenses.transport, tone: 'negative' },
-      { label: 'Rail', value: budget.breakdown.details.transport.rail, total: budget.breakdown.expenses.transport, tone: 'negative' },
-      { label: 'Power lines', value: budget.breakdown.details.transport.powerLines, total: budget.breakdown.expenses.transport, tone: 'negative' },
-      { label: 'Water pipes', value: budget.breakdown.details.transport.waterPipes, total: budget.breakdown.expenses.transport, tone: 'negative' }
+
+    const zoneDetails = renderDetailGroup('Zones', [
+      { label: 'Residential', value: toNumber(budget.breakdown.details.buildings.zonesByType.residential), total: Math.max(zoneTotal, 1), tone: 'negative' },
+      { label: 'Commercial', value: toNumber(budget.breakdown.details.buildings.zonesByType.commercial), total: Math.max(zoneTotal, 1), tone: 'negative' },
+      { label: 'Industrial', value: toNumber(budget.breakdown.details.buildings.zonesByType.industrial), total: Math.max(zoneTotal, 1), tone: 'negative' }
     ]);
-    const buildingDetails = renderDetailGroup('Building details', [
-      { label: 'Power plants', value: budget.breakdown.details.buildings.power, total: budget.breakdown.expenses.buildings, tone: 'negative' },
-      { label: 'Civic (pumps, towers, parks)', value: budget.breakdown.details.buildings.civic, total: budget.breakdown.expenses.buildings, tone: 'negative' },
-      { label: 'Zone buildings', value: budget.breakdown.details.buildings.zones, total: budget.breakdown.expenses.buildings, tone: 'negative' }
-    ]);
-    const powerPlantDetails = renderDetailGroup('Power plants', [
-      { label: 'Hydro', value: budget.breakdown.details.buildings.powerByType.hydro ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' },
-      { label: 'Coal', value: budget.breakdown.details.buildings.powerByType.coal ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' },
-      { label: 'Wind', value: budget.breakdown.details.buildings.powerByType.wind ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' },
-      { label: 'Solar', value: budget.breakdown.details.buildings.powerByType.solar ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' }
-    ]);
-    const civicDetails = renderDetailGroup('Civic', [
-      { label: 'Water pumps', value: budget.breakdown.details.buildings.civicByType.pump ?? 0, total: budget.breakdown.details.buildings.civic || 1, tone: 'negative' },
-      { label: 'Water towers', value: budget.breakdown.details.buildings.civicByType.water_tower ?? 0, total: budget.breakdown.details.buildings.civic || 1, tone: 'negative' },
-      { label: 'Parks', value: budget.breakdown.details.buildings.civicByType.park ?? 0, total: budget.breakdown.details.buildings.civic || 1, tone: 'negative' }
-    ]);
-    const zoneDetails = renderDetailGroup('Zone buildings', [
-      { label: 'Residential', value: budget.breakdown.details.buildings.zonesByType.residential ?? 0, total: budget.breakdown.details.buildings.zones || 1, tone: 'negative' },
-      { label: 'Commercial', value: budget.breakdown.details.buildings.zonesByType.commercial ?? 0, total: budget.breakdown.details.buildings.zones || 1, tone: 'negative' },
-      { label: 'Industrial', value: budget.breakdown.details.buildings.zonesByType.industrial ?? 0, total: budget.breakdown.details.buildings.zones || 1, tone: 'negative' }
+
+    const expensesSection = renderBreakdownList('Expenses', [
+      { label: 'Transportation', value: transportTotal, total: expensesTotal, tone: 'negative' },
+      { label: 'Power', value: powerLinesValue + powerPlantsTotal, total: expensesTotal, tone: 'negative' },
+      { label: 'Civic', value: civicTotal, total: expensesTotal, tone: 'negative' },
+      { label: 'Zones', value: zoneTotal, total: expensesTotal, tone: 'negative' }
     ]);
 
     body.innerHTML = `
@@ -249,16 +267,16 @@ export function initBudgetModal(options: BudgetModalOptions) {
         ${revenueSection}
         <div class="budget-divider"></div>
         ${renderTotal('Expenses total', expensesTotal, 'negative')}
-        ${expenseSection}
+        ${expensesSection}
+        <div class="budget-detail-hint">Subsections below are already counted in the totals above (no double counting).</div>
         <div class="budget-subsection">
-          ${transportDetails}
-          <div class="budget-divider subtle"></div>
-          ${buildingDetails}
-          <div class="budget-detail-hint">Details below are included in expenses above (no double counting).</div>
+          ${transportSection}
           <div class="budget-divider subtle"></div>
           ${powerPlantDetails}
           <div class="budget-divider subtle"></div>
-          ${civicDetails}
+          ${powerGroup}
+          <div class="budget-divider subtle"></div>
+          ${civicGroup}
           <div class="budget-divider subtle"></div>
           ${zoneDetails}
         </div>
