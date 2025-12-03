@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "tracks": [
+    {
+      "id": "downtown-drive",
+      "title": "Downtown Drive",
+      "artist": "City Crew",
+      "src": "/audio/radio/downtown-drive.opus",
+      "cover": "/audio/radio/covers/downtown-drive.webp",
+      "duration": 182,
+      "loudnessLufs": -14,
+      "loop": false,
+      "fallbackSrc": ["/audio/radio/downtown-drive.ogg"]
+    },
+    {
+      "id": "night-shift",
+      "title": "Night Shift Skyline",
+      "artist": "Neon Signals",
+      "src": "/audio/radio/night-shift.opus",
+      "cover": "/audio/radio/covers/night-shift.webp",
+      "duration": 201,
+      "loudnessLufs": -14.5
+    },
+    {
+      "id": "harbour-morning",
+      "title": "Harbour Morning",
+      "artist": "Ferry Lights",
+      "src": "/audio/radio/harbour-morning.opus",
+      "duration": 168
+    }
+  ]
+}
