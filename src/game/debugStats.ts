@@ -66,6 +66,8 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
   let industrialZones = 0;
   let populationCapacity = 0;
   let jobCapacity = 0;
+  let commercialJobCapacity = 0;
+  let industrialJobCapacity = 0;
   let buildingPowerUse = 0;
   let buildingWaterUse = 0;
   let buildingWaterOutput = 0;
@@ -105,16 +107,27 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     if (template.powerUse) buildingPowerUse += template.powerUse;
     if (template.waterUse) buildingWaterUse += template.waterUse;
     if (template.populationCapacity) populationCapacity += template.populationCapacity;
-    if (template.jobsCapacity) jobCapacity += template.jobsCapacity;
+    if (template.jobsCapacity) {
+      jobCapacity += template.jobsCapacity;
+      if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
+      if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+    }
   }
 
   const labourStats = computeLabourStats(state.population, populationCapacity, jobCapacity);
   const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
   const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
   const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
-  const cappedResidentialFill =
+  const fillResidential =
     populationCapacity > 0 ? Math.min(1, state.population / populationCapacity) : 0;
-  const cappedJobFill = jobCapacity > 0 ? Math.min(1, state.jobs / jobCapacity) : 0;
+  const jobsInCommercial =
+    jobCapacity > 0 ? (commercialJobCapacity / Math.max(jobCapacity, 1)) * state.jobs : 0;
+  const jobsInIndustrial =
+    jobCapacity > 0 ? (industrialJobCapacity / Math.max(jobCapacity, 1)) * state.jobs : 0;
+  const fillCommercial =
+    commercialJobCapacity > 0 ? Math.min(1, jobsInCommercial / commercialJobCapacity) : 1;
+  const fillIndustrial =
+    industrialJobCapacity > 0 ? Math.min(1, jobsInIndustrial / industrialJobCapacity) : 1;
   const workforceGap = Math.max(0, state.population - state.jobs);
   const jobsOverPopulation = Math.max(0, state.jobs - state.population);
   const utilityPenalty = state.utilities.power < 0 ? 15 : 0;
@@ -124,9 +137,9 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
 
   const residentialDemand = computeDemand({
     base: 70,
-    fillFraction: cappedResidentialFill,
-    workforceTerm: jobsOverPopulation * 0.6,
-    labourTerm: labourStats.vacancyRate * 20 - labourStats.unemploymentRate * 10,
+    fillFraction: fillResidential,
+    workforceTerm: 0,
+    labourTerm: labourStats.vacancyRate * 60 - labourStats.unemploymentRate * 80,
     pendingZones: pendingResidentialZones,
     pendingSlope: 0.45,
     utilityPenalty,
@@ -137,9 +150,11 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
 
   const commercialDemand = computeDemand({
     base: 50,
-    fillFraction: cappedJobFill,
-    workforceTerm: workforceGap * 0.2,
-    labourTerm: labourStats.unemploymentRate * 15 - labourStats.vacancyRate * 10,
+    fillFraction: fillCommercial,
+    workforceTerm:
+      labourStats.unemploymentRate * 30 +
+      Math.min(1, state.population / Math.max(populationCapacity, 1)) * 20,
+    labourTerm: 0,
     pendingZones: pendingCommercialZones,
     pendingSlope: 0.35,
     utilityPenalty: utilityPenalty * 0.5,
@@ -150,9 +165,9 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
 
   const industrialDemand = computeDemand({
     base: 55,
-    fillFraction: cappedJobFill,
-    workforceTerm: workforceGap * 0.25,
-    labourTerm: labourStats.unemploymentRate * 18 - labourStats.vacancyRate * 10,
+    fillFraction: fillIndustrial,
+    workforceTerm: labourStats.unemploymentRate * 80,
+    labourTerm: labourStats.vacancyRate * -40,
     pendingZones: pendingIndustrialZones,
     pendingSlope: 0.35,
     utilityPenalty: utilityPenalty * 0.5,
