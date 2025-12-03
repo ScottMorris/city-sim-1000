@@ -163,13 +163,13 @@ body {
 }
 
 .toolbar-group-radio {
-  padding: 6px;
+  padding: 6px 8px;
 }
 
 .toolbar-radio-slot {
   display: flex;
-  flex: 0 1 320px;
-  min-width: 220px;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .radio-widget {
