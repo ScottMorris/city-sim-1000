@@ -11,8 +11,14 @@ const powerOptions: Tool[] = [
 
 const waterOptions: Tool[] = [Tool.WaterPump, Tool.WaterTower, Tool.WaterPipe];
 
-export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void, initial: Tool) {
+export function initToolbar(
+  toolbar: HTMLElement,
+  onSelect: (tool: Tool) => void,
+  initial: Tool,
+  options: { onOpenBudget?: () => void } = {}
+) {
   toolbar.innerHTML = '';
+  const { onOpenBudget } = options;
 
   const primaryRow = document.createElement('div');
   primaryRow.className = 'toolbar-row';
@@ -51,6 +57,19 @@ export function initToolbar(toolbar: HTMLElement, onSelect: (tool: Tool) => void
     });
     primaryRow.appendChild(button);
   });
+
+  if (onOpenBudget) {
+    const spacer = document.createElement('div');
+    spacer.className = 'toolbar-spacer';
+    primaryRow.appendChild(spacer);
+    const budgetBtn = document.createElement('button');
+    budgetBtn.id = 'budget-modal-btn';
+    budgetBtn.className = 'tool-button budget-button';
+    budgetBtn.textContent = '📊 Budget';
+    budgetBtn.title = 'Open budget screen';
+    budgetBtn.addEventListener('click', () => onOpenBudget());
+    primaryRow.appendChild(budgetBtn);
+  }
 
   const createSubButton = (row: HTMLElement, key: Tool, labelOverride?: string) => {
     const button = document.createElement('button');

@@ -7,7 +7,7 @@ import {
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 
 interface BudgetModalOptions {
-  triggerBtn: HTMLButtonElement;
+  triggerBtn?: HTMLButtonElement;
   getState: () => GameState;
 }
 
@@ -39,11 +39,9 @@ function renderBreakdownList(
   options: { compact?: boolean } = {}
 ) {
   const { compact = false } = options;
+  const maxAbs = entries.reduce((max, entry) => Math.max(max, Math.abs(entry.value)), 0);
   const rows = entries.map((entry) => {
-    const pct =
-      entry.total === 0
-        ? 0
-        : Math.min(100, (Math.abs(entry.value) / Math.max(entry.total, Math.abs(entry.value)))) * 100;
+    const pct = maxAbs === 0 ? 0 : Math.min(100, (Math.abs(entry.value) / maxAbs) * 100);
     const barClass = entry.tone === 'negative' ? 'bar-negative' : 'bar-positive';
     return `
       <div class="budget-row${compact ? ' small' : ''}" ${entry.tooltip ? `title="${entry.tooltip}"` : ''}>
@@ -279,6 +277,6 @@ export function initBudgetModal(options: BudgetModalOptions) {
     window.addEventListener('keydown', handleKey);
   };
 
-  triggerBtn.addEventListener('click', open);
+  triggerBtn?.addEventListener('click', open);
   return { open };
 }
