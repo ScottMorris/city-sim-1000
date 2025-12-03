@@ -25,13 +25,13 @@ Then open the provided local URL. The service worker caches assets after first l
 - Soft over-zoning: pending zones only trim demand with caps/floors so big paint jobs trickle-build, and high demand can still break through.
 - Hydro generation, water pumping, and global utility balance that affects growth.
 - Tool info card beside the tile inspector that surfaces cost, upkeep, and stats for the active tool with a pin toggle when you want it always-on.
-- Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile.
+- Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile. Open the Budget screen for a quarterly breakdown and runway.
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.
 - Minimap in the bottom-right HUD: base map view with click-to-jump navigation and viewport framing; overlay modes coming soon.
 
 ## Budget and economy
-- Money updates every in-game day; the HUD shows the current month/day on a 30-day calendar and the ticker shows a projected net per month (green surplus, red deficit, neutral when flat).
+- Money updates every in-game day; the HUD shows the current month/day on a 30-day calendar and the ticker shows a projected net per month (green surplus, red deficit, neutral when flat). The Budget screen (from the HUD) shows quarterly totals, per-month net, and cash runway based on your current burn.
 - Revenue: base income plus per-population and per-zone contributions (commercial + industrial).
 - Expenses: upkeep from transport tiles, power lines, and all buildings (plants, zones, parks, pumps/towers, future services).
 - A power deficit halts new growth until restored; water is stubbed high until pipes ship.

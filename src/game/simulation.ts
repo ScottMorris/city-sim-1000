@@ -16,6 +16,7 @@ import {
   zoneHasRoadPath
 } from './adjacency';
 import { DAYS_PER_MONTH } from './time';
+import { recordDailyBudget } from './budget';
 import { computeDemand } from './demand';
 
 export interface SimulationConfig {
@@ -228,9 +229,14 @@ export class Simulation {
     this.state.demand.commercial = commercialDemand.value;
     this.state.demand.industrial = industrialDemand.value;
 
-    const revenue =
-      BASE_INCOME + this.state.population * 1.5 + commercialZones * 6 + industrialZones * 8;
-    const expenses = maintenance + buildingMaintenance;
+    const revenueBase = BASE_INCOME;
+    const revenuePopulation = this.state.population * 1.5;
+    const revenueCommercial = commercialZones * 6;
+    const revenueIndustrial = industrialZones * 8;
+    const revenue = revenueBase + revenuePopulation + revenueCommercial + revenueIndustrial;
+    const expensesTransport = maintenance;
+    const expensesBuildings = buildingMaintenance;
+    const expenses = expensesTransport + expensesBuildings;
     const net = revenue - expenses;
     const netPerDay = net * 0.2 * 1.5;
     const netPerMonth = netPerDay * DAYS_PER_MONTH;
@@ -239,8 +245,21 @@ export class Simulation {
       expenses,
       net,
       netPerDay,
-      netPerMonth
+      netPerMonth,
+      breakdown: {
+        revenue: {
+          base: revenueBase,
+          population: revenuePopulation,
+          commercial: revenueCommercial,
+          industrial: revenueIndustrial
+        },
+        expenses: {
+          transport: expensesTransport,
+          buildings: expensesBuildings
+        }
+      }
     };
+    recordDailyBudget(this.state);
     this.state.money = Math.max(0, this.state.money + netPerDay * (this.dt / 1.5));
   }
 

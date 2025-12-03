@@ -13,7 +13,7 @@
   - Water: 4-way flood fill through pipes and water facilities; surface buildings do not conduct water unless explicitly a pipe. (Temporarily disabled in simulation—water balance is fixed high while plumbing is built out.)
   - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe for water).
 - **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties.
-- **Feedback hooks**: Sticky warnings fire when utilities go negative (power/water) and a follow-up toast confirms recovery once the balance returns above zero. Budget panel surfaces a monthly net projection with colour-coded surplus/deficit plus a month/day readout to keep solvency visible.
+- **Feedback hooks**: Sticky warnings fire when utilities go negative (power/water) and a follow-up toast confirms recovery once the balance returns above zero. Budget panel surfaces a monthly net projection with colour-coded surplus/deficit plus a month/day readout to keep solvency visible. A Budget screen (from the HUD) adds quarterly totals, per-month net, and runway hints.
 - **Tool clarity**: Tool info card sits with the tile inspector; it shows cost/upkeep/output plus hints and can be pinned always-on. Tile inspector only appears while the Inspect tool is active.
 - **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build.
 - **Upgrade paths**: Pumps/towers → pipes; lines → plants; low → mid density; terraforming pricing that makes space trade-offs matter.

@@ -17,6 +17,7 @@ import { initHotkeys, defaultHotkeys, type HotkeyController } from './ui/hotkeys
 import { initToolbar, updateToolbar } from './ui/toolbar';
 import { createNotificationCenter } from './ui/notifications';
 import { initMinimap } from './ui/minimap';
+import { initBudgetModal } from './ui/budgetModal';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -28,7 +29,7 @@ appRoot.innerHTML = `
   <div class="topbar">
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
     <div class="hud">
-      <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="budget-net" class="budget-net">+$0 / month</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
+      <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="budget-net" class="budget-net">+$0 / month</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div><div class="controls-row"><button id="budget-modal-btn" class="secondary">Open budget</button></div></div>
       <div class="panel"><h4>Demands</h4><div class="demand-rows"><div class="demand-row"><span class="demand-label">R</span><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">C</span><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">I</span><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div></div></div>
       <div class="panel"><h4>City</h4><div id="month">Month 1</div><div id="day">Day 1 of 30</div><div id="population">Population 0</div><div id="jobs">Jobs 0</div></div>
       <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
@@ -58,6 +59,7 @@ const moneyEl = requireElement<HTMLDivElement>('#money');
 const budgetNetEl = requireElement<HTMLDivElement>('#budget-net');
 const powerEl = requireElement<HTMLDivElement>('#power');
 const waterEl = requireElement<HTMLDivElement>('#water');
+const budgetModalBtn = requireElement<HTMLButtonElement>('#budget-modal-btn');
 const resBar = requireElement<HTMLDivElement>('#res-bar');
 const comBar = requireElement<HTMLDivElement>('#com-bar');
 const indBar = requireElement<HTMLDivElement>('#ind-bar');
@@ -255,6 +257,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     monthEl,
     dayEl,
     overlayRoot: wrapper
+  });
+  initBudgetModal({
+    triggerBtn: budgetModalBtn,
+    getState: () => state
   });
 
   const minimapViewport = () => {

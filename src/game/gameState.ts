@@ -1,4 +1,5 @@
 import { PowerPlantType } from './constants';
+import type { BudgetHistory } from './budget';
 import type { BuildingInstance } from './buildings';
 import type { ServiceSystemState, TileServiceState } from './services';
 import { createServiceSystemState, createTileServiceState } from './services';
@@ -68,6 +69,18 @@ export interface BudgetStats {
   net: number;
   netPerDay: number;
   netPerMonth: number;
+  breakdown: {
+    revenue: {
+      base: number;
+      population: number;
+      commercial: number;
+      industrial: number;
+    };
+    expenses: {
+      transport: number;
+      buildings: number;
+    };
+  };
 }
 
 export interface GameState {
@@ -82,6 +95,7 @@ export interface GameState {
   utilities: UtilityStats;
   demand: DemandStats;
   budget: BudgetStats;
+  budgetHistory: import('./budget').BudgetHistory;
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
@@ -134,8 +148,13 @@ export function createInitialState(width = 64, height = 64): GameState {
       expenses: 0,
       net: 0,
       netPerDay: 0,
-      netPerMonth: 0
+      netPerMonth: 0,
+      breakdown: {
+        revenue: { base: 0, population: 0, commercial: 0, industrial: 0 },
+        expenses: { transport: 0, buildings: 0 }
+      }
     },
+    budgetHistory: { daily: [], lastRecordedDay: 0 },
     demand: { residential: 30, commercial: 30, industrial: 30 },
     buildings: [],
     nextBuildingId: 1,

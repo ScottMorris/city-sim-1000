@@ -61,7 +61,11 @@ export function deserialize(payload: string): GameState {
       expenses: 0,
       net: 0,
       netPerDay: 0,
-      netPerMonth: 0
+      netPerMonth: 0,
+      breakdown: {
+        revenue: { base: 0, population: 0, commercial: 0, industrial: 0 },
+        expenses: { transport: 0, buildings: 0 }
+      }
     };
   } else {
     parsed.budget.revenue = parsed.budget.revenue ?? 0;
@@ -69,7 +73,24 @@ export function deserialize(payload: string): GameState {
     parsed.budget.net = parsed.budget.net ?? 0;
     parsed.budget.netPerDay = parsed.budget.netPerDay ?? 0;
     parsed.budget.netPerMonth = parsed.budget.netPerMonth ?? 0;
+    parsed.budget.breakdown = parsed.budget.breakdown ?? {
+      revenue: { base: 0, population: 0, commercial: 0, industrial: 0 },
+      expenses: { transport: 0, buildings: 0 }
+    };
+    parsed.budget.breakdown.revenue = {
+      base: parsed.budget.breakdown.revenue?.base ?? 0,
+      population: parsed.budget.breakdown.revenue?.population ?? 0,
+      commercial: parsed.budget.breakdown.revenue?.commercial ?? 0,
+      industrial: parsed.budget.breakdown.revenue?.industrial ?? 0
+    };
+    parsed.budget.breakdown.expenses = {
+      transport: parsed.budget.breakdown.expenses?.transport ?? 0,
+      buildings: parsed.budget.breakdown.expenses?.buildings ?? 0
+    };
   }
+  parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
+  parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
+  parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
   const computeNextBuildingId = () => {
     const maxBuildingIdFromTiles = parsed.tiles.reduce(
       (max: number, tile: any) =>
