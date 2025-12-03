@@ -19,6 +19,14 @@
 - **Upgrade paths**: Pumps/towers → pipes; lines → plants; low → mid density; terraforming pricing that makes space trade-offs matter.
 - **Space trade-offs**: Footprint of utilities/parks vs valuable zones; underground view to reduce surface clutter.
 
+## Recent Playtest Notes (Dec 3, 2025)
+- Debug panel is visible in the production build (Show overlay/Copy state/penalties). Hide or gate it behind a dev toggle so players do not see QA affordances.
+- Headless Chromium fell back to software WebGL; confirm hardware-accelerated WebGL in normal browsers and consider a graceful warning if acceleration is missing.
+- Landing flow drops players into a blank map with no onboarding. Add a first-run cue (“Place a road and connect power, then paint Residential”) plus a quick link to the manual.
+- Demand bars start partially filled without explanation; add tooltips or a short hint about what drives each bar (jobs, vacancies, happiness, power).
+- Starting cash is $0; double-check that the base stipend lets players place early essentials without stalling, or seed a small upfront budget/task reward.
+- Save/Download/Upload wording should clearly reflect LocalStorage versus file saves and stay disabled until a city exists.
+
 ## Parameters to Decide Early
 - Tile size and map size (cost for pathing/network recompute).
 - Connection rules: roads 4-way or 8-way; rail interaction with roads; power only on lines; water only on pipes.
