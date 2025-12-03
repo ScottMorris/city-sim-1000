@@ -17,6 +17,11 @@ npm run dev
 
 Then open the provided local URL. The service worker caches assets after first load so the game keeps running offline. Use `npm run build` for a production bundle.
 
+## Deployment
+- GitHub Pages publishes to `https://scottmorris.github.io/city-sim-1000` via the `Deploy to GitHub Pages` workflow (runs on `main` pushes or manually).
+- The Pages build sets `VITE_BASE=/city-sim-1000/` so assets resolve under the project path; local builds default to `/`. To preview locally with the Pages base, run `VITE_BASE=/city-sim-1000/ npm run build` then `npm run preview`.
+- Enable Pages in repo settings with source “GitHub Actions”; the workflow uploads `dist` and deploys with `actions/deploy-pages`.
+
 ## Features
 - WebGL canvas renderer with zoom and pan for fast navigation.
 - Terraform tools for land, water, trees, parks, bulldozing, and infrastructure (roads, rail, power lines).
