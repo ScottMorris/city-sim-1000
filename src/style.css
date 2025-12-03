@@ -631,6 +631,10 @@ footer {
   margin: 2px 0 6px;
 }
 
+.budget-hint.tight {
+  margin: 0 0 6px;
+}
+
 .budget-row {
   display: flex;
   justify-content: space-between;
@@ -705,6 +709,27 @@ footer {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.budget-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-detail {
+  padding: 4px 0;
+}
+
+.budget-detail-title {
+  color: #9fb2d1;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.budget-divider.subtle {
+  border-bottom-color: #13203b;
+  margin: 6px 0;
 }
 
 @media (max-width: 900px) {

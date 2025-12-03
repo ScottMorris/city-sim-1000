@@ -29,25 +29,40 @@ function formatRunway(runwayDays: number) {
 
 function renderBreakdownList(
   title: string,
-  entries: { label: string; value: number; total: number; tone?: 'positive' | 'negative' }[]
+  entries: { label: string; value: number; total: number; tone?: 'positive' | 'negative'; hint?: string }[],
+  options: { compact?: boolean } = {}
 ) {
+  const { compact = false } = options;
   const rows = entries.map((entry) => {
     const pct = entry.total === 0 ? 0 : Math.min(100, (Math.abs(entry.value) / entry.total) * 100);
     const barClass = entry.tone === 'negative' ? 'bar-negative' : 'bar-positive';
     return `
-      <div class="budget-row">
+      <div class="budget-row${compact ? ' small' : ''}">
         <div class="budget-row-label">${entry.label}</div>
         <div class="budget-row-value">${formatCurrency(entry.value)}</div>
       </div>
       <div class="budget-row-bar">
         <div class="budget-bar ${barClass}" style="width:${pct}%"></div>
       </div>
+      ${entry.hint ? `<div class="budget-hint tight">${entry.hint}</div>` : ''}
     `;
   });
   return `
     <div class="budget-section">
       <div class="budget-section-title">${title}</div>
       ${rows.join('')}
+    </div>
+  `;
+}
+
+function renderDetailGroup(
+  title: string,
+  entries: { label: string; value: number; total: number; tone?: 'positive' | 'negative' }[]
+) {
+  return `
+    <div class="budget-detail">
+      <div class="budget-detail-title">${title}</div>
+      ${renderBreakdownList('', entries, { compact: true })}
     </div>
   `;
 }
@@ -155,14 +170,37 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const body = document.createElement('div');
     body.className = 'budget-body';
     const revenueSection = renderBreakdownList('Revenue', [
-      { label: 'Base', value: budget.breakdown.revenue.base, total: revenueTotal, tone: 'positive' },
-      { label: 'Population', value: budget.breakdown.revenue.population, total: revenueTotal, tone: 'positive' },
+      {
+        label: 'Base',
+        value: budget.breakdown.revenue.base,
+        total: revenueTotal,
+        tone: 'positive',
+        hint: 'Flat civic stipend each day'
+      },
+      {
+        label: 'Residents',
+        value: budget.breakdown.revenue.residents,
+        total: revenueTotal,
+        tone: 'positive',
+        hint: 'Income from population across residential zones'
+      },
       { label: 'Commercial zones', value: budget.breakdown.revenue.commercial, total: revenueTotal, tone: 'positive' },
       { label: 'Industrial zones', value: budget.breakdown.revenue.industrial, total: revenueTotal, tone: 'positive' }
     ]);
     const expenseSection = renderBreakdownList('Expenses', [
       { label: 'Transport upkeep', value: budget.breakdown.expenses.transport, total: expensesTotal, tone: 'negative' },
       { label: 'Buildings upkeep', value: budget.breakdown.expenses.buildings, total: expensesTotal, tone: 'negative' }
+    ]);
+    const transportDetails = renderDetailGroup('Transport details', [
+      { label: 'Roads', value: budget.breakdown.details.transport.roads, total: budget.breakdown.expenses.transport, tone: 'negative' },
+      { label: 'Rail', value: budget.breakdown.details.transport.rail, total: budget.breakdown.expenses.transport, tone: 'negative' },
+      { label: 'Power lines', value: budget.breakdown.details.transport.powerLines, total: budget.breakdown.expenses.transport, tone: 'negative' },
+      { label: 'Water pipes', value: budget.breakdown.details.transport.waterPipes, total: budget.breakdown.expenses.transport, tone: 'negative' }
+    ]);
+    const buildingDetails = renderDetailGroup('Building details', [
+      { label: 'Power plants', value: budget.breakdown.details.buildings.power, total: budget.breakdown.expenses.buildings, tone: 'negative' },
+      { label: 'Civic (pumps, towers, parks)', value: budget.breakdown.details.buildings.civic, total: budget.breakdown.expenses.buildings, tone: 'negative' },
+      { label: 'Zone buildings', value: budget.breakdown.details.buildings.zones, total: budget.breakdown.expenses.buildings, tone: 'negative' }
     ]);
 
     body.innerHTML = `
@@ -173,6 +211,11 @@ export function initBudgetModal(options: BudgetModalOptions) {
         ${revenueSection}
         <div class="budget-divider"></div>
         ${expenseSection}
+        <div class="budget-subsection">
+          ${transportDetails}
+          <div class="budget-divider subtle"></div>
+          ${buildingDetails}
+        </div>
       </div>
     `;
 

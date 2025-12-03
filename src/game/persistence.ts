@@ -63,8 +63,12 @@ export function deserialize(payload: string): GameState {
       netPerDay: 0,
       netPerMonth: 0,
       breakdown: {
-        revenue: { base: 0, population: 0, commercial: 0, industrial: 0 },
-        expenses: { transport: 0, buildings: 0 }
+        revenue: { base: 0, residents: 0, commercial: 0, industrial: 0 },
+        expenses: { transport: 0, buildings: 0 },
+        details: {
+          transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
+          buildings: { power: 0, civic: 0, zones: 0 }
+        }
       }
     };
   } else {
@@ -74,18 +78,37 @@ export function deserialize(payload: string): GameState {
     parsed.budget.netPerDay = parsed.budget.netPerDay ?? 0;
     parsed.budget.netPerMonth = parsed.budget.netPerMonth ?? 0;
     parsed.budget.breakdown = parsed.budget.breakdown ?? {
-      revenue: { base: 0, population: 0, commercial: 0, industrial: 0 },
-      expenses: { transport: 0, buildings: 0 }
+      revenue: { base: 0, residents: 0, commercial: 0, industrial: 0 },
+      expenses: { transport: 0, buildings: 0 },
+      details: {
+        transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
+        buildings: { power: 0, civic: 0, zones: 0 }
+      }
     };
     parsed.budget.breakdown.revenue = {
       base: parsed.budget.breakdown.revenue?.base ?? 0,
-      population: parsed.budget.breakdown.revenue?.population ?? 0,
+      residents: parsed.budget.breakdown.revenue?.residents ?? parsed.budget.breakdown.revenue?.population ?? 0,
       commercial: parsed.budget.breakdown.revenue?.commercial ?? 0,
       industrial: parsed.budget.breakdown.revenue?.industrial ?? 0
     };
     parsed.budget.breakdown.expenses = {
       transport: parsed.budget.breakdown.expenses?.transport ?? 0,
       buildings: parsed.budget.breakdown.expenses?.buildings ?? 0
+    };
+    parsed.budget.breakdown.details = parsed.budget.breakdown.details ?? {
+      transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
+      buildings: { power: 0, civic: 0, zones: 0 }
+    };
+    parsed.budget.breakdown.details.transport = {
+      roads: parsed.budget.breakdown.details.transport?.roads ?? 0,
+      rail: parsed.budget.breakdown.details.transport?.rail ?? 0,
+      powerLines: parsed.budget.breakdown.details.transport?.powerLines ?? 0,
+      waterPipes: parsed.budget.breakdown.details.transport?.waterPipes ?? 0
+    };
+    parsed.budget.breakdown.details.buildings = {
+      power: parsed.budget.breakdown.details.buildings?.power ?? 0,
+      civic: parsed.budget.breakdown.details.buildings?.civic ?? 0,
+      zones: parsed.budget.breakdown.details.buildings?.zones ?? 0
     };
   }
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };

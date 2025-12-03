@@ -72,13 +72,26 @@ export interface BudgetStats {
   breakdown: {
     revenue: {
       base: number;
-      population: number;
+      residents: number;
       commercial: number;
       industrial: number;
     };
     expenses: {
       transport: number;
       buildings: number;
+    };
+    details: {
+      transport: {
+        roads: number;
+        rail: number;
+        powerLines: number;
+        waterPipes: number;
+      };
+      buildings: {
+        power: number;
+        civic: number;
+        zones: number;
+      };
     };
   };
 }
@@ -150,8 +163,12 @@ export function createInitialState(width = 64, height = 64): GameState {
       netPerDay: 0,
       netPerMonth: 0,
       breakdown: {
-        revenue: { base: 0, population: 0, commercial: 0, industrial: 0 },
-        expenses: { transport: 0, buildings: 0 }
+        revenue: { base: 0, residents: 0, commercial: 0, industrial: 0 },
+        expenses: { transport: 0, buildings: 0 },
+        details: {
+          transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
+          buildings: { power: 0, civic: 0, zones: 0 }
+        }
       }
     },
     budgetHistory: { daily: [], lastRecordedDay: 0 },

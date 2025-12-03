@@ -3,6 +3,7 @@ import { TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import {
   BuildingStatus,
+  BuildingCategory,
   getBuildingTemplate,
   listPowerPlants,
   placeBuilding,
@@ -93,7 +94,14 @@ export class Simulation {
     let developedCommercialZones = 0;
     let developedIndustrialZones = 0;
     let maintenance = 0;
+    let maintenanceRoads = 0;
+    let maintenanceRail = 0;
+    let maintenancePowerLines = 0;
+    let maintenancePipes = 0;
     let buildingMaintenance = 0;
+    let buildingMaintenancePower = 0;
+    let buildingMaintenanceCivic = 0;
+    let buildingMaintenanceZones = 0;
     let buildingWaterOutput = 0;
     let buildingPowerUse = 0;
     let buildingWaterUse = 0;
@@ -116,23 +124,40 @@ export class Simulation {
         if (tile.buildingId !== undefined) developedIndustrialZones++;
       }
       const upkeep = MAINTENANCE[tile.kind];
-      if (upkeep && tile.buildingId === undefined) maintenance += upkeep;
+      if (upkeep && tile.buildingId === undefined) {
+        maintenance += upkeep;
+        if (tile.kind === TileKind.Road) maintenanceRoads += upkeep;
+        if (tile.kind === TileKind.Rail) maintenanceRail += upkeep;
+        if (tile.kind === TileKind.PowerLine) maintenancePowerLines += upkeep;
+        if (tile.kind === TileKind.WaterPipe) maintenancePipes += upkeep;
+      }
 
       if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
         const active = pumpTemplate.requiresPower === false ? true : tile.powered;
-        if (pumpTemplate.maintenance) buildingMaintenance += pumpTemplate.maintenance;
+        if (pumpTemplate.maintenance) {
+          buildingMaintenance += pumpTemplate.maintenance;
+          buildingMaintenanceCivic += pumpTemplate.maintenance;
+        }
         if (this.waterEnabled && active && pumpTemplate.waterOutput)
           buildingWaterOutput += pumpTemplate.waterOutput;
       }
       if (tile.buildingId === undefined && tile.kind === TileKind.Park && parkTemplate) {
-        if (parkTemplate.maintenance) buildingMaintenance += parkTemplate.maintenance;
+        if (parkTemplate.maintenance) {
+          buildingMaintenance += parkTemplate.maintenance;
+          buildingMaintenanceCivic += parkTemplate.maintenance;
+        }
       }
     }
 
     for (const building of this.state.buildings) {
       const template = getBuildingTemplate(building.templateId);
       if (!template) continue;
-      if (template.maintenance) buildingMaintenance += template.maintenance;
+      if (template.maintenance) {
+        buildingMaintenance += template.maintenance;
+        if (template.category === BuildingCategory.Power) buildingMaintenancePower += template.maintenance;
+        if (template.category === BuildingCategory.Civic) buildingMaintenanceCivic += template.maintenance;
+        if (template.category === BuildingCategory.Zone) buildingMaintenanceZones += template.maintenance;
+      }
       const isActive = building.state.status === BuildingStatus.Active;
       if (isActive) {
         if (this.waterEnabled && template.waterOutput) buildingWaterOutput += template.waterOutput;
@@ -154,6 +179,7 @@ export class Simulation {
       const maintenanceCost = templateMaintenance ?? fallbackMaintenance ?? 0;
       if (maintenanceCost) {
         buildingMaintenance += maintenanceCost;
+        buildingMaintenancePower += maintenanceCost;
       }
     }
 
@@ -249,13 +275,26 @@ export class Simulation {
       breakdown: {
         revenue: {
           base: revenueBase,
-          population: revenuePopulation,
+          residents: revenuePopulation,
           commercial: revenueCommercial,
           industrial: revenueIndustrial
         },
         expenses: {
           transport: expensesTransport,
           buildings: expensesBuildings
+        },
+        details: {
+          transport: {
+            roads: maintenanceRoads,
+            rail: maintenanceRail,
+            powerLines: maintenancePowerLines,
+            waterPipes: maintenancePipes
+          },
+          buildings: {
+            power: buildingMaintenancePower,
+            civic: buildingMaintenanceCivic,
+            zones: buildingMaintenanceZones
+          }
         }
       }
     };
