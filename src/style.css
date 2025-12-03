@@ -145,6 +145,27 @@ body {
   box-shadow: none;
 }
 
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #0f1d34;
+  border: 2px solid #223557;
+  border-radius: 14px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 0 #0a1020;
+}
+
+.toolbar-cluster {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-group-radio {
+  padding: 6px;
+}
+
 .toolbar-radio-slot {
   display: flex;
   flex: 0 1 320px;
@@ -156,12 +177,12 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #132644;
-  border: 2px solid #223557;
-  border-radius: 12px;
-  padding: 6px 8px;
-  height: 44px;
-  box-shadow: 0 4px 0 #0a1020;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  padding: 0 4px;
+  height: 32px;
+  box-shadow: none;
   overflow: hidden;
 }
 

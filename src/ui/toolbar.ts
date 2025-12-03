@@ -33,19 +33,16 @@ export function initToolbar(
   toolbar.appendChild(powerRow);
   toolbar.appendChild(waterRow);
 
-  const primaryTools = (Object.values(Tool) as Tool[]).filter(
-    (t) =>
-      ![
-        Tool.HydroPlant,
-        Tool.CoalPlant,
-        Tool.WindTurbine,
-        Tool.SolarFarm,
-        Tool.WaterTower,
-        Tool.WaterPipe
-      ].includes(t)
-  );
+  const groupedTools: Tool[][] = [
+    [Tool.Inspect, Tool.TerraformRaise, Tool.TerraformLower, Tool.Water, Tool.Tree],
+    [Tool.Road, Tool.Rail],
+    [Tool.PowerLine, Tool.WaterPump],
+    [Tool.Residential, Tool.Commercial, Tool.Industrial],
+    [Tool.Park],
+    [Tool.Bulldoze]
+  ];
 
-  primaryTools.forEach((key) => {
+  const createPrimaryButton = (key: Tool) => {
     const button = document.createElement('button');
     button.className = 'tool-button';
     button.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
@@ -56,25 +53,45 @@ export function initToolbar(
       onSelect(key);
       updateToolbar(toolbar, key);
     });
-    primaryRow.appendChild(button);
-  });
+    return button;
+  };
 
-  const radioHost = document.createElement('div');
-  radioHost.className = 'toolbar-radio-slot';
-  primaryRow.appendChild(radioHost);
+  groupedTools.forEach((group) => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'toolbar-group';
+    group.forEach((key) => {
+      const button = createPrimaryButton(key);
+      groupEl.appendChild(button);
+    });
+    primaryRow.appendChild(groupEl);
+  });
 
   const spacer = document.createElement('div');
   spacer.className = 'toolbar-spacer';
   primaryRow.appendChild(spacer);
 
+  const trailingCluster = document.createElement('div');
+  trailingCluster.className = 'toolbar-cluster';
+  primaryRow.appendChild(trailingCluster);
+
+  const radioGroup = document.createElement('div');
+  radioGroup.className = 'toolbar-group toolbar-group-radio';
+  const radioHost = document.createElement('div');
+  radioHost.className = 'toolbar-radio-slot';
+  radioGroup.appendChild(radioHost);
+  trailingCluster.appendChild(radioGroup);
+
   if (onOpenBudget) {
+    const budgetGroup = document.createElement('div');
+    budgetGroup.className = 'toolbar-group';
     const budgetBtn = document.createElement('button');
     budgetBtn.id = 'budget-modal-btn';
     budgetBtn.className = 'tool-button budget-button';
     budgetBtn.textContent = '📊 Budget';
     budgetBtn.title = 'Open budget screen';
     budgetBtn.addEventListener('click', () => onOpenBudget());
-    primaryRow.appendChild(budgetBtn);
+    budgetGroup.appendChild(budgetBtn);
+    trailingCluster.appendChild(budgetGroup);
   }
 
   const createSubButton = (row: HTMLElement, key: Tool, labelOverride?: string) => {
