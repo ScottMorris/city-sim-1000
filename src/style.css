@@ -731,6 +731,8 @@ footer {
   font-size: 13px;
   margin-bottom: 2px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .budget-divider.subtle {

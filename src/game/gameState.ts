@@ -91,6 +91,9 @@ export interface BudgetStats {
         power: number;
         civic: number;
         zones: number;
+        powerByType: Record<string, number>;
+        civicByType: Record<string, number>;
+        zonesByType: Record<string, number>;
       };
     };
   };
@@ -167,7 +170,7 @@ export function createInitialState(width = 64, height = 64): GameState {
         expenses: { transport: 0, buildings: 0 },
         details: {
           transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
-          buildings: { power: 0, civic: 0, zones: 0 }
+          buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
         }
       }
     },

@@ -82,7 +82,7 @@ export function deserialize(payload: string): GameState {
       expenses: { transport: 0, buildings: 0 },
       details: {
         transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
-        buildings: { power: 0, civic: 0, zones: 0 }
+        buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
       }
     };
     parsed.budget.breakdown.revenue = {
@@ -97,7 +97,7 @@ export function deserialize(payload: string): GameState {
     };
     parsed.budget.breakdown.details = parsed.budget.breakdown.details ?? {
       transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
-      buildings: { power: 0, civic: 0, zones: 0 }
+      buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
     };
     parsed.budget.breakdown.details.transport = {
       roads: parsed.budget.breakdown.details.transport?.roads ?? 0,
@@ -108,7 +108,10 @@ export function deserialize(payload: string): GameState {
     parsed.budget.breakdown.details.buildings = {
       power: parsed.budget.breakdown.details.buildings?.power ?? 0,
       civic: parsed.budget.breakdown.details.buildings?.civic ?? 0,
-      zones: parsed.budget.breakdown.details.buildings?.zones ?? 0
+      zones: parsed.budget.breakdown.details.buildings?.zones ?? 0,
+      powerByType: parsed.budget.breakdown.details.buildings?.powerByType ?? {},
+      civicByType: parsed.budget.breakdown.details.buildings?.civicByType ?? {},
+      zonesByType: parsed.budget.breakdown.details.buildings?.zonesByType ?? {}
     };
   }
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };

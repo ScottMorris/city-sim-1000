@@ -64,10 +64,15 @@ function renderDetailGroup(
   title: string,
   entries: { label: string; value: number; total: number; tone?: 'positive' | 'negative' }[]
 ) {
+  const visible = entries.filter((e) => e.value !== 0);
+  const rows = (visible.length ? visible : entries).map((entry) => ({
+    ...entry,
+    total: entry.total === 0 ? entries.reduce((sum, e) => sum + Math.abs(e.value), 0) || 1 : entry.total
+  }));
   return `
     <div class="budget-detail">
       <div class="budget-detail-title">${title}</div>
-      ${renderBreakdownList('', entries, { compact: true })}
+      ${renderBreakdownList('', rows, { compact: true })}
     </div>
   `;
 }
@@ -207,6 +212,22 @@ export function initBudgetModal(options: BudgetModalOptions) {
       { label: 'Civic (pumps, towers, parks)', value: budget.breakdown.details.buildings.civic, total: budget.breakdown.expenses.buildings, tone: 'negative' },
       { label: 'Zone buildings', value: budget.breakdown.details.buildings.zones, total: budget.breakdown.expenses.buildings, tone: 'negative' }
     ]);
+    const powerPlantDetails = renderDetailGroup('Power plants (by type)', [
+      { label: 'Hydro', value: budget.breakdown.details.buildings.powerByType.hydro ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' },
+      { label: 'Coal', value: budget.breakdown.details.buildings.powerByType.coal ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' },
+      { label: 'Wind', value: budget.breakdown.details.buildings.powerByType.wind ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' },
+      { label: 'Solar', value: budget.breakdown.details.buildings.powerByType.solar ?? 0, total: budget.breakdown.details.buildings.power || 1, tone: 'negative' }
+    ]);
+    const civicDetails = renderDetailGroup('Civic (by type)', [
+      { label: 'Water pumps', value: budget.breakdown.details.buildings.civicByType.pump ?? 0, total: budget.breakdown.details.buildings.civic || 1, tone: 'negative' },
+      { label: 'Water towers', value: budget.breakdown.details.buildings.civicByType.water_tower ?? 0, total: budget.breakdown.details.buildings.civic || 1, tone: 'negative' },
+      { label: 'Parks', value: budget.breakdown.details.buildings.civicByType.park ?? 0, total: budget.breakdown.details.buildings.civic || 1, tone: 'negative' }
+    ]);
+    const zoneDetails = renderDetailGroup('Zones (by type)', [
+      { label: 'Residential', value: budget.breakdown.details.buildings.zonesByType.residential ?? 0, total: budget.breakdown.details.buildings.zones || 1, tone: 'negative' },
+      { label: 'Commercial', value: budget.breakdown.details.buildings.zonesByType.commercial ?? 0, total: budget.breakdown.details.buildings.zones || 1, tone: 'negative' },
+      { label: 'Industrial', value: budget.breakdown.details.buildings.zonesByType.industrial ?? 0, total: budget.breakdown.details.buildings.zones || 1, tone: 'negative' }
+    ]);
 
     body.innerHTML = `
       <div class="budget-column">
@@ -220,6 +241,12 @@ export function initBudgetModal(options: BudgetModalOptions) {
           ${transportDetails}
           <div class="budget-divider subtle"></div>
           ${buildingDetails}
+          <div class="budget-divider subtle"></div>
+          ${powerPlantDetails}
+          <div class="budget-divider subtle"></div>
+          ${civicDetails}
+          <div class="budget-divider subtle"></div>
+          ${zoneDetails}
         </div>
       </div>
     `;

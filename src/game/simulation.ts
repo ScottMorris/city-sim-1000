@@ -102,6 +102,9 @@ export class Simulation {
     let buildingMaintenancePower = 0;
     let buildingMaintenanceCivic = 0;
     let buildingMaintenanceZones = 0;
+    const powerMaintenanceByType: Record<string, number> = {};
+    const civicMaintenanceByType: Record<string, number> = {};
+    const zoneMaintenanceByType: Record<string, number> = {};
     let buildingWaterOutput = 0;
     let buildingPowerUse = 0;
     let buildingWaterUse = 0;
@@ -137,6 +140,8 @@ export class Simulation {
         if (pumpTemplate.maintenance) {
           buildingMaintenance += pumpTemplate.maintenance;
           buildingMaintenanceCivic += pumpTemplate.maintenance;
+          civicMaintenanceByType[pumpTemplate.id] =
+            (civicMaintenanceByType[pumpTemplate.id] ?? 0) + pumpTemplate.maintenance;
         }
         if (this.waterEnabled && active && pumpTemplate.waterOutput)
           buildingWaterOutput += pumpTemplate.waterOutput;
@@ -145,6 +150,8 @@ export class Simulation {
         if (parkTemplate.maintenance) {
           buildingMaintenance += parkTemplate.maintenance;
           buildingMaintenanceCivic += parkTemplate.maintenance;
+          civicMaintenanceByType[parkTemplate.id] =
+            (civicMaintenanceByType[parkTemplate.id] ?? 0) + parkTemplate.maintenance;
         }
       }
     }
@@ -157,6 +164,18 @@ export class Simulation {
         if (template.category === BuildingCategory.Power) buildingMaintenancePower += template.maintenance;
         if (template.category === BuildingCategory.Civic) buildingMaintenanceCivic += template.maintenance;
         if (template.category === BuildingCategory.Zone) buildingMaintenanceZones += template.maintenance;
+        if (template.category === BuildingCategory.Power && template.power?.type) {
+          powerMaintenanceByType[template.power.type] =
+            (powerMaintenanceByType[template.power.type] ?? 0) + template.maintenance;
+        }
+        if (template.category === BuildingCategory.Civic) {
+          civicMaintenanceByType[template.id] =
+            (civicMaintenanceByType[template.id] ?? 0) + template.maintenance;
+        }
+        if (template.category === BuildingCategory.Zone) {
+          zoneMaintenanceByType[template.tileKind] =
+            (zoneMaintenanceByType[template.tileKind] ?? 0) + template.maintenance;
+        }
       }
       const isActive = building.state.status === BuildingStatus.Active;
       if (isActive) {
@@ -180,6 +199,10 @@ export class Simulation {
       if (maintenanceCost) {
         buildingMaintenance += maintenanceCost;
         buildingMaintenancePower += maintenanceCost;
+        if (plant.type) {
+          powerMaintenanceByType[plant.type] =
+            (powerMaintenanceByType[plant.type] ?? 0) + maintenanceCost;
+        }
       }
     }
 
@@ -293,7 +316,10 @@ export class Simulation {
           buildings: {
             power: buildingMaintenancePower,
             civic: buildingMaintenanceCivic,
-            zones: buildingMaintenanceZones
+            zones: buildingMaintenanceZones,
+            powerByType: powerMaintenanceByType,
+            civicByType: civicMaintenanceByType,
+            zonesByType: zoneMaintenanceByType
           }
         }
       }
