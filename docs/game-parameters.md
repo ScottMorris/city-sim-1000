@@ -38,6 +38,7 @@
 ## Demand & Over-zoning
 - Starter demand is seeded at 50/30/30 when the city is empty so pre-painted zones can begin to grow before normal formulas take over.
 - Base demand terms: Residential `70×(1 - fill)` plus jobs surplus ×0.6; Commercial `50×(1 - fill)` plus workforce gap ×0.2; Industrial `55×(1 - fill)` plus workforce gap ×0.25.
+- Labour signals: aggregate unemployment and vacancy rates (workers ≈ 55% of population) feed demand—vacancies boost Residential demand and trim Commercial/Industrial, while unemployment lifts Commercial/Industrial and trims Residential. Coefficients are small to avoid big swings.
 - Soft over-zoning: pending zones apply a mild penalty (Res -0.45 each, Com/Ind -0.35 each) capped to the lower of 35 or 60% of the current base term. High pressure (base > 60) shaves half of that penalty so strong demand can punch through.
 - Trickle floor: when a zone type is under 92% full, demand is floored at 8 before utility penalties so large painted areas grow slowly instead of stalling at 0. Power deficits still subtract 15 (7.5 for Com/Ind) after the floor.
 

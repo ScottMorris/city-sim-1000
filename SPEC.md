@@ -312,6 +312,7 @@ Range: **–100 to +100**
 Demand influenced by:
 
 * population vs jobs
+* labour balance: aggregate unemployment (workers ~55% of population) and job vacancy rates push/pull R/C/I demand (vacancies boost R, unemployment boosts C/I) with gentle coefficients
 * tax rates
 * available land
 * happiness

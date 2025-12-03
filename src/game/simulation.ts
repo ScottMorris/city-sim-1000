@@ -19,6 +19,7 @@ import {
 import { DAYS_PER_MONTH } from './time';
 import { recordDailyBudget } from './budget';
 import { computeDemand } from './demand';
+import { computeLabourStats } from './computeLabourStats';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -238,12 +239,14 @@ export class Simulation {
     const jobsOverPopulation = Math.max(0, this.state.jobs - this.state.population);
     const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
     const pendingPenaltyEnabled = this.state.settings?.pendingPenaltyEnabled ?? true;
+    const labourStats = computeLabourStats(this.state.population, populationCapacity, jobCapacity);
     const seeded = this.state.population === 0 && this.state.jobs === 0;
 
     const residentialDemand = computeDemand({
       base: 70,
       fillFraction: cappedResidentialFill,
       workforceTerm: jobsOverPopulation * 0.6,
+      labourTerm: labourStats.vacancyRate * 20 - labourStats.unemploymentRate * 10,
       pendingZones: pendingResidentialZones,
       pendingSlope: 0.45,
       utilityPenalty,
@@ -255,6 +258,7 @@ export class Simulation {
       base: 50,
       fillFraction: cappedJobFill,
       workforceTerm: workforceGap * 0.2,
+      labourTerm: labourStats.unemploymentRate * 15 - labourStats.vacancyRate * 10,
       pendingZones: pendingCommercialZones,
       pendingSlope: 0.35,
       utilityPenalty: utilityPenalty * 0.5,
@@ -266,6 +270,7 @@ export class Simulation {
       base: 55,
       fillFraction: cappedJobFill,
       workforceTerm: workforceGap * 0.25,
+      labourTerm: labourStats.unemploymentRate * 18 - labourStats.vacancyRate * 10,
       pendingZones: pendingIndustrialZones,
       pendingSlope: 0.35,
       utilityPenalty: utilityPenalty * 0.5,

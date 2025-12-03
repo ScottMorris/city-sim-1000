@@ -13,6 +13,7 @@ export interface DemandInput {
   base: number;
   fillFraction: number;
   workforceTerm: number;
+  labourTerm?: number;
   pendingZones: number;
   pendingSlope: number;
   utilityPenalty: number;
@@ -33,6 +34,7 @@ export interface DemandComputation extends DemandInput {
 }
 
 export function computeDemand(input: DemandInput): DemandComputation {
+  const labourTerm = input.labourTerm ?? 0;
   const fillTerm = input.base * (1 - input.fillFraction);
 
   if (input.seeded) {
@@ -49,7 +51,7 @@ export function computeDemand(input: DemandInput): DemandComputation {
     };
   }
 
-  const baseDemand = fillTerm + input.workforceTerm;
+  const baseDemand = fillTerm + input.workforceTerm + labourTerm;
   const pendingPenaltyRaw = input.pendingPenaltyEnabled ? input.pendingZones * input.pendingSlope : 0;
   const pendingPenaltyCapped = input.pendingPenaltyEnabled
     ? Math.min(pendingPenaltyRaw, baseDemand * PENDING_PENALTY_BASE_FRACTION, PENDING_PENALTY_MAX)

@@ -98,7 +98,9 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         ? 'Starter seed'
         : `${details.base}×(1 - fill ${Math.round(details.fillFraction * 100)}%) = ${details.fillTerm.toFixed(
             1
-          )}, workforce term ${details.workforceTerm.toFixed(1)}, pending ${details.pendingZones} → -${details.pendingPenaltyApplied.toFixed(
+          )}, workforce term ${details.workforceTerm.toFixed(1)}, labour term ${details.labourTerm.toFixed(
+            1
+          )}, pending ${details.pendingZones} → -${details.pendingPenaltyApplied.toFixed(
             1
           )} (cap ${details.pendingPenaltyCapped.toFixed(1)}, relief ${details.pressureRelief.toFixed(1)})${
             details.floorApplied ? ', floor active' : ''
@@ -127,6 +129,12 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         <div class="debug-hint">${formatDemandHint(stats.demandDetails.commercial)}</div>
         <div class="debug-row"><span>Industrial</span><strong>${stats.demand.industrial.toFixed(1)}%</strong></div>
         <div class="debug-hint">${formatDemandHint(stats.demandDetails.industrial)}</div>
+      </div>
+      <div class="debug-section">
+        <div class="debug-heading">Labour</div>
+        <div class="debug-row"><span>Unemployment</span><strong>${(stats.labour.unemploymentRate * 100).toFixed(1)}%</strong></div>
+        <div class="debug-row"><span>Vacancy</span><strong>${(stats.labour.vacancyRate * 100).toFixed(1)}%</strong></div>
+        <div class="debug-hint">Workers ${stats.labour.workers.toFixed(0)} / Jobs ${stats.labour.jobCapacity.toFixed(0)}</div>
       </div>
       <div class="debug-section">
         <div class="debug-heading">Utilities</div>

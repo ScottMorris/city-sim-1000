@@ -1,6 +1,7 @@
 import { BuildingStatus, getBuildingTemplate } from './buildings';
 import { GameState, TileKind } from './gameState';
 import { computeDemand } from './demand';
+import { computeLabourStats, LabourStats } from './computeLabourStats';
 
 export interface DemandDetails {
   base: number;
@@ -11,6 +12,7 @@ export interface DemandDetails {
   pendingPenaltyCapped: number;
   pendingPenaltyApplied: number;
   pressureRelief: number;
+  labourTerm: number;
   workforceGap: number;
   workforceTerm: number;
   utilityPenalty: number;
@@ -25,6 +27,7 @@ export interface SimulationDebugStats {
   day: number;
   population: number;
   jobs: number;
+  labour: LabourStats;
   zones: {
     residential: number;
     commercial: number;
@@ -105,6 +108,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     if (template.jobsCapacity) jobCapacity += template.jobsCapacity;
   }
 
+  const labourStats = computeLabourStats(state.population, populationCapacity, jobCapacity);
   const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
   const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
   const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
@@ -122,6 +126,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     base: 70,
     fillFraction: cappedResidentialFill,
     workforceTerm: jobsOverPopulation * 0.6,
+    labourTerm: labourStats.vacancyRate * 20 - labourStats.unemploymentRate * 10,
     pendingZones: pendingResidentialZones,
     pendingSlope: 0.45,
     utilityPenalty,
@@ -134,6 +139,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     base: 50,
     fillFraction: cappedJobFill,
     workforceTerm: workforceGap * 0.2,
+    labourTerm: labourStats.unemploymentRate * 15 - labourStats.vacancyRate * 10,
     pendingZones: pendingCommercialZones,
     pendingSlope: 0.35,
     utilityPenalty: utilityPenalty * 0.5,
@@ -146,6 +152,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     base: 55,
     fillFraction: cappedJobFill,
     workforceTerm: workforceGap * 0.25,
+    labourTerm: labourStats.unemploymentRate * 18 - labourStats.vacancyRate * 10,
     pendingZones: pendingIndustrialZones,
     pendingSlope: 0.35,
     utilityPenalty: utilityPenalty * 0.5,
@@ -159,6 +166,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     day: state.day,
     population: state.population,
     jobs: state.jobs,
+    labour: labourStats,
     zones: { residential: residentialZones, commercial: commercialZones, industrial: industrialZones },
     capacities: { population: populationCapacity, jobs: jobCapacity },
     utilities: {
@@ -184,6 +192,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
         pendingPenaltyCapped: residentialDemand.pendingPenaltyCapped,
         pendingPenaltyApplied: residentialDemand.pendingPenaltyApplied,
         pressureRelief: residentialDemand.pressureRelief,
+        labourTerm: residentialDemand.labourTerm ?? 0,
         workforceGap: jobsOverPopulation,
         workforceTerm: residentialDemand.workforceTerm,
         utilityPenalty: residentialDemand.utilityPenalty,
@@ -201,6 +210,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
         pendingPenaltyCapped: commercialDemand.pendingPenaltyCapped,
         pendingPenaltyApplied: commercialDemand.pendingPenaltyApplied,
         pressureRelief: commercialDemand.pressureRelief,
+        labourTerm: commercialDemand.labourTerm ?? 0,
         workforceGap,
         workforceTerm: commercialDemand.workforceTerm,
         utilityPenalty: commercialDemand.utilityPenalty,
@@ -218,6 +228,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
         pendingPenaltyCapped: industrialDemand.pendingPenaltyCapped,
         pendingPenaltyApplied: industrialDemand.pendingPenaltyApplied,
         pressureRelief: industrialDemand.pressureRelief,
+        labourTerm: industrialDemand.labourTerm ?? 0,
         workforceGap,
         workforceTerm: industrialDemand.workforceTerm,
         utilityPenalty: industrialDemand.utilityPenalty,
