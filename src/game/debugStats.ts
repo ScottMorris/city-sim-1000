@@ -7,17 +7,17 @@ export interface DemandDetails {
   base: number;
   fillFraction: number;
   fillTerm: number;
-  pendingZones: number;
-  pendingPenaltyRaw: number;
-  pendingPenaltyCapped: number;
-  pendingPenaltyApplied: number;
-  pressureRelief: number;
-  labourTerm: number;
-  workforceGap: number;
-  workforceTerm: number;
-  utilityPenalty: number;
-  demandBeforeUtilities: number;
-  floorApplied: boolean;
+    pendingZones: number;
+    pendingPenaltyRaw: number;
+    pendingPenaltyCapped: number;
+    pendingPenaltyApplied: number;
+    pressureRelief: number;
+    labourTerm: number;
+    workforceGap: number;
+    workforceTerm: number;
+    utilityPenalty: number;
+    demandBeforeUtilities: number;
+    floorApplied: boolean;
   seeded: boolean;
   final: number;
 }
@@ -168,7 +168,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     fillFraction: fillIndustrial,
     workforceTerm:
       labourStats.unemploymentRate * 80 + Math.max(0, 0.95 - fillIndustrial) * 20,
-    labourTerm: labourStats.vacancyRate * -20,
+    labourTerm: labourStats.vacancyRate * -5,
     pendingZones: pendingIndustrialZones,
     pendingSlope: 0.35,
     utilityPenalty: utilityPenalty * 0.5,

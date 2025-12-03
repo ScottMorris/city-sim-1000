@@ -20,6 +20,7 @@ export interface DemandInput {
   seeded: boolean;
   seededValue: number;
   pendingPenaltyEnabled: boolean;
+  floorOverride?: number;
 }
 
 export interface DemandComputation extends DemandInput {
@@ -60,9 +61,11 @@ export function computeDemand(input: DemandInput): DemandComputation {
   const pendingPenaltyApplied = Math.max(0, pendingPenaltyCapped - pressureRelief);
   const demandAfterPenalty = baseDemand - pendingPenaltyApplied;
   const demandBeforeUtilities =
-    input.fillFraction < FLOOR_FILL_THRESHOLD
-      ? Math.max(demandAfterPenalty, DEMAND_FLOOR)
-      : demandAfterPenalty;
+    input.floorOverride !== undefined
+      ? Math.max(demandAfterPenalty, input.floorOverride)
+      : input.fillFraction < FLOOR_FILL_THRESHOLD
+        ? Math.max(demandAfterPenalty, DEMAND_FLOOR)
+        : demandAfterPenalty;
   const value = clamp(demandBeforeUtilities - input.utilityPenalty, 0, 100);
 
   return {

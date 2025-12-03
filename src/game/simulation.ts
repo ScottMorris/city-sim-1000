@@ -293,13 +293,14 @@ export class Simulation {
       // Unemployment pulls industry, and slightly underfilled tiles push it; vacancy cools but softly.
       workforceTerm:
         labourStats.unemploymentRate * 80 + Math.max(0, 0.95 - fillIndustrial) * 20,
-      labourTerm: labourStats.vacancyRate * -20,
+      labourTerm: labourStats.vacancyRate * -5,
       pendingZones: pendingIndustrialZones,
       pendingSlope: 0.35,
       utilityPenalty: utilityPenalty * 0.5,
       seeded,
       seededValue: 30,
-      pendingPenaltyEnabled
+      pendingPenaltyEnabled,
+      floorOverride: fillIndustrial >= 0.95 ? 5 : undefined
     });
 
     this.state.demand.residential = residentialDemand.value;
