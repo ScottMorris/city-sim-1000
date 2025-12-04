@@ -24,11 +24,6 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   const widget = document.createElement('div');
   widget.className = 'radio-widget';
 
-  const cover = document.createElement('img');
-  cover.className = 'radio-cover';
-  cover.alt = 'Radio cover art';
-  cover.loading = 'lazy';
-
   const controls = document.createElement('div');
   controls.className = 'radio-controls';
 
@@ -47,6 +42,11 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   marqueeText.textContent = 'Loading radio...';
   marqueeText.setAttribute('role', 'status');
   marqueeViewport.appendChild(marqueeText);
+
+  const cover = document.createElement('img');
+  cover.className = 'radio-cover';
+  cover.alt = 'Radio cover art';
+  cover.loading = 'lazy';
 
   const popover = document.createElement('div');
   popover.className = 'radio-popover';
@@ -68,9 +68,9 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   popover.appendChild(popoverCover);
   popover.appendChild(popoverInfo);
 
-  widget.appendChild(cover);
   widget.appendChild(controls);
   widget.appendChild(marqueeViewport);
+  widget.appendChild(cover);
   widget.appendChild(popover);
   host.appendChild(widget);
 
