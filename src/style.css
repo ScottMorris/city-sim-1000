@@ -187,6 +187,7 @@ body {
   height: 37px;
   box-shadow: none;
   overflow: visible;
+  z-index: 50;
 }
 
 .radio-cover {
@@ -280,7 +281,7 @@ body {
   transform: translateY(-6px);
   transition: opacity 0.12s ease, transform 0.12s ease;
   min-width: 180px;
-  z-index: 20;
+  z-index: 200;
 }
 
 .radio-popover-cover {
