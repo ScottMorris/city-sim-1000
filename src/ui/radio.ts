@@ -139,17 +139,23 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   });
 
   audio.addEventListener('error', () => {
-    if (state.sources.length === 0) {
-      goToRelativeTrack(1, { autoplay: state.playing });
+    if (state.sources.length > 0) {
+      const nextSource = state.sources.shift();
+      if (!nextSource) return;
+      audio.src = nextSource;
+      audio.load();
+      if (state.playing) {
+        void safePlay();
+      }
       return;
     }
-    const nextSource = state.sources.shift();
-    if (!nextSource) return;
-    audio.src = nextSource;
-    audio.load();
-    if (state.playing) {
-      void safePlay();
-    }
+    // Stop autoplaying through the playlist when nothing can play; let the user pick another track.
+    state.playing = false;
+    audio.pause();
+    setText('Playback failed');
+    setPopoverMetaForCurrentTrack();
+    updatePlayLabel();
+    updateMarqueeAnimation();
   });
 
   function createIconButton(icon: string, label: string, action: string) {
