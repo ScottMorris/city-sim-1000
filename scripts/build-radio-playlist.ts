@@ -102,9 +102,9 @@ async function main() {
   await fs.mkdir(path.dirname(opts.output), { recursive: true });
   await fs.writeFile(opts.output, JSON.stringify(playlist, null, 2));
   console.log(
-    `${colour.green('Wrote ')}${colour.blue(opts.output)}${colour.green(
-      ` with ${tracks.length} track(s).`
-    )}`
+    `${colour.green('Wrote ')}${colour.blue(opts.output)}${colour.green(' with ')}${colour.cyan(
+      `${tracks.length}`
+    )}${colour.green(' track(s).')}`
   );
 }
 
