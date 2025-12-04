@@ -4,6 +4,9 @@ import { GameState, TileKind, getTile } from '../game/gameState';
 import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
 import { POWER_PLANT_CONFIGS } from '../game/constants';
 import type { TileTextures } from './tileAtlas';
+import { isPowerCarrier } from '../game/adjacency';
+
+const GRID_LINE_WIDTH = 1;
 
 export interface Position {
   x: number;
@@ -32,7 +35,7 @@ export class MapRenderer {
     camera: Camera,
     tileSize: number,
     palette: Record<TileKind, number>,
-    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {} }
+    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {}, powerLine: {} }
   ) {
     this.app = new Application();
     this.parent = parent;
@@ -70,7 +73,7 @@ export class MapRenderer {
 
   render(state: GameState, hovered: Position | null, selected: Position | null) {
     const size = this.tileSize * this.camera.scale;
-    const spriteSize = size - 1;
+    const spriteSize = size;
     this.mapLayer.clear();
     this.tilesWithSprites.clear();
     const buildingLookup = new Map<
@@ -89,11 +92,24 @@ export class MapRenderer {
         const idx = y * state.width + x;
         const spriteInfo = this.getTileSprite(state, tile, x, y, buildingLookup);
         if (spriteInfo && 'texture' in spriteInfo) {
-          const { texture, widthTiles, heightTiles } = spriteInfo;
+          const { texture, widthTiles, heightTiles, borderWidth = 0 } = spriteInfo;
+          if (borderWidth > 0) {
+            this.mapLayer.beginFill(0x000000, 0.8);
+            this.mapLayer.drawRect(
+              this.camera.x + x * size,
+              this.camera.y + y * size,
+              spriteSize * widthTiles,
+              spriteSize * heightTiles
+            );
+            this.mapLayer.endFill();
+          }
           const sprite = this.getOrCreateSprite(idx, texture);
-          sprite.position.set(this.camera.x + x * size, this.camera.y + y * size);
-          sprite.width = spriteSize * widthTiles;
-          sprite.height = spriteSize * heightTiles;
+          sprite.position.set(
+            this.camera.x + x * size + borderWidth,
+            this.camera.y + y * size + borderWidth
+          );
+          sprite.width = spriteSize * widthTiles - borderWidth * 2;
+          sprite.height = spriteSize * heightTiles - borderWidth * 2;
           sprite.visible = true;
           for (let dy = 0; dy < heightTiles; dy++) {
             for (let dx = 0; dx < widthTiles; dx++) {
@@ -101,6 +117,9 @@ export class MapRenderer {
               this.tilesWithSprites.add(coveredIdx);
             }
           }
+        } else if (spriteInfo?.skip) {
+          this.hideSprite(idx);
+          this.tilesWithSprites.add(idx);
         } else {
           this.hideSprite(idx);
           const color = this.getTileColor(tile);
@@ -108,8 +127,8 @@ export class MapRenderer {
           this.mapLayer.drawRect(
             this.camera.x + x * size,
             this.camera.y + y * size,
-            size - 1,
-            size - 1
+            size,
+            size
           );
           this.mapLayer.endFill();
         }
@@ -184,7 +203,7 @@ export class MapRenderer {
 
   private drawGrid(state: GameState, size: number) {
     this.gridLayer.clear();
-    this.gridLayer.lineStyle(1, 0x000000, 0.8);
+    this.gridLayer.lineStyle(GRID_LINE_WIDTH, 0x000000, 0.8);
     const widthPx = state.width * size;
     const heightPx = state.height * size;
     for (let x = 0; x <= state.width; x++) {
@@ -206,7 +225,7 @@ export class MapRenderer {
     y: number,
     buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ):
-    | { texture: Texture; widthTiles: number; heightTiles: number }
+    | { texture: Texture; widthTiles: number; heightTiles: number; borderWidth?: number }
     | { skip: true }
     | undefined {
     if (!tile) return undefined;
@@ -222,18 +241,28 @@ export class MapRenderer {
         if (x === origin.x && y === origin.y) {
           const powerTexture = this.tileTextures.powerPlant[tile.powerPlantType];
           if (powerTexture) {
-            return { texture: powerTexture, widthTiles: width, heightTiles: height };
+            return {
+              texture: powerTexture,
+              widthTiles: width,
+              heightTiles: height,
+              borderWidth: GRID_LINE_WIDTH
+            };
           }
         } else if (x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height) {
           return { skip: true };
         }
       }
       const fallbackTexture = this.tileTextures.powerPlant[tile.powerPlantType];
-      if (fallbackTexture) return { texture: fallbackTexture, widthTiles: 1, heightTiles: 1 };
+      if (fallbackTexture)
+        return { texture: fallbackTexture, widthTiles: 1, heightTiles: 1, borderWidth: GRID_LINE_WIDTH };
     }
     if (tile.kind === TileKind.Road) {
       const roadTexture = this.pickRoadTexture(state, x, y);
       if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
+    }
+    if (tile.kind === TileKind.PowerLine) {
+      const powerTexture = this.pickPowerLineTexture(state, x, y);
+      if (powerTexture) return { texture: powerTexture, widthTiles: 1, heightTiles: 1 };
     }
     const baseTexture = this.tileTextures.tiles[tile.kind];
     if (baseTexture) return { texture: baseTexture, widthTiles: 1, heightTiles: 1 };
@@ -267,6 +296,34 @@ export class MapRenderer {
       if (east) return roadTextures.east;
       if (south) return roadTextures.south;
       if (west) return roadTextures.west;
+    }
+
+    return undefined;
+  }
+
+  private pickPowerLineTexture(state: GameState, x: number, y: number): Texture | undefined {
+    const connectsToPower = (tx: number, ty: number) => {
+      const neighbour = getTile(state, tx, ty);
+      return isPowerCarrier(neighbour);
+    };
+
+    const north = y > 0 && connectsToPower(x, y - 1);
+    const south = y < state.height - 1 && connectsToPower(x, y + 1);
+    const east = x < state.width - 1 && connectsToPower(x + 1, y);
+    const west = x > 0 && connectsToPower(x - 1, y);
+
+    const powerTextures = this.tileTextures.powerLine;
+    const neighbours = [north, east, south, west].filter(Boolean).length;
+
+    if (neighbours === 2 && north && south && !east && !west) {
+      return powerTextures.north ?? powerTextures.south;
+    }
+    if (neighbours === 2 && east && west && !north && !south) {
+      return powerTextures.east ?? powerTextures.west;
+    }
+    if (neighbours === 1) {
+      if (north || south) return powerTextures.north ?? powerTextures.south;
+      if (east || west) return powerTextures.east ?? powerTextures.west;
     }
 
     return undefined;

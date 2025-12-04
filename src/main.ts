@@ -8,7 +8,7 @@ import { loadFromBrowser } from './game/persistence';
 import { createCamera, centerCamera, screenToTile } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
 import { palette, TILE_SIZE } from './rendering/sprites';
-import { loadPaletteTexture } from './rendering/tileAtlas';
+import { loadPaletteTexture, loadTileTextures } from './rendering/tileAtlas';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import { createHud } from './ui/hud';
 import { bindPersistenceControls, showManualModal, showToast } from './ui/dialogs';
@@ -236,10 +236,13 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 }
 
 (async function bootstrap() {
-  const paletteTexture = await loadPaletteTexture();
+  const [paletteTexture, tileTextures] = await Promise.all([
+    loadPaletteTexture(),
+    loadTileTextures()
+  ]);
   console.log('Palette texture loaded', paletteTexture);
 
-  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette);
+  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette, tileTextures);
   await renderer.init(wrapper);
   centerCamera(state, wrapper, TILE_SIZE, camera);
 
