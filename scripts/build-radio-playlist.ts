@@ -18,7 +18,8 @@ const colour = {
   green: (s: string) => `\u001b[32m${s}\u001b[0m`,
   yellow: (s: string) => `\u001b[33m${s}\u001b[0m`,
   red: (s: string) => `\u001b[31m${s}\u001b[0m`,
-  cyan: (s: string) => `\u001b[36m${s}\u001b[0m`
+  cyan: (s: string) => `\u001b[36m${s}\u001b[0m`,
+  blue: (s: string) => `\u001b[34m${s}\u001b[0m`
 };
 
 interface MetaOverride {
@@ -100,7 +101,9 @@ async function main() {
 
   await fs.mkdir(path.dirname(opts.output), { recursive: true });
   await fs.writeFile(opts.output, JSON.stringify(playlist, null, 2));
-  console.log(colour.green(`Wrote ${opts.output} with ${tracks.length} track(s).`));
+  console.log(
+    colour.green(`Wrote ${colour.blue(opts.output)} with ${tracks.length} track(s).`)
+  );
 }
 
 function parseArgs(argv: string[]): CliOptions | null {
