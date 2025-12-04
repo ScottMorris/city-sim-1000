@@ -89,7 +89,9 @@ body {
   background: #0d1a2f;
   border-top: 2px solid #1f2c4b;
   border-bottom: 2px solid #1f2c4b;
+  position: relative;
   overflow-x: auto;
+  overflow-y: visible;
 }
 
 .toolbar-row,
@@ -277,7 +279,7 @@ body {
   transform: translateY(-6px);
   transition: opacity 0.12s ease, transform 0.12s ease;
   min-width: 180px;
-  z-index: 8;
+  z-index: 20;
 }
 
 .radio-popover-cover {
