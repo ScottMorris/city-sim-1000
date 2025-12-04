@@ -348,6 +348,7 @@ body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+  z-index: 0;
 }
 
 .canvas-wrapper canvas {
@@ -356,6 +357,7 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  z-index: 0;
 }
 
 .overlay {
