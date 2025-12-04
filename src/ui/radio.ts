@@ -218,6 +218,8 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
       const url = encodeURI(track.cover);
       cover.src = url;
       popoverCover.src = url;
+      cover.classList.add('visible');
+      popoverCover.classList.add('visible');
     } else {
       cover.classList.remove('visible');
       cover.removeAttribute('src');
