@@ -92,6 +92,7 @@ body {
   position: relative;
   overflow-x: auto;
   overflow-y: visible;
+  z-index: 25;
 }
 
 .toolbar-row,
