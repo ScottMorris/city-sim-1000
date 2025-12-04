@@ -317,7 +317,10 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     state.index = Math.min(state.index, playlist.tracks.length - 1);
     setStatus('ready');
     applyTrack(state.playlist[state.index]);
+    state.playing = false;
+    audio.pause();
     updatePlayLabel();
+    updateMarqueeAnimation();
     setPopoverMetaForCurrentTrack();
   }
 
