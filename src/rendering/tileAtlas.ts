@@ -1,5 +1,4 @@
 import * as PIXI from 'pixi.js';
-import { groupD8 } from 'pixi.js';
 import { TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
 
@@ -34,7 +33,10 @@ const powerPlantTexturePaths: Partial<Record<PowerPlantType, string>> = {
   [PowerPlantType.Wind]: '/assets/tiles/power-plant-wind.png'
 };
 
-const powerLineTexturePath = '/assets/tiles/power-line-orth.png';
+const powerLineTexturePaths = {
+  horizontal: '/assets/tiles/power-line-horizontal.png',
+  vertical: '/assets/tiles/power-line-vertical.png'
+} as const;
 
 export async function loadTileTextures(): Promise<TileTextures> {
   const tileEntries = await Promise.all(
@@ -58,8 +60,16 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
-  const powerLineBase = await PIXI.Assets.load<PIXI.Texture>(powerLineTexturePath);
-  const powerLineTextures = createDirectionalTextures(powerLineBase);
+  const [powerLineHorizontal, powerLineVertical] = await Promise.all([
+    PIXI.Assets.load<PIXI.Texture>(powerLineTexturePaths.horizontal),
+    PIXI.Assets.load<PIXI.Texture>(powerLineTexturePaths.vertical)
+  ]);
+  const powerLineTextures: TileTextures['powerLine'] = {
+    east: powerLineHorizontal,
+    west: powerLineHorizontal,
+    north: powerLineVertical,
+    south: powerLineVertical
+  };
 
   return {
     tiles: Object.fromEntries(tileEntries),
@@ -67,23 +77,4 @@ export async function loadTileTextures(): Promise<TileTextures> {
     powerPlant: Object.fromEntries(powerPlantEntries),
     powerLine: powerLineTextures
   };
-}
-
-function createDirectionalTextures(base: PIXI.Texture): Required<TileTextures['powerLine']> {
-  return {
-    east: base,
-    west: rotateTexture(base, groupD8.W),
-    north: rotateTexture(base, groupD8.N),
-    south: rotateTexture(base, groupD8.S)
-  };
-}
-
-function rotateTexture(base: PIXI.Texture, rotation: number): PIXI.Texture {
-  return new PIXI.Texture({
-    source: base.source,
-    frame: base.frame.clone(),
-    orig: base.orig.clone(),
-    trim: base.trim?.clone(),
-    rotate: rotation
-  });
 }
