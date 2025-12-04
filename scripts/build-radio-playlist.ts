@@ -52,7 +52,7 @@ async function main() {
 
   const audioFiles = await listAudio(opts.audioDir);
   if (audioFiles.length === 0) {
-    console.error(colour.red(`No audio files found in ${opts.audioDir}`));
+    console.error(`${colour.red('No audio files found in ')}${colour.blue(opts.audioDir)}`);
     return;
   }
 
@@ -154,7 +154,7 @@ function parseArgs(argv: string[]): CliOptions | null {
         opts.dryRun = true;
         break;
       default:
-        console.warn(colour.yellow(`Unknown argument: ${arg}`));
+        console.warn(`${colour.yellow('Unknown argument: ')}${colour.cyan(arg)}`);
         printHelp();
         return null;
     }
@@ -189,7 +189,11 @@ async function loadMeta(metaPath: string): Promise<Record<string, MetaOverride>>
     const raw = await fs.readFile(metaPath, 'utf-8');
     return JSON.parse(raw);
   } catch (err) {
-    console.warn(colour.yellow(`Could not read meta file ${metaPath}: ${(err as Error).message}`));
+    console.warn(
+      `${colour.yellow('Could not read meta file ')}${colour.blue(metaPath)}${colour.yellow(
+        `: ${(err as Error).message}`
+      )}`
+    );
     return {};
   }
 }
@@ -241,7 +245,11 @@ async function getDuration(file: string): Promise<number | undefined> {
     const seconds = parseFloat(stdout.trim());
     return Number.isFinite(seconds) ? Math.round(seconds) : undefined;
   } catch (err) {
-    console.warn(colour.yellow(`Duration probe failed for ${file}: ${(err as Error).message}`));
+    console.warn(
+      `${colour.yellow('Duration probe failed for ')}${colour.blue(file)}${colour.yellow(
+        `: ${(err as Error).message}`
+      )}`
+    );
     return undefined;
   }
 }
@@ -260,7 +268,11 @@ async function getLoudness(file: string): Promise<number | undefined> {
     const match = stderr.match(/Integrated loudness:\s*(-?\d+\.?\d*) LUFS/i);
     return match ? parseFloat(match[1]) : undefined;
   } catch (err) {
-    console.warn(colour.yellow(`Loudness probe failed for ${file}: ${(err as Error).message}`));
+    console.warn(
+      `${colour.yellow('Loudness probe failed for ')}${colour.blue(file)}${colour.yellow(
+        `: ${(err as Error).message}`
+      )}`
+    );
     return undefined;
   }
 }
@@ -328,7 +340,11 @@ async function convertCover(input: string, output: string): Promise<boolean> {
     ]);
     return true;
   } catch (err) {
-    console.warn(colour.yellow(`Cover convert failed for ${input}: ${(err as Error).message}`));
+    console.warn(
+      `${colour.yellow('Cover convert failed for ')}${colour.blue(input)}${colour.yellow(
+        `: ${(err as Error).message}`
+      )}`
+    );
     return false;
   }
 }
