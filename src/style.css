@@ -183,7 +183,7 @@ body {
   padding: 0 4px;
   height: 37px;
   box-shadow: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .radio-cover {
