@@ -266,9 +266,9 @@ body {
 }
 
 .radio-popover {
-  position: absolute;
+  position: fixed;
   left: 0;
-  top: calc(100% + 8px);
+  top: 0;
   display: flex;
   gap: 10px;
   background: #101c34;
@@ -278,10 +278,10 @@ body {
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-6px);
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transform: translateY(0);
+  transition: opacity 0.12s ease;
   min-width: 180px;
-  z-index: 200;
+  z-index: 9999;
 }
 
 .radio-popover-cover {

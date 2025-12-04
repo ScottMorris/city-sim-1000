@@ -107,6 +107,9 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
       window.clearTimeout(hidePopoverTimeout);
       hidePopoverTimeout = null;
     }
+    const rect = widget.getBoundingClientRect();
+    popover.style.left = `${Math.round(rect.left)}px`;
+    popover.style.top = `${Math.round(rect.bottom + 8)}px`;
     widget.classList.add('radio-popover-open');
   };
 
