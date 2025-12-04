@@ -48,6 +48,7 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts) return;
 
+  const publicRoot = path.resolve('public');
   const metaOverrides = opts.metaPath ? await loadMeta(opts.metaPath) : {};
 
   const audioFiles = await listAudio(opts.audioDir);
@@ -65,9 +66,10 @@ async function main() {
 
     const fallback = files
       .filter((f) => f !== primary)
-      .map((f) => toSrc(f, opts.audioDir));
+      .map((f) => toPublicPath(f, publicRoot))
+      .filter(Boolean) as string[];
 
-    const src = toSrc(primary, opts.audioDir);
+    const src = toPublicPath(primary, publicRoot);
     const duration = await getDuration(primary);
     const loudness = await getLoudness(primary);
 
@@ -77,13 +79,14 @@ async function main() {
     const loop = override.loop;
 
     const coverPath = await ensureCover(id, primary, opts);
+    const coverSrc = coverPath ? toPublicPath(coverPath, publicRoot) : null;
 
     tracks.push({
       id,
       title,
       artist,
       src,
-      cover: coverPath ? toSrc(coverPath, path.dirname(opts.output)) : undefined,
+      cover: coverSrc ?? undefined,
       duration,
       loudnessLufs: loudness ?? undefined,
       loop,
@@ -226,11 +229,6 @@ function pickPrimary(files: string[]): string | null {
   return sorted[0];
 }
 
-function toSrc(absPath: string, baseDir: string): string {
-  const rel = path.relative(baseDir, absPath);
-  return '/' + rel.split(path.sep).join('/');
-}
-
 async function getDuration(file: string): Promise<number | undefined> {
   try {
     const { stdout } = await run('ffprobe', [
@@ -364,6 +362,19 @@ function humanize(id: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function toPublicPath(absPath: string, publicRoot: string): string | null {
+  const rel = path.relative(publicRoot, absPath);
+  if (rel.startsWith('..')) {
+    console.warn(
+      `${colour.yellow('File is outside public dir: ')}${colour.blue(absPath)}${colour.yellow(
+        '; skipping.'
+      )}`
+    );
+    return null;
+  }
+  return '/' + rel.split(path.sep).join('/');
 }
 
 main().catch((err) => {
