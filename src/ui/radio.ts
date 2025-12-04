@@ -215,8 +215,9 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
 
   function updateCover(track?: RadioTrack | null) {
     if (track?.cover) {
-      cover.src = track.cover;
-      popoverCover.src = track.cover;
+      const url = encodeURI(track.cover);
+      cover.src = url;
+      popoverCover.src = url;
     } else {
       cover.classList.remove('visible');
       cover.removeAttribute('src');
