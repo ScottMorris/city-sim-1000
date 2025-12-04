@@ -5,3 +5,4 @@ Radio assets live here.
 - Place optional cover art at `public/audio/radio/covers/` (WebP/AVIF/PNG), and reference it via the `cover` field in `playlist.json`.
 - If no playlist or tracks exist, the in-game radio shows “Radio offline” and disables playback until files are dropped in.
 - See `playlist.sample.json` for a starter template with fake tracks and covers; copy it to `playlist.json` and swap in your own assets.
+- Generate `playlist.json` (and WebP covers) with `npm run build:radio-playlist` (requires ffmpeg/ffprobe). Flags: `--meta overrides.json`, `--default-artist "Name"`, `--extract-embedded-covers`, `--force`, `--dry-run`.

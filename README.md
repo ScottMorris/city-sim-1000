@@ -53,6 +53,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Playback buttons use emoji to save space; the marquee pauses while paused and resets on track changes. Hover/focus reveals a compact popover for more detail without changing toolbar height.
 - Use `public/audio/radio/playlist.sample.json` as a starter; copy it to `playlist.json` and swap in your own filenames once you drop audio and cover files.
 - To fill `loudnessLufs`, measure each track with `ffmpeg -i track.opus -filter_complex ebur128=peak=true -f null -` and read the “Integrated loudness” value (in LUFS) from stderr; target roughly -14 LUFS so tracks feel even.
+- Auto-generate the playlist and covers with `npm run build:radio-playlist` (requires `ffmpeg`/`ffprobe` in PATH). Flags: `--meta <file>` for per-track overrides, `--default-artist "Name"`, `--extract-embedded-covers` to pull art from audio when no external cover exists, `--force` to rebuild covers, `--dry-run` to print JSON only.
 
 ## Controls (quick reference)
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.

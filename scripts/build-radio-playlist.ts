@@ -1,0 +1,340 @@
+#!/usr/bin/env -S node --experimental-import-meta-resolve
+/**
+ * Build a radio playlist JSON from audio files under public/audio/radio.
+ * - Extracts duration (ffprobe) and loudness (ffmpeg ebur128).
+ * - Converts matching covers to 256px WebP (or extracts embedded art when flagged).
+ * - Writes playlist.json with fields expected by the radio widget.
+ */
+
+import { execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+
+interface MetaOverride {
+  title?: string;
+  artist?: string;
+  loop?: boolean;
+}
+
+interface CliOptions {
+  audioDir: string;
+  coversDir: string;
+  output: string;
+  defaultArtist: string;
+  metaPath?: string;
+  extractEmbedded: boolean;
+  force: boolean;
+  dryRun: boolean;
+}
+
+const AUDIO_EXT = ['.opus', '.ogg', '.mp3', '.flac', '.wav', '.m4a'];
+const COVER_EXT = ['.webp', '.avif', '.png', '.jpg', '.jpeg'];
+const PREFERRED_AUDIO_ORDER = ['.opus', '.ogg', '.mp3', '.flac', '.wav', '.m4a'];
+const MAX_COVER_SIZE = 256;
+
+async function main() {
+  const opts = parseArgs(process.argv.slice(2));
+  if (!opts) return;
+
+  const metaOverrides = opts.metaPath ? await loadMeta(opts.metaPath) : {};
+
+  const audioFiles = await listAudio(opts.audioDir);
+  if (audioFiles.length === 0) {
+    console.error(`No audio files found in ${opts.audioDir}`);
+    return;
+  }
+
+  const groups = groupByBase(audioFiles);
+  const tracks = [];
+
+  for (const [id, files] of groups) {
+    const primary = pickPrimary(files);
+    if (!primary) continue;
+
+    const fallback = files
+      .filter((f) => f !== primary)
+      .map((f) => toSrc(f, opts.audioDir));
+
+    const src = toSrc(primary, opts.audioDir);
+    const duration = await getDuration(primary);
+    const loudness = await getLoudness(primary);
+
+    const override = metaOverrides[id] ?? {};
+    const title = override.title ?? humanize(id);
+    const artist = override.artist ?? opts.defaultArtist;
+    const loop = override.loop;
+
+    const coverPath = await ensureCover(id, primary, opts);
+
+    tracks.push({
+      id,
+      title,
+      artist,
+      src,
+      cover: coverPath ? toSrc(coverPath, path.dirname(opts.output)) : undefined,
+      duration,
+      loudnessLufs: loudness ?? undefined,
+      loop,
+      fallbackSrc: fallback.length ? fallback : undefined
+    });
+  }
+
+  tracks.sort((a, b) => a.id.localeCompare(b.id));
+
+  const playlist = { version: '1.0', tracks };
+  if (opts.dryRun) {
+    console.log(JSON.stringify(playlist, null, 2));
+    return;
+  }
+
+  await fs.mkdir(path.dirname(opts.output), { recursive: true });
+  await fs.writeFile(opts.output, JSON.stringify(playlist, null, 2));
+  console.log(`Wrote ${opts.output} with ${tracks.length} track(s).`);
+}
+
+function parseArgs(argv: string[]): CliOptions | null {
+  const defaults: CliOptions = {
+    audioDir: 'public/audio/radio',
+    coversDir: 'public/audio/radio/covers',
+    output: 'public/audio/radio/playlist.json',
+    defaultArtist: 'Unknown Artist',
+    metaPath: undefined,
+    extractEmbedded: false,
+    force: false,
+    dryRun: false
+  };
+
+  const opts = { ...defaults };
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    switch (arg) {
+      case '--help':
+      case '-h':
+        printHelp();
+        return null;
+      case '--audio':
+        opts.audioDir = argv[++i] ?? opts.audioDir;
+        break;
+      case '--covers':
+        opts.coversDir = argv[++i] ?? opts.coversDir;
+        break;
+      case '--out':
+        opts.output = argv[++i] ?? opts.output;
+        break;
+      case '--default-artist':
+        opts.defaultArtist = argv[++i] ?? opts.defaultArtist;
+        break;
+      case '--meta':
+        opts.metaPath = argv[++i];
+        break;
+      case '--extract-embedded-covers':
+        opts.extractEmbedded = true;
+        break;
+      case '--force':
+        opts.force = true;
+        break;
+      case '--dry-run':
+        opts.dryRun = true;
+        break;
+      default:
+        console.warn(`Unknown argument: ${arg}`);
+        printHelp();
+        return null;
+    }
+  }
+
+  return opts;
+}
+
+function printHelp() {
+  console.log(`Build radio playlist JSON.
+
+Options:
+  --audio <dir>                 Audio directory (default: public/audio/radio)
+  --covers <dir>                Covers directory (default: public/audio/radio/covers)
+  --out <file>                  Output playlist path (default: public/audio/radio/playlist.json)
+  --default-artist <name>       Default artist if none provided (default: "Unknown Artist")
+  --meta <file>                 Optional JSON mapping { "<id>": { "title": "...", "artist": "...", "loop": true } }
+  --extract-embedded-covers     Try extracting embedded art when no cover exists
+  --force                       Recreate covers even if a WebP already exists
+  --dry-run                     Print playlist JSON to stdout without writing files
+  --help, -h                    Show this help
+
+Requires ffprobe and ffmpeg in PATH.`);
+}
+
+async function loadMeta(metaPath: string): Promise<Record<string, MetaOverride>> {
+  try {
+    const raw = await fs.readFile(metaPath, 'utf-8');
+    return JSON.parse(raw);
+  } catch (err) {
+    console.warn(`Could not read meta file ${metaPath}: ${(err as Error).message}`);
+    return {};
+  }
+}
+
+async function listAudio(audioDir: string): Promise<string[]> {
+  const entries = await fs.readdir(audioDir, { withFileTypes: true });
+  return entries
+    .filter((e) => e.isFile() && AUDIO_EXT.includes(path.extname(e.name).toLowerCase()))
+    .map((e) => path.join(audioDir, e.name));
+}
+
+function groupByBase(files: string[]): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const file of files) {
+    const id = path.basename(file, path.extname(file));
+    const list = groups.get(id) ?? [];
+    list.push(file);
+    groups.set(id, list);
+  }
+  return groups;
+}
+
+function pickPrimary(files: string[]): string | null {
+  if (files.length === 0) return null;
+  const sorted = [...files].sort((a, b) => {
+    const extA = path.extname(a).toLowerCase();
+    const extB = path.extname(b).toLowerCase();
+    return PREFERRED_AUDIO_ORDER.indexOf(extA) - PREFERRED_AUDIO_ORDER.indexOf(extB);
+  });
+  return sorted[0];
+}
+
+function toSrc(absPath: string, baseDir: string): string {
+  const rel = path.relative(baseDir, absPath);
+  return '/' + rel.split(path.sep).join('/');
+}
+
+async function getDuration(file: string): Promise<number | undefined> {
+  try {
+    const { stdout } = await run('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'default=noprint_wrappers=1:nokey=1',
+      file
+    ]);
+    const seconds = parseFloat(stdout.trim());
+    return Number.isFinite(seconds) ? Math.round(seconds) : undefined;
+  } catch (err) {
+    console.warn(`Duration probe failed for ${file}: ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
+async function getLoudness(file: string): Promise<number | undefined> {
+  try {
+    const { stderr } = await run('ffmpeg', [
+      '-i',
+      file,
+      '-filter_complex',
+      'ebur128=peak=true',
+      '-f',
+      'null',
+      '-'
+    ]);
+    const match = stderr.match(/Integrated loudness:\s*(-?\d+\.?\d*) LUFS/i);
+    return match ? parseFloat(match[1]) : undefined;
+  } catch (err) {
+    console.warn(`Loudness probe failed for ${file}: ${(err as Error).message}`);
+    return undefined;
+  }
+}
+
+async function ensureCover(id: string, audioFile: string, opts: CliOptions): Promise<string | null> {
+  await fs.mkdir(opts.coversDir, { recursive: true });
+  const target = path.join(opts.coversDir, `${id}.webp`);
+  if (!opts.force && (await exists(target))) {
+    return target;
+  }
+
+  const existingCover = await findMatchingCover(id, opts.coversDir);
+  if (existingCover) {
+    const ok = await convertCover(existingCover, target);
+    return ok ? target : null;
+  }
+
+  if (opts.extractEmbedded) {
+    const extracted = await extractEmbeddedCover(audioFile);
+    if (extracted) {
+      const ok = await convertCover(extracted, target);
+      await fs.rm(extracted, { force: true });
+      return ok ? target : null;
+    }
+  }
+
+  return null;
+}
+
+async function findMatchingCover(id: string, coversDir: string): Promise<string | null> {
+  for (const ext of COVER_EXT) {
+    const file = path.join(coversDir, `${id}${ext}`);
+    if (await exists(file)) {
+      return file;
+    }
+  }
+  return null;
+}
+
+async function extractEmbeddedCover(audioFile: string): Promise<string | null> {
+  const temp = path.join(path.dirname(audioFile), `${path.basename(audioFile)}.cover.tmp.png`);
+  try {
+    await run('ffmpeg', ['-i', audioFile, '-map', '0:v', '-frames:v', '1', temp, '-y']);
+    return (await exists(temp)) ? temp : null;
+  } catch {
+    return null;
+  }
+}
+
+async function convertCover(input: string, output: string): Promise<boolean> {
+  try {
+    await run('ffmpeg', [
+      '-i',
+      input,
+      '-vf',
+      `scale='min(${MAX_COVER_SIZE},iw)':'min(${MAX_COVER_SIZE},ih)':force_original_aspect_ratio=decrease`,
+      '-frames:v',
+      '1',
+      '-y',
+      '-c:v',
+      'libwebp',
+      '-lossless',
+      '1',
+      output
+    ]);
+    return true;
+  } catch (err) {
+    console.warn(`Cover convert failed for ${input}: ${(err as Error).message}`);
+    return false;
+  }
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function humanize(id: string): string {
+  return id
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});

@@ -8,13 +8,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:radio-playlist": "tsx scripts/build-radio-playlist.ts"
   },
   "dependencies": {
     "pixi.js": "^8.1.5"
   },
   "devDependencies": {
     "jsdom": "^27.2.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.5",
     "vite": "^5.3.1",
     "vitest": "^2.1.1"
