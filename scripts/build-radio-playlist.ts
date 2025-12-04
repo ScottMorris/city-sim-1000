@@ -14,6 +14,13 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
+const colour = {
+  green: (s: string) => `\u001b[32m${s}\u001b[0m`,
+  yellow: (s: string) => `\u001b[33m${s}\u001b[0m`,
+  red: (s: string) => `\u001b[31m${s}\u001b[0m`,
+  cyan: (s: string) => `\u001b[36m${s}\u001b[0m`
+};
+
 interface MetaOverride {
   title?: string;
   artist?: string;
@@ -44,7 +51,7 @@ async function main() {
 
   const audioFiles = await listAudio(opts.audioDir);
   if (audioFiles.length === 0) {
-    console.error(`No audio files found in ${opts.audioDir}`);
+    console.error(colour.red(`No audio files found in ${opts.audioDir}`));
     return;
   }
 
@@ -93,7 +100,7 @@ async function main() {
 
   await fs.mkdir(path.dirname(opts.output), { recursive: true });
   await fs.writeFile(opts.output, JSON.stringify(playlist, null, 2));
-  console.log(`Wrote ${opts.output} with ${tracks.length} track(s).`);
+  console.log(colour.green(`Wrote ${opts.output} with ${tracks.length} track(s).`));
 }
 
 function parseArgs(argv: string[]): CliOptions | null {
@@ -142,7 +149,7 @@ function parseArgs(argv: string[]): CliOptions | null {
         opts.dryRun = true;
         break;
       default:
-        console.warn(`Unknown argument: ${arg}`);
+        console.warn(colour.yellow(`Unknown argument: ${arg}`));
         printHelp();
         return null;
     }
@@ -152,20 +159,24 @@ function parseArgs(argv: string[]): CliOptions | null {
 }
 
 function printHelp() {
-  console.log(`Build radio playlist JSON.
-
-Options:
-  --audio <dir>                 Audio directory (default: public/audio/radio)
-  --covers <dir>                Covers directory (default: public/audio/radio/covers)
-  --out <file>                  Output playlist path (default: public/audio/radio/playlist.json)
-  --default-artist <name>       Default artist if none provided (default: "Unknown Artist")
-  --meta <file>                 Optional JSON mapping { "<id>": { "title": "...", "artist": "...", "loop": true } }
-  --extract-embedded-covers     Try extracting embedded art when no cover exists
-  --force                       Recreate covers even if a WebP already exists
-  --dry-run                     Print playlist JSON to stdout without writing files
-  --help, -h                    Show this help
-
-Requires ffprobe and ffmpeg in PATH.`);
+  console.log(
+    [
+      colour.cyan('Build radio playlist JSON.'),
+      '',
+      'Options:',
+      '  --audio <dir>                 Audio directory (default: public/audio/radio)',
+      '  --covers <dir>                Covers directory (default: public/audio/radio/covers)',
+      '  --out <file>                  Output playlist path (default: public/audio/radio/playlist.json)',
+      '  --default-artist <name>       Default artist if none provided (default: "Unknown Artist")',
+      '  --meta <file>                 Optional JSON mapping { "<id>": { "title": "...", "artist": "...", "loop": true } }',
+      '  --extract-embedded-covers     Try extracting embedded art when no cover exists',
+      '  --force                       Recreate covers even if a WebP already exists',
+      '  --dry-run                     Print playlist JSON to stdout without writing files',
+      '  --help, -h                    Show this help',
+      '',
+      'Requires ffprobe and ffmpeg in PATH.'
+    ].join('\n')
+  );
 }
 
 async function loadMeta(metaPath: string): Promise<Record<string, MetaOverride>> {
@@ -173,7 +184,7 @@ async function loadMeta(metaPath: string): Promise<Record<string, MetaOverride>>
     const raw = await fs.readFile(metaPath, 'utf-8');
     return JSON.parse(raw);
   } catch (err) {
-    console.warn(`Could not read meta file ${metaPath}: ${(err as Error).message}`);
+    console.warn(colour.yellow(`Could not read meta file ${metaPath}: ${(err as Error).message}`));
     return {};
   }
 }
@@ -225,7 +236,7 @@ async function getDuration(file: string): Promise<number | undefined> {
     const seconds = parseFloat(stdout.trim());
     return Number.isFinite(seconds) ? Math.round(seconds) : undefined;
   } catch (err) {
-    console.warn(`Duration probe failed for ${file}: ${(err as Error).message}`);
+    console.warn(colour.yellow(`Duration probe failed for ${file}: ${(err as Error).message}`));
     return undefined;
   }
 }
@@ -244,7 +255,7 @@ async function getLoudness(file: string): Promise<number | undefined> {
     const match = stderr.match(/Integrated loudness:\s*(-?\d+\.?\d*) LUFS/i);
     return match ? parseFloat(match[1]) : undefined;
   } catch (err) {
-    console.warn(`Loudness probe failed for ${file}: ${(err as Error).message}`);
+    console.warn(colour.yellow(`Loudness probe failed for ${file}: ${(err as Error).message}`));
     return undefined;
   }
 }
@@ -312,7 +323,7 @@ async function convertCover(input: string, output: string): Promise<boolean> {
     ]);
     return true;
   } catch (err) {
-    console.warn(`Cover convert failed for ${input}: ${(err as Error).message}`);
+    console.warn(colour.yellow(`Cover convert failed for ${input}: ${(err as Error).message}`));
     return false;
   }
 }
