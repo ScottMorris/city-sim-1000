@@ -9,12 +9,13 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "build:radio-playlist": "tsx scripts/build-radio-playlist.ts"
+    "build:radio-playlist": "tsx scripts/build-radio-playlist.ts --extract-embedded-covers"
   },
   "dependencies": {
     "pixi.js": "^8.1.5"
   },
   "devDependencies": {
+    "@types/node": "^24.10.1",
     "jsdom": "^27.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.4.5",
