@@ -177,6 +177,7 @@ body {
 
 .radio-widget {
   position: relative;
+  flex: 0 1 360px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -240,8 +241,8 @@ body {
 }
 
 .radio-marquee-viewport {
-  flex: 1 1 180px;
-  min-width: 140px;
+  flex: 1 1 160px;
+  min-width: 120px;
   max-width: 220px;
   overflow: hidden;
 }
