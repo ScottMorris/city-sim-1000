@@ -69,13 +69,14 @@ async function main() {
       .map((f) => toPublicPath(f, publicRoot))
       .filter(Boolean) as string[];
 
+    const tags = await readTags(primary);
     const src = toPublicPath(primary, publicRoot);
     const duration = await getDuration(primary);
     const loudness = await getLoudness(primary);
 
     const override = metaOverrides[id] ?? {};
-    const title = override.title ?? humanize(id);
-    const artist = override.artist ?? opts.defaultArtist;
+    const title = override.title ?? tags.title ?? humanize(id);
+    const artist = override.artist ?? tags.artist ?? opts.defaultArtist;
     const loop = override.loop;
 
     const coverPath = await ensureCover(id, primary, opts);
@@ -375,6 +376,32 @@ function toPublicPath(absPath: string, publicRoot: string): string | null {
     return null;
   }
   return '/' + rel.split(path.sep).join('/');
+}
+
+async function readTags(file: string): Promise<{ artist?: string; title?: string }> {
+  try {
+    const { stdout } = await run('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'format_tags=artist,title',
+      '-of',
+      'json',
+      file
+    ]);
+    const parsed = JSON.parse(stdout) as { format?: { tags?: Record<string, string> } };
+    const tags = parsed.format?.tags ?? {};
+    const artist = tags.artist || tags.ARTIST;
+    const title = tags.title || tags.TITLE;
+    return { artist, title };
+  } catch (err) {
+    console.warn(
+      `${colour.yellow('Tag read failed for ')}${colour.blue(file)}${colour.yellow(
+        `: ${(err as Error).message}`
+      )}`
+    );
+    return {};
+  }
 }
 
 main().catch((err) => {
