@@ -31,7 +31,6 @@ export class MapRenderer {
   private tilesWithSprites: Set<number>;
   private camera: Camera;
   private tileSize: number;
-  private labelPool: Text[] = [];
   private gridDrawer: GridDrawer;
 
   constructor(
