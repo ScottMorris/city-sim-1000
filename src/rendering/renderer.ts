@@ -132,7 +132,7 @@ export class MapRenderer {
     this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
-    this.drawBuildingMarkers(state, size);
+    this.drawBuildingMarkers(state, size, buildingLookup);
     this.drawTileLabels(state, size);
     if (hovered) {
       this.overlayLayer.lineStyle(2, 0xffffff);
@@ -158,10 +158,14 @@ export class MapRenderer {
     return this.app.canvas;
   }
 
-  private drawBuildingMarkers(state: GameState, size: number) {
+  private drawBuildingMarkers(
+    state: GameState,
+    size: number,
+    buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
+  ) {
     const radius = Math.max(2, size * 0.12);
     for (const building of state.buildings) {
-      const template = getBuildingTemplate(building.templateId);
+      const template = buildingLookup.get(building.id)?.template ?? getBuildingTemplate(building.templateId);
       const width = template?.footprint.width ?? 1;
       const height = template?.footprint.height ?? 1;
       const cx = this.camera.x + (building.origin.x + width / 2) * size;
