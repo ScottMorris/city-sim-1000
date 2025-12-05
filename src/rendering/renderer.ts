@@ -24,12 +24,14 @@ export class MapRenderer {
   private labelLayer: Container;
   private container: Container;
   private tileLabels: Map<number, Text>;
+  private labelPool: Text[];
   private palette: Record<TileKind, number>;
   private tileTextures: TileTextures;
   private tileSprites: Map<number, Sprite>;
   private tilesWithSprites: Set<number>;
   private camera: Camera;
   private tileSize: number;
+  private labelPool: Text[] = [];
   private gridDrawer: GridDrawer;
 
   constructor(
@@ -62,6 +64,7 @@ export class MapRenderer {
     this.tileSprites = new Map();
     this.tilesWithSprites = new Set();
     this.tileLabels = new Map();
+    this.labelPool = [];
   }
 
   async init(resizeTo: HTMLElement) {
@@ -277,14 +280,9 @@ export class MapRenderer {
         if (!label) continue;
         let text = this.tileLabels.get(idx);
         if (!text) {
-          text = new Text({
-            text: label,
-            style: {
-              fontSize,
-              fill: 0xffffff,
-              fontFamily: 'monospace'
-            }
-          });
+          text = this.labelPool.pop() ?? new Text();
+          text.text = label;
+          text.style = { fontSize, fill: 0xffffff, fontFamily: 'monospace' };
           text.alpha = 0.8;
           text.anchor.set(0.5);
           this.tileLabels.set(idx, text);
@@ -308,7 +306,7 @@ export class MapRenderer {
     for (const [idx, text] of this.tileLabels) {
       if (!text.visible) {
         this.labelLayer.removeChild(text);
-        text.destroy();
+        this.labelPool.push(text);
         this.tileLabels.delete(idx);
       }
     }
