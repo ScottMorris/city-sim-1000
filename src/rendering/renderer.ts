@@ -4,6 +4,7 @@ import { GameState, TileKind, getTile } from '../game/gameState';
 import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
+import { GridDrawer } from './gridDrawer';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;
@@ -29,6 +30,7 @@ export class MapRenderer {
   private tilesWithSprites: Set<number>;
   private camera: Camera;
   private tileSize: number;
+  private gridDrawer: GridDrawer;
 
   constructor(
     parent: HTMLElement,
@@ -56,6 +58,7 @@ export class MapRenderer {
       this.overlayLayer,
       this.labelLayer
     );
+    this.gridDrawer = new GridDrawer(this.gridLayer);
     this.tileSprites = new Map();
     this.tilesWithSprites = new Set();
     this.tileLabels = new Map();
@@ -126,7 +129,7 @@ export class MapRenderer {
       }
     }
 
-    this.drawGrid(state, size, multiTileCoverage);
+    this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
     this.drawBuildingMarkers(state, size);
