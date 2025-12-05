@@ -24,7 +24,7 @@ export class MapRenderer {
   private labelLayer: Container;
   private container: Container;
   private tileLabels: Map<number, Text>;
-  private labelPool: Text[];
+  private labelPool: Text[] = [];
   private palette: Record<TileKind, number>;
   private tileTextures: TileTextures;
   private tileSprites: Map<number, Sprite>;
@@ -64,7 +64,6 @@ export class MapRenderer {
     this.tileSprites = new Map();
     this.tilesWithSprites = new Set();
     this.tileLabels = new Map();
-    this.labelPool = [];
   }
 
   async init(resizeTo: HTMLElement) {
