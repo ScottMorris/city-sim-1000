@@ -7,6 +7,7 @@ import type { TileTextures } from './tileAtlas';
 import { isPowerCarrier } from '../game/adjacency';
 
 const GRID_LINE_WIDTH = 1;
+const GRID_LINE_COLOUR = 0x123a63;
 
 export interface Position {
   x: number;
@@ -80,10 +81,24 @@ export class MapRenderer {
       number,
       { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }
     >();
+    const multiTileCoverage = new Int32Array(state.width * state.height);
     for (const building of state.buildings) {
       const template = getBuildingTemplate(building.templateId);
       if (template) {
         buildingLookup.set(building.id, { template, origin: building.origin });
+        const { width, height } = template.footprint;
+        if (width > 1 || height > 1) {
+          for (let dy = 0; dy < height; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              const tx = building.origin.x + dx;
+              const ty = building.origin.y + dy;
+              if (tx >= 0 && tx < state.width && ty >= 0 && ty < state.height) {
+                const idx = ty * state.width + tx;
+                multiTileCoverage[idx] = building.id;
+              }
+            }
+          }
+        }
       }
     }
     for (let y = 0; y < state.height; y++) {
@@ -135,7 +150,7 @@ export class MapRenderer {
       }
     }
 
-    this.drawGrid(state, size);
+    this.drawGrid(state, size, multiTileCoverage);
 
     this.overlayLayer.clear();
     this.drawBuildingMarkers(state, size);
@@ -201,21 +216,64 @@ export class MapRenderer {
     }
   }
 
-  private drawGrid(state: GameState, size: number) {
+  private drawGrid(state: GameState, size: number, multiTileCoverage: Int32Array) {
     this.gridLayer.clear();
-    this.gridLayer.lineStyle(GRID_LINE_WIDTH, 0x000000, 0.8);
-    const widthPx = state.width * size;
-    const heightPx = state.height * size;
+    // Keep lines crisp at any zoom: scale a little, but clamp so they never get chunky.
+    const lineWidth = Math.min(2, Math.max(GRID_LINE_WIDTH, Math.round(size * 0.05)));
+    this.gridLayer.setStrokeStyle({ width: lineWidth, color: GRID_LINE_COLOUR, alpha: 0.82 });
+    const sameBuilding = (x1: number, y1: number, x2: number, y2: number) => {
+      if (
+        x1 < 0 ||
+        x1 >= state.width ||
+        x2 < 0 ||
+        x2 >= state.width ||
+        y1 < 0 ||
+        y1 >= state.height ||
+        y2 < 0 ||
+        y2 >= state.height
+      )
+        return false;
+      const idx1 = y1 * state.width + x1;
+      const idx2 = y2 * state.width + x2;
+      const buildingId = multiTileCoverage[idx1];
+      return buildingId !== 0 && buildingId === multiTileCoverage[idx2];
+    };
+
     for (let x = 0; x <= state.width; x++) {
-      const px = this.camera.x + x * size;
-      this.gridLayer.moveTo(px, this.camera.y);
-      this.gridLayer.lineTo(px, this.camera.y + heightPx);
+      let y = 0;
+      while (y < state.height) {
+        if (x > 0 && x < state.width && sameBuilding(x - 1, y, x, y)) {
+          y++;
+          continue;
+        }
+        const startY = y;
+        y++;
+        while (y < state.height && !(x > 0 && x < state.width && sameBuilding(x - 1, y, x, y))) {
+          y++;
+        }
+        const px = this.camera.x + x * size;
+        this.gridLayer.moveTo(px, this.camera.y + startY * size);
+        this.gridLayer.lineTo(px, this.camera.y + y * size);
+      }
     }
     for (let y = 0; y <= state.height; y++) {
-      const py = this.camera.y + y * size;
-      this.gridLayer.moveTo(this.camera.x, py);
-      this.gridLayer.lineTo(this.camera.x + widthPx, py);
+      let x = 0;
+      while (x < state.width) {
+        if (y > 0 && y < state.height && sameBuilding(x, y - 1, x, y)) {
+          x++;
+          continue;
+        }
+        const startX = x;
+        x++;
+        while (x < state.width && !(y > 0 && y < state.height && sameBuilding(x, y - 1, x, y))) {
+          x++;
+        }
+        const py = this.camera.y + y * size;
+        this.gridLayer.moveTo(this.camera.x + startX * size, py);
+        this.gridLayer.lineTo(this.camera.x + x * size, py);
+      }
     }
+    this.gridLayer.stroke();
   }
 
   private getTileSprite(
