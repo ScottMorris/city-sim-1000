@@ -92,7 +92,6 @@ export function initSettingsModal(options: SettingsModalOptions) {
   const { getSettings, onApply } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((e: KeyboardEvent) => void) | null = null;
-  const bodyClass = 'modal-hide-footer';
   const cleanup = () => {
     if (backdrop) {
       backdrop.remove();
@@ -102,12 +101,10 @@ export function initSettingsModal(options: SettingsModalOptions) {
       window.removeEventListener('keydown', escHandler);
       escHandler = null;
     }
-    document.body.classList.remove(bodyClass);
   };
 
   const open = () => {
     if (backdrop) return;
-    document.body.classList.add(bodyClass);
     const draft: GameSettings = JSON.parse(JSON.stringify(getSettings()));
 
     backdrop = document.createElement('div');

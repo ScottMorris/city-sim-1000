@@ -140,7 +140,6 @@ export function initBudgetModal(options: BudgetModalOptions) {
   const { triggerBtn, getState } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((e: KeyboardEvent) => void) | null = null;
-  const bodyClass = 'modal-hide-footer';
 
   const cleanup = () => {
     if (escHandler) {
@@ -151,12 +150,10 @@ export function initBudgetModal(options: BudgetModalOptions) {
       backdrop.remove();
       backdrop = null;
     }
-    document.body.classList.remove(bodyClass);
   };
 
   const open = () => {
     if (backdrop) return;
-    document.body.classList.add(bodyClass);
     const state = getState();
     const budget = state.budget;
     const runwayDays = computeRunwayDays(state.money, budget.netPerDay);
