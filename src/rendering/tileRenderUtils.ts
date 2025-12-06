@@ -63,7 +63,10 @@ export function resolveTileSprite(
     }
   }
   if (tile.kind === TileKind.Commercial && tile.buildingId !== undefined) {
-    const comTextures = tileTextures.commercialBuildings ?? [];
+    const baseTextures = tileTextures.commercialBuildings ?? [];
+    const geminiEnabled = state.settings?.cosmetics?.geminiBuildingsEnabled ?? true;
+    const geminiTextures = geminiEnabled ? tileTextures.commercialGeminiBuildings ?? [] : [];
+    const comTextures = [...baseTextures, ...geminiTextures];
     if (comTextures.length > 0) {
       const texture = comTextures[(tile.buildingId - 1) % comTextures.length];
       if (texture) {

@@ -42,7 +42,15 @@ export class MapRenderer {
     camera: Camera,
     tileSize: number,
     palette: Record<TileKind, number>,
-    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {}, powerLine: {}, residentialHouses: [], commercialBuildings: [] }
+    tileTextures: TileTextures = {
+      tiles: {},
+      road: {},
+      powerPlant: {},
+      powerLine: {},
+      residentialHouses: [],
+      commercialBuildings: [],
+      commercialGeminiBuildings: []
+    }
   ) {
     this.app = new Application();
     this.parent = parent;
