@@ -110,7 +110,7 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
     ...minimapDefaults,
     ...(settings?.minimap ?? {})
   };
-  if (!['base', 'power', 'water', 'alerts'].includes(minimapSettings.mode)) {
+  if (!['base', 'power', 'water', 'alerts', 'education'].includes(minimapSettings.mode)) {
     minimapSettings.mode = 'base';
   }
   const inputDefaults = createDefaultInputSettings();
