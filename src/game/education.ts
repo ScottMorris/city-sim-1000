@@ -1,4 +1,4 @@
-import { BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingCategory, BuildingStatus, getBuildingTemplate } from './buildings';
 import { getOrthogonalNeighbourCoords, isZone } from './adjacency';
 import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
@@ -27,16 +27,78 @@ function isRoadish(tile: Tile | undefined): boolean {
   return tile.kind === TileKind.Road || tile.roadUnderlay === true;
 }
 
-function estimateEducationLoad(tile: Tile | undefined, serviceId: ServiceId): number {
+type EducationLoadMap = {
+  populationLoad: Map<number, number>;
+  jobLoad: Map<number, number>;
+};
+
+function computeEducationLoads(state: GameState): EducationLoadMap {
+  const populationLoad = new Map<number, number>();
+  const jobLoad = new Map<number, number>();
+
+  let totalPopCap = 0;
+  let totalComCap = 0;
+  let totalIndCap = 0;
+
+  for (const building of state.buildings) {
+    const template = getBuildingTemplate(building.templateId);
+    if (!template) continue;
+    if (building.state.status !== BuildingStatus.Active) continue;
+    if (template.category !== BuildingCategory.Zone) continue;
+    if (template.populationCapacity) totalPopCap += template.populationCapacity;
+    if (template.jobsCapacity) {
+      if (template.tileKind === TileKind.Commercial) totalComCap += template.jobsCapacity;
+      if (template.tileKind === TileKind.Industrial) totalIndCap += template.jobsCapacity;
+    }
+  }
+
+  const totalJobCap = totalComCap + totalIndCap;
+  const jobsInCommercial = totalJobCap > 0 ? (totalComCap / totalJobCap) * state.jobs : 0;
+  const jobsInIndustrial = totalJobCap > 0 ? (totalIndCap / totalJobCap) * state.jobs : 0;
+
+  for (const building of state.buildings) {
+    const template = getBuildingTemplate(building.templateId);
+    if (!template) continue;
+    if (building.state.status !== BuildingStatus.Active) continue;
+    if (template.category !== BuildingCategory.Zone) continue;
+    const idx = building.origin.y * state.width + building.origin.x;
+
+    if (template.populationCapacity) {
+      const share =
+        totalPopCap > 0 ? (template.populationCapacity / totalPopCap) * state.population : 0;
+      populationLoad.set(idx, share);
+    }
+
+    if (template.jobsCapacity) {
+      if (template.tileKind === TileKind.Commercial) {
+        const share = totalComCap > 0 ? (template.jobsCapacity / totalComCap) * jobsInCommercial : 0;
+        jobLoad.set(idx, share);
+      } else if (template.tileKind === TileKind.Industrial) {
+        const share = totalIndCap > 0 ? (template.jobsCapacity / totalIndCap) * jobsInIndustrial : 0;
+        jobLoad.set(idx, share);
+      }
+    }
+  }
+
+  return { populationLoad, jobLoad };
+}
+
+function estimateEducationLoad(
+  idx: number,
+  tile: Tile | undefined,
+  serviceId: ServiceId,
+  loads: EducationLoadMap
+): number {
   if (!tile || !isZone(tile)) return 0;
-  const template = getBuildingTemplate(tile.kind);
-  if (!template) return 0;
   if (serviceId === ServiceId.EducationElementary) {
-    return template.populationCapacity ?? 0;
+    return loads.populationLoad.get(idx) ?? 0;
   }
   if (serviceId === ServiceId.EducationHigh) {
-    if (template.jobsCapacity !== undefined) return template.jobsCapacity;
-    if (template.populationCapacity !== undefined) return template.populationCapacity * WORKER_SHARE;
+    const jobLoad = loads.jobLoad.get(idx);
+    if (jobLoad !== undefined) return jobLoad;
+    // Fallback to worker share of population when no job load exists yet.
+    const popLoad = loads.populationLoad.get(idx);
+    return popLoad !== undefined ? popLoad * WORKER_SHARE : 0;
   }
   return 0;
 }
@@ -97,14 +159,15 @@ export function recomputeEducation(state: GameState): EducationStats {
   let highServed = 0;
   let elementaryCapacity = 0;
   let highCapacity = 0;
+  const loads = computeEducationLoads(state);
 
-  state.tiles.forEach((tile) => {
+  state.tiles.forEach((tile, idx) => {
     tile.services.served[ServiceId.EducationElementary] = false;
     tile.services.served[ServiceId.EducationHigh] = false;
     tile.services.scores[ServiceId.EducationElementary] = 0;
     tile.services.scores[ServiceId.EducationHigh] = 0;
-    elementaryLoad += estimateEducationLoad(tile, ServiceId.EducationElementary);
-    highLoad += estimateEducationLoad(tile, ServiceId.EducationHigh);
+    elementaryLoad += estimateEducationLoad(idx, tile, ServiceId.EducationElementary, loads);
+    highLoad += estimateEducationLoad(idx, tile, ServiceId.EducationHigh, loads);
   });
 
   for (const building of state.buildings) {
@@ -132,7 +195,7 @@ export function recomputeEducation(state: GameState): EducationStats {
       const y = Math.floor(idx / state.width);
       const tile = getTile(state, x, y);
       if (!tile) continue;
-      const load = estimateEducationLoad(tile, template.service.id);
+      const load = estimateEducationLoad(idx, tile, template.service.id, loads);
       if (load <= 0) continue;
       const remaining = Math.max(0, capacity - used);
       if (remaining <= 0) break;
