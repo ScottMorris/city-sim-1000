@@ -65,6 +65,7 @@ function requireElement<T extends Element>(selector: string): T {
 }
 
 const toolbar = requireElement<HTMLDivElement>('#toolbar');
+const viewport = requireElement<HTMLDivElement>('#viewport');
 const wrapper = requireElement<HTMLDivElement>('#canvas-wrapper');
 const moneyEl = requireElement<HTMLDivElement>('#money');
 const budgetNetEl = requireElement<HTMLDivElement>('#budget-net');
@@ -89,6 +90,19 @@ const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
+
+const syncToolbarBaseHeight = () => {
+  const primaryRow = toolbar.querySelector<HTMLElement>('.toolbar-row');
+  if (!primaryRow) return;
+  const styles = getComputedStyle(toolbar);
+  const paddingTop = parseFloat(styles.paddingTop) || 0;
+  const paddingBottom = parseFloat(styles.paddingBottom) || 0;
+  const borderTop = parseFloat(styles.borderTopWidth) || 0;
+  const borderBottom = parseFloat(styles.borderBottomWidth) || 0;
+  const baseHeight =
+    primaryRow.getBoundingClientRect().height + paddingTop + paddingBottom + borderTop + borderBottom;
+  viewport.style.setProperty('--toolbar-base-height', `${baseHeight}px`);
+};
 
 function ensureSettingsShape(settings?: GameState['settings']): GameState['settings'] {
   const minimapDefaults = createDefaultMinimapSettings();
@@ -506,6 +520,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   );
   radioController = toolbarControllers.radio;
   applySettings(state.settings);
+  syncToolbarBaseHeight();
+  window.addEventListener('resize', syncToolbarBaseHeight);
+  requestAnimationFrame(syncToolbarBaseHeight);
 
   bindPersistenceControls({
     saveBtn,

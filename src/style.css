@@ -89,7 +89,10 @@ body {
   background: #0d1a2f;
   border-top: 2px solid #1f2c4b;
   border-bottom: 2px solid #1f2c4b;
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
   overflow-x: auto;
   overflow-y: visible;
   z-index: 25;
@@ -341,6 +344,7 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  padding-top: var(--toolbar-base-height, 72px);
 }
 
 .canvas-wrapper {
