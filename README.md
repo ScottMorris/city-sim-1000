@@ -27,6 +27,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Terraform tools for land, water, trees, parks, bulldozing, and infrastructure (roads, rail, power lines).
 - Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers (pipes coming soon with an underground view).
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
+- Education submenu with Elementary and High Schools that need power, flood coverage along roads, and gently influence demand and decay when underserved.
 - Soft over-zoning: pending zones only trim demand with caps/floors so big paint jobs trickle-build, and high demand can still break through.
 - Labour-aware demand: aggregate unemployment and job vacancies nudge R/C/I demand without simulating individual citizens.
 - Light decay: zone buildings slowly abandon under sustained low demand, no power, or unhappy tiles; abandoned lots auto-clear to zoned tiles and can regrow.
@@ -58,7 +59,7 @@ Then open the provided local URL. The service worker caches assets after first l
 
 ## Controls (quick reference)
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.
-- Tools: click toolbar buttons or hotkeys — Inspect (`I`), Raise (`E`), Lower (`Q`), Water paint (`F`), Trees (`T`), Road (`R`), Rail (`L`), Power Lines (`P`), Hydro (`H`), Pump (`U`), Tower (`Y`), Residential (`Z`), Commercial (`X`), Industrial (`C`), Park (`K`), Bulldoze (`B`).
+- Tools: click toolbar buttons or hotkeys — Inspect (`I`), Raise (`E`), Lower (`Q`), Water paint (`F`), Trees (`T`), Road (`R`), Rail (`L`), Power Lines (`P`), Hydro (`H`), Pump (`U`), Tower (`Y`), Elementary School (`J`), High School (`N`), Residential (`Z`), Commercial (`X`), Industrial (`C`), Park (`K`), Bulldoze (`B`).
 - Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x).
 - Inspector: select Inspect, click a tile to see utilities, status, and capacity; pin the tool info card to keep build stats visible.
 
