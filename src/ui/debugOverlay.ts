@@ -123,9 +123,15 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
       <div class="debug-section">
         <div class="debug-heading">Zones</div>
         <div class="debug-row"><span>Residential</span><strong>${stats.zones.residential}</strong></div>
-        <div class="debug-row"><span>Commercial</span><strong>${stats.zones.commercial}</strong></div>
-        <div class="debug-row"><span>Industrial</span><strong>${stats.zones.industrial}</strong></div>
-      </div>
+      <div class="debug-row"><span>Commercial</span><strong>${stats.zones.commercial}</strong></div>
+      <div class="debug-row"><span>Industrial</span><strong>${stats.zones.industrial}</strong></div>
+    </div>
+    <div class="debug-section">
+      <div class="debug-heading">Education</div>
+      <div class="debug-row"><span>Score</span><strong>${(stats.education.score * 100).toFixed(0)}%</strong></div>
+      <div class="debug-row"><span>Elementary</span><strong>${(stats.education.elementaryCoverage * 100).toFixed(0)}%</strong></div>
+      <div class="debug-row"><span>High School</span><strong>${(stats.education.highCoverage * 100).toFixed(0)}%</strong></div>
+    </div>
       <div class="debug-section">
         <div class="debug-heading">Demand</div>
         <div class="debug-hint">Over-zoning penalty: ${state.settings?.pendingPenaltyEnabled ?? true ? 'On' : 'Off'}</div>

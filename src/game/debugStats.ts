@@ -2,6 +2,7 @@ import { BuildingStatus, getBuildingTemplate } from './buildings';
 import { GameState, TileKind } from './gameState';
 import { computeDemand } from './demand';
 import { computeLabourStats, LabourStats } from './computeLabourStats';
+import { ServiceId } from './services';
 
 export interface DemandDetails {
   base: number;
@@ -45,6 +46,11 @@ export interface SimulationDebugStats {
     waterUse: number;
     waterBalance: number;
   };
+  education: {
+    score: number;
+    elementaryCoverage: number;
+    highCoverage: number;
+  };
   demand: {
     residential: number;
     commercial: number;
@@ -74,6 +80,9 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
   let developedResidentialZones = 0;
   let developedCommercialZones = 0;
   let developedIndustrialZones = 0;
+  const educationScore = state.education?.score ?? 0;
+  const elementaryCoverage = state.education?.elementaryCoverage ?? 0;
+  const highCoverage = state.education?.highCoverage ?? 0;
 
   const pumpTemplate = getBuildingTemplate(TileKind.WaterPump);
 
@@ -192,6 +201,11 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
       waterOutput: buildingWaterOutput,
       waterUse: buildingWaterUse,
       waterBalance: state.utilities.water
+    },
+    education: {
+      score: educationScore,
+      elementaryCoverage,
+      highCoverage
     },
     demand: {
       residential: residentialDemand.value,
