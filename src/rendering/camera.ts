@@ -24,7 +24,9 @@ export function screenToTile(
   clientY: number
 ) {
   const rect = canvas.getBoundingClientRect();
-  const x = (clientX - rect.left - camera.x) / (tileSize * camera.scale);
-  const y = (clientY - rect.top - camera.y) / (tileSize * camera.scale);
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = ((clientX - rect.left) * scaleX - camera.x) / (tileSize * camera.scale);
+  const y = ((clientY - rect.top) * scaleY - camera.y) / (tileSize * camera.scale);
   return { x: Math.floor(x), y: Math.floor(y) };
 }

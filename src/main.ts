@@ -100,6 +100,7 @@ let hovered: Position | null = null;
 let selected: Position | null = null;
 let isPanning = false;
 let isPainting = false;
+let pointerActive = false;
 let panStart = { x: 0, y: 0 };
 let cameraStart = { x: 0, y: 0 };
 let lastPainted: Position | null = null;
@@ -135,6 +136,9 @@ const centerCameraOnTile = (tileX: number, tileY: number) => {
   camera.y = wrapper.clientHeight / 2 - (targetY + 0.5) * size;
 };
 
+const isInBounds = (pos: Position) =>
+  pos.x >= 0 && pos.y >= 0 && pos.x < state.width && pos.y < state.height;
+
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
   if (tool === Tool.Inspect) {
@@ -151,23 +155,43 @@ function applyCurrentTool(tilePos: Position) {
 }
 
 function attachViewportEvents(canvas: HTMLCanvasElement) {
+  const pointerDebugEnabled = import.meta.env.DEV && localStorage.getItem('debug-pointer') === '1';
+  const logPointerToTile = (phase: string, e: PointerEvent, tilePos: Position) => {
+    if (!pointerDebugEnabled) return;
+    const rect = canvas.getBoundingClientRect();
+    console.debug('[pointer->tile]', phase, {
+      client: { x: e.clientX, y: e.clientY, buttons: e.buttons },
+      offsetFromCanvas: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      canvasCssSize: { width: rect.width, height: rect.height },
+      canvasPixelSize: { width: canvas.width, height: canvas.height },
+      tilePos,
+      tileSizePx: TILE_SIZE * camera.scale,
+      camera: { ...camera }
+    });
+  };
+
   wrapper.addEventListener('contextmenu', (e) => e.preventDefault());
 
   wrapper.addEventListener('pointerdown', (e) => {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
-    hovered = tilePos;
+    logPointerToTile('pointerdown', e, tilePos);
+    hovered = isInBounds(tilePos) ? tilePos : null;
+    pointerActive = true;
     if (e.button === 2 || e.button === 1 || e.altKey) {
       isPanning = true;
       panStart = { x: e.clientX, y: e.clientY };
       cameraStart = { ...camera };
       return;
     }
-    isPainting = true;
-    lastPainted = tilePos;
-    applyCurrentTool(tilePos);
+    if (hovered) {
+      isPainting = true;
+      lastPainted = hovered;
+      applyCurrentTool(hovered);
+    }
   });
 
   wrapper.addEventListener('pointermove', (e) => {
+    pointerActive = e.buttons !== 0;
     if (isPanning) {
       const dx = e.clientX - panStart.x;
       const dy = e.clientY - panStart.y;
@@ -176,17 +200,18 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       return;
     }
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
-    hovered = tilePos;
+    logPointerToTile('pointermove', e, tilePos);
+    hovered = isInBounds(tilePos) ? tilePos : null;
     const primaryDown = (e.buttons & 1) !== 0;
-    if (primaryDown && tool !== Tool.Inspect) {
+    if (primaryDown && tool !== Tool.Inspect && hovered) {
       if (!isPainting) {
         isPainting = true;
       }
       const alreadyPainted =
-        lastPainted && lastPainted.x === tilePos.x && lastPainted.y === tilePos.y;
+        lastPainted && lastPainted.x === hovered.x && lastPainted.y === hovered.y;
       if (!alreadyPainted) {
-        applyCurrentTool(tilePos);
-        lastPainted = tilePos;
+        applyCurrentTool(hovered);
+        lastPainted = hovered;
       }
     } else if (!primaryDown && isPainting) {
       stopPainting();
@@ -197,6 +222,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPanning = false;
     isPainting = false;
     lastPainted = null;
+    pointerActive = false;
   };
 
   wrapper.addEventListener('pointerup', stopPainting);
@@ -233,7 +259,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   }
   simulation.update(deltaSeconds);
   const overlayMode = state.settings?.minimap?.mode ?? 'base';
-  renderer.render(state, hovered, selected, overlayMode);
+  renderer.render(state, hovered, selected, overlayMode, pointerActive);
   hud.update(state);
   hud.renderOverlays(state, selected, tool);
   minimap?.update(state, camera);

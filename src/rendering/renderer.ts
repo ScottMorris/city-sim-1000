@@ -76,7 +76,13 @@ export class MapRenderer {
     this.app.stage.addChild(this.container);
   }
 
-  render(state: GameState, hovered: Position | null, selected: Position | null, overlayMode: MinimapMode = 'base') {
+  render(
+    state: GameState,
+    hovered: Position | null,
+    selected: Position | null,
+    overlayMode: MinimapMode = 'base',
+    pointerActive = false
+  ) {
     const size = this.tileSize * this.camera.scale;
     const spriteSize = size;
     this.mapLayer.clear();
@@ -142,7 +148,16 @@ export class MapRenderer {
     this.drawBuildingMarkers(state, size, buildingLookup);
     this.drawTileLabels(state, size);
     if (hovered) {
-      this.overlayLayer.lineStyle(2, 0xffffff);
+      const hoverOutline = pointerActive ? 0xffcc70 : 0xffffff;
+      this.overlayLayer.beginFill(hoverOutline, 0.16);
+      this.overlayLayer.drawRect(
+        this.camera.x + hovered.x * size,
+        this.camera.y + hovered.y * size,
+        size,
+        size
+      );
+      this.overlayLayer.endFill();
+      this.overlayLayer.lineStyle(2, hoverOutline);
       this.overlayLayer.drawRect(
         this.camera.x + hovered.x * size,
         this.camera.y + hovered.y * size,
