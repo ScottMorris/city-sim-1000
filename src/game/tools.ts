@@ -141,6 +141,10 @@ const registry: ToolRegistry = {
     success: false,
     message: 'Underground pipes view is coming soon.'
   }),
+  [Tool.ElementarySchool]: ({ state, x, y }, cost) =>
+    placeTemplatedBuilding(state, getBuildingTemplate(TileKind.ElementarySchool), x, y, cost),
+  [Tool.HighSchool]: ({ state, x, y }, cost) =>
+    placeTemplatedBuilding(state, getBuildingTemplate(TileKind.HighSchool), x, y, cost),
   [Tool.Residential]: ({ state, x, y }, cost) => {
     const tile = getTile(state, x, y);
     if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
