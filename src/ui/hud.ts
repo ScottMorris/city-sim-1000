@@ -4,6 +4,7 @@ import { Position } from '../rendering/renderer';
 import { Tool } from '../game/toolTypes';
 import { getToolDetails } from './toolInfo';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
+import { ServiceId } from '../game/services';
 
 export interface HudElements {
   moneyEl: HTMLElement;
@@ -187,6 +188,27 @@ export function createHud(elements: HudElements) {
                   : ''
               }`
                 : '';
+            const educationServed =
+              hasTileSelection.services?.served[ServiceId.EducationElementary] ||
+              hasTileSelection.services?.served[ServiceId.EducationHigh];
+            const educationScore = Math.max(
+              hasTileSelection.services?.scores[ServiceId.EducationElementary] ?? 0,
+              hasTileSelection.services?.scores[ServiceId.EducationHigh] ?? 0
+            );
+            const educationLine =
+              educationServed || educationScore > 0
+                ? `<div class="status-line"><span>Education</span><strong>${educationServed ? 'Served' : 'Underserved'}${educationScore > 0 ? ` • ${(educationScore * 100).toFixed(0)}%` : ''}</strong></div>`
+                : '';
+            const serviceBlock =
+              educationLine || (template?.service && building)
+                ? `<div class="info-subtitle">Services</div>
+                    ${educationLine}
+                    ${
+                      template?.service && building?.state.serviceLoad?.slotsUsed[template.service.id] !== undefined
+                        ? `<div class="status-line"><span>${template.name} load</span><strong>${building.state.serviceLoad.slotsUsed[template.service.id]} / ${template.service.capacity}</strong></div>`
+                        : ''
+                    }`
+                : '';
 
             return `
               <div class="info-section">
@@ -197,7 +219,9 @@ export function createHud(elements: HudElements) {
                 <div class="status-line"><span>Type</span><strong>${hasTileSelection.kind}</strong></div>
                 <div class="status-line"><span>Happy</span><strong>${hasTileSelection.happiness.toFixed(2)}</strong></div>
                 <div class="status-line"><span>Power</span><strong>${hasTileSelection.powered ? 'On' : 'Off'}</strong></div>
+                ${educationLine ? educationLine : ''}
                 ${buildingBlock ? `<div class="divider"></div>${buildingBlock}` : ''}
+                ${serviceBlock ? `<div class="divider"></div>${serviceBlock}` : ''}
                 <div class="map-stats">Utilities are modeled globally; keep power and water above zero to grow.</div>
               </div>
             `;
