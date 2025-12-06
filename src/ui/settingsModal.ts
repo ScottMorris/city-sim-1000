@@ -418,7 +418,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
 
     hotkeys.append(hotkeyHint, resetHotkeys, hotkeyTable, conflictLabel);
 
-    body.append(general, minimap, input, audio, accessibility, cosmetics, hotkeys);
+    body.append(audio, general, minimap, input, accessibility, cosmetics, hotkeys);
     modal.append(headerRow, body);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);

@@ -447,12 +447,22 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     nextSettings: GameState['settings'],
     options: { skipHotkeyReload?: boolean } = {}
   ) => {
-    state.settings = ensureSettingsShape(nextSettings);
-    minimap?.syncSettings(state.settings.minimap);
-    minimap?.markDirty();
+    const previous = state.settings;
+    const normalized = ensureSettingsShape(nextSettings);
+    const minimapChanged =
+      previous.minimap.open !== normalized.minimap.open ||
+      previous.minimap.size !== normalized.minimap.size ||
+      previous.minimap.mode !== normalized.minimap.mode;
+    const hotkeysChanged =
+      JSON.stringify(previous.hotkeys ?? {}) !== JSON.stringify(normalized.hotkeys ?? {});
+    state.settings = normalized;
+    if (minimapChanged) {
+      minimap?.syncSettings(state.settings.minimap);
+      minimap?.markDirty();
+    }
     updatePendingPenaltyBtn();
     radioController?.setVolume(state.settings.audio.radioVolume ?? 1);
-    if (!options.skipHotkeyReload) {
+    if (!options.skipHotkeyReload && hotkeysChanged) {
       rebuildHotkeys();
     }
   };
