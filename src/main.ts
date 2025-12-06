@@ -248,6 +248,9 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     logPointerToTile('pointermove', e, tilePos);
     hovered = isInBounds(tilePos) ? tilePos : null;
+    if (tool === Tool.Inspect) {
+      selected = hovered;
+    }
     const primaryDown = (e.buttons & 1) !== 0;
     if (primaryDown && tool !== Tool.Inspect && hovered) {
       if (!isPainting) {
