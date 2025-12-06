@@ -35,7 +35,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile. Open the Budget screen for a quarterly breakdown, detailed revenue/expense shares, and runway.
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.
-- Minimap in the bottom-right HUD: base map view with click-to-jump navigation and viewport framing; overlay modes coming soon.
+- Minimap in the bottom-right HUD: base map view plus power, water, and alerts overlay modes with click-to-jump navigation and viewport framing; the same mode tints the main map for quick at-a-glance status.
 - Toolbar radio widget with emoji controls (previous/play/pause/next), a scrolling marquee for artist/title, hover/focus popover for details, and an offline state when no playlist exists.
 
 ## Budget and economy

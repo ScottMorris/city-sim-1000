@@ -76,7 +76,7 @@
 - **Services/Amenities**: Parks impact radius; add fire/health placeholders; basic pollution/happiness modifiers for industrial proximity.
 - **Persistence/UX**: Manual modal (done), add hotkeys/help overlay, autosave cadence toggle; seed maps (random vs flat); settings panel for input options (e.g., invert keyboard pan).
 - **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
-- **UI/Navigation**: Minimap anchored to the bottom-right HUD for quick orientation on large maps. Base view is live (terrain/zones/roads/rail/power lines/buildings) with click-to-jump camera controls and a viewport rectangle; overlays (power, water, alerts) remain on deck but the mode switch scaffold is in place. Limit canvas size and coarsen sampling on huge maps to stay performant.
+- **UI/Navigation**: Minimap anchored to the bottom-right HUD for quick orientation on large maps. Base view is live (terrain/zones/roads/rail/power lines/buildings) with click-to-jump camera controls and a viewport rectangle; power, water, and alerts overlay modes are available and also tint the main map for quick at-a-glance feedback. Limit canvas size and coarsen sampling on huge maps to stay performant.
 
 ## Radio widget (toolbar)
 - Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) and a short marquee showing `Artist — Title`; the marquee pauses while paused and resets on track changes.

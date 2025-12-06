@@ -1,10 +1,11 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Camera } from './camera';
-import { GameState, TileKind, getTile } from '../game/gameState';
+import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
 import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
+import { isPowerCarrier, isZone } from '../game/adjacency';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;
@@ -75,12 +76,16 @@ export class MapRenderer {
     this.app.stage.addChild(this.container);
   }
 
-  render(state: GameState, hovered: Position | null, selected: Position | null) {
+  render(state: GameState, hovered: Position | null, selected: Position | null, overlayMode: MinimapMode = 'base') {
     const size = this.tileSize * this.camera.scale;
     const spriteSize = size;
     this.mapLayer.clear();
     this.tilesWithSprites.clear();
     const { buildingLookup, multiTileCoverage } = createBuildingLookup(state);
+    const buildingStatuses = new Map<number, BuildingStatus>();
+    for (const building of state.buildings) {
+      buildingStatuses.set(building.id, building.state.status);
+    }
     for (let y = 0; y < state.height; y++) {
       for (let x = 0; x < state.width; x++) {
         const tile = getTile(state, x, y)!;
@@ -133,6 +138,7 @@ export class MapRenderer {
     this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
+    this.drawOverlayTints(state, size, overlayMode, buildingStatuses);
     this.drawBuildingMarkers(state, size, buildingLookup);
     this.drawTileLabels(state, size);
     if (hovered) {
@@ -157,6 +163,76 @@ export class MapRenderer {
 
   getCanvas() {
     return this.app.canvas;
+  }
+
+  private drawOverlayTints(
+    state: GameState,
+    size: number,
+    overlayMode: MinimapMode,
+    buildingStatuses: Map<number, BuildingStatus>
+  ) {
+    if (overlayMode === 'base') return;
+
+    const pickTint = (tile: ReturnType<typeof getTile>) => {
+      if (!tile) return null;
+
+      if (overlayMode === 'power') {
+        if (tile.powerPlantType) return { color: 0x81e8ff, alpha: 0.35 };
+        if (tile.kind === TileKind.PowerLine || tile.powerOverlay) {
+          return { color: tile.powered ? 0x7bf0ff : 0xff99c2, alpha: 0.35 };
+        }
+        const carrier = isPowerCarrier(tile);
+        if (carrier && tile.powered) return { color: 0x7bffb7, alpha: 0.26 };
+        if (carrier && !tile.powered) return { color: 0xff7b7b, alpha: 0.32 };
+        return null;
+      }
+
+      if (overlayMode === 'water') {
+        if (tile.kind === TileKind.Water) return { color: 0x2f7be5, alpha: 0.32 };
+        if (tile.kind === TileKind.WaterPipe) return { color: 0x4cc3ff, alpha: 0.38 };
+        if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
+          return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
+        }
+        if (tile.powered) return { color: 0x5aa2ff, alpha: 0.12 };
+        return null;
+      }
+
+      if (overlayMode === 'alerts') {
+        const zone = isZone(tile);
+        const buildingStatus = tile.buildingId !== undefined ? buildingStatuses.get(tile.buildingId) : undefined;
+        let severity = 0;
+        if (tile.abandoned) severity = 2;
+        if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
+        if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
+        if (zone && !tile.powered) severity = Math.max(severity, 2);
+        if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
+
+        if (severity === 0) {
+          if (zone) return { color: 0x7bffb7, alpha: 0.16 };
+          return null;
+        }
+        if (severity === 1) return { color: 0xffcc70, alpha: 0.28 };
+        return { color: 0xff7b7b, alpha: 0.33 };
+      }
+
+      return null;
+    };
+
+    for (let y = 0; y < state.height; y++) {
+      for (let x = 0; x < state.width; x++) {
+        const tile = getTile(state, x, y);
+        const tint = pickTint(tile);
+        if (!tint) continue;
+        this.overlayLayer.beginFill(tint.color, tint.alpha);
+        this.overlayLayer.drawRect(
+          this.camera.x + x * size,
+          this.camera.y + y * size,
+          size,
+          size
+        );
+        this.overlayLayer.endFill();
+      }
+    }
   }
 
   private drawBuildingMarkers(

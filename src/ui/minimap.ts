@@ -8,6 +8,8 @@ import {
   createDefaultMinimapSettings,
   getTile
 } from '../game/gameState';
+import { BuildingStatus } from '../game/buildings';
+import { isPowerCarrier, isZone } from '../game/adjacency';
 import { TILE_SIZE, palette as tilePalette } from '../rendering/sprites';
 
 export interface MinimapOptions {
@@ -34,6 +36,13 @@ const SIZE_PRESETS: Record<MinimapSize, number> = {
 };
 const MIN_PANEL_WIDTH = 220;
 const PANEL_PADDING = 10 * 2; // matches .minimap-panel padding
+const MODE_COPY: Record<MinimapMode, { subtitle: string; hint: string }> = {
+  base: { subtitle: 'Base view', hint: 'Terrain, zones, transport, and power lines.' },
+  power: { subtitle: 'Power overlay', hint: 'Green = powered, red = unpowered; teal = generation/lines.' },
+  water: { subtitle: 'Water overlay', hint: 'Water tiles, pumps, towers, and pipes pop in blue for now.' },
+  alerts: { subtitle: 'Alerts overlay', hint: 'Heatmap for abandoned, unpowered, or unhappy zones.' }
+};
+const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts'];
 
 interface LayoutInfo {
   sizePx: number;
@@ -76,16 +85,25 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   title.textContent = 'Minimap';
   const subtitle = document.createElement('div');
   subtitle.className = 'minimap-subtitle';
-  subtitle.textContent = 'Base view';
+  subtitle.textContent = MODE_COPY[settings.mode].subtitle;
   titleBlock.append(title, subtitle);
 
   const baseModeBtn = document.createElement('button');
   baseModeBtn.className = 'chip-button';
   baseModeBtn.textContent = 'Base';
   baseModeBtn.addEventListener('click', () => setMode('base'));
-  const powerModeBtn = createDisabledModeButton('Power');
-  const waterModeBtn = createDisabledModeButton('Water');
-  const alertsModeBtn = createDisabledModeButton('Alerts');
+  const powerModeBtn = document.createElement('button');
+  powerModeBtn.className = 'chip-button';
+  powerModeBtn.textContent = 'Power';
+  powerModeBtn.addEventListener('click', () => setMode('power'));
+  const waterModeBtn = document.createElement('button');
+  waterModeBtn.className = 'chip-button';
+  waterModeBtn.textContent = 'Water';
+  waterModeBtn.addEventListener('click', () => setMode('water'));
+  const alertsModeBtn = document.createElement('button');
+  alertsModeBtn.className = 'chip-button';
+  alertsModeBtn.textContent = 'Alerts';
+  alertsModeBtn.addEventListener('click', () => setMode('alerts'));
 
   const sizeBtn = document.createElement('button');
   sizeBtn.className = 'chip-button';
@@ -127,7 +145,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   const hint = document.createElement('div');
   hint.className = 'minimap-hint';
-  hint.textContent = 'Overlays coming soon.';
+  hint.textContent = MODE_COPY[settings.mode].hint;
   body.append(hint);
 
   container.append(header, body);
@@ -154,14 +172,15 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   });
 
   function mergeSettings(next: Partial<MinimapSettings> | MinimapSettings): MinimapSettings {
-    return {
+    const merged = {
       ...createDefaultMinimapSettings(),
       ...(next ?? {})
     };
+    const safeMode = ALLOWED_MODES.includes(merged.mode) ? merged.mode : 'base';
+    return { ...merged, mode: safeMode };
   }
 
   function setMode(mode: MinimapMode) {
-    if (mode !== 'base') return;
     settings = { ...settings, mode };
     dirty = true;
     syncUi();
@@ -192,9 +211,14 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   function syncUi() {
     container.classList.toggle('minimap-collapsed', !settings.open);
     baseModeBtn.classList.toggle('active', settings.mode === 'base');
+    powerModeBtn.classList.toggle('active', settings.mode === 'power');
+    waterModeBtn.classList.toggle('active', settings.mode === 'water');
+    alertsModeBtn.classList.toggle('active', settings.mode === 'alerts');
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
     body.style.display = settings.open ? 'block' : 'none';
+    subtitle.textContent = MODE_COPY[settings.mode].subtitle;
+    hint.textContent = MODE_COPY[settings.mode].hint;
     const widthPx = Math.max(SIZE_PRESETS[settings.size] + PANEL_PADDING + 12, MIN_PANEL_WIDTH);
     container.style.width = `${widthPx}px`;
   }
@@ -226,17 +250,66 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     dirty = true;
   }
 
-  function pickColor(tile: ReturnType<typeof getTile>) {
+  function createBuildingStatusLookup(state: GameState) {
+    const lookup = new Map<number, BuildingStatus>();
+    for (const building of state.buildings) {
+      lookup.set(building.id, building.state.status);
+    }
+    return lookup;
+  }
+
+  function pickModeColor(tile: ReturnType<typeof getTile>, buildingStatuses: Map<number, BuildingStatus>) {
     if (!tile) return '#000';
+
+    if (settings.mode === 'power') {
+      if (tile.powerPlantType) return '#81e8ff';
+      if (tile.kind === TileKind.PowerLine || tile.powerOverlay) {
+        return tile.powered ? '#7bf0ff' : '#ff99c2';
+      }
+      const carrier = isPowerCarrier(tile);
+      if (carrier && tile.powered) return 'rgba(123, 255, 183, 0.9)';
+      if (carrier && !tile.powered) return 'rgba(255, 123, 123, 0.9)';
+      return 'rgba(20, 32, 50, 0.9)';
+    }
+
+    if (settings.mode === 'water') {
+      if (tile.kind === TileKind.Water) return '#1f68d6';
+      if (tile.kind === TileKind.WaterPipe) return '#4cc3ff';
+      if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
+        return tile.powered ? '#7ad5ff' : '#ffcc70';
+      }
+      return tile.powered ? 'rgba(90, 162, 255, 0.25)' : 'rgba(16, 26, 42, 0.92)';
+    }
+
+    if (settings.mode === 'alerts') {
+      const zone = isZone(tile);
+      const buildingStatus = tile.buildingId !== undefined ? buildingStatuses.get(tile.buildingId) : undefined;
+      let severity = 0;
+      if (tile.abandoned) severity = 2;
+      if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
+      if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
+      if (zone && !tile.powered) severity = Math.max(severity, 2);
+      if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
+
+      if (severity === 0) {
+        if (zone) return 'rgba(123, 255, 183, 0.35)';
+        return 'rgba(16, 26, 42, 0.92)';
+      }
+      if (severity === 1) return 'rgba(255, 204, 112, 0.95)';
+      return 'rgba(255, 123, 123, 0.95)';
+    }
+
+    // Base/default mode.
     if (tile.powerOverlay) return colorToCss(palette[TileKind.PowerLine]);
     if (tile.railUnderlay) return colorToCss(palette[TileKind.Rail]);
     if (tile.roadUnderlay) return colorToCss(palette[TileKind.Road]);
     return colorToCss(palette[tile.kind]);
   }
 
-  function drawBase(state: GameState) {
+  function drawMap(state: GameState) {
     if (!layout) layoutCanvases();
     const frame = layout!;
+    const buildingStatuses = createBuildingStatusLookup(state);
     baseCtx.clearRect(0, 0, frame.sizePx, frame.sizePx);
     const targetPixels = Math.max(60, frame.sizePx - 12);
     const step = Math.max(1, Math.ceil(Math.max(state.width, state.height) / targetPixels));
@@ -251,7 +324,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
         const tileX = Math.min(state.width - 1, sx * step);
         const tileY = Math.min(state.height - 1, sy * step);
         const tile = getTile(state, tileX, tileY);
-        baseCtx.fillStyle = pickColor(tile);
+        baseCtx.fillStyle = pickModeColor(tile, buildingStatuses);
         baseCtx.fillRect(offsetX + sx * scale, offsetY + sy * scale, scale, scale);
       }
     }
@@ -329,7 +402,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     }
     const shouldRedraw = dirty || tickChanged;
     if (shouldRedraw && now - lastRedraw > 80) {
-      drawBase(state);
+      drawMap(state);
     }
     drawViewport(camera, state);
   }
@@ -353,13 +426,4 @@ function toCss(color: number) {
 
 function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
-}
-
-function createDisabledModeButton(label: string) {
-  const btn = document.createElement('button');
-  btn.className = 'chip-button';
-  btn.textContent = label;
-  btn.disabled = true;
-  btn.title = 'Overlay coming soon';
-  return btn;
 }

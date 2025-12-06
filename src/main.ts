@@ -80,12 +80,17 @@ const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
 
 function ensureSettingsShape(settings?: GameState['settings']): GameState['settings'] {
+  const minimapDefaults = createDefaultMinimapSettings();
+  const minimapSettings = {
+    ...minimapDefaults,
+    ...(settings?.minimap ?? {})
+  };
+  if (!['base', 'power', 'water', 'alerts'].includes(minimapSettings.mode)) {
+    minimapSettings.mode = 'base';
+  }
   return {
     pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
-    minimap: {
-      ...createDefaultMinimapSettings(),
-      ...(settings?.minimap ?? {})
-    }
+    minimap: minimapSettings
   };
 }
 
@@ -227,7 +232,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     camera.y -= movement.y * KEYBOARD_PAN_SPEED * deltaSeconds;
   }
   simulation.update(deltaSeconds);
-  renderer.render(state, hovered, selected);
+  const overlayMode = state.settings?.minimap?.mode ?? 'base';
+  renderer.render(state, hovered, selected, overlayMode);
   hud.update(state);
   hud.renderOverlays(state, selected, tool);
   minimap?.update(state, camera);

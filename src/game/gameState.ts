@@ -36,7 +36,7 @@ export interface Tile {
   services: TileServiceState;
 }
 
-export type MinimapMode = 'base';
+export type MinimapMode = 'base' | 'power' | 'water' | 'alerts';
 
 export type MinimapSize = 'small' | 'medium';
 
