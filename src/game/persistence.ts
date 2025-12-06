@@ -162,7 +162,6 @@ export function deserialize(payload: string): GameState {
       ...createDefaultMinimapSettings(),
       ...(incomingSettings.minimap ?? {})
     },
-    input: { ...defaultSettings.input, ...(incomingSettings.input ?? {}) },
     accessibility: {
       ...defaultSettings.accessibility,
       ...(incomingSettings.accessibility ?? {})
