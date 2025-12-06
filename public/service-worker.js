@@ -1,9 +1,16 @@
 const CACHE_NAME = 'city-sim-cache-v1';
-const OFFLINE_URLS = ['/', '/index.html', '/manual.html', '/manifest.webmanifest'];
+const scopeBase = self.registration?.scope ?? '/';
+const OFFLINE_URLS = ['.', 'index.html', 'manual.html', 'manifest.webmanifest'].map((url) =>
+  new URL(url, scopeBase).href
+);
+const FALLBACK_URL = new URL('index.html', scopeBase).href;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_URLS)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(OFFLINE_URLS))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -27,7 +34,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           return response;
         })
-        .catch(() => caches.match('/index.html'));
+        .catch(() => caches.match(FALLBACK_URL));
     })
   );
 });

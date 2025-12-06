@@ -1,3 +1,5 @@
+import { withBasePath } from '../utils/assetPaths';
+
 export interface RadioTrack {
   id: string;
   title: string;
@@ -15,7 +17,7 @@ export interface RadioPlaylist {
   tracks: RadioTrack[];
 }
 
-export const DEFAULT_PLAYLIST_PATH = '/audio/radio/playlist.json';
+export const DEFAULT_PLAYLIST_PATH = withBasePath('audio/radio/playlist.json');
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -67,17 +69,18 @@ function normaliseTrack(entry: unknown): RadioTrack | null {
   const normalisedFallbacks = Array.isArray(fallbackSrc)
     ? fallbackSrc.filter((item): item is string => isNonEmptyString(item))
     : undefined;
+  const fallbackPaths = normalisedFallbacks?.map((item) => withBasePath(item));
 
   return {
     id,
     title,
     artist,
-    src,
-    cover: isNonEmptyString(cover) ? cover : undefined,
+    src: withBasePath(src),
+    cover: isNonEmptyString(cover) ? withBasePath(cover) : undefined,
     duration: typeof duration === 'number' ? duration : undefined,
     loudnessLufs: typeof loudnessLufs === 'number' ? loudnessLufs : undefined,
     loop: typeof loop === 'boolean' ? loop : undefined,
-    fallbackSrc: normalisedFallbacks && normalisedFallbacks.length > 0 ? normalisedFallbacks : undefined
+    fallbackSrc: fallbackPaths && fallbackPaths.length > 0 ? fallbackPaths : undefined
   };
 }
 
