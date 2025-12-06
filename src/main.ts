@@ -265,8 +265,15 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     (e) => {
       e.preventDefault();
       const inputSettings = state.settings.input;
+      const panSpeed = PAN_SPEEDS[inputSettings.panSpeed] ?? PAN_SPEEDS.normal;
+      if (e.ctrlKey) {
+        const scale = (panSpeed / PAN_SPEEDS.normal) * 0.35;
+        const horizontalDelta =
+          Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        camera.x -= horizontalDelta * scale;
+        return;
+      }
       if (inputSettings.shiftScrollsToPan && e.shiftKey) {
-        const panSpeed = PAN_SPEEDS[inputSettings.panSpeed] ?? PAN_SPEEDS.normal;
         const scale = (panSpeed / PAN_SPEEDS.normal) * 0.35;
         camera.x -= e.deltaX * scale;
         camera.y -= e.deltaY * scale;

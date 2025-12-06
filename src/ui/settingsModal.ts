@@ -216,7 +216,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
 
     const shiftScrollRow = createToggleRow({
       label: 'Shift + scroll pans',
-      description: 'Hold Shift while scrolling to pan instead of zooming.',
+      description: 'Hold Shift to pan instead of zooming; Ctrl + scroll pans horizontally.',
       checked: draft.input.shiftScrollsToPan,
       onChange: (checked) => {
         draft.input.shiftScrollsToPan = checked;
