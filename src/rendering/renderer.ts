@@ -103,14 +103,14 @@ export class MapRenderer {
         if (spriteInfo && 'texture' in spriteInfo) {
           const { texture, widthTiles, heightTiles, borderWidth = 0 } = spriteInfo;
           if (borderWidth > 0) {
-            this.mapLayer.beginFill(0x000000, 0.8);
-            this.mapLayer.drawRect(
-              this.camera.x + x * size,
-              this.camera.y + y * size,
-              spriteSize * widthTiles,
-              spriteSize * heightTiles
-            );
-            this.mapLayer.endFill();
+            this.mapLayer
+              .rect(
+                this.camera.x + x * size,
+                this.camera.y + y * size,
+                spriteSize * widthTiles,
+                spriteSize * heightTiles
+              )
+              .fill({ color: 0x000000, alpha: 0.8 });
           }
           const sprite = this.getOrCreateSprite(idx, texture);
           sprite.position.set(
@@ -132,14 +132,14 @@ export class MapRenderer {
         } else {
           this.hideSprite(idx);
           const color = getTileColour(tile, this.palette);
-          this.mapLayer.beginFill(color, 0.95);
-          this.mapLayer.drawRect(
-            this.camera.x + x * size,
-            this.camera.y + y * size,
-            size,
-            size
-          );
-          this.mapLayer.endFill();
+          this.mapLayer
+            .rect(
+              this.camera.x + x * size,
+              this.camera.y + y * size,
+              size,
+              size
+            )
+            .fill({ color, alpha: 0.95 });
         }
       }
     }
@@ -156,30 +156,25 @@ export class MapRenderer {
         ? this.footprintFits(state, hovered, hoverFootprint)
         : true;
       const hoverOutline = fitsFootprint ? (pointerActive ? 0xffcc70 : 0xffffff) : 0xff7b7b;
-      this.overlayLayer.beginFill(hoverOutline, 0.16);
-      this.overlayLayer.drawRect(
-        this.camera.x + hovered.x * size,
-        this.camera.y + hovered.y * size,
-        size * hoverFootprint.width,
-        size * hoverFootprint.height
-      );
-      this.overlayLayer.endFill();
-      this.overlayLayer.lineStyle(2, hoverOutline);
-      this.overlayLayer.drawRect(
-        this.camera.x + hovered.x * size,
-        this.camera.y + hovered.y * size,
-        size * hoverFootprint.width,
-        size * hoverFootprint.height
-      );
+      this.overlayLayer
+        .rect(
+          this.camera.x + hovered.x * size,
+          this.camera.y + hovered.y * size,
+          size * hoverFootprint.width,
+          size * hoverFootprint.height
+        )
+        .fill({ color: hoverOutline, alpha: 0.16 })
+        .stroke({ width: 2, color: hoverOutline });
     }
     if (selected) {
-      this.overlayLayer.lineStyle(2, 0x7bffb7);
-      this.overlayLayer.drawRect(
-        this.camera.x + selected.x * size,
-        this.camera.y + selected.y * size,
-        size,
-        size
-      );
+      this.overlayLayer
+        .rect(
+          this.camera.x + selected.x * size,
+          this.camera.y + selected.y * size,
+          size,
+          size
+        )
+        .stroke({ width: 2, color: 0x7bffb7 });
     }
   }
 
@@ -263,14 +258,14 @@ export class MapRenderer {
         const tile = getTile(state, x, y);
         const tint = pickTint(tile);
         if (!tint) continue;
-        this.overlayLayer.beginFill(tint.color, tint.alpha);
-        this.overlayLayer.drawRect(
-          this.camera.x + x * size,
-          this.camera.y + y * size,
-          size,
-          size
-        );
-        this.overlayLayer.endFill();
+        this.overlayLayer
+          .rect(
+            this.camera.x + x * size,
+            this.camera.y + y * size,
+            size,
+            size
+          )
+          .fill({ color: tint.color, alpha: tint.alpha });
       }
     }
   }
@@ -305,9 +300,7 @@ export class MapRenderer {
       const cx = this.camera.x + (origin.x + width / 2) * size;
       const cy = this.camera.y + (origin.y + height / 2) * size;
       const color = powered ? 0x7bffb7 : 0xff7b7b;
-      this.overlayLayer.beginFill(color, 0.9);
-      this.overlayLayer.drawCircle(cx, cy, radius);
-      this.overlayLayer.endFill();
+      this.overlayLayer.circle(cx, cy, radius).fill({ color, alpha: 0.9 });
     }
   }
 
