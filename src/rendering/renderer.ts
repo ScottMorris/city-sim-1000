@@ -38,7 +38,7 @@ export class MapRenderer {
     camera: Camera,
     tileSize: number,
     palette: Record<TileKind, number>,
-    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {}, powerLine: {} }
+    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {}, powerLine: {}, residentialHouses: [] }
   ) {
     this.app = new Application();
     this.parent = parent;
@@ -166,12 +166,28 @@ export class MapRenderer {
   ) {
     const radius = Math.max(2, size * 0.12);
     for (const building of state.buildings) {
-      const template = buildingLookup.get(building.id)?.template ?? getBuildingTemplate(building.templateId);
+      const lookup = buildingLookup.get(building.id);
+      const template = lookup?.template ?? getBuildingTemplate(building.templateId);
+      const origin = lookup?.origin ?? building.origin;
       const width = template?.footprint.width ?? 1;
       const height = template?.footprint.height ?? 1;
-      const cx = this.camera.x + (building.origin.x + width / 2) * size;
-      const cy = this.camera.y + (building.origin.y + height / 2) * size;
+      let hasSpriteCoverage = false;
+      for (let dy = 0; dy < height && !hasSpriteCoverage; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+          const tx = origin.x + dx;
+          const ty = origin.y + dy;
+          if (tx < 0 || ty < 0 || tx >= state.width || ty >= state.height) continue;
+          const idx = ty * state.width + tx;
+          if (this.tilesWithSprites.has(idx)) {
+            hasSpriteCoverage = true;
+            break;
+          }
+        }
+      }
       const powered = building.state.status === BuildingStatus.Active;
+      if (powered && hasSpriteCoverage) continue;
+      const cx = this.camera.x + (origin.x + width / 2) * size;
+      const cy = this.camera.y + (origin.y + height / 2) * size;
       const color = powered ? 0x7bffb7 : 0xff7b7b;
       this.overlayLayer.beginFill(color, 0.9);
       this.overlayLayer.drawCircle(cx, cy, radius);

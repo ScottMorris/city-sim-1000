@@ -53,6 +53,15 @@ export function resolveTileSprite(
   buildingLookup: BuildingLookup
 ): TileSpriteInfo {
   if (!tile) return undefined;
+  if (tile.kind === TileKind.Residential && tile.buildingId !== undefined) {
+    const houseTextures = tileTextures.residentialHouses ?? [];
+    if (houseTextures.length > 0) {
+      const texture = houseTextures[(tile.buildingId - 1) % houseTextures.length];
+      if (texture) {
+        return { texture, widthTiles: 1, heightTiles: 1 };
+      }
+    }
+  }
   if (tile.kind === TileKind.HydroPlant && tile.powerPlantType) {
     const footprint =
       (tile.buildingId && buildingLookup.get(tile.buildingId)?.template?.footprint) ??

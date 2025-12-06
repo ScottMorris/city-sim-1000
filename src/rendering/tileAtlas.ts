@@ -7,6 +7,7 @@ export interface TileTextures {
   road: Partial<Record<'north' | 'east' | 'south' | 'west', PIXI.Texture>>;
   powerPlant: Partial<Record<PowerPlantType, PIXI.Texture>>;
   powerLine: Partial<Record<'north' | 'east' | 'south' | 'west', PIXI.Texture>>;
+  residentialHouses: PIXI.Texture[];
 }
 
 export async function loadPaletteTexture(): Promise<PIXI.Texture> {
@@ -37,6 +38,12 @@ const powerLineTexturePaths = {
   horizontal: '/assets/tiles/power-line-horizontal.png',
   vertical: '/assets/tiles/power-line-vertical.png'
 } as const;
+
+const residentialHouseTexturePaths = [
+  '/assets/tiles/res-house-1.png',
+  '/assets/tiles/res-house-2.png',
+  '/assets/tiles/res-house-3.png'
+];
 
 export async function loadTileTextures(): Promise<TileTextures> {
   const tileEntries = await Promise.all(
@@ -71,10 +78,15 @@ export async function loadTileTextures(): Promise<TileTextures> {
     south: powerLineVertical
   };
 
+  const residentialHouses = await Promise.all(
+    residentialHouseTexturePaths.map(async (path) => PIXI.Assets.load<PIXI.Texture>(path))
+  );
+
   return {
     tiles: Object.fromEntries(tileEntries),
     road: Object.fromEntries(roadEntries),
     powerPlant: Object.fromEntries(powerPlantEntries),
-    powerLine: powerLineTextures
+    powerLine: powerLineTextures,
+    residentialHouses
   };
 }
