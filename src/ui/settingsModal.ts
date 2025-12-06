@@ -331,7 +331,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
     const cosmetics = createSection('Cosmetics', 'Visual toggles for sprites.');
     const geminiRow = createToggleRow({
       label: 'Gemini building sprites',
-      description: 'Adds Gemini easter-egg commercial sprites.',
+      description: 'Adds Gemini easter-egg sprites.',
       checked: draft.cosmetics.geminiBuildingsEnabled,
       onChange: (checked) => {
         draft.cosmetics.geminiBuildingsEnabled = checked;
