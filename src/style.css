@@ -1116,7 +1116,7 @@ footer {
   font-size: 12px;
 }
 
-.settings-modal-open footer {
+.modal-hide-footer footer {
   display: none;
 }
 

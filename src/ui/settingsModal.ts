@@ -92,7 +92,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
   const { getSettings, onApply } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((e: KeyboardEvent) => void) | null = null;
-  const bodyClass = 'settings-modal-open';
+  const bodyClass = 'modal-hide-footer';
   const cleanup = () => {
     if (backdrop) {
       backdrop.remove();
