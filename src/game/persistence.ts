@@ -169,6 +169,7 @@ export function deserialize(payload: string): GameState {
     },
     audio: { ...defaultSettings.audio, ...(incomingSettings.audio ?? {}) },
     hotkeys: { ...defaultSettings.hotkeys, ...(incomingSettings.hotkeys ?? {}) },
+    input: { ...defaultSettings.input, ...(incomingSettings.input ?? {}) },
     cosmetics: {
       ...defaultSettings.cosmetics,
       ...(incomingSettings.cosmetics ?? {})

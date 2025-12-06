@@ -266,7 +266,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       e.preventDefault();
       const inputSettings = state.settings.input;
       const panSpeed = PAN_SPEEDS[inputSettings.panSpeed] ?? PAN_SPEEDS.normal;
-      if (e.ctrlKey) {
+      if (e.ctrlKey && inputSettings.ctrlScrollsToPan) {
         const scale = (panSpeed / PAN_SPEEDS.normal) * 0.35;
         const horizontalDelta =
           Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;

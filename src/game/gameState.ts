@@ -56,6 +56,7 @@ export interface InputSettings {
   edgeScrollEnabled: boolean;
   edgeScrollSpeed: PanSpeedPreset;
   shiftScrollsToPan: boolean;
+  ctrlScrollsToPan: boolean;
   zoomSensitivity: ZoomSensitivityPreset;
 }
 
@@ -162,6 +163,7 @@ export function createDefaultInputSettings(): InputSettings {
     edgeScrollEnabled: false,
     edgeScrollSpeed: 'normal',
     shiftScrollsToPan: false,
+    ctrlScrollsToPan: true,
     zoomSensitivity: 'normal'
   };
 }

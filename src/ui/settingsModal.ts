@@ -216,10 +216,20 @@ export function initSettingsModal(options: SettingsModalOptions) {
 
     const shiftScrollRow = createToggleRow({
       label: 'Shift + scroll pans',
-      description: 'Hold Shift to pan instead of zooming; Ctrl + scroll pans horizontally.',
+      description: 'Hold Shift while scrolling to pan instead of zooming.',
       checked: draft.input.shiftScrollsToPan,
       onChange: (checked) => {
         draft.input.shiftScrollsToPan = checked;
+        onApply(draft);
+      }
+    });
+
+    const ctrlScrollRow = createToggleRow({
+      label: 'Ctrl + scroll pans horizontally',
+      description: 'Scroll with Ctrl held to pan left/right instead of zooming.',
+      checked: draft.input.ctrlScrollsToPan,
+      onChange: (checked) => {
+        draft.input.ctrlScrollsToPan = checked;
         onApply(draft);
       }
     });
@@ -255,7 +265,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
         onApply(draft);
       }
     });
-    input.append(invertPanRow, panSpeedRow, shiftScrollRow, zoomRow, edgeScrollRow);
+    input.append(invertPanRow, panSpeedRow, shiftScrollRow, ctrlScrollRow, zoomRow, edgeScrollRow);
 
     const audio = createSection('Audio', 'Radio volume and future effects.');
     const radioRow = document.createElement('div');
