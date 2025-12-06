@@ -1,4 +1,5 @@
 import { PowerPlantType } from './constants';
+import { defaultHotkeys } from '../ui/hotkeys';
 import type { BudgetHistory } from './budget';
 import type { BuildingInstance } from './buildings';
 import type { ServiceSystemState, TileServiceState } from './services';
@@ -46,9 +47,40 @@ export interface MinimapSettings {
   mode: MinimapMode;
 }
 
+export type PanSpeedPreset = 'slow' | 'normal' | 'fast';
+export type ZoomSensitivityPreset = 'gentle' | 'normal' | 'fast';
+
+export interface InputSettings {
+  invertPan: boolean;
+  panSpeed: PanSpeedPreset;
+  edgeScrollEnabled: boolean;
+  edgeScrollSpeed: PanSpeedPreset;
+  shiftScrollsToPan: boolean;
+  zoomSensitivity: ZoomSensitivityPreset;
+}
+
+export interface AccessibilitySettings {
+  reducedMotion: boolean;
+  highContrastOverlays: boolean;
+}
+
+export interface AudioSettings {
+  radioVolume: number;
+  sfxVolume: number;
+}
+
+export interface CosmeticSettings {
+  geminiBuildingsEnabled: boolean;
+}
+
 export interface GameSettings {
   pendingPenaltyEnabled: boolean;
   minimap: MinimapSettings;
+  input: InputSettings;
+  accessibility: AccessibilitySettings;
+  audio: AudioSettings;
+  hotkeys: Record<string, string[]>;
+  cosmetics: CosmeticSettings;
 }
 
 export interface UtilityStats {
@@ -123,10 +155,46 @@ export function createDefaultMinimapSettings(): MinimapSettings {
   return { open: true, size: 'medium', mode: 'base' };
 }
 
+export function createDefaultInputSettings(): InputSettings {
+  return {
+    invertPan: false,
+    panSpeed: 'normal',
+    edgeScrollEnabled: false,
+    edgeScrollSpeed: 'normal',
+    shiftScrollsToPan: false,
+    zoomSensitivity: 'normal'
+  };
+}
+
+export function createDefaultAccessibilitySettings(): AccessibilitySettings {
+  return {
+    reducedMotion: false,
+    highContrastOverlays: false
+  };
+}
+
+export function createDefaultAudioSettings(): AudioSettings {
+  return {
+    radioVolume: 1,
+    sfxVolume: 1
+  };
+}
+
+export function createDefaultCosmeticSettings(): CosmeticSettings {
+  return {
+    geminiBuildingsEnabled: true
+  };
+}
+
 export function createDefaultSettings(): GameSettings {
   return {
     pendingPenaltyEnabled: true,
-    minimap: createDefaultMinimapSettings()
+    minimap: createDefaultMinimapSettings(),
+    input: createDefaultInputSettings(),
+    accessibility: createDefaultAccessibilitySettings(),
+    audio: createDefaultAudioSettings(),
+    hotkeys: { ...defaultHotkeys },
+    cosmetics: createDefaultCosmeticSettings()
   };
 }
 

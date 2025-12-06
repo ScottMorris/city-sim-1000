@@ -977,6 +977,145 @@ footer {
   margin: 6px 0;
 }
 
+.settings-modal {
+  padding: 14px;
+  gap: 12px;
+  background: linear-gradient(180deg, #0f1b2f 0%, #0a1324 100%);
+}
+
+.settings-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-header {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e8f1ff;
+}
+
+.settings-subtitle {
+  color: #9fb2d1;
+  font-size: 12px;
+}
+
+.settings-body {
+  display: grid;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.settings-section {
+  background: #0a1224;
+  border: 1px solid #1f2c4b;
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-section-title {
+  font-weight: 700;
+  color: #e8f1ff;
+}
+
+.settings-section-hint {
+  color: #9fb2d1;
+  font-size: 12px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #13203b;
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-label {
+  font-weight: 600;
+  color: #e8f1ff;
+}
+
+.settings-description {
+  color: #9fb2d1;
+  font-size: 12px;
+}
+
+.settings-row input[type='checkbox'] {
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+}
+
+.settings-row select,
+.settings-row input[type='range'],
+.settings-row input[type='text'] {
+  background: #0f1d34;
+  border: 1px solid #223557;
+  color: #e8f1ff;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.settings-row input[type='range'] {
+  width: 180px;
+}
+
+.settings-row input[type='text'] {
+  width: 100%;
+}
+
+.settings-warning {
+  color: #9fb2d1;
+  font-size: 12px;
+}
+
+.settings-warning.error {
+  color: #f08c42;
+}
+
+.hotkey-table {
+  display: grid;
+  gap: 6px;
+}
+
+.hotkey-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.hotkey-row-header {
+  color: #9fb2d1;
+  font-size: 12px;
+}
+
 @media (max-width: 900px) {
   body { font-size: 12px; }
   .hud { grid-template-columns: repeat(2, minmax(120px, 1fr)); }

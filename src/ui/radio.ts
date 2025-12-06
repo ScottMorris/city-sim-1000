@@ -4,12 +4,15 @@ type RadioStatus = 'loading' | 'offline' | 'ready';
 
 export interface RadioWidget {
   refresh: () => Promise<void>;
+  setVolume: (volume: number) => void;
+  getVolume: () => number;
 }
 
 export interface RadioWidgetOptions {
   playlistUrl?: string;
   fetchImpl?: typeof fetch;
   audioFactory?: () => HTMLAudioElement;
+  initialVolume?: number;
 }
 
 export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions = {}): RadioWidget {
@@ -17,6 +20,7 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   const fetchImpl = options.fetchImpl ?? fetch;
   const audio = options.audioFactory ? options.audioFactory() : new Audio();
   audio.preload = 'metadata';
+  audio.volume = Math.min(1, Math.max(0, options.initialVolume ?? 1));
 
   host.classList.add('toolbar-radio-slot');
   host.innerHTML = '';
@@ -333,6 +337,10 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   void loadPlaylist();
 
   return {
-    refresh: loadPlaylist
+    refresh: loadPlaylist,
+    setVolume: (volume: number) => {
+      audio.volume = Math.min(1, Math.max(0, volume));
+    },
+    getVolume: () => audio.volume
   };
 }

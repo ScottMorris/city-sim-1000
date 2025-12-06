@@ -1,6 +1,15 @@
 import './style.css';
 import { Application } from 'pixi.js';
-import { createDefaultMinimapSettings, createInitialState, GameState, getTile } from './game/gameState';
+import {
+  createDefaultAccessibilitySettings,
+  createDefaultAudioSettings,
+  createDefaultCosmeticSettings,
+  createDefaultInputSettings,
+  createDefaultMinimapSettings,
+  createInitialState,
+  GameState,
+  getTile
+} from './game/gameState';
 import { applyTool } from './game/tools';
 import { Tool } from './game/toolTypes';
 import { Simulation } from './game/simulation';
@@ -13,11 +22,13 @@ import { registerServiceWorker } from './pwa/registerServiceWorker';
 import { createHud } from './ui/hud';
 import { bindPersistenceControls, showManualModal, showToast } from './ui/dialogs';
 import { initDebugOverlay } from './ui/debugOverlay';
-import { initHotkeys, defaultHotkeys, type HotkeyController } from './ui/hotkeys';
+import { initHotkeys, defaultHotkeys, type HotkeyAction, type HotkeyController } from './ui/hotkeys';
 import { initToolbar, updateToolbar } from './ui/toolbar';
 import { createNotificationCenter } from './ui/notifications';
 import { initMinimap } from './ui/minimap';
 import { initBudgetModal } from './ui/budgetModal';
+import { initSettingsModal } from './ui/settingsModal';
+import type { RadioWidget } from './ui/radio';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -88,9 +99,18 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
   if (!['base', 'power', 'water', 'alerts'].includes(minimapSettings.mode)) {
     minimapSettings.mode = 'base';
   }
+  const inputDefaults = createDefaultInputSettings();
+  const accessibilityDefaults = createDefaultAccessibilitySettings();
+  const audioDefaults = createDefaultAudioSettings();
+  const cosmeticDefaults = createDefaultCosmeticSettings();
   return {
     pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
-    minimap: minimapSettings
+    minimap: minimapSettings,
+    input: { ...inputDefaults, ...(settings?.input ?? {}) },
+    accessibility: { ...accessibilityDefaults, ...(settings?.accessibility ?? {}) },
+    audio: { ...audioDefaults, ...(settings?.audio ?? {}) },
+    hotkeys: { ...defaultHotkeys, ...(settings?.hotkeys ?? {}) },
+    cosmetics: { ...cosmeticDefaults, ...(settings?.cosmetics ?? {}) }
   };
 }
 
@@ -115,7 +135,17 @@ const simulation = new Simulation(state, {
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
 let minimap: ReturnType<typeof initMinimap> | null = null;
-const KEYBOARD_PAN_SPEED = 700;
+let radioController: RadioWidget | null = null;
+const PAN_SPEEDS = {
+  slow: 420,
+  normal: 700,
+  fast: 1000
+} as const;
+const ZOOM_STEPS = {
+  gentle: 0.06,
+  normal: 0.1,
+  fast: 0.18
+} as const;
 const simSpeeds = {
   slow: 0.5,
   fast: 1,
@@ -234,8 +264,17 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     'wheel',
     (e) => {
       e.preventDefault();
+      const inputSettings = state.settings.input;
+      if (inputSettings.shiftScrollsToPan && e.shiftKey) {
+        const panSpeed = PAN_SPEEDS[inputSettings.panSpeed] ?? PAN_SPEEDS.normal;
+        const scale = (panSpeed / PAN_SPEEDS.normal) * 0.35;
+        camera.x -= e.deltaX * scale;
+        camera.y -= e.deltaY * scale;
+        return;
+      }
       const prevScale = camera.scale;
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      const zoomStep = ZOOM_STEPS[inputSettings.zoomSensitivity] ?? ZOOM_STEPS.normal;
+      const factor = e.deltaY > 0 ? 1 - zoomStep : 1 + zoomStep;
       camera.scale = Math.min(3, Math.max(0.5, camera.scale * factor));
       const rect = canvas.getBoundingClientRect();
       const focusX = e.clientX - rect.left;
@@ -254,8 +293,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   lastFrame = now;
   const movement = hotkeys?.getMovementVector();
   if (movement) {
-    camera.x -= movement.x * KEYBOARD_PAN_SPEED * deltaSeconds;
-    camera.y -= movement.y * KEYBOARD_PAN_SPEED * deltaSeconds;
+    const panSpeed = PAN_SPEEDS[state.settings.input.panSpeed] ?? PAN_SPEEDS.normal;
+    const direction = state.settings.input.invertPan ? -1 : 1;
+    camera.x -= movement.x * panSpeed * direction * deltaSeconds;
+    camera.y -= movement.y * panSpeed * direction * deltaSeconds;
   }
   simulation.update(deltaSeconds);
   const overlayMode = state.settings?.minimap?.mode ?? 'base';
@@ -304,17 +345,6 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     };
   };
 
-  minimap = initMinimap({
-    root: wrapper,
-    settings: state.settings.minimap,
-    onSettingsChange: (next) => {
-      state.settings.minimap = next;
-    },
-    onJumpToTile: ({ x, y }) => centerCameraOnTile(x, y),
-    getViewportSize: minimapViewport,
-    palette
-  });
-
   const setTool = (nextTool: Tool) => {
     tool = nextTool;
     updateToolbar(toolbar, nextTool);
@@ -333,83 +363,132 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     }
   };
 
-  initToolbar(
+  const updatePendingPenaltyBtn = () => {
+    const enabled = state.settings?.pendingPenaltyEnabled ?? true;
+    pendingPenaltyBtn.textContent = `Penalties: ${enabled ? 'On' : 'Off'}`;
+    pendingPenaltyBtn.classList.toggle('active', enabled);
+  };
+
+  const handleHotkeyAction = (action: HotkeyAction) => {
+    switch (action) {
+      case 'selectInspect':
+        setTool(Tool.Inspect);
+        return;
+      case 'selectTerraformRaise':
+        setTool(Tool.TerraformRaise);
+        return;
+      case 'selectTerraformLower':
+        setTool(Tool.TerraformLower);
+        return;
+      case 'selectWater':
+        setTool(Tool.Water);
+        return;
+      case 'selectTrees':
+        setTool(Tool.Tree);
+        return;
+      case 'selectRoad':
+        setTool(Tool.Road);
+        return;
+      case 'selectRail':
+        setTool(Tool.Rail);
+        return;
+      case 'selectPower':
+        setTool(Tool.PowerLine);
+        return;
+      case 'selectHydro':
+        setTool(Tool.HydroPlant);
+        return;
+      case 'selectWaterPump':
+        setTool(Tool.WaterPump);
+        return;
+      case 'selectWaterTower':
+        setTool(Tool.WaterTower);
+        return;
+      case 'selectResidential':
+        setTool(Tool.Residential);
+        return;
+      case 'selectCommercial':
+        setTool(Tool.Commercial);
+        return;
+      case 'selectIndustrial':
+        setTool(Tool.Industrial);
+        return;
+      case 'selectPark':
+        setTool(Tool.Park);
+        return;
+      case 'selectBulldoze':
+        setTool(Tool.Bulldoze);
+        return;
+      case 'speedSlow':
+        setSimSpeed('slow');
+        return;
+      case 'speedFast':
+        setSimSpeed('fast');
+        return;
+      case 'speedLudicrous':
+        setSimSpeed('ludicrous');
+        return;
+      case 'toggleMinimap':
+        minimap?.toggleOpen();
+        minimap?.markDirty();
+        return;
+    }
+  };
+
+  const rebuildHotkeys = () => {
+    hotkeys?.dispose();
+    hotkeys = initHotkeys({
+      bindings: state.settings.hotkeys ?? defaultHotkeys,
+      onAction: handleHotkeyAction
+    });
+  };
+
+  const applySettings = (
+    nextSettings: GameState['settings'],
+    options: { skipHotkeyReload?: boolean } = {}
+  ) => {
+    state.settings = ensureSettingsShape(nextSettings);
+    minimap?.syncSettings(state.settings.minimap);
+    minimap?.markDirty();
+    updatePendingPenaltyBtn();
+    radioController?.setVolume(state.settings.audio.radioVolume ?? 1);
+    if (!options.skipHotkeyReload) {
+      rebuildHotkeys();
+    }
+  };
+
+  let settingsModal: ReturnType<typeof initSettingsModal> | null = null;
+
+  minimap = initMinimap({
+    root: wrapper,
+    settings: state.settings.minimap,
+    onSettingsChange: (next) => {
+      applySettings({ ...state.settings, minimap: next }, { skipHotkeyReload: true });
+    },
+    onJumpToTile: ({ x, y }) => centerCameraOnTile(x, y),
+    getViewportSize: minimapViewport,
+    palette
+  });
+
+  settingsModal = initSettingsModal({
+    getSettings: () => state.settings,
+    onApply: (next) => applySettings(next)
+  });
+
+  const toolbarControllers = initToolbar(
     toolbar,
     (nextTool) => {
       setTool(nextTool);
     },
     tool,
-    { onOpenBudget: () => budgetModal.open() }
-  );
-
-  hotkeys = initHotkeys({
-    bindings: defaultHotkeys,
-    onAction: (action) => {
-      switch (action) {
-        case 'selectInspect':
-          setTool(Tool.Inspect);
-          return;
-        case 'selectTerraformRaise':
-          setTool(Tool.TerraformRaise);
-          return;
-        case 'selectTerraformLower':
-          setTool(Tool.TerraformLower);
-          return;
-        case 'selectWater':
-          setTool(Tool.Water);
-          return;
-        case 'selectTrees':
-          setTool(Tool.Tree);
-          return;
-        case 'selectRoad':
-          setTool(Tool.Road);
-          return;
-        case 'selectRail':
-          setTool(Tool.Rail);
-          return;
-        case 'selectPower':
-          setTool(Tool.PowerLine);
-          return;
-        case 'selectHydro':
-          setTool(Tool.HydroPlant);
-          return;
-        case 'selectWaterPump':
-          setTool(Tool.WaterPump);
-          return;
-        case 'selectWaterTower':
-          setTool(Tool.WaterTower);
-          return;
-        case 'selectResidential':
-          setTool(Tool.Residential);
-          return;
-        case 'selectCommercial':
-          setTool(Tool.Commercial);
-          return;
-        case 'selectIndustrial':
-          setTool(Tool.Industrial);
-          return;
-        case 'selectPark':
-          setTool(Tool.Park);
-          return;
-        case 'selectBulldoze':
-          setTool(Tool.Bulldoze);
-          return;
-        case 'speedSlow':
-          setSimSpeed('slow');
-          return;
-        case 'speedFast':
-          setSimSpeed('fast');
-          return;
-        case 'speedLudicrous':
-          setSimSpeed('ludicrous');
-          return;
-        case 'toggleMinimap':
-          minimap?.toggleOpen();
-          minimap?.markDirty();
-          return;
-      }
+    {
+      onOpenBudget: () => budgetModal.open(),
+      onOpenSettings: () => settingsModal?.open(),
+      radioVolume: state.settings.audio.radioVolume
     }
-  });
+  );
+  radioController = toolbarControllers.radio;
+  applySettings(state.settings);
 
   bindPersistenceControls({
     saveBtn,
@@ -420,12 +499,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state,
     onStateLoaded: (loaded) => {
       state = loaded;
-      state.settings = ensureSettingsShape(state.settings);
+      applySettings(state.settings);
       simulation.setState(state);
       centerCamera(state, wrapper, TILE_SIZE, camera);
-      minimap?.syncSettings(state.settings.minimap);
-      minimap?.markDirty();
-      updatePendingPenaltyBtn();
     }
   });
 
@@ -438,16 +514,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state
   });
 
-  const updatePendingPenaltyBtn = () => {
-    const enabled = state.settings?.pendingPenaltyEnabled ?? true;
-    pendingPenaltyBtn.textContent = `Penalties: ${enabled ? 'On' : 'Off'}`;
-    pendingPenaltyBtn.classList.toggle('active', enabled);
-  };
-
   pendingPenaltyBtn.addEventListener('click', () => {
     const current = state.settings?.pendingPenaltyEnabled ?? true;
-    state.settings.pendingPenaltyEnabled = !current;
-    updatePendingPenaltyBtn();
+    applySettings({ ...state.settings, pendingPenaltyEnabled: !current }, { skipHotkeyReload: true });
     showToast(`Over-zoning penalty ${state.settings.pendingPenaltyEnabled ? 'enabled' : 'disabled'}`);
   });
 

@@ -161,6 +161,17 @@ export function deserialize(payload: string): GameState {
     minimap: {
       ...createDefaultMinimapSettings(),
       ...(incomingSettings.minimap ?? {})
+    },
+    input: { ...defaultSettings.input, ...(incomingSettings.input ?? {}) },
+    accessibility: {
+      ...defaultSettings.accessibility,
+      ...(incomingSettings.accessibility ?? {})
+    },
+    audio: { ...defaultSettings.audio, ...(incomingSettings.audio ?? {}) },
+    hotkeys: { ...defaultSettings.hotkeys, ...(incomingSettings.hotkeys ?? {}) },
+    cosmetics: {
+      ...defaultSettings.cosmetics,
+      ...(incomingSettings.cosmetics ?? {})
     }
   };
   return parsed as GameState;

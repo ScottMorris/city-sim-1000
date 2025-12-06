@@ -1,6 +1,6 @@
 import { Tool } from '../game/toolTypes';
 import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
-import { initRadioWidget } from './radio';
+import { initRadioWidget, type RadioWidget } from './radio';
 
 const powerOptions: Tool[] = [
   Tool.PowerLine,
@@ -16,10 +16,10 @@ export function initToolbar(
   toolbar: HTMLElement,
   onSelect: (tool: Tool) => void,
   initial: Tool,
-  options: { onOpenBudget?: () => void } = {}
-) {
+  options: { onOpenBudget?: () => void; onOpenSettings?: () => void; radioVolume?: number } = {}
+): { radio: RadioWidget } {
   toolbar.innerHTML = '';
-  const { onOpenBudget } = options;
+  const { onOpenBudget, onOpenSettings, radioVolume } = options;
 
   const primaryRow = document.createElement('div');
   primaryRow.className = 'toolbar-row';
@@ -81,6 +81,18 @@ export function initToolbar(
   radioGroup.appendChild(radioHost);
   trailingCluster.appendChild(radioGroup);
 
+  if (onOpenSettings) {
+    const settingsGroup = document.createElement('div');
+    settingsGroup.className = 'toolbar-group';
+    const settingsBtn = document.createElement('button');
+    settingsBtn.className = 'tool-button';
+    settingsBtn.textContent = '⚙️ Settings';
+    settingsBtn.title = 'Open settings';
+    settingsBtn.addEventListener('click', () => onOpenSettings());
+    settingsGroup.appendChild(settingsBtn);
+    trailingCluster.appendChild(settingsGroup);
+  }
+
   if (onOpenBudget) {
     const budgetGroup = document.createElement('div');
     budgetGroup.className = 'toolbar-group';
@@ -116,8 +128,9 @@ export function initToolbar(
   powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? '⚡ Lines' : undefined));
   waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? '🚰 Pump' : undefined));
 
-  initRadioWidget(radioHost);
+  const radio = initRadioWidget(radioHost, { initialVolume: radioVolume });
   updateToolbar(toolbar, initial);
+  return { radio };
 }
 
 export function updateToolbar(toolbar: HTMLElement, active: Tool) {
