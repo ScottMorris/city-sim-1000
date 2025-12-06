@@ -95,7 +95,7 @@ body {
   top: 0;
   overflow-x: auto;
   overflow-y: visible;
-  z-index: 25;
+  z-index: 2000;
 }
 
 .toolbar-row,
@@ -103,6 +103,7 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  position: relative;
 }
 
 .toolbar-spacer {
@@ -114,7 +115,66 @@ body {
 }
 
 .toolbar-sub {
-  padding-left: 4px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: none;
+  padding: 8px 10px;
+  margin: 0;
+  align-self: flex-start;
+  background: #0f1d34;
+  border: 2px solid #223557;
+  border-radius: 14px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5);
+  width: fit-content;
+  min-width: max-content;
+  z-index: 2100;
+  pointer-events: auto;
+}
+
+.toolbar-sub::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 10px;
+  right: 10px;
+  height: 6px;
+  background: #0f1d34;
+  border-left: 2px solid #223557;
+  border-right: 2px solid #223557;
+  border-top: 2px solid #223557;
+  border-radius: 12px 12px 0 0;
+}
+
+.toolbar-sub.toolbar-sub-open {
+  border-color: #223557;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55);
+}
+
+.toolbar-sub.toolbar-sub-open::before {
+  border-color: #223557;
+}
+
+.toolbar-group-sub-open {
+  border-color: var(--accent);
+  box-shadow: 0 4px 0 #0a1020, 0 0 10px rgba(123, 255, 183, 0.22);
+  z-index: 2004;
+}
+
+.toolbar-group-sub-open::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -6px;
+  height: 8px;
+  background: #0f1d34;
+  border-left: 2px solid #223557;
+  border-right: 2px solid #223557;
+  border-bottom: 2px solid #223557;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  z-index: -1;
 }
 
 .tool-button,
@@ -160,6 +220,9 @@ body {
   border-radius: 14px;
   padding: 6px 8px;
   box-shadow: 0 4px 0 #0a1020;
+  position: relative;
+  overflow: visible;
+  z-index: 2002;
 }
 
 .toolbar-cluster {

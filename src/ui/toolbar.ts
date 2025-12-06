@@ -139,10 +139,21 @@ export function initToolbar(
 
   const radio = initRadioWidget(radioHost, { initialVolume: radioVolume });
   updateToolbar(toolbar, initial);
+
+  const restyleSubmenus = () => {
+    const activeTool = toolbar.dataset.activeTool as Tool | undefined;
+    if (activeTool) {
+      updateToolbar(toolbar, activeTool);
+    }
+  };
+  toolbar.addEventListener('scroll', restyleSubmenus);
+  window.addEventListener('resize', restyleSubmenus);
+
   return { radio };
 }
 
 export function updateToolbar(toolbar: HTMLElement, active: Tool) {
+  toolbar.dataset.activeTool = active;
   toolbar.querySelectorAll('.tool-button').forEach((btn) => {
     const key = btn.getAttribute('data-tool');
     if (!key) return;
@@ -168,13 +179,48 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
   const powerRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="power"]');
   const waterRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="water"]');
   const educationRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="education"]');
+
+  const allGroups = toolbar.querySelectorAll<HTMLElement>('.toolbar-group');
+  allGroups.forEach((group) => group.classList.remove('toolbar-group-sub-open'));
+
+  const positionSubmenu = (row: HTMLDivElement | null, anchorTool: Tool) => {
+    if (!row) return;
+    // Keep the submenu container aligned with the originating toolbar group.
+    const anchorButton = toolbar.querySelector<HTMLElement>(`.tool-button[data-tool="${anchorTool}"]`);
+    const anchorGroup = anchorButton?.closest<HTMLElement>('.toolbar-group');
+    if (!anchorButton || !anchorGroup) return;
+    const anchorRect = anchorGroup.getBoundingClientRect();
+    row.style.left = `${anchorRect.left}px`;
+    row.style.minWidth = `${anchorRect.width}px`;
+    row.style.top = `${anchorRect.bottom - 2}px`;
+    anchorGroup.classList.add('toolbar-group-sub-open');
+  };
+
   if (powerRow) {
-    powerRow.style.display = powerOptions.includes(active) ? 'flex' : 'none';
+    const open = powerOptions.includes(active);
+    powerRow.style.display = open ? 'flex' : 'none';
+    powerRow.style.left = '';
+    powerRow.style.top = '';
+    powerRow.style.minWidth = '';
+    powerRow.classList.toggle('toolbar-sub-open', open);
+    if (open) positionSubmenu(powerRow, Tool.PowerLine);
   }
   if (waterRow) {
-    waterRow.style.display = waterOptions.includes(active) ? 'flex' : 'none';
+    const open = waterOptions.includes(active);
+    waterRow.style.display = open ? 'flex' : 'none';
+    waterRow.style.left = '';
+    waterRow.style.top = '';
+    waterRow.style.minWidth = '';
+    waterRow.classList.toggle('toolbar-sub-open', open);
+    if (open) positionSubmenu(waterRow, Tool.WaterPump);
   }
   if (educationRow) {
-    educationRow.style.display = educationOptions.includes(active) ? 'flex' : 'none';
+    const open = educationOptions.includes(active);
+    educationRow.style.display = open ? 'flex' : 'none';
+    educationRow.style.left = '';
+    educationRow.style.top = '';
+    educationRow.style.minWidth = '';
+    educationRow.classList.toggle('toolbar-sub-open', open);
+    if (open) positionSubmenu(educationRow, Tool.ElementarySchool);
   }
 }

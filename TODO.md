@@ -8,4 +8,4 @@ Here are two ready-to-use prompts to resume later:
 - road/rail intersections with power lines crossing above.
 - road/rail connections to zones
 - Power through water buildings
--
+- Toolbar subnav border seam: investigate small blip at parent/subnav junction when submenu is open.
