@@ -91,17 +91,19 @@ const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
 
-const syncToolbarBaseHeight = () => {
-  const primaryRow = toolbar.querySelector<HTMLElement>('.toolbar-row');
-  if (!primaryRow) return;
+const syncToolbarHeights = () => {
+  const rect = toolbar.getBoundingClientRect();
   const styles = getComputedStyle(toolbar);
   const paddingTop = parseFloat(styles.paddingTop) || 0;
   const paddingBottom = parseFloat(styles.paddingBottom) || 0;
   const borderTop = parseFloat(styles.borderTopWidth) || 0;
   const borderBottom = parseFloat(styles.borderBottomWidth) || 0;
-  const baseHeight =
-    primaryRow.getBoundingClientRect().height + paddingTop + paddingBottom + borderTop + borderBottom;
+  const primaryRow = toolbar.querySelector<HTMLElement>('.toolbar-row');
+  const primaryHeight = primaryRow?.getBoundingClientRect().height ?? 0;
+  const baseHeight = Math.max(primaryHeight + paddingTop + paddingBottom + borderTop + borderBottom, 72);
+  const visibleHeight = Math.max(rect.height || 0, baseHeight);
   viewport.style.setProperty('--toolbar-base-height', `${baseHeight}px`);
+  viewport.style.setProperty('--toolbar-visible-height', `${visibleHeight}px`);
 };
 
 function ensureSettingsShape(settings?: GameState['settings']): GameState['settings'] {
@@ -369,6 +371,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const setTool = (nextTool: Tool) => {
     tool = nextTool;
     updateToolbar(toolbar, nextTool);
+    syncToolbarHeights();
   };
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
@@ -527,9 +530,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   );
   radioController = toolbarControllers.radio;
   applySettings(state.settings);
-  syncToolbarBaseHeight();
-  window.addEventListener('resize', syncToolbarBaseHeight);
-  requestAnimationFrame(syncToolbarBaseHeight);
+  syncToolbarHeights();
+  window.addEventListener('resize', syncToolbarHeights);
+  requestAnimationFrame(syncToolbarHeights);
 
   bindPersistenceControls({
     saveBtn,

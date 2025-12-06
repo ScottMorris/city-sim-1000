@@ -1,8 +1,13 @@
 import { BuildingCategory, BuildingStatus, getBuildingTemplate } from './buildings';
-import { getOrthogonalNeighbourCoords, isZone } from './adjacency';
-import type { GameState, Tile } from './gameState';
-import { getTile, TileKind } from './gameState';
+import type { GameState } from './gameState';
+import { getTile } from './gameState';
 import { ServiceId } from './services';
+import {
+  computeZoneLoads,
+  estimateZoneLoad,
+  getReachableZoneCandidates,
+  DEFAULT_WORKER_SHARE
+} from './serviceDistribution';
 
 export interface EducationStats {
   elementaryServed: number;
@@ -16,142 +21,9 @@ export interface EducationStats {
   highCoverage: number;
 }
 
-const WORKER_SHARE = 0.55;
-
 function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
 }
-
-function isRoadish(tile: Tile | undefined): boolean {
-  if (!tile) return false;
-  return tile.kind === TileKind.Road || tile.roadUnderlay === true;
-}
-
-type EducationLoadMap = {
-  populationLoad: Map<number, number>;
-  jobLoad: Map<number, number>;
-};
-
-function computeEducationLoads(state: GameState): EducationLoadMap {
-  const populationLoad = new Map<number, number>();
-  const jobLoad = new Map<number, number>();
-
-  let totalPopCap = 0;
-  let totalComCap = 0;
-  let totalIndCap = 0;
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    if (building.state.status !== BuildingStatus.Active) continue;
-    if (template.category !== BuildingCategory.Zone) continue;
-    if (template.populationCapacity) totalPopCap += template.populationCapacity;
-    if (template.jobsCapacity) {
-      if (template.tileKind === TileKind.Commercial) totalComCap += template.jobsCapacity;
-      if (template.tileKind === TileKind.Industrial) totalIndCap += template.jobsCapacity;
-    }
-  }
-
-  const totalJobCap = totalComCap + totalIndCap;
-  const jobsInCommercial = totalJobCap > 0 ? (totalComCap / totalJobCap) * state.jobs : 0;
-  const jobsInIndustrial = totalJobCap > 0 ? (totalIndCap / totalJobCap) * state.jobs : 0;
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    if (building.state.status !== BuildingStatus.Active) continue;
-    if (template.category !== BuildingCategory.Zone) continue;
-    const idx = building.origin.y * state.width + building.origin.x;
-
-    if (template.populationCapacity) {
-      const share =
-        totalPopCap > 0 ? (template.populationCapacity / totalPopCap) * state.population : 0;
-      populationLoad.set(idx, share);
-    }
-
-    if (template.jobsCapacity) {
-      if (template.tileKind === TileKind.Commercial) {
-        const share = totalComCap > 0 ? (template.jobsCapacity / totalComCap) * jobsInCommercial : 0;
-        jobLoad.set(idx, share);
-      } else if (template.tileKind === TileKind.Industrial) {
-        const share = totalIndCap > 0 ? (template.jobsCapacity / totalIndCap) * jobsInIndustrial : 0;
-        jobLoad.set(idx, share);
-      }
-    }
-  }
-
-  return { populationLoad, jobLoad };
-}
-
-function estimateEducationLoad(
-  idx: number,
-  tile: Tile | undefined,
-  serviceId: ServiceId,
-  loads: EducationLoadMap
-): number {
-  if (!tile || !isZone(tile)) return 0;
-  if (serviceId === ServiceId.EducationElementary) {
-    return loads.populationLoad.get(idx) ?? 0;
-  }
-  if (serviceId === ServiceId.EducationHigh) {
-    const jobLoad = loads.jobLoad.get(idx);
-    if (jobLoad !== undefined) return jobLoad;
-    // Fallback to worker share of population when no job load exists yet.
-    const popLoad = loads.populationLoad.get(idx);
-    return popLoad !== undefined ? popLoad * WORKER_SHARE : 0;
-  }
-  return 0;
-}
-
-function gatherReachableZones(
-  state: GameState,
-  origin: { x: number; y: number },
-  footprint: { width: number; height: number },
-  radius: number
-): Map<number, number> {
-  const reachable = new Map<number, number>();
-  const queue: Array<{ x: number; y: number; d: number }> = [];
-  const visited = new Set<number>();
-
-  for (let dy = 0; dy < footprint.height; dy++) {
-    for (let dx = 0; dx < footprint.width; dx++) {
-      queue.push({ x: origin.x + dx, y: origin.y + dy, d: 0 });
-    }
-  }
-
-  const toIndex = (x: number, y: number) => y * state.width + x;
-
-  while (queue.length) {
-    const { x, y, d } = queue.shift()!;
-    if (d > radius) continue;
-    const idx = toIndex(x, y);
-    if (visited.has(idx)) continue;
-    visited.add(idx);
-    const tile = getTile(state, x, y);
-    const isRoad = isRoadish(tile);
-    const isServedZone = isZone(tile);
-
-    if (isServedZone) {
-      const existing = reachable.get(idx);
-      reachable.set(idx, existing !== undefined ? Math.min(existing, d) : d);
-    }
-
-    // Travel along roads and through zones so interior lots can be served inside a radius.
-    if (!isRoad && !isServedZone && d > 0) continue;
-
-    for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
-      const nd = d + 1;
-      if (nd > radius) continue;
-      const neighbour = getTile(state, nx, ny);
-      if (isRoadish(neighbour) || isZone(neighbour)) {
-        queue.push({ x: nx, y: ny, d: nd });
-      }
-    }
-  }
-
-  return reachable;
-}
-
 export function recomputeEducation(state: GameState): EducationStats {
   let elementaryLoad = 0;
   let highLoad = 0;
@@ -159,15 +31,15 @@ export function recomputeEducation(state: GameState): EducationStats {
   let highServed = 0;
   let elementaryCapacity = 0;
   let highCapacity = 0;
-  const loads = computeEducationLoads(state);
+  const loads = computeZoneLoads(state, DEFAULT_WORKER_SHARE);
 
   state.tiles.forEach((tile, idx) => {
     tile.services.served[ServiceId.EducationElementary] = false;
     tile.services.served[ServiceId.EducationHigh] = false;
     tile.services.scores[ServiceId.EducationElementary] = 0;
     tile.services.scores[ServiceId.EducationHigh] = 0;
-    elementaryLoad += estimateEducationLoad(idx, tile, ServiceId.EducationElementary, loads);
-    highLoad += estimateEducationLoad(idx, tile, ServiceId.EducationHigh, loads);
+    elementaryLoad += estimateZoneLoad(idx, tile, ServiceId.EducationElementary, loads);
+    highLoad += estimateZoneLoad(idx, tile, ServiceId.EducationHigh, loads);
   });
 
   for (const building of state.buildings) {
@@ -185,8 +57,12 @@ export function recomputeEducation(state: GameState): EducationStats {
     if (template.service.id === ServiceId.EducationElementary) elementaryCapacity += capacity;
     if (template.service.id === ServiceId.EducationHigh) highCapacity += capacity;
 
-    const reachable = gatherReachableZones(state, building.origin, template.footprint, template.service.coverageRadius);
-    const candidates = Array.from(reachable.entries()).sort((a, b) => a[1] - b[1]);
+    const candidates = getReachableZoneCandidates(
+      state,
+      building.origin,
+      template.footprint,
+      template.service.coverageRadius
+    );
     let used = 0;
 
     for (const [idx] of candidates) {
@@ -195,7 +71,7 @@ export function recomputeEducation(state: GameState): EducationStats {
       const y = Math.floor(idx / state.width);
       const tile = getTile(state, x, y);
       if (!tile) continue;
-      const load = estimateEducationLoad(idx, tile, template.service.id, loads);
+      const load = estimateZoneLoad(idx, tile, template.service.id, loads);
       if (load <= 0) continue;
       const remaining = Math.max(0, capacity - used);
       if (remaining <= 0) break;
@@ -262,6 +138,11 @@ export function computeEducationReach(
     template.service.id !== ServiceId.EducationHigh
   )
     return new Set();
-  const reachable = gatherReachableZones(state, origin, template.footprint, template.service.coverageRadius);
-  return new Set(reachable.keys());
+  const candidates = getReachableZoneCandidates(
+    state,
+    origin,
+    template.footprint,
+    template.service.coverageRadius
+  );
+  return new Set(candidates.map(([idx]) => idx));
 }

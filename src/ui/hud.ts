@@ -219,7 +219,6 @@ export function createHud(elements: HudElements) {
                 <div class="status-line"><span>Type</span><strong>${hasTileSelection.kind}</strong></div>
                 <div class="status-line"><span>Happy</span><strong>${hasTileSelection.happiness.toFixed(2)}</strong></div>
                 <div class="status-line"><span>Power</span><strong>${hasTileSelection.powered ? 'On' : 'Off'}</strong></div>
-                ${educationLine ? educationLine : ''}
                 ${buildingBlock ? `<div class="divider"></div>${buildingBlock}` : ''}
                 ${serviceBlock ? `<div class="divider"></div>${serviceBlock}` : ''}
                 <div class="map-stats">Utilities are modeled globally; keep power and water above zero to grow.</div>

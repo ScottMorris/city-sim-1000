@@ -669,7 +669,7 @@ footer {
 .debug-overlay {
   position: absolute;
   right: 12px;
-  top: 12px;
+  top: calc(var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 12px);
   min-width: 260px;
   max-width: 360px;
   background: rgba(10, 16, 32, 0.92);
