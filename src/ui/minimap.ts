@@ -10,6 +10,7 @@ import {
 } from '../game/gameState';
 import { BuildingStatus } from '../game/buildings';
 import { isPowerCarrier, isZone } from '../game/adjacency';
+import { ServiceId } from '../game/services';
 import { TILE_SIZE, palette as tilePalette } from '../rendering/sprites';
 
 export interface MinimapOptions {
@@ -40,9 +41,13 @@ const MODE_COPY: Record<MinimapMode, { subtitle: string; hint: string }> = {
   base: { subtitle: 'Base view', hint: 'Terrain, zones, transport, and power lines.' },
   power: { subtitle: 'Power overlay', hint: 'Green = powered, red = unpowered; teal = generation/lines.' },
   water: { subtitle: 'Water overlay', hint: 'Water tiles, pumps, towers, and pipes pop in blue for now.' },
-  alerts: { subtitle: 'Alerts overlay', hint: 'Heatmap for abandoned, unpowered, or unhappy zones.' }
+  alerts: { subtitle: 'Alerts overlay', hint: 'Heatmap for abandoned, unpowered, or unhappy zones.' },
+  education: {
+    subtitle: 'Education overlay',
+    hint: 'Schools in purple; served zones glow green, underserved zones amber.'
+  }
 };
-const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts'];
+const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts', 'education'];
 
 interface LayoutInfo {
   sizePx: number;
@@ -104,6 +109,10 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   alertsModeBtn.className = 'chip-button';
   alertsModeBtn.textContent = 'Alerts';
   alertsModeBtn.addEventListener('click', () => setMode('alerts'));
+  const educationModeBtn = document.createElement('button');
+  educationModeBtn.className = 'chip-button';
+  educationModeBtn.textContent = 'Education';
+  educationModeBtn.addEventListener('click', () => setMode('education'));
 
   const sizeBtn = document.createElement('button');
   sizeBtn.className = 'chip-button';
@@ -127,7 +136,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   const actions = document.createElement('div');
   actions.className = 'minimap-actions';
-  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, sizeBtn].forEach((btn) => {
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, sizeBtn].forEach((btn) => {
     if (btn === sizeBtn) {
       btn.classList.add('minimap-span');
     }
@@ -214,6 +223,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     powerModeBtn.classList.toggle('active', settings.mode === 'power');
     waterModeBtn.classList.toggle('active', settings.mode === 'water');
     alertsModeBtn.classList.toggle('active', settings.mode === 'alerts');
+    educationModeBtn.classList.toggle('active', settings.mode === 'education');
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
     body.style.display = settings.open ? 'block' : 'none';
@@ -297,6 +307,18 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       }
       if (severity === 1) return 'rgba(255, 204, 112, 0.95)';
       return 'rgba(255, 123, 123, 0.95)';
+    }
+    if (settings.mode === 'education') {
+      if (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) {
+        return '#8f7bff';
+      }
+      if (isZone(tile)) {
+        const served =
+          tile.services.served[ServiceId.EducationElementary] ||
+          tile.services.served[ServiceId.EducationHigh];
+        return served ? 'rgba(123, 255, 183, 0.75)' : 'rgba(255, 204, 112, 0.95)';
+      }
+      return 'rgba(16, 26, 42, 0.9)';
     }
 
     // Base/default mode.

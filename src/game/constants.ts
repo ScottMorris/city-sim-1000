@@ -70,6 +70,8 @@ export const BUILD_COST: Record<Tool, number> = {
   [Tool.WaterPump]: 400,
   [Tool.WaterTower]: 1200,
   [Tool.WaterPipe]: 4,
+  [Tool.ElementarySchool]: 4500,
+  [Tool.HighSchool]: 7000,
   [Tool.Residential]: 40,
   [Tool.Commercial]: 60,
   [Tool.Industrial]: 80,

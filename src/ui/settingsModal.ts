@@ -34,6 +34,8 @@ const HOTKEY_LABELS: Record<HotkeyAction, string> = {
   selectHydro: 'Hydro plant',
   selectWaterPump: 'Water pump',
   selectWaterTower: 'Water tower',
+  selectElementarySchool: 'Elementary school',
+  selectHighSchool: 'High school',
   selectResidential: 'Residential zone',
   selectCommercial: 'Commercial zone',
   selectIndustrial: 'Industrial zone',

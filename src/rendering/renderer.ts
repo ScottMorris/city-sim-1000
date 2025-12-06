@@ -2,11 +2,13 @@ import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js
 import { Camera } from './camera';
 import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
 import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
+import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
+import { ServiceId } from '../game/services';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;
@@ -148,6 +150,16 @@ export class MapRenderer {
 
     this.overlayLayer.clear();
     this.drawOverlayTints(state, size, overlayMode, buildingStatuses);
+    const educationPreview = this.pickEducationPreview(state, hovered, selected, activeTool, buildingLookup);
+    if (educationPreview) {
+      this.drawEducationPreview(
+        state,
+        educationPreview.origin,
+        educationPreview.templateId,
+        size,
+        educationPreview.existing
+      );
+    }
     this.drawBuildingMarkers(state, size, buildingLookup);
     this.drawTileLabels(state, size);
     if (hovered) {
@@ -250,6 +262,21 @@ export class MapRenderer {
         return { color: 0xff7b7b, alpha: 0.33 };
       }
 
+      if (overlayMode === 'education') {
+        if (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) {
+          return { color: 0x8f7bff, alpha: 0.4 };
+        }
+        if (isZone(tile)) {
+          const served =
+            tile.services.served[ServiceId.EducationElementary] ||
+            tile.services.served[ServiceId.EducationHigh];
+          return served
+            ? { color: 0x7bffb7, alpha: 0.2 }
+            : { color: 0xffcc70, alpha: 0.28 };
+        }
+        return null;
+      }
+
       return null;
     };
 
@@ -268,6 +295,76 @@ export class MapRenderer {
           .fill({ color: tint.color, alpha: tint.alpha });
       }
     }
+  }
+
+  private pickEducationPreview(
+    state: GameState,
+    hovered: Position | null,
+    selected: Position | null,
+    activeTool: Tool,
+    buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
+  ):
+    | {
+        origin: Position;
+        templateId: string;
+        existing: boolean;
+      }
+    | null {
+    if (activeTool === Tool.ElementarySchool || activeTool === Tool.HighSchool) {
+      if (hovered) return { origin: hovered, templateId: activeTool, existing: false };
+    }
+    if (!selected) return null;
+    const tile = getTile(state, selected.x, selected.y);
+    if (!tile || tile.buildingId === undefined) return null;
+    const lookup = buildingLookup.get(tile.buildingId);
+    const template = lookup?.template ?? getBuildingTemplate(tile.kind);
+    if (!template?.service) return null;
+    if (
+      template.service.id !== ServiceId.EducationElementary &&
+      template.service.id !== ServiceId.EducationHigh
+    )
+      return null;
+    const origin = lookup?.origin ?? selected;
+    return { origin, templateId: template.id, existing: true };
+  }
+
+  private drawEducationPreview(
+    state: GameState,
+    origin: Position,
+    templateId: string,
+    size: number,
+    skipFitCheck = false
+  ) {
+    const footprint = this.getToolFootprint(templateId as Tool);
+    if (!skipFitCheck && !this.footprintFits(state, origin, footprint)) return;
+    const reach = computeEducationReach(state, origin, templateId);
+    if (!reach.size) return;
+    const color =
+      templateId === TileKind.HighSchool || templateId === Tool.HighSchool
+        ? 0x8f7bff
+        : 0x6aa7ff;
+
+    for (const idx of reach) {
+      const x = idx % state.width;
+      const y = Math.floor(idx / state.width);
+      this.overlayLayer
+        .rect(
+          this.camera.x + x * size,
+          this.camera.y + y * size,
+          size,
+          size
+        )
+        .fill({ color, alpha: 0.2 });
+    }
+
+    this.overlayLayer
+      .rect(
+        this.camera.x + origin.x * size,
+        this.camera.y + origin.y * size,
+        size * footprint.width,
+        size * footprint.height
+      )
+      .stroke({ width: 2, color, alpha: 0.9 });
   }
 
   private drawBuildingMarkers(

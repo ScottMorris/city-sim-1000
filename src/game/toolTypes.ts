@@ -14,6 +14,8 @@ export enum Tool {
   WaterPump = 'pump',
   WaterTower = 'water_tower',
   WaterPipe = 'water_pipe',
+  ElementarySchool = 'elementary_school',
+  HighSchool = 'high_school',
   Residential = 'residential',
   Commercial = 'commercial',
   Industrial = 'industrial',

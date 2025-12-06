@@ -1,7 +1,9 @@
 export enum ServiceId {
   Police = 'police',
   Fire = 'fire',
-  Health = 'health'
+  Health = 'health',
+  EducationElementary = 'education_elementary',
+  EducationHigh = 'education_high'
 }
 
 export interface ServiceDefinition {
@@ -57,6 +59,26 @@ export const DEFAULT_SERVICE_DEFINITIONS: Record<ServiceId, ServiceDefinition> =
     buildCost: 7000,
     upkeep: 55,
     servedHappinessDelta: 0.07,
+    unservedHappinessDelta: -0.06
+  },
+  [ServiceId.EducationElementary]: {
+    id: ServiceId.EducationElementary,
+    name: 'Elementary School',
+    coverageRadius: 8,
+    capacity: 180,
+    buildCost: 4500,
+    upkeep: 40,
+    servedHappinessDelta: 0.05,
+    unservedHappinessDelta: -0.05
+  },
+  [ServiceId.EducationHigh]: {
+    id: ServiceId.EducationHigh,
+    name: 'High School',
+    coverageRadius: 9,
+    capacity: 160,
+    buildCost: 7000,
+    upkeep: 55,
+    servedHappinessDelta: 0.05,
     unservedHappinessDelta: -0.06
   }
 };

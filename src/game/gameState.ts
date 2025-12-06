@@ -1,6 +1,7 @@
 import { PowerPlantType } from './constants';
 import { defaultHotkeys } from '../ui/hotkeys';
 import type { BudgetHistory } from './budget';
+import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings';
 import type { ServiceSystemState, TileServiceState } from './services';
 import { createServiceSystemState, createTileServiceState } from './services';
@@ -19,6 +20,8 @@ export enum TileKind {
   WaterPump = 'pump',
   WaterTower = 'water_tower',
   WaterPipe = 'water_pipe',
+  ElementarySchool = 'elementary_school',
+  HighSchool = 'high_school',
   Park = 'park'
 }
 
@@ -37,7 +40,7 @@ export interface Tile {
   services: TileServiceState;
 }
 
-export type MinimapMode = 'base' | 'power' | 'water' | 'alerts';
+export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education';
 
 export type MinimapSize = 'small' | 'medium';
 
@@ -149,6 +152,7 @@ export interface GameState {
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
+  education: EducationStats;
   settings: GameSettings;
 }
 
@@ -250,6 +254,17 @@ export function createInitialState(width = 64, height = 64): GameState {
     buildings: [],
     nextBuildingId: 1,
     services: createServiceSystemState(),
+    education: {
+      elementaryServed: 0,
+      elementaryCapacity: 0,
+      elementaryLoad: 0,
+      highServed: 0,
+      highCapacity: 0,
+      highLoad: 0,
+      score: 0,
+      elementaryCoverage: 0,
+      highCoverage: 0
+    },
     settings: createDefaultSettings()
   };
 }

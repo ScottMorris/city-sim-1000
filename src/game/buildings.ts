@@ -3,7 +3,7 @@ import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
 import { getOrthogonalNeighbourCoords, isPowerCarrier } from './adjacency';
 import { Tool } from './toolTypes';
-import { createEmptyServiceLoad, ServiceLoad } from './services';
+import { createEmptyServiceLoad, ServiceId, ServiceLoad } from './services';
 
 export enum BuildingCategory {
   Power = 'power',
@@ -41,6 +41,11 @@ export interface BuildingTemplate {
   waterOutput?: number;
   populationCapacity?: number;
   jobsCapacity?: number;
+  service?: {
+    id: ServiceId;
+    coverageRadius: number;
+    capacity: number;
+  };
 }
 
 export interface BuildingInstance {
@@ -135,6 +140,30 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
     maintenance: 0.05,
     tileKind: TileKind.Park,
     requiresPower: false
+  },
+  [TileKind.ElementarySchool]: {
+    id: TileKind.ElementarySchool,
+    name: 'Elementary School',
+    category: BuildingCategory.Civic,
+    footprint: { width: 2, height: 2 },
+    cost: BUILD_COST[Tool.ElementarySchool],
+    maintenance: 40,
+    tileKind: TileKind.ElementarySchool,
+    requiresPower: true,
+    powerUse: 4,
+    service: { id: ServiceId.EducationElementary, coverageRadius: 8, capacity: 180 }
+  },
+  [TileKind.HighSchool]: {
+    id: TileKind.HighSchool,
+    name: 'High School',
+    category: BuildingCategory.Civic,
+    footprint: { width: 2, height: 2 },
+    cost: BUILD_COST[Tool.HighSchool],
+    maintenance: 55,
+    tileKind: TileKind.HighSchool,
+    requiresPower: true,
+    powerUse: 5,
+    service: { id: ServiceId.EducationHigh, coverageRadius: 9, capacity: 160 }
   }
 };
 

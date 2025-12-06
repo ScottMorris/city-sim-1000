@@ -425,6 +425,12 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       case 'selectWaterTower':
         setTool(Tool.WaterTower);
         return;
+      case 'selectElementarySchool':
+        setTool(Tool.ElementarySchool);
+        return;
+      case 'selectHighSchool':
+        setTool(Tool.HighSchool);
+        return;
       case 'selectResidential':
         setTool(Tool.Residential);
         return;

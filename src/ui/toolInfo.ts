@@ -29,6 +29,8 @@ export const toolLabels: Record<Tool, string> = {
   [Tool.WaterPump]: '🚰 Pump',
   [Tool.WaterTower]: '🗼 Tower',
   [Tool.WaterPipe]: '🔧 Pipes',
+  [Tool.ElementarySchool]: '🏫 Elementary',
+  [Tool.HighSchool]: '🏢 High School',
   [Tool.Residential]: '🏘️ Res',
   [Tool.Commercial]: '🏪 Com',
   [Tool.Industrial]: '🏭 Ind',
@@ -37,7 +39,8 @@ export const toolLabels: Record<Tool, string> = {
 };
 
 export const primaryLabelOverrides: Partial<Record<Tool, string>> = {
-  [Tool.WaterPump]: '🚰 Water'
+  [Tool.WaterPump]: '🚰 Water',
+  [Tool.ElementarySchool]: '🎓 Schools'
 };
 
 const toolNames: Record<Tool, string> = {
@@ -56,6 +59,8 @@ const toolNames: Record<Tool, string> = {
   [Tool.WaterPump]: 'Water Pump',
   [Tool.WaterTower]: 'Water Tower',
   [Tool.WaterPipe]: 'Water Pipes',
+  [Tool.ElementarySchool]: 'Elementary School',
+  [Tool.HighSchool]: 'High School',
   [Tool.Residential]: 'Residential Zone',
   [Tool.Commercial]: 'Commercial Zone',
   [Tool.Industrial]: 'Industrial Zone',
@@ -75,6 +80,8 @@ const toolHotkeyActions: Partial<Record<Tool, HotkeyAction>> = {
   [Tool.HydroPlant]: 'selectHydro',
   [Tool.WaterPump]: 'selectWaterPump',
   [Tool.WaterTower]: 'selectWaterTower',
+  [Tool.ElementarySchool]: 'selectElementarySchool',
+  [Tool.HighSchool]: 'selectHighSchool',
   [Tool.Residential]: 'selectResidential',
   [Tool.Commercial]: 'selectCommercial',
   [Tool.Industrial]: 'selectIndustrial',
@@ -184,6 +191,24 @@ export function getToolDetails(tool: Tool): ToolDetails {
         addUtilityUse(rows, template.powerUse, template.waterUse, template.waterOutput);
       }
       hints.push(template?.requiresPower ? 'Requires power to run.' : 'Keeps running without power.');
+      break;
+    }
+    case Tool.ElementarySchool:
+    case Tool.HighSchool: {
+      const template = getBuildingTemplate(
+        tool === Tool.ElementarySchool ? TileKind.ElementarySchool : TileKind.HighSchool
+      );
+      if (template) {
+        rows.push({ label: 'Footprint', value: formatFootprint(template.footprint.width, template.footprint.height) });
+        const service = template.service;
+        if (service) {
+          rows.push({ label: 'Coverage', value: `${service.coverageRadius} tiles (road reach)` });
+          rows.push({ label: 'Capacity', value: `${service.capacity} seats` });
+        }
+        withMaintenanceRow(rows, template.maintenance);
+        addUtilityUse(rows, template.powerUse, template.waterUse, template.waterOutput);
+      }
+      hints.push('Covers homes through the road network; requires power to stay open.');
       break;
     }
     case Tool.Residential:

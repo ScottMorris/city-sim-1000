@@ -14,6 +14,8 @@ export type HotkeyAction =
   | 'selectHydro'
   | 'selectWaterPump'
   | 'selectWaterTower'
+  | 'selectElementarySchool'
+  | 'selectHighSchool'
   | 'selectResidential'
   | 'selectCommercial'
   | 'selectIndustrial'
@@ -42,6 +44,8 @@ export const defaultHotkeys: HotkeyBindings = {
   selectHydro: ['KeyH'],
   selectWaterPump: ['KeyU'],
   selectWaterTower: ['KeyY'],
+  selectElementarySchool: ['KeyJ'],
+  selectHighSchool: ['KeyN'],
   selectResidential: ['KeyZ'],
   selectCommercial: ['KeyX'],
   selectIndustrial: ['KeyC'],

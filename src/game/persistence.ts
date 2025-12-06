@@ -12,6 +12,7 @@ import {
   createTileServiceState,
   DEFAULT_SERVICE_DEFINITIONS
 } from './services';
+import { createEmptyEducationStats } from './education';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -34,6 +35,11 @@ export function deserialize(payload: string): GameState {
   parsed.services.definitions = parsed.services.definitions ?? {
     ...DEFAULT_SERVICE_DEFINITIONS
   };
+  Object.entries(DEFAULT_SERVICE_DEFINITIONS).forEach(([id, def]) => {
+    if (!parsed.services.definitions[id]) {
+      parsed.services.definitions[id] = def;
+    }
+  });
   parsed.tiles = parsed.tiles.map((tile: any) => ({
     ...tile,
     powered: tile.powered ?? false,
@@ -117,6 +123,7 @@ export function deserialize(payload: string): GameState {
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
   parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
   parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
+  parsed.education = parsed.education ?? createEmptyEducationStats();
   const computeNextBuildingId = () => {
     const maxBuildingIdFromTiles = parsed.tiles.reduce(
       (max: number, tile: any) =>

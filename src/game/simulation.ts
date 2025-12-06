@@ -20,6 +20,8 @@ import { DAYS_PER_MONTH } from './time';
 import { recordDailyBudget } from './budget';
 import { computeDemand } from './demand';
 import { computeLabourStats } from './computeLabourStats';
+import { recomputeEducation } from './education';
+import { ServiceId } from './services';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -95,6 +97,7 @@ export class Simulation {
     this.spawnZoneBuildings();
     updateBuildingStates(this.state);
     recomputePowerNetwork(this.state);
+    this.state.education = recomputeEducation(this.state);
 
     let residentialZones = 0;
     let commercialZones = 0;
@@ -260,12 +263,16 @@ export class Simulation {
     const pendingPenaltyEnabled = this.state.settings?.pendingPenaltyEnabled ?? true;
     const labourStats = computeLabourStats(this.state.population, populationCapacity, jobCapacity);
     const seeded = this.state.population === 0 && this.state.jobs === 0;
+    const education = this.state.education;
+    const educationScore = education?.score ?? 0;
+    const educationDemandDelta = educationScore * 4 - (1 - educationScore) * 12;
+    const workforcePenalty = (1 - (education?.highCoverage ?? 0)) * 20;
 
     const residentialDemand = computeDemand({
       base: 70, // fill coefficient for residential slots
       fillFraction: fillResidential,
       workforceTerm: 0,
-      labourTerm: labourStats.vacancyRate * 60 - labourStats.unemploymentRate * 80,
+      labourTerm: labourStats.vacancyRate * 60 - labourStats.unemploymentRate * 80 + educationDemandDelta,
       pendingZones: pendingResidentialZones,
       pendingSlope: 0.45,
       utilityPenalty,
@@ -278,7 +285,8 @@ export class Simulation {
       fillFraction: fillCommercial,
       workforceTerm:
         labourStats.unemploymentRate * 30 +
-        Math.min(1, this.state.population / Math.max(populationCapacity, 1)) * 20,
+        Math.min(1, this.state.population / Math.max(populationCapacity, 1)) * 20 -
+        workforcePenalty * 0.6,
       labourTerm: 0,
       pendingZones: pendingCommercialZones,
       pendingSlope: 0.35,
@@ -292,7 +300,9 @@ export class Simulation {
       fillFraction: fillIndustrial,
       // Unemployment pulls industry, and slightly underfilled tiles push it; vacancy cools but softly.
       workforceTerm:
-        labourStats.unemploymentRate * 80 + Math.max(0, 0.95 - fillIndustrial) * 20,
+        labourStats.unemploymentRate * 80 +
+        Math.max(0, 0.95 - fillIndustrial) * 20 -
+        workforcePenalty,
       labourTerm: labourStats.vacancyRate * -5,
       pendingZones: pendingIndustrialZones,
       pendingSlope: 0.35,
@@ -403,8 +413,6 @@ export class Simulation {
     this.applyZoneGrowthForType(TileKind.Residential, this.state.demand.residential, residentialCandidates);
     this.applyZoneGrowthForType(TileKind.Commercial, this.state.demand.commercial, commercialCandidates);
     this.applyZoneGrowthForType(TileKind.Industrial, this.state.demand.industrial, industrialCandidates);
-
-    this.applyBuildingDecay();
   }
 
   /**
@@ -469,15 +477,28 @@ export class Simulation {
       const demand = this.getDemandForZone(template.tileKind);
       const noPower = building.state.status === BuildingStatus.InactiveNoPower;
       const unhappy = tile.happiness < happinessThreshold;
+      const servedElementary = tile.services.served[ServiceId.EducationElementary];
+      const servedHigh = tile.services.served[ServiceId.EducationHigh];
+      const needsElementary = template.tileKind === TileKind.Residential;
+      const needsHigh =
+        template.tileKind === TileKind.Commercial ||
+        template.tileKind === TileKind.Industrial ||
+        template.tileKind === TileKind.Residential;
+      const educationUnserved =
+        (needsElementary && !servedElementary) || (needsHigh && !servedHigh);
 
       // Pressure from low demand combined with bad services/power; avoid punishing stable equilibrium.
       const lowDemand = demand < demandLowThreshold;
       if (lowDemand && (unhappy || noPower)) trouble += troubleIncrement;
       if (unhappy && noPower) trouble += troubleIncrement; // stack when both are bad
       if (noPower) trouble += troublePowerPenalty;
+      if (educationUnserved) trouble += troubleIncrement * 0.5;
 
       // If conditions are fine, bleed trouble down slowly.
-      if (!lowDemand && !unhappy && !noPower) trouble = Math.max(0, trouble - troubleDecay);
+      if (!lowDemand && !unhappy && !noPower) {
+        trouble = Math.max(0, trouble - troubleDecay);
+        if (!educationUnserved) trouble = Math.max(0, trouble - troubleDecay * 0.25);
+      }
 
       building.state.troubleTicks = trouble;
 

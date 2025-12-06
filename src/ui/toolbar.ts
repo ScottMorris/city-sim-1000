@@ -11,6 +11,7 @@ const powerOptions: Tool[] = [
 ];
 
 const waterOptions: Tool[] = [Tool.WaterPump, Tool.WaterTower, Tool.WaterPipe];
+const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 
 export function initToolbar(
   toolbar: HTMLElement,
@@ -29,14 +30,19 @@ export function initToolbar(
   const waterRow = document.createElement('div');
   waterRow.className = 'toolbar-sub';
   waterRow.dataset.submenu = 'water';
+  const educationRow = document.createElement('div');
+  educationRow.className = 'toolbar-sub';
+  educationRow.dataset.submenu = 'education';
   toolbar.appendChild(primaryRow);
   toolbar.appendChild(powerRow);
   toolbar.appendChild(waterRow);
+  toolbar.appendChild(educationRow);
 
   const groupedTools: Tool[][] = [
     [Tool.Inspect, Tool.TerraformRaise, Tool.TerraformLower, Tool.Water, Tool.Tree],
     [Tool.Road, Tool.Rail],
     [Tool.PowerLine, Tool.WaterPump],
+    [Tool.ElementarySchool],
     [Tool.Residential, Tool.Commercial, Tool.Industrial],
     [Tool.Park],
     [Tool.Bulldoze]
@@ -127,6 +133,9 @@ export function initToolbar(
 
   powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? '⚡ Lines' : undefined));
   waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? '🚰 Pump' : undefined));
+  educationOptions.forEach((key) =>
+    createSubButton(educationRow, key, key === Tool.ElementarySchool ? '🎓 Elementary' : '🏢 High')
+  );
 
   const radio = initRadioWidget(radioHost, { initialVolume: radioVolume });
   updateToolbar(toolbar, initial);
@@ -144,10 +153,12 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
       active === Tool.WindTurbine ||
       active === Tool.SolarFarm;
     const activeWater = active === Tool.WaterPump || active === Tool.WaterTower || active === Tool.WaterPipe;
+    const activeEducation = active === Tool.ElementarySchool || active === Tool.HighSchool;
     const isActive =
       key === active ||
       (activePower && key === Tool.PowerLine) ||
-      (activeWater && key === Tool.WaterPump);
+      (activeWater && key === Tool.WaterPump) ||
+      (activeEducation && key === Tool.ElementarySchool);
     btn.classList.toggle('active', isActive);
   });
   toolbar.querySelectorAll('.tool-sub-button').forEach((btn) => {
@@ -156,10 +167,14 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
   });
   const powerRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="power"]');
   const waterRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="water"]');
+  const educationRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="education"]');
   if (powerRow) {
     powerRow.style.display = powerOptions.includes(active) ? 'flex' : 'none';
   }
   if (waterRow) {
     waterRow.style.display = waterOptions.includes(active) ? 'flex' : 'none';
+  }
+  if (educationRow) {
+    educationRow.style.display = educationOptions.includes(active) ? 'flex' : 'none';
   }
 }
