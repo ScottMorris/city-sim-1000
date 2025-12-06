@@ -1116,6 +1116,10 @@ footer {
   font-size: 12px;
 }
 
+.settings-modal-open footer {
+  display: none;
+}
+
 @media (max-width: 900px) {
   body { font-size: 12px; }
   .hud { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
