@@ -54,6 +54,7 @@ export function isFrontierZone(state: GameState, x: number, y: number): boolean 
 export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.powerPlantType) return true;
+  if (tile.buildingId !== undefined) return true;
   if (tile.kind === TileKind.PowerLine) return true;
   if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
   if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;
