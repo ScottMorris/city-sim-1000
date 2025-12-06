@@ -6,6 +6,7 @@ import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone } from '../game/adjacency';
+import { Tool } from '../game/toolTypes';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;
@@ -39,7 +40,7 @@ export class MapRenderer {
     camera: Camera,
     tileSize: number,
     palette: Record<TileKind, number>,
-    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {}, powerLine: {}, residentialHouses: [] }
+    tileTextures: TileTextures = { tiles: {}, road: {}, powerPlant: {}, powerLine: {}, residentialHouses: [], commercialBuildings: [] }
   ) {
     this.app = new Application();
     this.parent = parent;
@@ -81,10 +82,12 @@ export class MapRenderer {
     hovered: Position | null,
     selected: Position | null,
     overlayMode: MinimapMode = 'base',
-    pointerActive = false
+    pointerActive = false,
+    activeTool: Tool = Tool.Inspect
   ) {
     const size = this.tileSize * this.camera.scale;
     const spriteSize = size;
+    const hoverFootprint = this.getToolFootprint(activeTool);
     this.mapLayer.clear();
     this.tilesWithSprites.clear();
     const { buildingLookup, multiTileCoverage } = createBuildingLookup(state);
@@ -148,21 +151,25 @@ export class MapRenderer {
     this.drawBuildingMarkers(state, size, buildingLookup);
     this.drawTileLabels(state, size);
     if (hovered) {
-      const hoverOutline = pointerActive ? 0xffcc70 : 0xffffff;
+      const shouldValidatePlacement = hoverFootprint.width > 1 || hoverFootprint.height > 1;
+      const fitsFootprint = shouldValidatePlacement
+        ? this.footprintFits(state, hovered, hoverFootprint)
+        : true;
+      const hoverOutline = fitsFootprint ? (pointerActive ? 0xffcc70 : 0xffffff) : 0xff7b7b;
       this.overlayLayer.beginFill(hoverOutline, 0.16);
       this.overlayLayer.drawRect(
         this.camera.x + hovered.x * size,
         this.camera.y + hovered.y * size,
-        size,
-        size
+        size * hoverFootprint.width,
+        size * hoverFootprint.height
       );
       this.overlayLayer.endFill();
       this.overlayLayer.lineStyle(2, hoverOutline);
       this.overlayLayer.drawRect(
         this.camera.x + hovered.x * size,
         this.camera.y + hovered.y * size,
-        size,
-        size
+        size * hoverFootprint.width,
+        size * hoverFootprint.height
       );
     }
     if (selected) {
@@ -174,6 +181,24 @@ export class MapRenderer {
         size
       );
     }
+  }
+
+  private getToolFootprint(tool: Tool) {
+    const template = getBuildingTemplate(tool);
+    return template?.footprint ?? { width: 1, height: 1 };
+  }
+
+  private footprintFits(state: GameState, origin: Position, footprint: { width: number; height: number }) {
+    if (origin.x + footprint.width > state.width || origin.y + footprint.height > state.height) {
+      return false;
+    }
+    for (let dy = 0; dy < footprint.height; dy++) {
+      for (let dx = 0; dx < footprint.width; dx++) {
+        const tile = getTile(state, origin.x + dx, origin.y + dy);
+        if (!tile || tile.buildingId !== undefined || tile.powerPlantType) return false;
+      }
+    }
+    return true;
   }
 
   getCanvas() {

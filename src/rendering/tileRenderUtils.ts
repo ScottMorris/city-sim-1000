@@ -62,6 +62,15 @@ export function resolveTileSprite(
       }
     }
   }
+  if (tile.kind === TileKind.Commercial && tile.buildingId !== undefined) {
+    const comTextures = tileTextures.commercialBuildings ?? [];
+    if (comTextures.length > 0) {
+      const texture = comTextures[(tile.buildingId - 1) % comTextures.length];
+      if (texture) {
+        return { texture, widthTiles: 1, heightTiles: 1 };
+      }
+    }
+  }
   if (tile.kind === TileKind.HydroPlant && tile.powerPlantType) {
     const footprint =
       (tile.buildingId && buildingLookup.get(tile.buildingId)?.template?.footprint) ??

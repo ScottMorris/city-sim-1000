@@ -195,7 +195,7 @@ function applyCurrentTool(tilePos: Position) {
   } else if (result.success) {
     minimap?.markDirty();
   }
-  selected = tilePos;
+  selected = null;
 }
 
 function attachViewportEvents(canvas: HTMLCanvasElement) {
@@ -321,7 +321,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   }
   simulation.update(deltaSeconds);
   const overlayMode = state.settings?.minimap?.mode ?? 'base';
-  renderer.render(state, hovered, selected, overlayMode, pointerActive);
+  renderer.render(state, hovered, selected, overlayMode, pointerActive, tool);
   hud.update(state);
   hud.renderOverlays(state, selected, tool);
   minimap?.update(state, camera);
@@ -483,7 +483,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     }
     updatePendingPenaltyBtn();
     radioController?.setVolume(state.settings.audio.radioVolume ?? 1);
-    if (!options.skipHotkeyReload && hotkeysChanged) {
+    const shouldReloadHotkeys = hotkeysChanged || !hotkeys;
+    if (!options.skipHotkeyReload && shouldReloadHotkeys) {
       rebuildHotkeys();
     }
   };
