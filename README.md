@@ -65,3 +65,4 @@ Then open the provided local URL. The service worker caches assets after first l
 ## Offline & PWA
 - `public/service-worker.js` caches core pages and dynamically caches other assets.
 - `public/manifest.webmanifest` and icons let you install the game as a standalone experience.
+- Regenerate the emoji favicon and PWA icons with `npm run build:favicon`; it draws the 🏙️ emoji onto a dark blue gradient for consistent branding.
