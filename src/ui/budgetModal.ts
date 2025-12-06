@@ -138,8 +138,22 @@ function renderTotal(label: string, value: number, tone?: 'positive' | 'negative
 
 export function initBudgetModal(options: BudgetModalOptions) {
   const { triggerBtn, getState } = options;
+  let backdrop: HTMLDivElement | null = null;
+  let escHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  const cleanup = () => {
+    if (escHandler) {
+      window.removeEventListener('keydown', escHandler);
+      escHandler = null;
+    }
+    if (backdrop) {
+      backdrop.remove();
+      backdrop = null;
+    }
+  };
 
   const open = () => {
+    if (backdrop) return;
     const state = getState();
     const budget = state.budget;
     const runwayDays = computeRunwayDays(state.money, budget.netPerDay);
@@ -158,7 +172,7 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const expensesTotal =
       toNumber(budget.breakdown.expenses.transport) + toNumber(budget.breakdown.expenses.buildings);
 
-    const backdrop = document.createElement('div');
+    backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     const modal = document.createElement('div');
     modal.className = 'modal budget-modal';
@@ -306,20 +320,16 @@ export function initBudgetModal(options: BudgetModalOptions) {
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
 
-    const handleKey = (e: KeyboardEvent) => {
+    escHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') cleanup();
-    };
-    const cleanup = () => {
-      window.removeEventListener('keydown', handleKey);
-      backdrop.remove();
     };
     closeBtn.addEventListener('click', cleanup);
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) cleanup();
     });
-    window.addEventListener('keydown', handleKey);
+    window.addEventListener('keydown', escHandler);
   };
 
   triggerBtn?.addEventListener('click', open);
-  return { open };
+  return { open, close: cleanup };
 }
