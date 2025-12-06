@@ -64,7 +64,7 @@ export function resolveTileSprite(
   }
   if (tile.kind === TileKind.Commercial && tile.buildingId !== undefined) {
     const baseTextures = tileTextures.commercialBuildings ?? [];
-    const geminiEnabled = state.settings?.cosmetics?.geminiBuildingsEnabled ?? true;
+    const geminiEnabled = state.settings?.cosmetics?.geminiBuildingsEnabled ?? false;
     const geminiTextures = geminiEnabled ? tileTextures.commercialGeminiBuildings ?? [] : [];
     const comTextures = [...baseTextures, ...geminiTextures];
     if (comTextures.length > 0) {

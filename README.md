@@ -37,7 +37,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.
 - Minimap in the bottom-right HUD: base map view plus power, water, and alerts overlay modes with click-to-jump navigation and viewport framing; the same mode tints the main map for quick at-a-glance status.
-- Settings gear in the toolbar with over-zoning penalty toggle, minimap controls, input presets (invert pan, pan speed, Shift+scroll to pan, zoom sensitivity), radio volume, and placeholders for edge scroll, hotkey remapping, accessibility, and Gemini sprites.
+- Settings gear in the toolbar with over-zoning penalty toggle, minimap controls, input presets (invert pan, pan speed, Shift+scroll to pan, zoom sensitivity), radio volume, Gemini sprite toggle (off by default), and placeholders for edge scroll, hotkey remapping, and accessibility.
 - Toolbar radio widget with emoji controls (previous/play/pause/next), a scrolling marquee for artist/title, hover/focus popover for details, and an offline state when no playlist exists.
 
 ## Budget and economy

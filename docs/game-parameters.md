@@ -98,7 +98,7 @@
 - Simulation Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x).
 
 ### Settings Backlog (Input)
-- A settings modal now exists (gear button in the toolbar) with the over-zoning penalty toggle, minimap controls, pan inversion/pan speed presets, Shift+scroll-to-pan, zoom sensitivity, radio volume, and a Gemini sprite placeholder toggle. Edge scroll, hotkey remapping UX, higher-contrast/reduced-motion, and SFX are stubbed but not wired yet.
+- A settings modal now exists (gear button in the toolbar) with the over-zoning penalty toggle, minimap controls, pan inversion/pan speed presets, Shift+scroll-to-pan, zoom sensitivity, radio volume, and a Gemini sprite toggle (off by default). Edge scroll, hotkey remapping UX, higher-contrast/reduced-motion, and SFX are stubbed but not wired yet.
 - Toggle for keyboard pan inversion and pan speed preset.
 - Hotkey remapping with conflict hints and reset-to-defaults.
 - Edge scroll enable/disable and speed when added.

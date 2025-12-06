@@ -188,7 +188,7 @@ export function createDefaultAudioSettings(): AudioSettings {
 
 export function createDefaultCosmeticSettings(): CosmeticSettings {
   return {
-    geminiBuildingsEnabled: true
+    geminiBuildingsEnabled: false
   };
 }
 
