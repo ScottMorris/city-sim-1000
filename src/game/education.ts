@@ -66,24 +66,23 @@ function gatherReachableZones(
     if (visited.has(idx)) continue;
     visited.add(idx);
     const tile = getTile(state, x, y);
-    if (isZone(tile)) {
+    const isRoad = isRoadish(tile);
+    const isServedZone = isZone(tile);
+
+    if (isServedZone) {
       const existing = reachable.get(idx);
       reachable.set(idx, existing !== undefined ? Math.min(existing, d) : d);
     }
 
-    if (!isRoadish(tile) && d > 0) continue;
+    // Travel along roads and through zones so interior lots can be served inside a radius.
+    if (!isRoad && !isServedZone && d > 0) continue;
 
     for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
       const nd = d + 1;
       if (nd > radius) continue;
       const neighbour = getTile(state, nx, ny);
-      if (isRoadish(neighbour)) {
+      if (isRoadish(neighbour) || isZone(neighbour)) {
         queue.push({ x: nx, y: ny, d: nd });
-      } else if (isZone(neighbour)) {
-        const neighbourIdx = toIndex(nx, ny);
-        const prev = reachable.get(neighbourIdx);
-        const dist = Math.min(prev ?? nd, nd);
-        reachable.set(neighbourIdx, dist);
       }
     }
   }
