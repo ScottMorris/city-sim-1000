@@ -65,6 +65,19 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
 }
 
 /**
+ * Returns true if the tile is powered or has an orthogonally adjacent powered carrier.
+ */
+export function tileHasPower(state: GameState, x: number, y: number): boolean {
+  const tile = getTile(state, x, y);
+  if (!tile) return false;
+  if (tile.powered) return true;
+  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
+    const neighbour = getTile(state, nx, ny);
+    return neighbour?.powered && isPowerCarrier(neighbour);
+  });
+}
+
+/**
  * Returns true if a zone tile can reach a road by walking orthogonally through other zone tiles.
  */
 export function zoneHasRoadPath(state: GameState, startX: number, startY: number): boolean {

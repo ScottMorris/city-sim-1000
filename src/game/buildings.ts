@@ -1,7 +1,7 @@
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
-import { getOrthogonalNeighbourCoords, isPowerCarrier } from './adjacency';
+import { getOrthogonalNeighbourCoords, isPowerCarrier, tileHasPower } from './adjacency';
 import { Tool } from './toolTypes';
 import { createEmptyServiceLoad, ServiceId, ServiceLoad } from './services';
 
@@ -310,16 +310,6 @@ export function removeBuilding(state: GameState, buildingId: number) {
       tile.happiness = Math.min(1.5, tile.happiness + 0.05);
     }
   }
-}
-
-function tileHasPower(state: GameState, x: number, y: number): boolean {
-  const tile = getTile(state, x, y);
-  if (!tile) return false;
-  if (tile.powered) return true;
-  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
-    const neighbour = getTile(state, nx, ny);
-    return neighbour?.powered && isPowerCarrier(neighbour);
-  });
 }
 
 export function updateBuildingStates(state: GameState) {

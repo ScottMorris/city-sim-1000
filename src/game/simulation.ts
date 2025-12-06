@@ -14,6 +14,7 @@ import {
   getOrthogonalNeighbourCoords,
   hasRoadAccess,
   isFrontierZone,
+  tileHasPower,
   zoneHasRoadPath
 } from './adjacency';
 import { DAYS_PER_MONTH } from './time';
@@ -388,6 +389,12 @@ export class Simulation {
         const hasRoadChain = zoneHasRoadPath(this.state, x, y);
         const frontierAllowed = isFrontierZone(this.state, x, y);
         if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) {
+          this.zoneGrowthTimers.delete(y * this.state.width + x);
+          continue;
+        }
+
+        const powerAvailable = this.state.utilities.powerProduced > 0;
+        if (powerAvailable && !tileHasPower(this.state, x, y)) {
           this.zoneGrowthTimers.delete(y * this.state.width + x);
           continue;
         }
