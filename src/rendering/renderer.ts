@@ -49,7 +49,8 @@ export class MapRenderer {
       powerLine: {},
       residentialHouses: [],
       commercialBuildings: [],
-      commercialGeminiBuildings: []
+      commercialGeminiBuildings: [],
+      schools: {}
     }
   ) {
     this.app = new Application();

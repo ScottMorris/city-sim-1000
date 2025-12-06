@@ -96,6 +96,29 @@ export function resolveTileSprite(
     if (fallbackTexture)
       return { texture: fallbackTexture, widthTiles: 1, heightTiles: 1, borderWidth: BUILDING_BORDER_WIDTH };
   }
+  if (
+    (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) &&
+    tile.buildingId !== undefined
+  ) {
+    const entry = buildingLookup.get(tile.buildingId);
+    const template = entry?.template;
+    const origin = entry?.origin;
+    if (template && origin) {
+      const width = template.footprint.width;
+      const height = template.footprint.height;
+      if (x === origin.x && y === origin.y) {
+        const texture =
+          tile.kind === TileKind.ElementarySchool
+            ? tileTextures.schools?.elementary
+            : tileTextures.schools?.high;
+        if (texture) {
+          return { texture, widthTiles: width, heightTiles: height, borderWidth: BUILDING_BORDER_WIDTH };
+        }
+      } else if (x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height) {
+        return { skip: true };
+      }
+    }
+  }
   if (tile.kind === TileKind.Road) {
     const roadTexture = pickRoadTexture(state, x, y, tileTextures);
     if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
