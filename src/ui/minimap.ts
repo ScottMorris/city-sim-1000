@@ -152,10 +152,18 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   canvasWrapper.append(baseCanvas, overlayCanvas);
   body.append(actions, canvasWrapper);
 
+  const legendDetails = document.createElement('details');
+  legendDetails.className = 'minimap-legend';
+
+  const legendSummary = document.createElement('summary');
+  legendSummary.className = 'minimap-legend-summary';
+  legendSummary.textContent = 'Legend details';
+
   const hint = document.createElement('div');
   hint.className = 'minimap-hint';
   hint.textContent = MODE_COPY[settings.mode].hint;
-  body.append(hint);
+  legendDetails.append(legendSummary, hint);
+  body.append(legendDetails);
 
   container.append(header, body);
   options.root.append(container);

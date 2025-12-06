@@ -433,6 +433,28 @@ body {
   grid-column: 1 / -1;
 }
 
+.minimap-legend {
+  background: rgba(12, 20, 40, 0.75);
+  border: 1px solid #1f2c4b;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.minimap-legend summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 11px;
+  list-style: none;
+}
+
+.minimap-legend summary::-webkit-details-marker {
+  display: none;
+}
+
+.minimap-legend[open] summary {
+  margin-bottom: 4px;
+}
+
 .minimap-body {
   margin-top: 8px;
   background: rgba(9, 14, 26, 0.85);
