@@ -80,7 +80,13 @@ Game saves are stored in **LocalStorage** with optional import/export.
 │  │  ├─ toolTypes.ts
 │  │  ├─ persistence.ts
 │  │  ├─ constants.ts
-│  │  └─ power.ts
+│  │  ├─ utilities/
+│  │  │  ├─ power.ts
+│  │  │  └─ water.ts
+│  │  └─ buildings/
+│  │     ├─ state.ts
+│  │     ├─ manager.ts
+│  │     └─ templates.ts
 │  ├─ rendering/
 │  │  ├─ renderer.ts
 │  │  ├─ sprites.ts
@@ -125,15 +131,23 @@ Tiles include:
 
 ### 5.3 Power Network (v1)
 
-* Tiles carry a `powered` flag and optional `powerPlantType` (Hydro, Coal, Wind, Solar).
-* Power sources: any tile with `powerPlantType` set.
-* Network edges: `TileKind.PowerLine` tiles.
-* Connectivity: 4-directional BFS flood-fill from sources through power lines; reachable lines/plants are marked `powered: true`.
-* Production: `powerProduced` sums plant outputs from `POWER_PLANT_CONFIGS`; `powerUsed` is `0` until consumers exist.
+* Tiles carry a `powered` flag.
+* Power sources: any building/tile with `powerPlantType` set (Hydro, Coal, Wind, Solar).
+* Network edges: `TileKind.PowerLine` tiles, Road, and Rail.
+* Connectivity: 4-directional BFS flood-fill from sources through power lines/roads/rail; reachable lines/plants are marked `powered: true`.
+* Production: `powerProduced` sums plant outputs from `BUILDING_TEMPLATES`.
 * Maintenance: per-tile upkeep plus per-plant maintenance from configs.
-* Rendering is unchanged for v1; powered/unpowered lines share visuals for now.
 
-### 5.4 UI Patterns
+### 5.4 Water Network (v1)
+
+* Tiles carry a `watered` flag.
+* Water sources: Pumps (must be adjacent to water) and Water Towers.
+* Network edges: `TileKind.WaterPipe` (underground layer), Road, Rail, and Zones.
+* Connectivity: BFS flood-fill from sources through pipes and surface transport/zones.
+* Production: `waterProduced` sums pump/tower outputs.
+* Maintenance: per-pipe upkeep plus per-building maintenance.
+
+### 5.5 UI Patterns
 
 * Toolbar is two rows: the primary row and a contextual sub-row beneath it.
 * The main “Power” button reveals a sub-row of power tools (Lines, Hydro, Coal, Wind, Solar); the Power button stays active when any power tool is selected.
@@ -143,7 +157,7 @@ Tiles include:
 * Minimap sits in the bottom-right HUD corner with click-to-jump navigation, a visible viewport rectangle, and a toggle/hotkey (`M`) to collapse or expand it. Base mode renders terrain, zones, roads, rail, power lines, and buildings; overlay modes for power/water/alerts/education tint both the minimap and main view. Use an offscreen canvas for redraws, throttle updates, and coarsen sampling on very large maps to protect performance.
 * Budget panel shows cash, a colour-coded monthly net projection, and a calendar month/day readout (30-day months) so per-month numbers have visible context. A Budget modal (HUD button) surfaces quarterly totals (last 3 months), per-month net, runway at current burn, and revenue/expense breakdowns. Revenue shows base stipend + residents/commercial/industrial; expenses split transport (roads/rail/lines/pipes) and buildings (power, civic, zones) with details.
 
-### 5.5 Rendering
+### 5.6 Rendering
 
 * `MapRenderer` encapsulates Pixi rendering and draws tiles using existing palette colors; called each frame from `main.ts`.
 * Camera logic (`centerCamera`, `screenToTile`) lives in `rendering/camera.ts`; rendering is decoupled from UI/event handling.
@@ -153,7 +167,7 @@ Tiles include:
 * Water pump
 * Residential/Commercial/Industrial zones
 
-### 5.3 UI Skin
+### 5.7 UI Skin
 
 * Pixel fonts only
 * Buttons use retro framed borders
@@ -180,6 +194,7 @@ export enum TileKind {
   Land, Water, Road, Rail, Tree, Park,
   PowerLine, HydroPlant, WaterPump,
   Residential, Commercial, Industrial,
+  WaterPipe
 }
 
 export interface Tile {
@@ -191,6 +206,7 @@ export interface Tile {
   powered: boolean;
   watered: boolean;
   happiness: number;
+  underground?: TileKind; // e.g. WaterPipe
 }
 ```
 
@@ -251,7 +267,7 @@ PowerLine
 Hydro
 Pump
 WaterTower
-WaterPipe (planned; requires underground view)
+WaterPipe
 Res
 Com
 Ind
@@ -278,7 +294,7 @@ Bulldoze
 * Each zoned tile can host a 1×1 **zone building instance** created by the simulation:
   * Residential lots provide population capacity; commercial/industrial lots provide job capacity
   * Lots use the building template system (cost/maintenance/utility use/capacity stored on the instance)
-  * Lots require power to be **Active**; inactive lots contribute no capacity or consumption
+  * Lots require power and water (if `waterUse > 0`) to be **Active**; inactive lots contribute no capacity or consumption
   * Simulation spawns lots when demand is positive and utilities are available; bulldozing removes the lot and zoning
 
 #### Utilities
@@ -286,7 +302,7 @@ Bulldoze
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
 * Water Tower: 2×2 footprint that boosts city water reserves, does not require power
-* Water Pipe: planned; placement UI stubbed until underground view exists
+* Water Pipe: Connects water network underground. Requires Underground View.
 * Power lines: graph-based connectivity
 
 ---
@@ -300,7 +316,7 @@ Bulldoze
 * Simulation includes:
 
   * Power supply graph
-  * Water supply radius or graph
+  * Water supply graph
   * R/C/I demand calculations
   * Zone growth & decline
   * Happiness adjustments

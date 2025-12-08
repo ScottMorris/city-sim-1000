@@ -1,15 +1,11 @@
 import type { GameState } from './gameState';
 import { getTile, TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
-import {
-  BuildingStatus,
-  BuildingCategory,
-  getBuildingTemplate,
-  listPowerPlants,
-  placeBuilding,
-  updateBuildingStates
-} from './buildings';
-import { recomputePowerNetwork } from './power';
+import { BuildingStatus } from './buildings/state';
+import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
+import { listPowerPlants, placeBuilding, updateBuildingStates } from './buildings/manager';
+import { recomputePowerNetwork } from './utilities/power';
+import { recomputeWaterNetwork } from './utilities/water';
 import {
   getOrthogonalNeighbourCoords,
   hasRoadAccess,
@@ -18,7 +14,7 @@ import {
   zoneHasRoadPath
 } from './adjacency';
 import { DAYS_PER_MONTH } from './time';
-import { recordDailyBudget } from './budget';
+import { recordDailyBudget } from './economy';
 import { computeDemand } from './demand';
 import { computeLabourStats } from './computeLabourStats';
 import { recomputeEducation } from './education';
@@ -48,7 +44,7 @@ export class Simulation {
   private readonly dt: number;
   private readonly zoneGrowthDelayTicks: number;
   private zoneGrowthTimers = new Map<number, number>();
-  private readonly waterEnabled = false;
+  private readonly waterEnabled = true;
   private speedMultiplier = 1;
   private notify?: (alert: SimulationAlert) => void;
   private powerDeficitActive = false;
@@ -95,9 +91,11 @@ export class Simulation {
     this.state.day += this.dt / 1.5;
 
     recomputePowerNetwork(this.state);
+    if (this.waterEnabled) recomputeWaterNetwork(this.state);
     this.spawnZoneBuildings();
     updateBuildingStates(this.state);
     recomputePowerNetwork(this.state);
+    if (this.waterEnabled) recomputeWaterNetwork(this.state);
     this.state.education = recomputeEducation(this.state);
 
     let residentialZones = 0;
@@ -148,6 +146,14 @@ export class Simulation {
         if (tile.kind === TileKind.Rail) maintenanceRail += upkeep;
         if (tile.kind === TileKind.PowerLine) maintenancePowerLines += upkeep;
         if (tile.kind === TileKind.WaterPipe) maintenancePipes += upkeep;
+      }
+
+      if (tile.underground) {
+        const uUpkeep = MAINTENANCE[tile.underground];
+        if (uUpkeep) {
+          maintenance += uUpkeep;
+          if (tile.underground === TileKind.WaterPipe) maintenancePipes += uUpkeep;
+        }
       }
 
       if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
@@ -260,7 +266,7 @@ export class Simulation {
     const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
     const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
     const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
-    const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
+    const utilityPenalty = (this.state.utilities.power < 0 ? 15 : 0) + (this.waterEnabled && this.state.utilities.water < 0 ? 15 : 0);
     const pendingPenaltyEnabled = this.state.settings?.pendingPenaltyEnabled ?? true;
     const labourStats = computeLabourStats(this.state.population, populationCapacity, jobCapacity);
     const seeded = this.state.population === 0 && this.state.jobs === 0;
@@ -415,7 +421,7 @@ export class Simulation {
     }
 
     // Early-out if power is negative; growth is blocked.
-    if (this.state.utilities.power < 0) return;
+    if (this.state.utilities.power < 0 || (this.waterEnabled && this.state.utilities.water < 0)) return;
 
     this.applyZoneGrowthForType(TileKind.Residential, this.state.demand.residential, residentialCandidates);
     this.applyZoneGrowthForType(TileKind.Commercial, this.state.demand.commercial, commercialCandidates);
@@ -519,7 +525,7 @@ export class Simulation {
    * Clears a zone building when decay wins: remove the building instance and leave the zoned tile
    * ready to regrow. Capacity drops to 0, which naturally nudges demand upward again.
    */
-  private abandonZoneBuilding(building: import('./buildings').BuildingInstance, tile: import('./gameState').Tile) {
+  private abandonZoneBuilding(building: import('./buildings/state').BuildingInstance, tile: import('./gameState').Tile) {
     // Remove building instance
     this.state.buildings = this.state.buildings.filter((b) => b.id !== building.id);
     // Clear building references but keep the zone kind so it can regrow.

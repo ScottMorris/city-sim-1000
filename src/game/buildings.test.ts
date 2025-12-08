@@ -1,13 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, getTile, TileKind } from './gameState';
-import {
-  BuildingCategory,
-  BuildingStatus,
-  BuildingTemplate,
-  placeBuilding,
-  registerBuildingTemplate,
-  updateBuildingStates
-} from './buildings';
+import { BuildingStatus } from './buildings/state';
+import { BuildingCategory, BuildingTemplate, registerBuildingTemplate } from './buildings/templates';
+import { placeBuilding, updateBuildingStates } from './buildings/manager';
 import { deserialize, serialize } from './persistence';
 
 const poweredTemplate: BuildingTemplate = {

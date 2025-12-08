@@ -5,7 +5,8 @@ import {
   createDefaultMinimapSettings,
   createDefaultSettings
 } from './gameState';
-import { createBuildingState, getBuildingTemplate } from './buildings';
+import { createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import {
   createEmptyServiceLoad,
   createServiceSystemState,
@@ -25,11 +26,15 @@ export function deserialize(payload: string): GameState {
       power: parsed.power ?? 0,
       water: parsed.water ?? 0,
       powerProduced: 0,
-      powerUsed: 0
+      powerUsed: 0,
+      waterProduced: 0,
+      waterUsed: 0
     };
   } else {
     parsed.utilities.powerProduced = parsed.utilities.powerProduced ?? 0;
     parsed.utilities.powerUsed = parsed.utilities.powerUsed ?? 0;
+    parsed.utilities.waterProduced = parsed.utilities.waterProduced ?? 0;
+    parsed.utilities.waterUsed = parsed.utilities.waterUsed ?? 0;
   }
   parsed.services = parsed.services ?? createServiceSystemState();
   parsed.services.definitions = parsed.services.definitions ?? {
@@ -43,6 +48,8 @@ export function deserialize(payload: string): GameState {
   parsed.tiles = parsed.tiles.map((tile: any) => ({
     ...tile,
     powered: tile.powered ?? false,
+    watered: tile.watered ?? false,
+    underground: tile.underground,
     powerPlantType: tile.powerPlantType,
     powerPlantId: tile.powerPlantId,
     buildingId: tile.buildingId ?? tile.powerPlantId,

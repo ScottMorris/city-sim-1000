@@ -1,4 +1,5 @@
-import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
+import { BuildingStatus } from '../game/buildings/state';
+import { getBuildingTemplate } from '../game/buildings/templates';
 import { GameState, getTile } from '../game/gameState';
 import { Position } from '../rendering/renderer';
 import { Tool } from '../game/toolTypes';
@@ -219,6 +220,7 @@ export function createHud(elements: HudElements) {
                 <div class="status-line"><span>Type</span><strong>${hasTileSelection.kind}</strong></div>
                 <div class="status-line"><span>Happy</span><strong>${hasTileSelection.happiness.toFixed(2)}</strong></div>
                 <div class="status-line"><span>Power</span><strong>${hasTileSelection.powered ? 'On' : 'Off'}</strong></div>
+                <div class="status-line"><span>Water</span><strong>${hasTileSelection.watered ? 'Wet' : 'Dry'}</strong></div>
                 ${buildingBlock ? `<div class="divider"></div>${buildingBlock}` : ''}
                 ${serviceBlock ? `<div class="divider"></div>${serviceBlock}` : ''}
                 <div class="map-stats">Utilities are modeled globally; keep power and water above zero to grow.</div>

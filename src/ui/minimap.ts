@@ -8,7 +8,7 @@ import {
   createDefaultMinimapSettings,
   getTile
 } from '../game/gameState';
-import { BuildingStatus } from '../game/buildings';
+import { BuildingStatus } from '../game/buildings/state';
 import { isPowerCarrier, isZone } from '../game/adjacency';
 import { ServiceId } from '../game/services';
 import { TILE_SIZE, palette as tilePalette } from '../rendering/sprites';
@@ -45,9 +45,10 @@ const MODE_COPY: Record<MinimapMode, { subtitle: string; hint: string }> = {
   education: {
     subtitle: 'Education overlay',
     hint: 'Schools in purple; served zones glow green, underserved zones amber.'
-  }
+  },
+  underground: { subtitle: 'Underground', hint: 'View pipes and subsurface infrastructure.' }
 };
-const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts', 'education'];
+const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts', 'education', 'underground'];
 
 interface LayoutInfo {
   sizePx: number;
@@ -113,6 +114,10 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   educationModeBtn.className = 'chip-button';
   educationModeBtn.textContent = 'Education';
   educationModeBtn.addEventListener('click', () => setMode('education'));
+  const undergroundModeBtn = document.createElement('button');
+  undergroundModeBtn.className = 'chip-button';
+  undergroundModeBtn.textContent = 'Underground';
+  undergroundModeBtn.addEventListener('click', () => setMode('underground'));
 
   const sizeBtn = document.createElement('button');
   sizeBtn.className = 'chip-button';
@@ -136,7 +141,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   const actions = document.createElement('div');
   actions.className = 'minimap-actions';
-  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, sizeBtn].forEach((btn) => {
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, undergroundModeBtn, sizeBtn].forEach((btn) => {
     if (btn === sizeBtn) {
       btn.classList.add('minimap-span');
     }
@@ -232,6 +237,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     waterModeBtn.classList.toggle('active', settings.mode === 'water');
     alertsModeBtn.classList.toggle('active', settings.mode === 'alerts');
     educationModeBtn.classList.toggle('active', settings.mode === 'education');
+    undergroundModeBtn.classList.toggle('active', settings.mode === 'underground');
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
     body.style.display = settings.open ? 'block' : 'none';
@@ -305,6 +311,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       let severity = 0;
       if (tile.abandoned) severity = 2;
       if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
+      if (buildingStatus === BuildingStatus.InactiveNoWater) return '#4cc3ff';
       if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
       if (zone && !tile.powered) severity = Math.max(severity, 2);
       if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
@@ -327,6 +334,13 @@ export function initMinimap(options: MinimapOptions): MinimapController {
         return served ? 'rgba(123, 255, 183, 0.75)' : 'rgba(255, 204, 112, 0.95)';
       }
       return 'rgba(16, 26, 42, 0.9)';
+    }
+
+    if (settings.mode === 'underground') {
+      if (tile.underground === TileKind.WaterPipe) return '#4cc3ff';
+      if (tile.kind === TileKind.Water) return '#1f68d6';
+      // Fade others
+      return 'rgba(16, 26, 42, 0.95)';
     }
 
     // Base/default mode.

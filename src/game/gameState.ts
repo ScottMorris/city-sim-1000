@@ -1,8 +1,8 @@
 import { PowerPlantType } from './constants';
 import { defaultHotkeys } from '../ui/hotkeys';
-import type { BudgetHistory } from './budget';
+import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
-import type { BuildingInstance } from './buildings';
+import type { BuildingInstance } from './buildings/state';
 import type { ServiceSystemState, TileServiceState } from './services';
 import { createServiceSystemState, createTileServiceState } from './services';
 
@@ -30,7 +30,9 @@ export interface Tile {
   elevation: number;
   happiness: number;
   powered: boolean;
+  watered: boolean;
   abandoned?: boolean;
+  underground?: TileKind;
   roadUnderlay?: boolean;
   railUnderlay?: boolean;
   powerOverlay?: boolean;
@@ -40,7 +42,7 @@ export interface Tile {
   services: TileServiceState;
 }
 
-export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education';
+export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'underground';
 
 export type MinimapSize = 'small' | 'medium';
 
@@ -92,6 +94,8 @@ export interface UtilityStats {
   water: number;
   powerProduced: number;
   powerUsed: number;
+  waterProduced: number;
+  waterUsed: number;
 }
 
 export interface DemandStats {
@@ -148,7 +152,7 @@ export interface GameState {
   utilities: UtilityStats;
   demand: DemandStats;
   budget: BudgetStats;
-  budgetHistory: import('./budget').BudgetHistory;
+  budgetHistory: import('./economy').BudgetHistory;
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
@@ -215,6 +219,7 @@ export function createInitialState(width = 64, height = 64): GameState {
         elevation: 0,
         happiness: 1,
         powered: false,
+        watered: false,
         services: createTileServiceState()
       });
     }
@@ -232,7 +237,9 @@ export function createInitialState(width = 64, height = 64): GameState {
       power: 10,
       water: 10,
       powerProduced: 0,
-      powerUsed: 0
+      powerUsed: 0,
+      waterProduced: 0,
+      waterUsed: 0
     },
     budget: {
       revenue: 0,
