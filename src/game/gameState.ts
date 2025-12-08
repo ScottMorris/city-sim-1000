@@ -1,4 +1,4 @@
-import { PowerPlantType } from './configs';
+import { PowerPlantType } from './constants';
 import { defaultHotkeys } from '../ui/hotkeys';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
@@ -94,6 +94,8 @@ export interface UtilityStats {
   water: number;
   powerProduced: number;
   powerUsed: number;
+  waterProduced: number;
+  waterUsed: number;
 }
 
 export interface DemandStats {
@@ -235,7 +237,9 @@ export function createInitialState(width = 64, height = 64): GameState {
       power: 10,
       water: 10,
       powerProduced: 0,
-      powerUsed: 0
+      powerUsed: 0,
+      waterProduced: 0,
+      waterUsed: 0
     },
     budget: {
       revenue: 0,

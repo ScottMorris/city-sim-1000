@@ -1,4 +1,4 @@
-import { BUILD_COST, PowerPlantType } from './configs';
+import { BUILD_COST, PowerPlantType } from './constants';
 import { type BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './buildings/templates';
 import { placeBuilding, removeBuilding } from './buildings/manager';
 import { GameState, Tile, TileKind, getTile, setTile } from './gameState';
@@ -174,18 +174,23 @@ const registry: ToolRegistry = {
   [Tool.Park]: ({ state, x, y }, cost) =>
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.Park), x, y, cost),
   [Tool.Bulldoze]: ({ state, x, y }, cost) => {
-    state.money -= cost;
     const tile = getTile(state, x, y);
-    if (tile) {
-      if (state.settings.minimap.mode === 'underground') {
-        if (tile.underground) {
-          tile.underground = undefined;
-        }
-      } else if (tile.buildingId !== undefined) {
-        removeBuilding(state, tile.buildingId);
-      } else {
-        setTile(state, x, y, TileKind.Land);
+    if (!tile) return { success: false };
+
+    if (state.settings.minimap.mode === 'underground') {
+      if (tile.underground) {
+        state.money -= cost;
+        tile.underground = undefined;
+        return { success: true };
       }
+      return { success: true }; // Nothing to bulldoze underground
+    }
+
+    state.money -= cost;
+    if (tile.buildingId !== undefined) {
+      removeBuilding(state, tile.buildingId);
+    } else {
+      setTile(state, x, y, TileKind.Land);
     }
     return { success: true };
   }

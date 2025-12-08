@@ -1,6 +1,6 @@
 import type { GameState } from './gameState';
 import { getTile, TileKind } from './gameState';
-import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './configs';
+import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import { BuildingStatus } from './buildings/state';
 import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import { listPowerPlants, placeBuilding, updateBuildingStates } from './buildings/manager';

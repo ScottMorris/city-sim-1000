@@ -1,4 +1,4 @@
-import { PowerPlantType } from '../configs';
+import { PowerPlantType } from '../constants';
 import { GameState, Tile, getTile, TileKind } from '../gameState';
 import { tileHasPower } from '../adjacency';
 import { BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './templates';

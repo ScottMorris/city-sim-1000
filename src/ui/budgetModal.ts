@@ -158,15 +158,15 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const budget = state.budget;
     const runwayDays = computeRunwayDays(state.money, budget.netPerDay);
     const revenueEntries = [
-      { label: 'Base', value: toNumber(budget.breakdown.revenue.base), tone: 'positive', tooltip: 'Flat civic stipend each day' },
+      { label: 'Base', value: toNumber(budget.breakdown.revenue.base), tone: 'positive' as const, tooltip: 'Flat civic stipend each day' },
       {
         label: 'Residential',
-        value: toNumber(budget.breakdown.revenue.residents ?? budget.breakdown.revenue.population),
-        tone: 'positive',
+        value: toNumber(budget.breakdown.revenue.residents),
+        tone: 'positive' as const,
         tooltip: 'Income from population across residential zones'
       },
-      { label: 'Commercial', value: toNumber(budget.breakdown.revenue.commercial), tone: 'positive' },
-      { label: 'Industrial', value: toNumber(budget.breakdown.revenue.industrial), tone: 'positive' }
+      { label: 'Commercial', value: toNumber(budget.breakdown.revenue.commercial), tone: 'positive' as const },
+      { label: 'Industrial', value: toNumber(budget.breakdown.revenue.industrial), tone: 'positive' as const }
     ];
     const revenueTotal = revenueEntries.reduce((sum, entry) => sum + entry.value, 0);
     const expensesTotal =
@@ -239,50 +239,50 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const zoneTotal = toNumber(budget.breakdown.details.buildings.zones);
 
     const powerPlantDetails = renderBreakdownList('Power Plants', [
-      { label: 'Total', value: powerPlantsTotal, total: Math.max(powerPlantsTotal, 1), tone: 'negative' },
-      { label: 'Hydro', value: toNumber(budget.breakdown.details.buildings.powerByType.hydro), total: Math.max(powerPlantsTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Coal', value: toNumber(budget.breakdown.details.buildings.powerByType.coal), total: Math.max(powerPlantsTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Wind', value: toNumber(budget.breakdown.details.buildings.powerByType.wind), total: Math.max(powerPlantsTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Solar', value: toNumber(budget.breakdown.details.buildings.powerByType.solar), total: Math.max(powerPlantsTotal, 1), tone: 'negative', depth: 1 }
+      { label: 'Total', value: powerPlantsTotal, total: Math.max(powerPlantsTotal, 1), tone: 'negative' as const },
+      { label: 'Hydro', value: toNumber(budget.breakdown.details.buildings.powerByType.hydro), total: Math.max(powerPlantsTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Coal', value: toNumber(budget.breakdown.details.buildings.powerByType.coal), total: Math.max(powerPlantsTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Wind', value: toNumber(budget.breakdown.details.buildings.powerByType.wind), total: Math.max(powerPlantsTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Solar', value: toNumber(budget.breakdown.details.buildings.powerByType.solar), total: Math.max(powerPlantsTotal, 1), tone: 'negative' as const, depth: 1 }
     ]);
 
     const transportSection = renderBreakdownList('Transportation', [
-      { label: 'Total', value: transportTotal, total: Math.max(transportTotal, 1), tone: 'negative' },
-      { label: 'Roads', value: roadsValue, total: Math.max(transportTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Rail', value: railValue, total: Math.max(transportTotal, 1), tone: 'negative', depth: 1 }
+      { label: 'Total', value: transportTotal, total: Math.max(transportTotal, 1), tone: 'negative' as const },
+      { label: 'Roads', value: roadsValue, total: Math.max(transportTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Rail', value: railValue, total: Math.max(transportTotal, 1), tone: 'negative' as const, depth: 1 }
     ]);
 
     const pipesSection = renderBreakdownList('Pipes', [
-      { label: 'Total', value: pipesValue, total: Math.max(pipesValue, 1), tone: 'negative' }
+      { label: 'Total', value: pipesValue, total: Math.max(pipesValue, 1), tone: 'negative' as const }
     ]);
 
     const powerSection = renderBreakdownList('Power', [
-      { label: 'Total', value: powerLinesValue + powerPlantsTotal, total: Math.max(powerLinesValue + powerPlantsTotal, 1), tone: 'negative' },
-      { label: 'Power lines', value: powerLinesValue, total: Math.max(powerLinesValue + powerPlantsTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Power plants', value: powerPlantsTotal, total: Math.max(powerLinesValue + powerPlantsTotal, 1), tone: 'negative', depth: 1 }
+      { label: 'Total', value: powerLinesValue + powerPlantsTotal, total: Math.max(powerLinesValue + powerPlantsTotal, 1), tone: 'negative' as const },
+      { label: 'Power lines', value: powerLinesValue, total: Math.max(powerLinesValue + powerPlantsTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Power plants', value: powerPlantsTotal, total: Math.max(powerLinesValue + powerPlantsTotal, 1), tone: 'negative' as const, depth: 1 }
     ]);
 
     const civicSection = renderBreakdownList('Civic', [
-      { label: 'Total', value: civicTotal, total: Math.max(civicTotal, 1), tone: 'negative' },
-      { label: 'Parks', value: toNumber(budget.breakdown.details.buildings.civicByType.park), total: Math.max(civicTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Water pumps', value: toNumber(budget.breakdown.details.buildings.civicByType.pump), total: Math.max(civicTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Water towers', value: toNumber(budget.breakdown.details.buildings.civicByType.water_tower), total: Math.max(civicTotal, 1), tone: 'negative', depth: 1 }
+      { label: 'Total', value: civicTotal, total: Math.max(civicTotal, 1), tone: 'negative' as const },
+      { label: 'Parks', value: toNumber(budget.breakdown.details.buildings.civicByType.park), total: Math.max(civicTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Water pumps', value: toNumber(budget.breakdown.details.buildings.civicByType.pump), total: Math.max(civicTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Water towers', value: toNumber(budget.breakdown.details.buildings.civicByType.water_tower), total: Math.max(civicTotal, 1), tone: 'negative' as const, depth: 1 }
     ]);
 
     const zoneDetails = renderBreakdownList('Zones', [
-      { label: 'Total', value: zoneTotal, total: Math.max(zoneTotal, 1), tone: 'negative' },
-      { label: 'Residential', value: toNumber(budget.breakdown.details.buildings.zonesByType.residential), total: Math.max(zoneTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Commercial', value: toNumber(budget.breakdown.details.buildings.zonesByType.commercial), total: Math.max(zoneTotal, 1), tone: 'negative', depth: 1 },
-      { label: 'Industrial', value: toNumber(budget.breakdown.details.buildings.zonesByType.industrial), total: Math.max(zoneTotal, 1), tone: 'negative', depth: 1 }
+      { label: 'Total', value: zoneTotal, total: Math.max(zoneTotal, 1), tone: 'negative' as const },
+      { label: 'Residential', value: toNumber(budget.breakdown.details.buildings.zonesByType.residential), total: Math.max(zoneTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Commercial', value: toNumber(budget.breakdown.details.buildings.zonesByType.commercial), total: Math.max(zoneTotal, 1), tone: 'negative' as const, depth: 1 },
+      { label: 'Industrial', value: toNumber(budget.breakdown.details.buildings.zonesByType.industrial), total: Math.max(zoneTotal, 1), tone: 'negative' as const, depth: 1 }
     ]);
 
     const pipesTotal = pipesValue;
     const expensesSection = renderBreakdownList('Expenses', [
-      { label: 'Transportation', value: transportTotal, total: expensesTotal, tone: 'negative' },
-      { label: 'Pipes', value: pipesTotal, total: expensesTotal, tone: 'negative' },
-      { label: 'Power', value: powerLinesValue + powerPlantsTotal, total: expensesTotal, tone: 'negative' },
-      { label: 'Civic', value: civicTotal, total: expensesTotal, tone: 'negative' },
-      { label: 'Zones', value: zoneTotal, total: expensesTotal, tone: 'negative' }
+      { label: 'Transportation', value: transportTotal, total: expensesTotal, tone: 'negative' as const },
+      { label: 'Pipes', value: pipesTotal, total: expensesTotal, tone: 'negative' as const },
+      { label: 'Power', value: powerLinesValue + powerPlantsTotal, total: expensesTotal, tone: 'negative' as const },
+      { label: 'Civic', value: civicTotal, total: expensesTotal, tone: 'negative' as const },
+      { label: 'Zones', value: zoneTotal, total: expensesTotal, tone: 'negative' as const }
     ]);
 
     body.innerHTML = `

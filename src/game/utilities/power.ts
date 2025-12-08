@@ -1,7 +1,7 @@
 import { BuildingStatus } from '../buildings/state';
 import { listPowerPlants } from '../buildings/manager';
 import { GameState } from '../gameState';
-import { POWER_PLANT_CONFIGS } from '../configs';
+import { POWER_PLANT_CONFIGS } from '../constants';
 import { getOrthogonalNeighbourCoords, isPowerCarrier } from '../adjacency';
 
 function getIndex(state: GameState, x: number, y: number) {
