@@ -1,6 +1,6 @@
 import { PowerPlantType } from '../constants';
 import { GameState, Tile, getTile, TileKind } from '../gameState';
-import { tileHasPower } from '../adjacency';
+import { tileHasPower, tileHasWater } from '../adjacency';
 import { BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './templates';
 import { BuildingInstance, createBuildingState, BuildingStatus } from './state';
 
@@ -80,9 +80,11 @@ export function updateBuildingStates(state: GameState) {
       continue;
     }
     const needsPower = template.requiresPower !== false;
+    let hasPower = true;
+    const { width, height } = template.footprint;
+
     if (needsPower) {
       let poweredTiles = 0;
-      const { width, height } = template.footprint;
       for (let dy = 0; dy < height; dy++) {
         for (let dx = 0; dx < width; dx++) {
           if (tileHasPower(state, instance.origin.x + dx, instance.origin.y + dy)) {
@@ -90,8 +92,26 @@ export function updateBuildingStates(state: GameState) {
           }
         }
       }
-      const fullyPowered = poweredTiles === template.footprint.width * template.footprint.height;
-      instance.state.status = fullyPowered ? BuildingStatus.Active : BuildingStatus.InactiveNoPower;
+      hasPower = poweredTiles === width * height;
+    }
+
+    if (!hasPower) {
+      instance.state.status = BuildingStatus.InactiveNoPower;
+      continue;
+    }
+
+    const needsWater = (template.waterUse ?? 0) > 0;
+    if (needsWater) {
+      let wateredTiles = 0;
+      for (let dy = 0; dy < height; dy++) {
+        for (let dx = 0; dx < width; dx++) {
+          if (tileHasWater(state, instance.origin.x + dx, instance.origin.y + dy)) {
+            wateredTiles++;
+          }
+        }
+      }
+      const fullyWatered = wateredTiles === width * height;
+      instance.state.status = fullyWatered ? BuildingStatus.Active : BuildingStatus.InactiveNoWater;
     } else {
       instance.state.status = BuildingStatus.Active;
     }

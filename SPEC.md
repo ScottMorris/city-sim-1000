@@ -294,7 +294,7 @@ Bulldoze
 * Each zoned tile can host a 1×1 **zone building instance** created by the simulation:
   * Residential lots provide population capacity; commercial/industrial lots provide job capacity
   * Lots use the building template system (cost/maintenance/utility use/capacity stored on the instance)
-  * Lots require power to be **Active**; inactive lots contribute no capacity or consumption
+  * Lots require power and water (if `waterUse > 0`) to be **Active**; inactive lots contribute no capacity or consumption
   * Simulation spawns lots when demand is positive and utilities are available; bulldozing removes the lot and zoning
 
 #### Utilities

@@ -10,9 +10,9 @@
   - Roads: 4-way orthogonal connectivity (no diagonal) for zoning reach, services, and traffic assumptions. Intersections auto-connect; roads and rail may cross with rules (rail over/under or shared tile if allowed).
   - Rail: 4-way network; gives freight/passenger bonus if a zone is road-adjacent to any rail tile within 1 tile (orthogonal) or directly orthogonal if sharing tiles is disallowed.
   - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power). Roads and rail also conduct power; power lines can overlay road/rail without breaking access. No diagonal hops.
-  - Water: 4-way flood fill through pipes and water facilities (Pumps/Towers). Roads and rail also conduct water; zones/buildings count as carriers if they have water. Underground pipes connect sources to the network.
+  - Water: 4-way flood fill through pipes and water facilities (Pumps/Towers). Roads and rail also conduct water (early game); underground pipes connect sources to the network and bridge gaps. Buildings without water connection become Inactive.
   - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe/road for water).
-- **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties.
+- **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties. InactiveNoWater status stops consumption and output.
 - **Feedback hooks**: Sticky warnings fire when utilities go negative (power/water) and a follow-up toast confirms recovery once the balance returns above zero. Budget panel surfaces a monthly net projection with colour-coded surplus/deficit plus a month/day readout to keep solvency visible. A Budget screen (from the HUD) adds quarterly totals, per-month net, and runway hints, with revenue (base stipend + residents/commercial/industrial) and expense breakdowns (transport vs buildings).
 - **Tool clarity**: Tool info card sits with the tile inspector; it shows cost/upkeep/output plus hints and can be pinned always-on. Tile inspector only appears while the Inspect tool is active.
 - **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build.
