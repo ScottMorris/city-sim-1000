@@ -7,7 +7,7 @@ import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
-import { isPowerCarrier, isZone } from '../game/adjacency';
+import { isPowerCarrier, isZone, isWaterCarrier } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
 import { ServiceId } from '../game/services';
 
@@ -175,7 +175,7 @@ export class MapRenderer {
 
           const hasNeighbour = (dx: number, dy: number) => {
              const t = getTile(state, x + dx, y + dy);
-             return t?.underground === TileKind.WaterPipe;
+             return isWaterCarrier(t);
           };
 
           this.mapLayer.rect(cx - offset, cy - offset, pipeWidth, pipeWidth).fill({ color: 0x555555 });
