@@ -66,11 +66,7 @@ export function recomputeWaterNetwork(state: GameState) {
     }
   }
 
+  state.utilities.waterProduced = produced;
+  state.utilities.waterUsed = used;
   state.utilities.water = produced - used;
-  // We don't have separate produced/used fields in utilities stats for water?
-  // GameState has: utilities: { power, water, powerProduced, powerUsed }
-  // It lacks waterProduced/waterUsed.
-  // I should probably add them if I want to display them or stick to just 'water' balance.
-  // The HUD shows `state.utilities.water`.
-  // I'll stick to calculating net water.
 }

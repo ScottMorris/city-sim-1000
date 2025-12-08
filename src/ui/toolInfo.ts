@@ -1,4 +1,4 @@
-import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '../game/configs';
+import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { TileKind } from '../game/gameState';
 import { Tool } from '../game/toolTypes';

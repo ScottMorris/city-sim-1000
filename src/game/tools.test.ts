@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './configs';
+import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { recomputePowerNetwork } from './utilities/power';
 import { applyTool } from './tools';
