@@ -216,6 +216,7 @@ describe('simulation', () => {
     applyTool(state, Tool.PowerLine, 2, 1);
     applyTool(state, Tool.PowerLine, 2, 2);
     applyTool(state, Tool.WaterTower, 0, 2); // Add water
+    applyTool(state, Tool.WaterPipe, 2, 2); // Connect water
     applyTool(state, Tool.Road, 3, 1);
     applyTool(state, Tool.Residential, 3, 2);
     state.demand.residential = 80;

@@ -296,6 +296,7 @@ export class MapRenderer {
         let severity = 0;
         if (tile.abandoned) severity = 2;
         if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
+        if (buildingStatus === BuildingStatus.InactiveNoWater) return { color: 0x4cc3ff, alpha: 0.45 };
         if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
         if (zone && !tile.powered) severity = Math.max(severity, 2);
         if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
