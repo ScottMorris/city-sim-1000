@@ -6,7 +6,7 @@ import {
   getQuarterSummary,
   getRecentMonths,
   recordDailyBudget
-} from './budget';
+} from './economy';
 
 describe('budget helpers', () => {
   it('records one entry per day and trims history', () => {

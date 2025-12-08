@@ -1,7 +1,7 @@
 import type { Texture } from 'pixi.js';
 import { isPowerCarrier } from '../game/adjacency';
-import { POWER_PLANT_CONFIGS } from '../game/constants';
-import { getBuildingTemplate } from '../game/buildings';
+import { POWER_PLANT_CONFIGS } from '../game/configs';
+import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
 import type { TileTextures } from './tileAtlas';
 

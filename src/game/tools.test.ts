@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
+import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './configs';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
-import { recomputePowerNetwork } from './power';
+import { recomputePowerNetwork } from './utilities/power';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
-import { BuildingStatus, getBuildingTemplate, placeBuilding } from './buildings';
+import { BuildingStatus } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
+import { placeBuilding } from './buildings/manager';
 import { hasRoadAccess } from './adjacency';
 
 describe('tools', () => {
@@ -213,6 +215,7 @@ describe('simulation', () => {
     applyTool(state, Tool.PowerLine, 2, 0);
     applyTool(state, Tool.PowerLine, 2, 1);
     applyTool(state, Tool.PowerLine, 2, 2);
+    applyTool(state, Tool.WaterTower, 0, 2); // Add water
     applyTool(state, Tool.Road, 3, 1);
     applyTool(state, Tool.Residential, 3, 2);
     state.demand.residential = 80;

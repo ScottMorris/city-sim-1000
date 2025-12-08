@@ -1,7 +1,8 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Camera } from './camera';
 import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
-import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
+import { BuildingStatus } from '../game/buildings/state';
+import { getBuildingTemplate } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
@@ -106,6 +107,9 @@ export class MapRenderer {
     for (const building of state.buildings) {
       buildingStatuses.set(building.id, building.state.status);
     }
+    const isUnderground = overlayMode === 'underground';
+    const surfaceAlpha = isUnderground ? 0.25 : 1.0;
+
     for (let y = 0; y < state.height; y++) {
       for (let x = 0; x < state.width; x++) {
         const tile = getTile(state, x, y)!;
@@ -121,7 +125,7 @@ export class MapRenderer {
                 spriteSize * widthTiles,
                 spriteSize * heightTiles
               )
-              .fill({ color: 0x000000, alpha: 0.8 });
+              .fill({ color: 0x000000, alpha: 0.8 * surfaceAlpha });
           }
           const sprite = this.getOrCreateSprite(idx, texture);
           sprite.position.set(
@@ -131,6 +135,7 @@ export class MapRenderer {
           sprite.width = spriteSize * widthTiles - borderWidth * 2;
           sprite.height = spriteSize * heightTiles - borderWidth * 2;
           sprite.visible = true;
+          sprite.alpha = surfaceAlpha;
           for (let dy = 0; dy < heightTiles; dy++) {
             for (let dx = 0; dx < widthTiles; dx++) {
               const coveredIdx = (y + dy) * state.width + (x + dx);
@@ -150,7 +155,34 @@ export class MapRenderer {
               size,
               size
             )
-            .fill({ color, alpha: 0.95 });
+            .fill({ color, alpha: 0.95 * surfaceAlpha });
+        }
+
+        if (isUnderground && tile.underground) {
+          // Draw underground layer (pipes)
+          // Simple visual for now: grey pipe, blue if watered (handled by overlay)
+          const px = this.camera.x + x * size + size * 0.25;
+          const py = this.camera.y + y * size + size * 0.25;
+          const pSize = size * 0.5;
+          this.mapLayer.rect(px, py, pSize, pSize).fill({ color: 0x555555, alpha: 1.0 });
+
+          // Connectors (simple logic for visualization)
+          const pipeWidth = size * 0.2;
+          const center = size / 2;
+          const offset = pipeWidth / 2;
+          const cx = this.camera.x + x * size + center;
+          const cy = this.camera.y + y * size + center;
+
+          const hasNeighbour = (dx: number, dy: number) => {
+             const t = getTile(state, x + dx, y + dy);
+             return t?.underground === TileKind.WaterPipe;
+          };
+
+          this.mapLayer.rect(cx - offset, cy - offset, pipeWidth, pipeWidth).fill({ color: 0x555555 });
+          if (hasNeighbour(0, -1)) this.mapLayer.rect(cx - offset, this.camera.y + y * size, pipeWidth, center).fill({ color: 0x555555 });
+          if (hasNeighbour(0, 1)) this.mapLayer.rect(cx - offset, cy, pipeWidth, center).fill({ color: 0x555555 });
+          if (hasNeighbour(-1, 0)) this.mapLayer.rect(this.camera.x + x * size, cy - offset, center, pipeWidth).fill({ color: 0x555555 });
+          if (hasNeighbour(1, 0)) this.mapLayer.rect(cx, cy - offset, center, pipeWidth).fill({ color: 0x555555 });
         }
       }
     }
@@ -243,13 +275,18 @@ export class MapRenderer {
         return null;
       }
 
-      if (overlayMode === 'water') {
+      if (overlayMode === 'water' || overlayMode === 'underground') {
         if (tile.kind === TileKind.Water) return { color: 0x2f7be5, alpha: 0.32 };
-        if (tile.kind === TileKind.WaterPipe) return { color: 0x4cc3ff, alpha: 0.38 };
+        if (tile.underground === TileKind.WaterPipe) {
+             return { color: tile.watered ? 0x4cc3ff : 0x888888, alpha: 0.6 };
+        }
+        if (tile.kind === TileKind.WaterPipe) return { color: 0x4cc3ff, alpha: 0.38 }; // Legacy check
+
         if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
           return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
         }
-        if (tile.powered) return { color: 0x5aa2ff, alpha: 0.12 };
+        // Show watered status on buildings/zones
+        if (overlayMode === 'water' && tile.watered) return { color: 0x5aa2ff, alpha: 0.2 };
         return null;
       }
 

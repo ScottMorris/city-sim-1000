@@ -1,5 +1,5 @@
-import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
-import { getBuildingTemplate } from '../game/buildings';
+import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '../game/configs';
+import { getBuildingTemplate } from '../game/buildings/templates';
 import { TileKind } from '../game/gameState';
 import { Tool } from '../game/toolTypes';
 import { defaultHotkeys, HotkeyAction } from './hotkeys';
@@ -253,8 +253,8 @@ export function getToolDetails(tool: Tool): ToolDetails {
       hints.push('Clears buildings or networks; terrain stays unchanged.');
       break;
     case Tool.WaterPipe:
-      hints.push('Underground pipes coming soon.');
-      return { tool, name, hotkey, rows, hints, unavailable: true };
+      hints.push('Place underground to connect pumps/towers.');
+      break;
     case Tool.Inspect:
     default:
       hints.push('Inspect a tile to see utilities, status, and capacity.');

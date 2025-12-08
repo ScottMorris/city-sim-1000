@@ -119,12 +119,7 @@ export function initToolbar(
     const hotkey = getToolHotkey(key);
     button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
-    if (key === Tool.WaterPipe) {
-      button.disabled = true;
-      button.title = 'Underground water pipes view coming soon';
-    }
     button.addEventListener('click', () => {
-      if (button.disabled) return;
       onSelect(key);
       updateToolbar(toolbar, key);
     });

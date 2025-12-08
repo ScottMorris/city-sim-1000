@@ -1,4 +1,5 @@
-import { BuildingStatus, getBuildingTemplate } from '../game/buildings';
+import { BuildingStatus } from '../game/buildings/state';
+import { getBuildingTemplate } from '../game/buildings/templates';
 import { GameState, getTile } from '../game/gameState';
 import { Position } from '../rendering/renderer';
 import { Tool } from '../game/toolTypes';

@@ -1,6 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { TileKind } from '../game/gameState';
-import { PowerPlantType } from '../game/constants';
+import { PowerPlantType } from '../game/configs';
 import { withBasePath } from '../utils/assetPaths';
 
 export interface TileTextures {
