@@ -6,7 +6,8 @@ import {
   createDefaultMinimapSettings,
   createDefaultSettings
 } from './gameState';
-import { createBuildingState, getBuildingTemplate } from './buildings';
+import { createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import {
   createEmptyServiceLoad,
   createServiceSystemState,
@@ -44,6 +45,8 @@ export function deserialize(payload: string): GameState {
   parsed.tiles = parsed.tiles.map((tile: any) => ({
     ...tile,
     powered: tile.powered ?? false,
+    watered: tile.watered ?? false,
+    underground: tile.underground,
     powerPlantType: tile.powerPlantType,
     powerPlantId: tile.powerPlantId,
     buildingId: tile.buildingId ?? tile.powerPlantId,

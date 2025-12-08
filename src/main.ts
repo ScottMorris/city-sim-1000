@@ -119,7 +119,7 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
     ...minimapDefaults,
     ...(settings?.minimap ?? {})
   };
-  if (!['base', 'power', 'water', 'alerts', 'education'].includes(minimapSettings.mode)) {
+  if (!['base', 'power', 'water', 'alerts', 'education', 'underground'].includes(minimapSettings.mode)) {
     minimapSettings.mode = 'base';
   }
   const inputDefaults = createDefaultInputSettings();
@@ -418,7 +418,18 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     };
   };
 
-  const setTool = (nextTool: Tool) => selectTool(nextTool);
+  const setTool = (nextTool: Tool) => {
+    selectTool(nextTool);
+    if (nextTool === Tool.WaterPipe && state.settings.minimap.mode !== 'underground') {
+      applySettings({ ...state.settings, minimap: { ...state.settings.minimap, mode: 'underground' } });
+    } else if (
+      nextTool !== Tool.WaterPipe &&
+      nextTool !== Tool.Bulldoze &&
+      state.settings.minimap.mode === 'underground'
+    ) {
+      applySettings({ ...state.settings, minimap: { ...state.settings.minimap, mode: 'base' } });
+    }
+  };
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
     simSpeed = speed;

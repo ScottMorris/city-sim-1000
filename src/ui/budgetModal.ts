@@ -3,7 +3,7 @@ import {
   computeRunwayDays,
   getQuarterSummary,
   getRecentMonths
-} from '../game/budget';
+} from '../game/economy';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 import { DEFAULT_BYLAWS, LIGHTING_POLICIES, applyLightingPolicy } from '../game/bylaws';
 import { computeLightingBaseStats } from '../game/bylawAnalytics';

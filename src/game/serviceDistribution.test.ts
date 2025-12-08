@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState, setTile, TileKind } from './gameState';
-import { getBuildingTemplate, placeBuilding } from './buildings';
+import { getBuildingTemplate } from './buildings/templates';
+import { placeBuilding } from './buildings/manager';
 import {
   computeZoneLoads,
   estimateZoneLoad,

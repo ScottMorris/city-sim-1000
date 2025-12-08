@@ -1,4 +1,5 @@
-import { BuildingCategory, BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingStatus } from './buildings/state';
+import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import type { GameState } from './gameState';
 import { getTile } from './gameState';
 import { ServiceId } from './services';

@@ -1,5 +1,6 @@
 import { getOrthogonalNeighbourCoords, isZone } from './adjacency';
-import { BuildingCategory, BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingStatus } from './buildings/state';
+import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
 import { ServiceId } from './services';

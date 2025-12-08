@@ -1,9 +1,9 @@
-import { PowerPlantType } from './constants';
+import { PowerPlantType } from './configs';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { defaultHotkeys } from '../ui/hotkeys';
-import type { BudgetHistory } from './budget';
+import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
-import type { BuildingInstance } from './buildings';
+import type { BuildingInstance } from './buildings/state';
 import type { ServiceSystemState, TileServiceState } from './services';
 import { createServiceSystemState, createTileServiceState } from './services';
 
@@ -31,7 +31,9 @@ export interface Tile {
   elevation: number;
   happiness: number;
   powered: boolean;
+  watered: boolean;
   abandoned?: boolean;
+  underground?: TileKind;
   roadUnderlay?: boolean;
   railUnderlay?: boolean;
   powerOverlay?: boolean;
@@ -41,7 +43,7 @@ export interface Tile {
   services: TileServiceState;
 }
 
-export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education';
+export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'underground';
 
 export type MinimapSize = 'small' | 'medium';
 
@@ -150,7 +152,7 @@ export interface GameState {
   utilities: UtilityStats;
   demand: DemandStats;
   budget: BudgetStats;
-  budgetHistory: import('./budget').BudgetHistory;
+  budgetHistory: BudgetHistory;
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
@@ -218,6 +220,7 @@ export function createInitialState(width = 64, height = 64): GameState {
         elevation: 0,
         happiness: 1,
         powered: false,
+        watered: false,
         services: createTileServiceState()
       });
     }

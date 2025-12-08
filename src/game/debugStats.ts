@@ -1,4 +1,5 @@
-import { BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingStatus } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import { GameState, TileKind } from './gameState';
 import { computeDemand } from './demand';
 import { computeLabourStats, LabourStats } from './computeLabourStats';

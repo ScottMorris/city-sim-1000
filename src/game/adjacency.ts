@@ -64,6 +64,16 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
   return false;
 }
 
+export function isWaterCarrier(tile: Tile | undefined): boolean {
+  if (!tile) return false;
+  if (tile.underground === TileKind.WaterPipe) return true;
+  if (tile.buildingId !== undefined) return true; // Buildings carry water
+  if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
+  if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;
+  if (isZone(tile)) return true;
+  return false;
+}
+
 /**
  * Returns true if the tile is powered or has an orthogonally adjacent powered carrier.
  */
@@ -74,6 +84,19 @@ export function tileHasPower(state: GameState, x: number, y: number): boolean {
   return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
     const neighbour = getTile(state, nx, ny);
     return neighbour?.powered && isPowerCarrier(neighbour);
+  });
+}
+
+/**
+ * Returns true if the tile is watered or has an orthogonally adjacent watered carrier.
+ */
+export function tileHasWater(state: GameState, x: number, y: number): boolean {
+  const tile = getTile(state, x, y);
+  if (!tile) return false;
+  if (tile.watered) return true;
+  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
+    const neighbour = getTile(state, nx, ny);
+    return neighbour?.watered && isWaterCarrier(neighbour);
   });
 }
 
