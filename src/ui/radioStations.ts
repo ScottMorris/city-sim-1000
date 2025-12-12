@@ -58,11 +58,13 @@ function normaliseStation(entry: unknown): RadioStation | null {
     return null;
   }
 
+  const playlistPath = isNonEmptyString(playlist) ? withBasePath(playlist) : '';
   return {
     id,
     name: isNonEmptyString(name) ? name : formatStationName(id),
     description: isNonEmptyString(description) ? description : undefined,
-    playlist
+    // Encode to survive spaces in folder names when deployed under a base path.
+    playlist: encodeURI(playlistPath)
   };
 }
 
