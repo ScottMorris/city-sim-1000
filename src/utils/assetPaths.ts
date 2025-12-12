@@ -5,8 +5,13 @@ export function withBasePath(path: string): string {
   if (ABSOLUTE_URL_PATTERN.test(path) || path.startsWith('//')) {
     return path;
   }
-  const base = import.meta.env.BASE_URL ?? '/';
-  const trimmedBase = base.endsWith('/') ? base : `${base}/`;
+  const envBase = import.meta.env.BASE_URL ?? '/';
+  // If the build base is '/', derive a runtime base from the current document (helps on GitHub Pages).
+  const runtimeBase =
+    envBase === '/' && typeof document !== 'undefined'
+      ? new URL('.', document.baseURI).pathname
+      : envBase;
+  const trimmedBase = runtimeBase.endsWith('/') ? runtimeBase : `${runtimeBase}/`;
   const trimmedPath = path.startsWith('/') ? path.slice(1) : path;
   return `${trimmedBase}${trimmedPath}`;
 }
