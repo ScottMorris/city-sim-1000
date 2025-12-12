@@ -38,7 +38,7 @@ Then open the provided local URL. The service worker caches assets after first l
 - Manual available at `public/manual.html` covering controls and systems.
 - Minimap in the bottom-right HUD: base map view plus power, water, and alerts overlay modes with click-to-jump navigation and viewport framing; the same mode tints the main map for quick at-a-glance status.
 - Settings gear in the toolbar with over-zoning penalty toggle, minimap controls, input presets (invert pan, pan speed, Shift+scroll to pan, zoom sensitivity), radio volume, Gemini sprite toggle (off by default), and placeholders for edge scroll, hotkey remapping, and accessibility.
-- Toolbar radio widget with emoji controls (previous/play/pause/next), a scrolling marquee for artist/title, hover/focus popover for details, and an offline state when no playlist exists.
+- Toolbar radio widget with emoji controls (previous/play/pause/next), a playlist icon button that opens a station dropdown, a scrolling marquee for artist/title, hover/focus popover for details, and an offline state when no playlist exists.
 
 ## Budget and economy
 - Money updates every in-game day; the HUD shows the current month/day on a 30-day calendar and the ticker shows a projected net per month (green surplus, red deficit, neutral when flat). The Budget screen (from the HUD) shows quarterly totals, per-month net, and cash runway based on your current burn, plus revenue/expense details.
@@ -49,13 +49,12 @@ Then open the provided local URL. The service worker caches assets after first l
 - A power deficit halts new growth until restored; water is stubbed high until pipes ship.
 
 ## Radio assets (drop-in)
-- Put audio files in `public/audio/radio/` (prefer Opus at 48 kHz, ~64–96 kbps). Add fallbacks like `.ogg`/`.mp3` only if you need broader browser coverage.
-- Create `public/audio/radio/playlist.json` with a `version` string and `tracks` array of `{ id, title, artist, src, cover?, duration?, loudnessLufs?, loop?, fallbackSrc? }`. The radio loads this JSON on start and cycles tracks; missing or empty playlists leave the widget in “Radio offline”.
-- Optional covers live in `public/audio/radio/covers/` (WebP/AVIF/PNG). If a track declares `cover`, a tiny thumbnail appears in the toolbar and the hover popover shows a larger preview; no cover means no image shown.
-- Playback buttons use emoji to save space; the marquee pauses while paused and resets on track changes. Hover/focus reveals a compact popover for more detail without changing toolbar height.
-- Use `public/audio/radio/playlist.sample.json` as a starter; copy it to `playlist.json` and swap in your own filenames once you drop audio and cover files.
-- To fill `loudnessLufs`, measure each track with `ffmpeg -i track.opus -filter_complex ebur128=peak=true -f null -` and read the “Integrated loudness” value (in LUFS) from stderr; target roughly -14 LUFS so tracks feel even.
-- Auto-generate the playlist and covers with `npm run build:radio-playlist` (requires `ffmpeg`/`ffprobe` in PATH). It reads embedded tags for title/artist when available. Flags: `--meta <file>` for per-track overrides, `--default-artist "Name"`, `--extract-embedded-covers` to pull art from audio when no external cover exists, `--force` to rebuild covers, `--dry-run` to print JSON only.
+- Each station sits in its own folder under `public/audio/radio/<station>` with audio files, optional covers, and a local `playlist.json`. The toolbar reads `public/audio/radio/stations.json` to populate the playlist icon dropdown so multiple stations can coexist.
+- Drop an optional `station.json` beside a playlist to give it a friendly `name` and `description`; the build script copies those fields into the generated manifest for the UI.
+- Audio files should prefer Opus at 48 kHz (~64–96 kbps) with fallbacks (`.ogg`/`.mp3`) listed in `fallbackSrc`. Supply cover art in `public/audio/radio/covers/` (WebP/AVIF/PNG) so thumbnails appear in the toolbar and hover popover.
+- Playback buttons keep using emoji controls; the marquee scrolls while playing and the hover/focus popover shows the current title/artist and cover art.
+- Use `public/audio/radio/playlist.sample.json` as inspiration, then copy tracks into a station folder (see `public/audio/radio/sample/playlist.json`) and keep covers next to that station.
+- Run `npm run build:radio-playlist` to scan station folders, write each `playlist.json`, convert covers, and emit `public/audio/radio/stations.json`. Flags are unchanged: `--meta <file>` for overrides, `--default-artist "Name"`, `--extract-embedded-covers`, `--force`, `--convert-opus` to transcode non-Opus sources, and `--dry-run`.
 
 ## Controls (quick reference)
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.

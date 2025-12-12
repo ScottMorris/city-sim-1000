@@ -10,8 +10,8 @@
   - Roads: 4-way orthogonal connectivity (no diagonal) for zoning reach, services, and traffic assumptions. Intersections auto-connect; roads and rail may cross with rules (rail over/under or shared tile if allowed).
   - Rail: 4-way network; gives freight/passenger bonus if a zone is road-adjacent to any rail tile within 1 tile (orthogonal) or directly orthogonal if sharing tiles is disallowed.
   - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power). Roads and rail also conduct power; power lines can overlay road/rail without breaking access. No diagonal hops.
-  - Water: 4-way flood fill through pipes and water facilities; surface buildings do not conduct water unless explicitly a pipe. (Temporarily disabled in simulation—water balance is fixed high while plumbing is built out.)
-  - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe for water).
+  - Water: 4-way flood fill through pipes and water facilities (Pumps/Towers). Roads and rail also conduct water; zones/buildings count as carriers if they have water. Underground pipes connect sources to the network.
+  - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe/road for water).
 - **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties.
 - **Feedback hooks**: Sticky warnings fire when utilities go negative (power/water) and a follow-up toast confirms recovery once the balance returns above zero. Budget panel surfaces a monthly net projection with colour-coded surplus/deficit plus a month/day readout to keep solvency visible. A Budget screen (from the HUD) adds quarterly totals, per-month net, and runway hints, with revenue (base stipend + residents/commercial/industrial) and expense breakdowns (transport vs buildings).
 - **Tool clarity**: Tool info card sits with the tile inspector; it shows cost/upkeep/output plus hints and can be pinned always-on. Tile inspector only appears while the Inspect tool is active.
@@ -39,7 +39,7 @@
 - **Terraform**: Unlocks buildable land and shapes flow; must be priced to matter.
 - **Road/Rail**: Primary connectivity; rail as mid/late-game freight/passenger efficiency.
 - **Power**: Plants with upkeep; lines as network graph; outages visibly stall zones. Roads/rail can conduct power; power lines can overlay roads/rail.
-- **Water**: Pumps/towers and pipes; underground view for clean management. (Temporarily disabled in sim until pipes arrive.)
+- **Water**: Pumps/towers and pipes; underground view for clean management. Roads/rail conduct water to simplify early expansion; pipes connect distant sources.
 - **Zoning**: R/C/I with demand bars; growth tied to services and connectivity.
 - **Amenities**: Parks/trees for happiness; future services can reuse road reach.
 
@@ -80,11 +80,11 @@
 - **UI/Navigation**: Minimap anchored to the bottom-right HUD for quick orientation on large maps. Base view is live (terrain/zones/roads/rail/power lines/buildings) with click-to-jump camera controls and a viewport rectangle; power, water, and alerts overlay modes are available and also tint the main map for quick at-a-glance feedback. Limit canvas size and coarsen sampling on huge maps to stay performant.
 
 ## Radio widget (toolbar)
-- Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) and a short marquee showing `Artist — Title`; the marquee pauses while paused and resets on track changes.
-- Hover/focus reveals a small popover above the toolbar with full title/artist details and a larger cover preview when provided; if a track has no cover or it fails to load, the thumbnail remains hidden.
-- Playlist lives at `public/audio/radio/playlist.json` with `{ version, tracks: [{ id, title, artist, src, cover?, duration?, loudnessLufs?, loop?, fallbackSrc? }] }`. Prefer Opus (48 kHz, ~64–96 kbps); add fallbacks (`.ogg`/`.mp3`) only if needed and list them in `fallbackSrc`.
-- Loudness normalisation can lean on optional `loudnessLufs` hints per track. Measure per-track loudness with `ffmpeg -i track.opus -filter_complex ebur128=peak=true -f null -` and read the “Integrated loudness” (LUFS) from stderr; aim near -14 LUFS to keep levels even. If the playlist is missing or empty, the widget stays in “Radio offline” and controls disable until files are added.
-- Helper script: `npm run build:radio-playlist` scans `public/audio/radio/`, probes duration/LUFS via ffprobe/ffmpeg, reads embedded title/artist tags when present, converts covers to 256px WebP (or extracts embedded art with `--extract-embedded-covers`), and writes `playlist.json`. Use `--meta <file>` for per-track overrides and `--dry-run` to preview JSON.
+- Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) plus a playlist-icon button that opens the station dropdown.
+- The dropdown lists entries from `public/audio/radio/stations.json`, each pointing at a subfolder and its `playlist.json`. Switching stations reloads the playlist/cover metadata without touching the rest of the UI.
+- Hover/focus reveals a popover with full title/artist details and the cover preview when provided; missing covers stay hidden. While paused the marquee name stays in place, and it scrolls when the track is playing.
+- Each station playlist lives at `public/audio/radio/<station>/playlist.json` with `{ version, tracks: [{ id, title, artist, src, cover?, duration?, loudnessLufs?, loop?, fallbackSrc? }] }`. Prefer Opus (48 kHz, ~64–96 kbps); add fallbacks (`.ogg`/`.mp3`) only if necessary and list them in `fallbackSrc`. Missing or empty playlists deliver “Radio offline” and disable controls until new files appear.
+- Helper script: `npm run build:radio-playlist` now scans every station folder it finds, writes each station’s `playlist.json`, converts covers, and emits `public/audio/radio/stations.json`. Flags are unchanged: `--meta <file>` for per-track overrides, `--default-artist "Name"`, `--extract-embedded-covers`, `--force`, `--convert-opus` to transcode non-Opus sources, and `--dry-run`.
 
 ## Controls & Hotkeys
 - Movement: `WASD` or arrow keys for panning; scroll wheel/pinch to zoom.

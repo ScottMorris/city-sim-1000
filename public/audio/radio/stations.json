@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "stations": [
+    {
+      "id": "City Sim 1000",
+      "name": "City Sim 1000",
+      "playlist": "/audio/radio/City Sim 1000/playlist.json"
+    },
+    {
+      "id": "Psy Cim 1000",
+      "name": "Psy Cim 1000",
+      "playlist": "/audio/radio/Psy Cim 1000/playlist.json"
+    }
+  ]
+}

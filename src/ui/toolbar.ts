@@ -1,6 +1,7 @@
 import { Tool } from '../game/toolTypes';
 import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
 import { initRadioWidget, type RadioWidget } from './radio';
+import { fetchRadioStations, type RadioStation } from './radioStations';
 
 const powerOptions: Tool[] = [
   Tool.PowerLine,
@@ -13,14 +14,27 @@ const powerOptions: Tool[] = [
 const waterOptions: Tool[] = [Tool.WaterPump, Tool.WaterTower, Tool.WaterPipe];
 const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 
+interface ToolbarOptions {
+  onOpenBudget?: () => void;
+  onOpenSettings?: () => void;
+  radioVolume?: number;
+  radioStationId?: string;
+  onRadioStationChange?: (stationId: string) => void;
+}
+
+export interface ToolbarControllers {
+  radio: RadioWidget;
+  setRadioStation: (stationId?: string, opts?: { triggerChange?: boolean }) => void;
+}
+
 export function initToolbar(
   toolbar: HTMLElement,
   onSelect: (tool: Tool) => void,
   initial: Tool,
-  options: { onOpenBudget?: () => void; onOpenSettings?: () => void; radioVolume?: number } = {}
-): { radio: RadioWidget } {
+  options: ToolbarOptions = {}
+): ToolbarControllers {
   toolbar.innerHTML = '';
-  const { onOpenBudget, onOpenSettings, radioVolume } = options;
+  const { onOpenBudget, onOpenSettings, radioVolume, radioStationId, onRadioStationChange } = options;
 
   const primaryRow = document.createElement('div');
   primaryRow.className = 'toolbar-row';
@@ -84,7 +98,10 @@ export function initToolbar(
   radioGroup.className = 'toolbar-group toolbar-group-radio';
   const radioHost = document.createElement('div');
   radioHost.className = 'toolbar-radio-slot';
+  const radioStationHost = document.createElement('div');
+  radioStationHost.className = 'toolbar-radio-station';
   radioGroup.appendChild(radioHost);
+  radioGroup.appendChild(radioStationHost);
   trailingCluster.appendChild(radioGroup);
 
   if (onOpenSettings) {
@@ -119,12 +136,7 @@ export function initToolbar(
     const hotkey = getToolHotkey(key);
     button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
-    if (key === Tool.WaterPipe) {
-      button.disabled = true;
-      button.title = 'Underground water pipes view coming soon';
-    }
     button.addEventListener('click', () => {
-      if (button.disabled) return;
       onSelect(key);
       updateToolbar(toolbar, key);
     });
@@ -138,6 +150,166 @@ export function initToolbar(
   );
 
   const radio = initRadioWidget(radioHost, { initialVolume: radioVolume });
+
+  const stationButton = document.createElement('button');
+  stationButton.type = 'button';
+  stationButton.className = 'radio-station-button';
+  stationButton.textContent = '🎧';
+  stationButton.title = 'Loading radio stations...';
+  stationButton.setAttribute('aria-haspopup', 'true');
+  stationButton.setAttribute('aria-expanded', 'false');
+  stationButton.disabled = true;
+
+  const stationMenu = document.createElement('div');
+  stationMenu.className = 'radio-station-menu';
+  stationMenu.setAttribute('role', 'menu');
+  const stationList = document.createElement('div');
+  stationList.className = 'radio-station-menu-list';
+  stationMenu.appendChild(stationList);
+
+  radioStationHost.append(stationButton, stationMenu);
+
+  const updateStationButton = (station: RadioStation | null) => {
+    if (!station) {
+      stationButton.title = 'Select radio station';
+      stationButton.setAttribute('aria-label', 'Select radio station');
+      return;
+    }
+    stationButton.title = `Current station: ${station.name}`;
+    stationButton.setAttribute('aria-label', `Select radio station (current: ${station.name})`);
+  };
+
+  let stations: RadioStation[] = [];
+  let activeStationId: string | null = null;
+  let pendingStationId: string | undefined = radioStationId;
+  let manifestLoaded = false;
+
+  const renderStationList = () => {
+    stationList.innerHTML = '';
+    if (!stations.length) {
+      const empty = document.createElement('div');
+      empty.className = 'radio-station-menu-empty';
+      empty.textContent = manifestLoaded ? 'No radio stations available' : 'Loading radio stations...';
+      stationList.appendChild(empty);
+      return;
+    }
+    stations.forEach((station) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'radio-station-menu-item';
+      item.setAttribute('role', 'menuitem');
+      item.textContent = station.name;
+      if (station.id === activeStationId) {
+        item.classList.add('radio-station-menu-item-active');
+      }
+      item.addEventListener('click', () => {
+        setRadioStation(station.id, { triggerChange: true });
+        closeStationMenu();
+      });
+      stationList.appendChild(item);
+      if (station.description) {
+        const desc = document.createElement('div');
+        desc.className = 'radio-station-menu-description';
+        desc.textContent = station.description;
+        stationList.appendChild(desc);
+      }
+    });
+  };
+
+  const closeStationMenu = () => {
+    stationMenu.classList.remove('open');
+    stationButton.setAttribute('aria-expanded', 'false');
+  };
+
+  const positionStationMenu = () => {
+    const rect = stationButton.getBoundingClientRect();
+    const margin = 8;
+    stationMenu.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    stationMenu.style.top = `${Math.round(rect.bottom + margin + window.scrollY)}px`;
+    stationMenu.style.minWidth = `${Math.max(rect.width, 220)}px`;
+  };
+
+  const openStationMenu = () => {
+    if (stationButton.disabled || !stations.length) return;
+    positionStationMenu();
+    stationMenu.classList.add('open');
+    stationButton.setAttribute('aria-expanded', 'true');
+  };
+
+  const toggleStationMenu = () => {
+    if (stationMenu.classList.contains('open')) {
+      closeStationMenu();
+    } else {
+      openStationMenu();
+    }
+  };
+
+  const setRadioStation = (stationId?: string, opts: { triggerChange?: boolean } = {}) => {
+    pendingStationId = stationId;
+    if (!stations.length) return;
+    const station =
+      (stationId ? stations.find((entry) => entry.id === stationId) : undefined) ?? stations[0];
+    if (!station) return;
+    const hadChanged = activeStationId !== station.id;
+    activeStationId = station.id;
+    updateStationButton(station);
+    radio.setPlaylistUrl(station.playlist);
+    renderStationList();
+    if (opts.triggerChange && hadChanged && onRadioStationChange) {
+      onRadioStationChange(station.id);
+    }
+  };
+
+  const loadStations = async () => {
+    stationButton.disabled = true;
+    stationList.innerHTML = '';
+    const loading = document.createElement('div');
+    loading.className = 'radio-station-menu-loading';
+    loading.textContent = 'Loading radio stations...';
+    stationList.appendChild(loading);
+    const manifest = await fetchRadioStations();
+    manifestLoaded = true;
+    if (!manifest || !manifest.stations.length) {
+      stations = [];
+      stationButton.disabled = true;
+      stationList.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'radio-station-menu-empty';
+      empty.textContent = manifest ? 'No radio stations available' : 'Radio stations unavailable';
+      stationList.appendChild(empty);
+      stationButton.title = 'Radio stations unavailable';
+      stationButton.setAttribute('aria-label', 'Radio stations unavailable');
+      closeStationMenu();
+      return;
+    }
+    stations = manifest.stations;
+    stationButton.disabled = false;
+    setRadioStation(pendingStationId, { triggerChange: false });
+  };
+
+  const handleDocumentClick = (event: MouseEvent) => {
+    if (!radioStationHost.contains(event.target as Node)) {
+      closeStationMenu();
+    }
+  };
+
+  const handleDocumentKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      closeStationMenu();
+    }
+  };
+
+  stationButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleStationMenu();
+  });
+
+  document.addEventListener('click', handleDocumentClick);
+  document.addEventListener('keydown', handleDocumentKeydown);
+  window.addEventListener('resize', positionStationMenu);
+
+  loadStations();
+
   updateToolbar(toolbar, initial);
 
   const restyleSubmenus = () => {
@@ -149,7 +321,7 @@ export function initToolbar(
   toolbar.addEventListener('scroll', restyleSubmenus);
   window.addEventListener('resize', restyleSubmenus);
 
-  return { radio };
+  return { radio, setRadioStation };
 }
 
 export function updateToolbar(toolbar: HTMLElement, active: Tool) {
