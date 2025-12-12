@@ -18,6 +18,11 @@ describe('fetchRadioStations', () => {
             {
               id: 'sample',
               playlist: '/audio/radio/sample/playlist.json'
+            },
+            {
+              id: 'with-spaces',
+              name: 'With Spaces',
+              playlist: '/audio/radio/City%20Sim%201000/playlist.json'
             }
           ]
         })
@@ -37,6 +42,11 @@ describe('fetchRadioStations', () => {
           id: 'sample',
           name: 'Sample',
           playlist: '/audio/radio/sample/playlist.json'
+        },
+        {
+          id: 'with-spaces',
+          name: 'With Spaces',
+          playlist: '/audio/radio/City%20Sim%201000/playlist.json'
         }
       ]
     });
