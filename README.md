@@ -1,5 +1,7 @@
 # City Sim 1000
 
+![City Sim 1000 banner](public/assets/readme-banner.png)
+
 A browser-based, offline-ready city simulator built with TypeScript, Vite, and WebGL-powered rendering via PixiJS. Grow a skyline with roads, rail, hydro power, water pumps, zoning, trees, and parks while balancing demand and budget.
 
 ## Tech stack
