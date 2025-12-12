@@ -284,6 +284,20 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     audio.load();
   }
 
+  function warmCacheForPlaylist(tracks: RadioTrack[]) {
+    if (!('fetch' in window)) return;
+    tracks.forEach((track) => {
+      const candidates = [track.src, ...(track.fallbackSrc ?? []), track.cover ?? ''];
+      candidates
+        .filter((url) => typeof url === 'string' && url.length > 0)
+        .forEach((url) => {
+          void fetch(url).catch(() => {
+            // Ignore cache warm failures; playback will still try network.
+          });
+        });
+    });
+  }
+
   function applyTrack(track: RadioTrack) {
     const text = `${track.artist} — ${track.title}`;
     setText(text, true);
@@ -333,6 +347,7 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     updatePlayLabel();
     updateMarqueeAnimation();
     setPopoverMetaForCurrentTrack();
+    void warmCacheForPlaylist(state.playlist);
   }
 
   void loadPlaylist();
