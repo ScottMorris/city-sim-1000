@@ -6,6 +6,7 @@ export interface RadioWidget {
   refresh: () => Promise<void>;
   setVolume: (volume: number) => void;
   getVolume: () => number;
+  setPlaylistUrl: (url: string) => void;
 }
 
 export interface RadioWidgetOptions {
@@ -16,7 +17,7 @@ export interface RadioWidgetOptions {
 }
 
 export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions = {}): RadioWidget {
-  const playlistUrl = options.playlistUrl ?? DEFAULT_PLAYLIST_PATH;
+  let playlistUrl = options.playlistUrl ?? DEFAULT_PLAYLIST_PATH;
   const fetchImpl = options.fetchImpl ?? fetch;
   const audio = options.audioFactory ? options.audioFactory() : new Audio();
   audio.preload = 'metadata';
@@ -341,6 +342,11 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     setVolume: (volume: number) => {
       audio.volume = Math.min(1, Math.max(0, volume));
     },
-    getVolume: () => audio.volume
+    getVolume: () => audio.volume,
+    setPlaylistUrl: (url: string) => {
+      if (!url) return;
+      playlistUrl = url;
+      void loadPlaylist();
+    }
   };
 }
