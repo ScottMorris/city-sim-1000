@@ -145,7 +145,9 @@ let pointerActive = false;
 let panStart = { x: 0, y: 0 };
 let cameraStart = { x: 0, y: 0 };
 let lastPainted: Position | null = null;
-let tool: Tool = Tool.Inspect;
+let activeTool: Tool = Tool.Inspect;
+let selectedTool: Tool = Tool.Inspect;
+let temporaryTool: Tool | null = null;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 state.settings = ensureSettingsShape(state.settings);
 const notifications = createNotificationCenter();
@@ -190,13 +192,31 @@ const centerCameraOnTile = (tileX: number, tileY: number) => {
 const isInBounds = (pos: Position) =>
   pos.x >= 0 && pos.y >= 0 && pos.x < state.width && pos.y < state.height;
 
+const setActiveTool = (nextTool: Tool) => {
+  activeTool = nextTool;
+  updateToolbar(toolbar, nextTool);
+  syncToolbarHeights();
+};
+
+const selectTool = (nextTool: Tool) => {
+  selectedTool = nextTool;
+  temporaryTool = null;
+  setActiveTool(nextTool);
+};
+
+const restoreSelectedTool = () => {
+  if (!temporaryTool) return;
+  temporaryTool = null;
+  setActiveTool(selectedTool);
+};
+
 function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
-  if (tool === Tool.Inspect) {
+  if (activeTool === Tool.Inspect) {
     selected = tilePos;
     return;
   }
-  const result = applyTool(state, tool, tilePos.x, tilePos.y);
+  const result = applyTool(state, activeTool, tilePos.x, tilePos.y);
   if (!result.success && result.message) {
     showToast(result.message);
   } else if (result.success) {
@@ -228,11 +248,20 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     logPointerToTile('pointerdown', e, tilePos);
     hovered = isInBounds(tilePos) ? tilePos : null;
     pointerActive = true;
-    if (e.button === 2 || e.button === 1 || e.altKey) {
+    if (e.button === 1 || e.altKey) {
       isPanning = true;
       panStart = { x: e.clientX, y: e.clientY };
       cameraStart = { ...camera };
       return;
+    }
+    if (e.button === 2) {
+      if (activeTool === Tool.Inspect) {
+        return;
+      }
+      if (!temporaryTool) {
+        temporaryTool = activeTool;
+        setActiveTool(Tool.Bulldoze);
+      }
     }
     if (hovered) {
       isPainting = true;
@@ -253,11 +282,14 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     logPointerToTile('pointermove', e, tilePos);
     hovered = isInBounds(tilePos) ? tilePos : null;
-    if (tool === Tool.Inspect) {
+    if (activeTool === Tool.Inspect) {
       selected = hovered;
     }
     const primaryDown = (e.buttons & 1) !== 0;
-    if (primaryDown && tool !== Tool.Inspect && hovered) {
+    const secondaryDown = (e.buttons & 2) !== 0;
+    const isPaintingWithSecondary = secondaryDown && activeTool === Tool.Bulldoze;
+    const shouldPaint = hovered && activeTool !== Tool.Inspect && (primaryDown || isPaintingWithSecondary);
+    if (shouldPaint) {
       if (!isPainting) {
         isPainting = true;
       }
@@ -267,7 +299,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         applyCurrentTool(hovered);
         lastPainted = hovered;
       }
-    } else if (!primaryDown && isPainting) {
+    } else if (!primaryDown && !secondaryDown && isPainting) {
       stopPainting();
     }
   });
@@ -277,6 +309,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPainting = false;
     lastPainted = null;
     pointerActive = false;
+    restoreSelectedTool();
   };
 
   wrapper.addEventListener('pointerup', stopPainting);
@@ -331,9 +364,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   }
   simulation.update(deltaSeconds);
   const overlayMode = state.settings?.minimap?.mode ?? 'base';
-  renderer.render(state, hovered, selected, overlayMode, pointerActive, tool);
+  renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
   hud.update(state);
-  hud.renderOverlays(state, selected, tool);
+  hud.renderOverlays(state, selected, activeTool);
   minimap?.update(state, camera);
   debugOverlay?.update(state);
   requestAnimationFrame(() => gameLoop(renderer, hud));
@@ -376,11 +409,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     };
   };
 
-  const setTool = (nextTool: Tool) => {
-    tool = nextTool;
-    updateToolbar(toolbar, nextTool);
-    syncToolbarHeights();
-  };
+  const setTool = (nextTool: Tool) => selectTool(nextTool);
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
     simSpeed = speed;
@@ -529,7 +558,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     (nextTool) => {
       setTool(nextTool);
     },
-    tool,
+    activeTool,
     {
       onOpenBudget: () => budgetModal.open(),
       onOpenSettings: () => settingsModal?.open(),
@@ -581,7 +610,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   attachViewportEvents(renderer.getCanvas());
 
   const cancelCurrentTool = () => {
-    const wasInspect = tool === Tool.Inspect;
+    const wasInspect = activeTool === Tool.Inspect;
     isPainting = false;
     lastPainted = null;
     setTool(Tool.Inspect);
