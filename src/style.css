@@ -297,7 +297,7 @@ body {
   display: none;
   flex-direction: column;
   gap: 6px;
-  z-index: 9999;
+  z-index: 20001;
   max-height: 260px;
   overflow-y: auto;
 }
