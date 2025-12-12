@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "tracks": [
+    {
+      "id": "01 Ly'n Lion Louie (Psytrance Remix)",
+      "title": "Ly'n Lion Louie (Psytrance Remix)",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/Psy Cim 1000/01 Ly'n Lion Louie (Psytrance Remix).opus",
+      "cover": "/audio/radio/covers/01 Ly'n Lion Louie (Psytrance Remix).webp",
+      "duration": 322
+    },
+    {
+      "id": "02 Bouncing Boogy (Psytrance Cover)",
+      "title": "Bouncing Boogy (Psytrance Cover)",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/Psy Cim 1000/02 Bouncing Boogy (Psytrance Cover).opus",
+      "cover": "/audio/radio/covers/02 Bouncing Boogy (Psytrance Cover).webp",
+      "duration": 383
+    },
+    {
+      "id": "03 After Hours Planning (Psytrance Cover)",
+      "title": "After Hours Planning (Psytrance Cover)",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/Psy Cim 1000/03 After Hours Planning (Psytrance Cover).opus",
+      "cover": "/audio/radio/covers/03 After Hours Planning (Psytrance Cover).webp",
+      "duration": 325
+    },
+    {
+      "id": "04 Glass Atrium (Smooth Vibe Mix)",
+      "title": "Glass Atrium (Smooth Vibe Mix)",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/Psy Cim 1000/04 Glass Atrium (Smooth Vibe Mix).opus",
+      "cover": "/audio/radio/covers/04 Glass Atrium (Smooth Vibe Mix).webp",
+      "duration": 239
+    },
+    {
+      "id": "05 Steel & Steam",
+      "title": "Steel & Steam",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/Psy Cim 1000/05 Steel & Steam.opus",
+      "cover": "/audio/radio/covers/05 Steel & Steam.webp",
+      "duration": 260
+    }
+  ]
+}

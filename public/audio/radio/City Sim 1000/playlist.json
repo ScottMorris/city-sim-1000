@@ -1,0 +1,125 @@
+{
+  "version": "1.0",
+  "tracks": [
+    {
+      "id": "01 Skyline Dawn",
+      "title": "Skyline Dawn",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/01 Skyline Dawn.opus",
+      "cover": "/audio/radio/covers/01 Skyline Dawn.webp",
+      "duration": 117
+    },
+    {
+      "id": "02 Blueprint Flow",
+      "title": "Blueprint Flow",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/02 Blueprint Flow.opus",
+      "cover": "/audio/radio/covers/02 Blueprint Flow.webp",
+      "duration": 289
+    },
+    {
+      "id": "03 Neon Maintenance",
+      "title": "Neon Maintenance",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/03 Neon Maintenance.opus",
+      "cover": "/audio/radio/covers/03 Neon Maintenance.webp",
+      "duration": 128
+    },
+    {
+      "id": "04 Ledger Lines",
+      "title": "Ledger Lines",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/04 Ledger Lines.opus",
+      "cover": "/audio/radio/covers/04 Ledger Lines.webp",
+      "duration": 132
+    },
+    {
+      "id": "05 Bouncing Boogy",
+      "title": "Bouncing Boogy",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/05 Bouncing Boogy.opus",
+      "cover": "/audio/radio/covers/05 Bouncing Boogy.webp",
+      "duration": 157
+    },
+    {
+      "id": "06 Glass Atrium",
+      "title": "Glass Atrium",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/06 Glass Atrium.opus",
+      "cover": "/audio/radio/covers/06 Glass Atrium.webp",
+      "duration": 115
+    },
+    {
+      "id": "07 Suburban Sunlight",
+      "title": "Suburban Sunlight",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/07 Suburban Sunlight.opus",
+      "cover": "/audio/radio/covers/07 Suburban Sunlight.webp",
+      "duration": 193
+    },
+    {
+      "id": "08 Greenways",
+      "title": "Greenways",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/08 Greenways.opus",
+      "cover": "/audio/radio/covers/08 Greenways.webp",
+      "duration": 186
+    },
+    {
+      "id": "09 Grid Online",
+      "title": "Grid Online",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/09 Grid Online.opus",
+      "cover": "/audio/radio/covers/09 Grid Online.webp",
+      "duration": 205
+    },
+    {
+      "id": "10 Power to the People",
+      "title": "Power to the People",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/10 Power to the People.opus",
+      "cover": "/audio/radio/covers/10 Power to the People.webp",
+      "duration": 222
+    },
+    {
+      "id": "11 Going Nowhere, Let’s Blues",
+      "title": "Going Nowhere, Let",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/11 Going Nowhere, Let’s Blues.opus",
+      "cover": "/audio/radio/covers/11 Going Nowhere, Let’s Blues.webp",
+      "duration": 164
+    },
+    {
+      "id": "12 Street Party Snacks",
+      "title": "Street Party Snacks",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/12 Street Party Snacks.opus",
+      "cover": "/audio/radio/covers/12 Street Party Snacks.webp",
+      "duration": 130
+    },
+    {
+      "id": "13 After Hours Planning",
+      "title": "After Hours Planning",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/13 After Hours Planning.opus",
+      "cover": "/audio/radio/covers/13 After Hours Planning.webp",
+      "duration": 234
+    },
+    {
+      "id": "14 Down There Is Where the Heart Is",
+      "title": "Down There Is Where the Heart Is",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/14 Down There Is Where the Heart Is.opus",
+      "cover": "/audio/radio/covers/14 Down There Is Where the Heart Is.webp",
+      "duration": 209
+    },
+    {
+      "id": "15 Ly’n Lion Louie",
+      "title": "Ly’n Lion Louie",
+      "artist": "Scott Morris",
+      "src": "/audio/radio/City Sim 1000/15 Ly’n Lion Louie.opus",
+      "cover": "/audio/radio/covers/15 Ly’n Lion Louie.webp",
+      "duration": 239
+    }
+  ]
+}
