@@ -53,7 +53,12 @@ appRoot.innerHTML = `
     <div class="toolbar" id="toolbar"></div>
     <div class="canvas-wrapper" id="canvas-wrapper"></div>
   </div>
-  <footer>Offline ready • WebGL powered • Inspired by pixel skylines</footer>
+  <footer>
+    <span class="footer-copy">Offline ready • WebGL powered • Inspired by pixel skylines</span>
+    <a class="footer-link" href="https://github.com/ScottMorris/city-sim-1000" target="_blank" rel="noopener">
+      View on GitHub
+    </a>
+  </footer>
 `;
 
 function requireElement<T extends Element>(selector: string): T {

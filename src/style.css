@@ -855,10 +855,26 @@ button.secondary.active {
 }
 
 footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   background: #0c1324;
   padding: 12px 16px;
   border-top: 2px solid #1f2c4b;
   color: #7bffb7;
+}
+
+.footer-link {
+  color: #96d9ff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.footer-link:hover {
+  color: #7bffb7;
+  text-decoration: underline;
 }
 
 .debug-overlay {
