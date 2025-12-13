@@ -165,7 +165,8 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const baselineLighting = applyLightingPolicy(lightingBase, DEFAULT_BYLAWS.lighting);
     const activeLighting = applyLightingPolicy(lightingBase, lighting);
     const lightingPowerDelta = activeLighting.powerUse - baselineLighting.powerUse;
-    const lightingUpkeepDeltaPerMonth = (activeLighting.maintenance - baselineLighting.maintenance) * 9;
+    const lightingUpkeepDelta = activeLighting.maintenance - baselineLighting.maintenance;
+    const lightingUpkeepDeltaPerMonth = lightingUpkeepDelta * 9;
     const revenueEntries = [
       { label: 'Base', value: toNumber(budget.breakdown.revenue.base), tone: 'positive', tooltip: 'Flat civic stipend each day' },
       {
@@ -296,7 +297,14 @@ export function initBudgetModal(options: BudgetModalOptions) {
       { label: 'Pipes', value: pipesTotal, total: expensesTotal, tone: 'negative' },
       { label: 'Power', value: powerLinesValue + powerPlantsTotal, total: expensesTotal, tone: 'negative' },
       { label: 'Civic', value: civicTotal, total: expensesTotal, tone: 'negative' },
-      { label: 'Zones', value: zoneTotal, total: expensesTotal, tone: 'negative' }
+      { label: 'Zones', value: zoneTotal, total: expensesTotal, tone: 'negative' },
+      {
+        label: 'Lighting bylaw adj.',
+        value: lightingUpkeepDelta,
+        total: expensesTotal,
+        tone: lightingUpkeepDelta >= 0 ? 'negative' : 'positive',
+        tooltip: 'Delta vs neutral baseline (already included in civic/zones upkeep)'
+      }
     ]);
 
     body.innerHTML = `
