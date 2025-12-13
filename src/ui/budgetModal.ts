@@ -5,6 +5,8 @@ import {
   getRecentMonths
 } from '../game/budget';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
+import { DEFAULT_BYLAWS, LIGHTING_POLICIES, applyLightingPolicy } from '../game/bylaws';
+import { computeLightingBaseStats } from '../game/bylawAnalytics';
 
 interface BudgetModalOptions {
   triggerBtn?: HTMLButtonElement;
@@ -157,6 +159,13 @@ export function initBudgetModal(options: BudgetModalOptions) {
     const state = getState();
     const budget = state.budget;
     const runwayDays = computeRunwayDays(state.money, budget.netPerDay);
+    const lighting = state.bylaws?.lighting ?? DEFAULT_BYLAWS.lighting;
+    const lightingPolicy = LIGHTING_POLICIES[lighting];
+    const lightingBase = computeLightingBaseStats(state);
+    const baselineLighting = applyLightingPolicy(lightingBase, DEFAULT_BYLAWS.lighting);
+    const activeLighting = applyLightingPolicy(lightingBase, lighting);
+    const lightingPowerDelta = activeLighting.powerUse - baselineLighting.powerUse;
+    const lightingUpkeepDeltaPerMonth = (activeLighting.maintenance - baselineLighting.maintenance) * 9;
     const revenueEntries = [
       { label: 'Base', value: toNumber(budget.breakdown.revenue.base), tone: 'positive', tooltip: 'Flat civic stipend each day' },
       {
@@ -218,6 +227,11 @@ export function initBudgetModal(options: BudgetModalOptions) {
         <div class="summary-label">Runway</div>
         <div class="summary-value">${formatRunway(runwayDays)}</div>
         <div class="summary-hint">At current burn</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Lighting bylaw</div>
+        <div class="summary-value">${lightingPolicy.label}</div>
+        <div class="summary-hint">Power ${lightingPowerDelta >= 0 ? '+' : ''}${lightingPowerDelta.toFixed(2)} MW • Upkeep ${formatCurrency(lightingUpkeepDeltaPerMonth, { signed: true })} / mo</div>
       </div>
     `;
 
