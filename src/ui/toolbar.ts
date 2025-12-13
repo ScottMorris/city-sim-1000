@@ -16,6 +16,7 @@ const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 
 interface ToolbarOptions {
   onOpenBudget?: () => void;
+  onOpenBylaws?: () => void;
   onOpenSettings?: () => void;
   radioVolume?: number;
   radioStationId?: string;
@@ -34,7 +35,7 @@ export function initToolbar(
   options: ToolbarOptions = {}
 ): ToolbarControllers {
   toolbar.innerHTML = '';
-  const { onOpenBudget, onOpenSettings, radioVolume, radioStationId, onRadioStationChange } = options;
+  const { onOpenBudget, onOpenBylaws, onOpenSettings, radioVolume, radioStationId, onRadioStationChange } = options;
 
   const primaryRow = document.createElement('div');
   primaryRow.className = 'toolbar-row';
@@ -104,29 +105,49 @@ export function initToolbar(
   radioGroup.appendChild(radioStationHost);
   trailingCluster.appendChild(radioGroup);
 
+  const adminGroup = document.createElement('div');
+  adminGroup.className = 'toolbar-group toolbar-group-admin';
+  let hasAdminButtons = false;
+
   if (onOpenSettings) {
-    const settingsGroup = document.createElement('div');
-    settingsGroup.className = 'toolbar-group';
     const settingsBtn = document.createElement('button');
+    settingsBtn.type = 'button';
     settingsBtn.className = 'tool-button';
     settingsBtn.textContent = '⚙️ Settings';
     settingsBtn.title = 'Open settings';
     settingsBtn.addEventListener('click', () => onOpenSettings());
-    settingsGroup.appendChild(settingsBtn);
-    trailingCluster.appendChild(settingsGroup);
+    adminGroup.appendChild(settingsBtn);
+    hasAdminButtons = true;
+  }
+
+  if (onOpenBylaws) {
+    const bylawsBtn = document.createElement('button');
+    bylawsBtn.type = 'button';
+    bylawsBtn.id = 'bylaws-modal-btn';
+    bylawsBtn.className = 'tool-button';
+    bylawsBtn.textContent = '📜 Bylaws';
+    bylawsBtn.title = 'Open bylaws screen';
+    bylawsBtn.addEventListener('click', () => onOpenBylaws());
+    adminGroup.appendChild(bylawsBtn);
+    hasAdminButtons = true;
   }
 
   if (onOpenBudget) {
-    const budgetGroup = document.createElement('div');
-    budgetGroup.className = 'toolbar-group';
     const budgetBtn = document.createElement('button');
+    budgetBtn.type = 'button';
     budgetBtn.id = 'budget-modal-btn';
     budgetBtn.className = 'tool-button budget-button';
     budgetBtn.textContent = '📊 Budget';
     budgetBtn.title = 'Open budget screen';
     budgetBtn.addEventListener('click', () => onOpenBudget());
-    budgetGroup.appendChild(budgetBtn);
-    trailingCluster.appendChild(budgetGroup);
+    adminGroup.appendChild(budgetBtn);
+    hasAdminButtons = true;
+  }
+
+  if (hasAdminButtons) {
+    adminGroup.setAttribute('role', 'group');
+    adminGroup.setAttribute('aria-label', 'City admin tools');
+    trailingCluster.appendChild(adminGroup);
   }
 
   const createSubButton = (row: HTMLElement, key: Tool, labelOverride?: string) => {

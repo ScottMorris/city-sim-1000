@@ -9,3 +9,4 @@ Here are two ready-to-use prompts to resume later:
 - road/rail connections to zones
 - Power through water buildings
 - Toolbar subnav border seam: investigate small blip at parent/subnav junction when submenu is open.
+- TODO: Explore a districts system so bylaws (e.g., lighting standards like LEDs vs carbon arc lamps) can apply to targeted areas instead of the whole city.

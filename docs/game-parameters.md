@@ -66,6 +66,15 @@
 - **UI hooks**: Overlays per service reading `serviceScores`; build tooltip shows cost, upkeep, radius, capacity. A shared “underserved” icon can appear on tiles/zones missing required coverage.
 - **Future depth (later)**: Incident spawning by density/hazard, dispatch travel time on roads, queues per station, staffing/budget sliders, and specialised buildings (clinic vs hospital). These plug into the same data shapes without reshaping state.
 
+## Bylaws & District Planning
+- **Purpose**: Bylaws let players set city-wide or district-specific rules that tweak upkeep, utility demand, or happiness without adding new buildings. Early focus: lighting standards that change power draw and ambience.
+- **Baseline toggles**: Add city-wide bylaws for energy-efficient lighting (reduced power use for civic/zone buildings with a small upfront cost) and heritage/carbon-arc lighting (higher power draw, minor happiness boost, visual flavour). Show monthly upkeep/benefit deltas before enabling.
+- **District hooks**: Introduce optional districts as map overlays. Players can paint districts similar to zoning; bylaws can override the city default within those boundaries (e.g., a downtown heritage district using carbon arc lamps while suburbs favour LEDs). Keep district limits modest to avoid pathing bloat.
+- **Simulation impacts**: Lighting bylaws adjust building `powerUse` modifiers and can influence happiness at night. Districts also provide a hook for future policies (noise, pollution, density caps) by storing per-district modifiers alongside zoning data.
+- **UI/UX**: The Bylaws modal opens from the toolbar’s city admin cluster (next to Budget/Settings) with policy copy, tooltips, and projected budget/power effects. The district paint tool should surface the active bylaw theme and allow quick reassignment. Overlays highlight districts with their active policy and show warnings if a district lacks a bylaw (falls back to city default).
+- **Persistence**: Save city-wide bylaw states and a list of districts with polygon/paint masks plus their assigned bylaw bundle. Ensure saves remain backwards-compatible by defaulting to “no bylaws” when absent.
+- **Tech debt avoidance**: Reuse existing overlay/minimap tinting infrastructure for district visualization, and keep district data near zoning/utility state so power/water overlays can respect bylaw modifiers without separate graphs.
+
 ## Next Steps (Suggested)
 - **Visuals**: Build a sprite atlas (road/rail crossings, power-over-road, zone variants, construction states); add subtle animations (water tiles, lit windows at night).
 - **Pipes & Underground**: Finish water network with pipes + underground view toggle; water deficit penalties; overlay for pressure/flow; restore water sim (remove stub).
