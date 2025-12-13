@@ -1,4 +1,5 @@
 import { PowerPlantType } from './constants';
+import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { defaultHotkeys } from '../ui/hotkeys';
 import type { BudgetHistory } from './budget';
 import type { EducationStats } from './education';
@@ -154,6 +155,7 @@ export interface GameState {
   nextBuildingId: number;
   services: ServiceSystemState;
   education: EducationStats;
+  bylaws: BylawState;
   settings: GameSettings;
 }
 
@@ -267,6 +269,7 @@ export function createInitialState(width = 64, height = 64): GameState {
       elementaryCoverage: 0,
       highCoverage: 0
     },
+    bylaws: { ...DEFAULT_BYLAWS },
     settings: createDefaultSettings()
   };
 }

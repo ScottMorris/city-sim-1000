@@ -30,6 +30,7 @@ import { initBudgetModal } from './ui/budgetModal';
 import { initSettingsModal } from './ui/settingsModal';
 import { initBylawsModal } from './ui/bylawsModal';
 import type { RadioWidget } from './ui/radio';
+import { DEFAULT_BYLAWS } from './game/bylaws';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -401,7 +402,13 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const budgetModal = initBudgetModal({
     getState: () => state
   });
-  const bylawsModal = initBylawsModal();
+  const bylawsModal = initBylawsModal({
+    getState: () => state,
+    onSelectLighting: (lighting) => {
+      state.bylaws = state.bylaws ?? { ...DEFAULT_BYLAWS };
+      state.bylaws.lighting = lighting;
+    }
+  });
 
   const minimapViewport = () => {
     const canvas = renderer.getCanvas();

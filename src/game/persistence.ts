@@ -1,4 +1,5 @@
 import { LOCAL_STORAGE_KEY } from './constants';
+import { DEFAULT_BYLAWS } from './bylaws';
 import {
   GameState,
   TileKind,
@@ -127,6 +128,10 @@ export function deserialize(payload: string): GameState {
   parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
   parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
   parsed.education = parsed.education ?? createEmptyEducationStats();
+  parsed.bylaws = parsed.bylaws ?? { ...DEFAULT_BYLAWS };
+  if (!parsed.bylaws.lighting) {
+    parsed.bylaws.lighting = DEFAULT_BYLAWS.lighting;
+  }
   const computeNextBuildingId = () => {
     const maxBuildingIdFromTiles = parsed.tiles.reduce(
       (max: number, tile: any) =>

@@ -23,6 +23,7 @@ import { computeDemand } from './demand';
 import { computeLabourStats } from './computeLabourStats';
 import { recomputeEducation } from './education';
 import { ServiceId } from './services';
+import { applyLightingPolicy, DEFAULT_BYLAWS, LIGHTING_POLICIES } from './bylaws';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -40,6 +41,21 @@ export interface SimulationAlert {
 
 function clamp(val: number, min: number, max: number) {
   return Math.max(min, Math.min(max, val));
+}
+
+function nudgeTowards(current: number, target: number, maxStep = 0.002) {
+  const delta = target - current;
+  if (Math.abs(delta) < 1e-4) return current;
+  const step = clamp(delta, -maxStep, maxStep);
+  return clamp(current + step, 0, 1.5);
+}
+
+function scaleBreakdownByMultiplier(bucket: Record<string, number>, multiplier: number) {
+  const scaled: Record<string, number> = {};
+  for (const [key, value] of Object.entries(bucket)) {
+    scaled[key] = (value ?? 0) * multiplier;
+  }
+  return scaled;
 }
 
 export class Simulation {
@@ -119,6 +135,10 @@ export class Simulation {
     this.state.tick++;
     this.state.day += this.dt / 1.5;
 
+    const lightingBylaw = this.state.bylaws?.lighting ?? DEFAULT_BYLAWS.lighting;
+    const lightingPolicy =
+      LIGHTING_POLICIES[lightingBylaw] ?? LIGHTING_POLICIES[DEFAULT_BYLAWS.lighting];
+
     recomputePowerNetwork(this.state);
     const grew = this.spawnZoneBuildings();
     updateBuildingStates(this.state);
@@ -145,6 +165,8 @@ export class Simulation {
     const zoneMaintenanceByType: Record<string, number> = {};
     let buildingWaterOutput = 0;
     let buildingPowerUse = 0;
+    let buildingPowerUseCivic = 0;
+    let buildingPowerUseZones = 0;
     let buildingWaterUse = 0;
     let populationCapacity = 0;
     let jobCapacity = 0;
@@ -220,13 +242,30 @@ export class Simulation {
       const isActive = building.state.status === BuildingStatus.Active;
       if (isActive) {
         if (this.waterEnabled && template.waterOutput) buildingWaterOutput += template.waterOutput;
-        if (template.powerUse) buildingPowerUse += template.powerUse;
+        if (template.powerUse) {
+          buildingPowerUse += template.powerUse;
+          if (template.category === BuildingCategory.Civic) {
+            buildingPowerUseCivic += template.powerUse;
+          } else if (template.category === BuildingCategory.Zone) {
+            buildingPowerUseZones += template.powerUse;
+          }
+        }
         if (this.waterEnabled && template.waterUse) buildingWaterUse += template.waterUse;
         if (template.populationCapacity) populationCapacity += template.populationCapacity;
         if (template.jobsCapacity) {
           jobCapacity += template.jobsCapacity;
           if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
           if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+        }
+        if (template.category !== BuildingCategory.Power && lightingPolicy) {
+          const { width, height } = template.footprint;
+          for (let dy = 0; dy < height; dy++) {
+            for (let dx = 0; dx < width; dx++) {
+              const tile = getTile(this.state, building.origin.x + dx, building.origin.y + dy);
+              if (!tile) continue;
+              tile.happiness = nudgeTowards(tile.happiness, lightingPolicy.happinessTarget);
+            }
+          }
         }
       }
     }
@@ -249,6 +288,35 @@ export class Simulation {
         }
       }
     }
+
+    const lightingApplication = applyLightingPolicy(
+      {
+        powerUseCivic: buildingPowerUseCivic,
+        powerUseZones: buildingPowerUseZones,
+        maintenanceCivic: buildingMaintenanceCivic,
+        maintenanceZones: buildingMaintenanceZones
+      },
+      lightingBylaw
+    );
+    const unscopedPowerUse =
+      buildingPowerUse - (buildingPowerUseCivic + buildingPowerUseZones);
+    const adjustedCivicMaintenance = scaleBreakdownByMultiplier(
+      civicMaintenanceByType,
+      lightingApplication.multipliers.maintenance
+    );
+    const adjustedZoneMaintenance = scaleBreakdownByMultiplier(
+      zoneMaintenanceByType,
+      lightingApplication.multipliers.maintenance
+    );
+    buildingPowerUse = lightingApplication.powerUse + unscopedPowerUse;
+    buildingMaintenanceCivic = lightingApplication.maintenanceCivic;
+    buildingMaintenanceZones = lightingApplication.maintenanceZones;
+    buildingMaintenance =
+      buildingMaintenancePower + buildingMaintenanceCivic + buildingMaintenanceZones;
+    for (const key of Object.keys(civicMaintenanceByType)) delete civicMaintenanceByType[key];
+    Object.assign(civicMaintenanceByType, adjustedCivicMaintenance);
+    for (const key of Object.keys(zoneMaintenanceByType)) delete zoneMaintenanceByType[key];
+    Object.assign(zoneMaintenanceByType, adjustedZoneMaintenance);
 
     const desiredPop = Math.min(
       populationCapacity,
