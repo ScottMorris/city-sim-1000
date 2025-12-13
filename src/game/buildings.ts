@@ -1,6 +1,6 @@
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import type { GameState, Tile } from './gameState';
-import { getTile, TileKind } from './gameState';
+import { bumpTileRevision, getTile, TileKind } from './gameState';
 import { getOrthogonalNeighbourCoords, isPowerCarrier, tileHasPower } from './adjacency';
 import { Tool } from './toolTypes';
 import { createEmptyServiceLoad, ServiceId, ServiceLoad } from './services';
@@ -296,10 +296,12 @@ export function placeBuilding(
   }
 
   state.nextBuildingId = buildingId + 1;
+  bumpTileRevision(state);
   return { success: true, instance };
 }
 
 export function removeBuilding(state: GameState, buildingId: number) {
+  let removed = false;
   state.buildings = (state.buildings || []).filter((b) => b.id !== buildingId);
   for (const tile of state.tiles) {
     if (tile.buildingId === buildingId) {
@@ -308,8 +310,10 @@ export function removeBuilding(state: GameState, buildingId: number) {
       tile.powerPlantType = undefined;
       tile.powerPlantId = undefined;
       tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+      removed = true;
     }
   }
+  if (removed) bumpTileRevision(state);
 }
 
 export function updateBuildingStates(state: GameState) {

@@ -140,6 +140,7 @@ export interface GameState {
   width: number;
   height: number;
   tiles: Tile[];
+  tileRevision: number;
   money: number;
   day: number;
   tick: number;
@@ -223,6 +224,7 @@ export function createInitialState(width = 64, height = 64): GameState {
     width,
     height,
     tiles,
+    tileRevision: 0,
     money: 100000,
     day: 1,
     tick: 0,
@@ -273,6 +275,10 @@ function getIndex(state: GameState, x: number, y: number): number {
   return y * state.width + x;
 }
 
+export function bumpTileRevision(state: GameState) {
+  state.tileRevision = (state.tileRevision ?? 0) + 1;
+}
+
 export function getTile(state: GameState, x: number, y: number): Tile | undefined {
   if (x < 0 || y < 0 || x >= state.width || y >= state.height) return undefined;
   return state.tiles[getIndex(state, x, y)];
@@ -291,4 +297,5 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
     tile.powerPlantId = undefined;
     tile.buildingId = undefined;
   }
+  bumpTileRevision(state);
 }

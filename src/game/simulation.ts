@@ -1,5 +1,5 @@
 import type { GameState } from './gameState';
-import { getTile, TileKind } from './gameState';
+import { bumpTileRevision, getTile, TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import {
   BuildingStatus,
@@ -48,6 +48,8 @@ export class Simulation {
   private readonly dt: number;
   private readonly zoneGrowthDelayTicks: number;
   private zoneGrowthTimers = new Map<number, number>();
+  private vacantZoneIndices = new Set<number>();
+  private lastTileRevision = -1;
   private readonly waterEnabled = false;
   private speedMultiplier = 1;
   private notify?: (alert: SimulationAlert) => void;
@@ -72,6 +74,8 @@ export class Simulation {
   setState(state: GameState) {
     this.state = state;
     this.zoneGrowthTimers = new Map();
+    this.vacantZoneIndices = new Set();
+    this.lastTileRevision = -1;
     this.accumulator = 0;
     this.powerDeficitActive = false;
     this.waterDeficitActive = false;
@@ -79,6 +83,27 @@ export class Simulation {
 
   setSpeed(multiplier: number) {
     this.speedMultiplier = Math.max(0.1, multiplier);
+  }
+
+  private refreshVacantZoneCache() {
+    const currentRevision = this.state.tileRevision ?? 0;
+    if (this.lastTileRevision === currentRevision && this.vacantZoneIndices.size > 0) return;
+
+    this.vacantZoneIndices.clear();
+    this.state.tiles.forEach((tile, index) => {
+      if (tile.buildingId !== undefined) return;
+      if (
+        tile.kind === TileKind.Residential ||
+        tile.kind === TileKind.Commercial ||
+        tile.kind === TileKind.Industrial
+      ) {
+        this.vacantZoneIndices.add(index);
+      }
+    });
+    for (const idx of this.zoneGrowthTimers.keys()) {
+      if (!this.vacantZoneIndices.has(idx)) this.zoneGrowthTimers.delete(idx);
+    }
+    this.lastTileRevision = currentRevision;
   }
 
   update(elapsedSeconds: number) {
@@ -95,9 +120,9 @@ export class Simulation {
     this.state.day += this.dt / 1.5;
 
     recomputePowerNetwork(this.state);
-    this.spawnZoneBuildings();
+    const grew = this.spawnZoneBuildings();
     updateBuildingStates(this.state);
-    recomputePowerNetwork(this.state);
+    if (grew) recomputePowerNetwork(this.state);
     this.state.education = recomputeEducation(this.state);
 
     let residentialZones = 0;
@@ -368,58 +393,81 @@ export class Simulation {
     this.state.money = Math.max(0, this.state.money + netPerDay * (this.dt / 1.5));
   }
 
-  private spawnZoneBuildings() {
-    const residentialCandidates: Array<{ x: number; y: number }> = [];
-    const commercialCandidates: Array<{ x: number; y: number }> = [];
-    const industrialCandidates: Array<{ x: number; y: number }> = [];
+  private spawnZoneBuildings(): boolean {
+    this.refreshVacantZoneCache();
 
-    for (let y = 0; y < this.state.height; y++) {
-      for (let x = 0; x < this.state.width; x++) {
-        const tile = this.state.tiles[y * this.state.width + x];
-        if (tile.buildingId !== undefined) continue;
-        if (
-          tile.kind !== TileKind.Residential &&
-          tile.kind !== TileKind.Commercial &&
-          tile.kind !== TileKind.Industrial
-        ) {
-          continue;
-        }
+    const residentialCandidates: Array<{ idx: number; x: number; y: number }> = [];
+    const commercialCandidates: Array<{ idx: number; x: number; y: number }> = [];
+    const industrialCandidates: Array<{ idx: number; x: number; y: number }> = [];
 
-        // Keep existing road access gating.
-        const hasRoadChain = zoneHasRoadPath(this.state, x, y);
-        const frontierAllowed = isFrontierZone(this.state, x, y);
-        if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) {
-          this.zoneGrowthTimers.delete(y * this.state.width + x);
-          continue;
-        }
-
-        const powerAvailable = this.state.utilities.powerProduced > 0;
-        if (powerAvailable && !tileHasPower(this.state, x, y)) {
-          this.zoneGrowthTimers.delete(y * this.state.width + x);
-          continue;
-        }
-
-        // Preserve the per-tile growth delay before a lot is eligible.
-        const idx = y * this.state.width + x;
-        const currentTimer = this.zoneGrowthTimers.get(idx) ?? this.zoneGrowthDelayTicks;
-        if (currentTimer > 1) {
-          this.zoneGrowthTimers.set(idx, currentTimer - 1);
-          continue;
-        }
+    for (const idx of this.vacantZoneIndices) {
+      const tile = this.state.tiles[idx];
+      if (tile.buildingId !== undefined) {
         this.zoneGrowthTimers.delete(idx);
-
-        if (tile.kind === TileKind.Residential) residentialCandidates.push({ x, y });
-        if (tile.kind === TileKind.Commercial) commercialCandidates.push({ x, y });
-        if (tile.kind === TileKind.Industrial) industrialCandidates.push({ x, y });
+        this.vacantZoneIndices.delete(idx);
+        continue;
       }
+      if (
+        tile.kind !== TileKind.Residential &&
+        tile.kind !== TileKind.Commercial &&
+        tile.kind !== TileKind.Industrial
+      ) {
+        this.zoneGrowthTimers.delete(idx);
+        this.vacantZoneIndices.delete(idx);
+        continue;
+      }
+      const x = idx % this.state.width;
+      const y = Math.floor(idx / this.state.width);
+
+      // Keep existing road access gating.
+      const hasRoadChain = zoneHasRoadPath(this.state, x, y);
+      const frontierAllowed = isFrontierZone(this.state, x, y);
+      if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) {
+        this.zoneGrowthTimers.delete(idx);
+        continue;
+      }
+
+      const powerAvailable = this.state.utilities.powerProduced > 0;
+      if (powerAvailable && !tileHasPower(this.state, x, y)) {
+        this.zoneGrowthTimers.delete(idx);
+        continue;
+      }
+
+      // Preserve the per-tile growth delay before a lot is eligible.
+      const currentTimer = this.zoneGrowthTimers.get(idx) ?? this.zoneGrowthDelayTicks;
+      if (currentTimer > 1) {
+        this.zoneGrowthTimers.set(idx, currentTimer - 1);
+        continue;
+      }
+      this.zoneGrowthTimers.delete(idx);
+
+      if (tile.kind === TileKind.Residential) residentialCandidates.push({ idx, x, y });
+      if (tile.kind === TileKind.Commercial) commercialCandidates.push({ idx, x, y });
+      if (tile.kind === TileKind.Industrial) industrialCandidates.push({ idx, x, y });
     }
 
     // Early-out if power is negative; growth is blocked.
-    if (this.state.utilities.power < 0) return;
+    if (this.state.utilities.power < 0) return false;
 
-    this.applyZoneGrowthForType(TileKind.Residential, this.state.demand.residential, residentialCandidates);
-    this.applyZoneGrowthForType(TileKind.Commercial, this.state.demand.commercial, commercialCandidates);
-    this.applyZoneGrowthForType(TileKind.Industrial, this.state.demand.industrial, industrialCandidates);
+    const grewResidential = this.applyZoneGrowthForType(
+      TileKind.Residential,
+      this.state.demand.residential,
+      residentialCandidates
+    );
+    const grewCommercial = this.applyZoneGrowthForType(
+      TileKind.Commercial,
+      this.state.demand.commercial,
+      commercialCandidates
+    );
+    const grewIndustrial = this.applyZoneGrowthForType(
+      TileKind.Industrial,
+      this.state.demand.industrial,
+      industrialCandidates
+    );
+    if (grewResidential || grewCommercial || grewIndustrial) {
+      this.lastTileRevision = this.state.tileRevision ?? this.lastTileRevision;
+    }
+    return grewResidential || grewCommercial || grewIndustrial;
   }
 
   /**
@@ -430,15 +478,15 @@ export class Simulation {
   private applyZoneGrowthForType(
     kind: TileKind,
     demand: number,
-    candidates: Array<{ x: number; y: number }>
-  ) {
-    if (candidates.length === 0) return;
+    candidates: Array<{ idx: number; x: number; y: number }>
+  ): boolean {
+    if (candidates.length === 0) return false;
     const debugWave = typeof process !== 'undefined' && process?.env?.WAVE_DEBUG === '1';
 
     // Cap how many lots can start growing this tick. At demand 0 this is 1; it rises gently
     // with demand and is hard-capped to avoid big bursts.
     const maxNewLots = clamp(1 + Math.floor(demand / 40), 0, 4);
-    if (maxNewLots <= 0) return;
+    if (maxNewLots <= 0) return false;
 
     // Growth chance per candidate. Demand below ~20 yields ~0 probability; high demand is near 1.
     const pGrow = demand >= 50 ? 1 : demand <= 0 ? 0 : clamp((demand + 20) / 120, 0, 1);
@@ -453,14 +501,19 @@ export class Simulation {
     }
 
     let grown = 0;
-    for (const { x, y } of candidates) {
+    for (const { idx, x, y } of candidates) {
       if (grown >= maxNewLots) break;
       if (Math.random() > pGrow) continue;
       const template = getBuildingTemplate(kind);
       if (!template) continue;
       const result = placeBuilding(this.state, template, x, y);
-      if (result.success) grown++;
+      if (result.success) {
+        grown++;
+        this.vacantZoneIndices.delete(idx);
+        this.zoneGrowthTimers.delete(idx);
+      }
     }
+    return grown > 0;
   }
 
   /**
@@ -528,6 +581,7 @@ export class Simulation {
     tile.powerPlantId = undefined;
     tile.abandoned = true;
     tile.happiness = Math.max(0.1, tile.happiness - 0.1);
+    bumpTileRevision(this.state);
   }
 
   private getDemandForZone(kind: TileKind): number {

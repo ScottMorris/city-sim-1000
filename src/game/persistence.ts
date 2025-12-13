@@ -61,6 +61,9 @@ export function deserialize(payload: string): GameState {
   if (parsed.tick === undefined) {
     parsed.tick = 0;
   }
+  if (parsed.tileRevision === undefined) {
+    parsed.tileRevision = 0;
+  }
   if (!parsed.budget) {
     parsed.budget = {
       revenue: 0,
