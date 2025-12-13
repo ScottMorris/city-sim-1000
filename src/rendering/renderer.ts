@@ -54,6 +54,7 @@ export class MapRenderer {
       residentialHouses: [],
       commercialBuildings: [],
       commercialGeminiBuildings: [],
+      industrialBuildings: [],
       schools: {}
     }
   ) {
