@@ -28,6 +28,7 @@ import { createNotificationCenter } from './ui/notifications';
 import { initMinimap } from './ui/minimap';
 import { initBudgetModal } from './ui/budgetModal';
 import { initSettingsModal } from './ui/settingsModal';
+import { initBylawsModal } from './ui/bylawsModal';
 import type { RadioWidget } from './ui/radio';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
@@ -400,6 +401,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const budgetModal = initBudgetModal({
     getState: () => state
   });
+  const bylawsModal = initBylawsModal();
 
   const minimapViewport = () => {
     const canvas = renderer.getCanvas();
@@ -561,6 +563,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     activeTool,
     {
       onOpenBudget: () => budgetModal.open(),
+      onOpenBylaws: () => bylawsModal.open(),
       onOpenSettings: () => settingsModal?.open(),
       radioVolume: state.settings.audio.radioVolume
     }

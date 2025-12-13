@@ -965,6 +965,105 @@ footer {
   background: linear-gradient(180deg, #0f1b2f 0%, #0b1526 100%);
 }
 
+.bylaws-modal {
+  padding: 14px 14px 16px;
+  gap: 12px;
+  background: linear-gradient(180deg, #0f1b2f 0%, #0a1425 100%);
+  width: min(90vw, 840px);
+}
+
+.bylaws-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bylaws-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bylaws-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e8f1ff;
+}
+
+.bylaws-subtitle {
+  color: #9fb2d1;
+  font-size: 12px;
+  max-width: 520px;
+}
+
+.bylaws-lede {
+  background: #0a1224;
+  border: 1px solid #1f2c4b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #d8e6ff;
+  font-size: 13px;
+}
+
+.bylaws-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+  padding: 0 2px 6px;
+}
+
+.bylaws-section {
+  background: #0a1224;
+  border: 1px solid #1f2c4b;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bylaws-section-title {
+  color: #e8f1ff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.bylaws-section-hint {
+  color: #9fb2d1;
+  font-size: 12px;
+}
+
+.bylaws-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #d8e6ff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.bylaws-list strong {
+  color: #e8f1ff;
+}
+
+.bylaws-callout {
+  background: #132035;
+  border: 1px solid #2e4c77;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #d8e6ff;
+  font-size: 13px;
+}
+
+.bylaws-footer {
+  color: #9fb2d1;
+  font-size: 12px;
+  padding: 0 2px 2px;
+}
+
 .budget-header {
   display: flex;
   align-items: center;
