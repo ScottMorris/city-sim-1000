@@ -240,6 +240,7 @@ export function initToolbar(
   const closeStationMenu = () => {
     stationMenu.classList.remove('open');
     stationButton.setAttribute('aria-expanded', 'false');
+    radioGroup.classList.remove('toolbar-group-radio-open');
   };
 
   const positionStationMenu = () => {
@@ -255,6 +256,7 @@ export function initToolbar(
     positionStationMenu();
     stationMenu.classList.add('open');
     stationButton.setAttribute('aria-expanded', 'true');
+    radioGroup.classList.add('toolbar-group-radio-open');
   };
 
   const toggleStationMenu = () => {
