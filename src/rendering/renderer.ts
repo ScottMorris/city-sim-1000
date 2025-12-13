@@ -9,9 +9,13 @@ import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
 import { ServiceId } from '../game/services';
+import { getToolCost } from '../game/tools';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;
+const FOOTPRINT_CONFLICT_COLOUR = 0xff7b7b;
+const FOOTPRINT_WARNING_COLOUR = 0xffcc70;
+const FOOTPRINT_PREVIEW_COLOUR = 0xffffff;
 
 export interface Position {
   x: number;
@@ -98,7 +102,8 @@ export class MapRenderer {
   ) {
     const size = this.tileSize * this.camera.scale;
     const spriteSize = size;
-    const hoverFootprint = this.getToolFootprint(activeTool);
+    const hoverTemplate = getBuildingTemplate(activeTool);
+    const hoverFootprint = hoverTemplate?.footprint ?? this.getToolFootprint(activeTool);
     this.mapLayer.clear();
     this.tilesWithSprites.clear();
     const { buildingLookup, multiTileCoverage } = createBuildingLookup(state);
@@ -176,7 +181,13 @@ export class MapRenderer {
       const fitsFootprint = shouldValidatePlacement
         ? this.footprintFits(state, hovered, hoverFootprint)
         : true;
-      const hoverOutline = fitsFootprint ? (pointerActive ? 0xffcc70 : 0xffffff) : 0xff7b7b;
+      const toolCost = getToolCost(activeTool);
+      const lacksFunds = Boolean(hoverTemplate && toolCost > 0 && state.money < toolCost);
+      const hoverOutline = !fitsFootprint
+        ? FOOTPRINT_CONFLICT_COLOUR
+        : lacksFunds || pointerActive
+          ? FOOTPRINT_WARNING_COLOUR
+          : FOOTPRINT_PREVIEW_COLOUR;
       this.overlayLayer
         .rect(
           this.camera.x + hovered.x * size,

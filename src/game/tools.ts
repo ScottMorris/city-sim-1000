@@ -25,7 +25,7 @@ export type ToolHandler = (ctx: ToolContext, cost: number) => ChangeResult;
 
 export type ToolRegistry = Record<Tool, ToolHandler>;
 
-function getToolCost(tool: Tool): number {
+export function getToolCost(tool: Tool): number {
   const templateCost = getBuildingTemplate(tool)?.cost;
   if (templateCost !== undefined) return templateCost;
   return BUILD_COST[tool] ?? 0;
