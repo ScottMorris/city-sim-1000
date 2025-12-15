@@ -71,7 +71,8 @@ export function removeBuilding(state: GameState, buildingId: number) {
   }
 }
 
-export function updateBuildingStates(state: GameState) {
+export function updateBuildingStates(state: GameState, options: { waterEnabled?: boolean } = {}) {
+  const waterEnabled = options.waterEnabled ?? true;
   for (const instance of state.buildings) {
     const template = getBuildingTemplate(instance.templateId);
     if (!template) continue;
@@ -100,7 +101,7 @@ export function updateBuildingStates(state: GameState) {
       continue;
     }
 
-    const needsWater = (template.waterUse ?? 0) > 0;
+    const needsWater = waterEnabled && template.requiresWater !== false && (template.waterUse ?? 0) > 0;
     if (needsWater) {
       let wateredTiles = 0;
       for (let dy = 0; dy < height; dy++) {

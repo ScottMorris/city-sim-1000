@@ -1,4 +1,5 @@
-import { BuildingCategory, BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
+import { BuildingStatus } from './buildings/state';
 import type { GameState } from './gameState';
 import {
   applyLightingPolicy,

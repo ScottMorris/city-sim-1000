@@ -140,7 +140,8 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     industrialJobCapacity > 0 ? Math.min(1, jobsInIndustrial / industrialJobCapacity) : 1;
   const workforceGap = Math.max(0, state.population - state.jobs);
   const jobsOverPopulation = Math.max(0, state.jobs - state.population);
-  const utilityPenalty = state.utilities.power < 0 ? 15 : 0;
+  const utilityPenalty =
+    (state.utilities.power < 0 ? 15 : 0) + (state.utilities.water < 0 ? 15 : 0);
   const pendingPenaltyEnabled = state.settings?.pendingPenaltyEnabled ?? true;
 
   const seeded = state.population === 0 && state.jobs === 0;

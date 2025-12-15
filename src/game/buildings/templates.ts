@@ -19,6 +19,7 @@ export interface BuildingTemplate {
   tileKind: TileKind;
   spriteKey?: string;
   requiresPower?: boolean;
+  requiresWater?: boolean;
   power?: { type: PowerPlantType; outputMw: number };
   powerUse?: number;
   waterUse?: number;

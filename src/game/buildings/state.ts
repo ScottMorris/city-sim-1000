@@ -3,6 +3,7 @@ import { createEmptyServiceLoad, ServiceLoad } from '../services';
 export enum BuildingStatus {
   Active = 'active',
   InactiveNoPower = 'inactive_no_power',
+  InactiveNoWater = 'inactive_no_water',
   InactiveDamaged = 'inactive_damaged'
 }
 
