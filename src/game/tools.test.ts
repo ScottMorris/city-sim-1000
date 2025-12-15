@@ -295,6 +295,27 @@ describe('simulation', () => {
     expect(getTile(state, 8, 3)?.powered).toBe(true);
   });
 
+  it('allows growth to continue when water is in deficit (should only dampen demand)', () => {
+    const state = createInitialState(6, 6);
+    state.money = 50000;
+    applyTool(state, Tool.WindTurbine, 0, 0);
+    applyTool(state, Tool.PowerLine, 1, 0);
+    applyTool(state, Tool.Road, 2, 0);
+    applyTool(state, Tool.Residential, 3, 0);
+    state.demand.residential = 90;
+    // Simulate a pre-existing water deficit
+    state.utilities.water = -100;
+
+    const sim = new Simulation(state, { ticksPerSecond: 1 });
+    const originalRandom = Math.random;
+    Math.random = () => 0; // force the growth roll to pass
+    sim.update(2.5);
+    Math.random = originalRandom;
+
+    const built = state.buildings.find((b) => b.templateId === 'zone-residential');
+    expect(built).toBeDefined();
+  });
+
   it('removes transport underlays when bulldozing a crossing', () => {
     const state = createInitialState(8, 8);
     state.money = 50000;
@@ -325,6 +346,8 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 3);
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
+    const originalRandom = Math.random;
+    Math.random = () => 0; // force growth when utility factors are low
     sim.update(2.5);
     expect(hasRoadAccess(state, 3, 3)).toBe(false);
     expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeDefined();
@@ -333,6 +356,7 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 4, 3);
     applyTool(state, Tool.Road, 4, 2);
     sim.update(2.5);
+    Math.random = originalRandom;
     const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(secondZone.length).toBeGreaterThan(1);
   });
@@ -348,7 +372,10 @@ describe('simulation', () => {
     }
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
+    const originalRandom = Math.random;
+    Math.random = () => 0;
     sim.update(2.5);
+    Math.random = originalRandom;
     const built = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(built.length).toBeGreaterThan(0);
     const centerTile = getTile(state, 3, 3)!;
@@ -372,10 +399,13 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 3); // interior tile with no road access
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
+    const originalRandom = Math.random;
+    Math.random = () => 0;
     sim.update(2.5);
     const firstZone = state.buildings.find((b) => b.templateId === 'zone-residential');
     expect(firstZone).toBeDefined();
     sim.update(2.5);
+    Math.random = originalRandom;
     const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(secondZone.length).toBeGreaterThan(1);
   });

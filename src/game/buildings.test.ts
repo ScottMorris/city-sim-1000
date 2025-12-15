@@ -16,6 +16,19 @@ const poweredTemplate: BuildingTemplate = {
   requiresPower: true
 };
 
+const waterTemplate: BuildingTemplate = {
+  id: 'test-water-requirer',
+  name: 'Needs Water',
+  category: BuildingCategory.Civic,
+  footprint: { width: 1, height: 1 },
+  cost: 0,
+  maintenance: 0,
+  tileKind: TileKind.Park,
+  requiresPower: false,
+  requiresWater: true,
+  waterUse: 1
+};
+
 describe('buildings state machine', () => {
   it('marks building inactive when unpowered and reactivates when powered', () => {
     const state = createInitialState(4, 4);
@@ -39,6 +52,21 @@ describe('buildings state machine', () => {
     state.buildings[0].state.health = 0;
     updateBuildingStates(state);
     expect(state.buildings[0].state.status).toBe(BuildingStatus.InactiveDamaged);
+  });
+
+  it('marks building inactive when unwatered and reactivates when watered', () => {
+    const state = createInitialState(4, 4);
+    state.money = 1000;
+    registerBuildingTemplate(waterTemplate);
+    const result = placeBuilding(state, waterTemplate, 2, 2);
+    expect(result.success).toBe(true);
+    updateBuildingStates(state);
+    expect(state.buildings[0].state.status).toBe(BuildingStatus.InactiveNoWater);
+
+    const tile = getTile(state, 2, 2)!;
+    tile.watered = true;
+    updateBuildingStates(state);
+    expect(state.buildings[0].state.status).toBe(BuildingStatus.Active);
   });
 
   it('rebuilds legacy civic tiles into building instances on load', () => {
