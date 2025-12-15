@@ -112,15 +112,24 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     const template = getBuildingTemplate(building.templateId);
     if (!template) continue;
     const isActive = building.state.status === BuildingStatus.Active;
-    if (!isActive) continue;
-    if (template.waterOutput) buildingWaterOutput += template.waterOutput;
-    if (template.powerUse) buildingPowerUse += template.powerUse;
-    if (template.waterUse) buildingWaterUse += template.waterUse;
-    if (template.populationCapacity) populationCapacity += template.populationCapacity;
-    if (template.jobsCapacity) {
-      jobCapacity += template.jobsCapacity;
-      if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
-      if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+    const contributesCapacity =
+      isActive ||
+      (template.category === BuildingCategory.Zone &&
+        (building.state.status === BuildingStatus.InactiveNoPower ||
+          building.state.status === BuildingStatus.InactiveNoWater));
+    if (!isActive && !contributesCapacity) continue;
+    if (isActive) {
+      if (template.waterOutput) buildingWaterOutput += template.waterOutput;
+      if (template.powerUse) buildingPowerUse += template.powerUse;
+      if (template.waterUse) buildingWaterUse += template.waterUse;
+    }
+    if (contributesCapacity) {
+      if (template.populationCapacity) populationCapacity += template.populationCapacity;
+      if (template.jobsCapacity) {
+        jobCapacity += template.jobsCapacity;
+        if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
+        if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+      }
     }
   }
 

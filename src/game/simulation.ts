@@ -246,6 +246,12 @@ export class Simulation {
         }
       }
       const isActive = building.state.status === BuildingStatus.Active;
+      const contributesCapacity =
+        isActive ||
+        (template.category === BuildingCategory.Zone &&
+          (building.state.status === BuildingStatus.InactiveNoPower ||
+            building.state.status === BuildingStatus.InactiveNoWater));
+
       if (isActive) {
         if (this.waterEnabled && template.waterOutput) buildingWaterOutput += template.waterOutput;
         if (template.powerUse) {
@@ -257,12 +263,6 @@ export class Simulation {
           }
         }
         if (this.waterEnabled && template.waterUse) buildingWaterUse += template.waterUse;
-        if (template.populationCapacity) populationCapacity += template.populationCapacity;
-        if (template.jobsCapacity) {
-          jobCapacity += template.jobsCapacity;
-          if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
-          if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
-        }
         if (template.category !== BuildingCategory.Power && lightingPolicy) {
           const { width, height } = template.footprint;
           for (let dy = 0; dy < height; dy++) {
@@ -272,6 +272,15 @@ export class Simulation {
               tile.happiness = nudgeTowards(tile.happiness, lightingPolicy.happinessTarget);
             }
           }
+        }
+      }
+
+      if (contributesCapacity) {
+        if (template.populationCapacity) populationCapacity += template.populationCapacity;
+        if (template.jobsCapacity) {
+          jobCapacity += template.jobsCapacity;
+          if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
+          if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
         }
       }
     }
