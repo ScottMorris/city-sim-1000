@@ -7,10 +7,14 @@ import {
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 import { DEFAULT_BYLAWS, LIGHTING_POLICIES, applyLightingPolicy } from '../game/bylaws';
 import { computeLightingBaseStats } from '../game/bylawAnalytics';
+import type { BudgetInsights } from '../game/narrative/types';
 
 interface BudgetModalOptions {
   triggerBtn?: HTMLButtonElement;
   getState: () => GameState;
+  getNarrativeEnabled?: () => boolean;
+  getBudgetInsights?: () => BudgetInsights | undefined;
+  refreshBudgetInsights?: () => void;
 }
 
 function formatCurrency(value: number, opts: { signed?: boolean } = {}) {
@@ -138,8 +142,79 @@ function renderTotal(label: string, value: number, tone?: 'positive' | 'negative
   `;
 }
 
+function renderInsightsColumn(insights: BudgetInsights | undefined, enabled: boolean) {
+  if (!enabled) return '';
+  if (!insights) {
+    return `
+      <div class="budget-column budget-insights">
+        <div class="budget-section-title">Insights</div>
+        <div class="budget-hint">No insights available yet.</div>
+      </div>
+    `;
+  }
+
+  const topChanges = insights.topChanges
+    .map((change) => {
+      const tone = change.direction === 'down' ? 'negative' : 'positive';
+      return `
+        <div class="budget-row small">
+          <div class="budget-row-label">${change.label}</div>
+          <div class="budget-row-value ${tone}">${change.value}</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  const drivers = insights.drivers
+    .map(
+      (driver) => `
+        <div class="budget-insights-item">
+          <div class="budget-insights-label">${driver.label}</div>
+          <div class="budget-insights-text">${driver.explanation}</div>
+        </div>
+      `
+    )
+    .join('');
+
+  const risks = insights.risks
+    .map(
+      (risk) => `
+        <div class="budget-insights-risk" data-severity="${risk.severity}">
+          <div class="budget-insights-label">${risk.label}</div>
+          <div class="budget-insights-text">${risk.note}</div>
+        </div>
+      `
+    )
+    .join('');
+
+  return `
+    <div class="budget-column budget-insights">
+      <div class="budget-section-title">Insights</div>
+      <div class="budget-insights-section">
+        <div class="budget-detail-title">Top changes</div>
+        ${topChanges}
+      </div>
+      <div class="budget-divider subtle"></div>
+      <div class="budget-insights-section">
+        <div class="budget-detail-title">Drivers</div>
+        ${drivers}
+      </div>
+      <div class="budget-divider subtle"></div>
+      <div class="budget-insights-section">
+        <div class="budget-detail-title">Risks</div>
+        ${risks}
+      </div>
+      <div class="budget-divider subtle"></div>
+      <div class="budget-insights-section">
+        <div class="budget-detail-title">Recommendation</div>
+        <div class="budget-insights-recommendation">${insights.recommendation}</div>
+      </div>
+    </div>
+  `;
+}
+
 export function initBudgetModal(options: BudgetModalOptions) {
-  const { triggerBtn, getState } = options;
+  const { triggerBtn, getState, getNarrativeEnabled, getBudgetInsights, refreshBudgetInsights } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((e: KeyboardEvent) => void) | null = null;
 
@@ -238,6 +313,11 @@ export function initBudgetModal(options: BudgetModalOptions) {
 
     const body = document.createElement('div');
     body.className = 'budget-body';
+    const narrativeEnabled = getNarrativeEnabled?.() ?? false;
+    if (narrativeEnabled) {
+      refreshBudgetInsights?.();
+    }
+    const insights = narrativeEnabled ? getBudgetInsights?.() : undefined;
     const revenueSection = renderBreakdownList(
       'Revenue',
       revenueEntries.map((entry) => ({ ...entry, total: revenueTotal }))
@@ -307,6 +387,8 @@ export function initBudgetModal(options: BudgetModalOptions) {
       }
     ]);
 
+    const insightsColumn = renderInsightsColumn(insights, narrativeEnabled);
+
     body.innerHTML = `
       <div class="budget-column">
         ${renderQuarterSection(state)}
@@ -329,6 +411,7 @@ export function initBudgetModal(options: BudgetModalOptions) {
           ${zoneDetails}
         </div>
       </div>
+      ${insightsColumn}
     `;
 
     const footer = document.createElement('div');

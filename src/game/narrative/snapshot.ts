@@ -57,7 +57,21 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
     economy: {
       cash: state.money,
       netPerMonth: state.budget?.netPerMonth ?? 0,
-      runwayMonths: computeRunwayMonths(state.money, state.budget?.netPerMonth ?? 0)
+      runwayMonths: computeRunwayMonths(state.money, state.budget?.netPerMonth ?? 0),
+      revenue: state.budget?.revenue ?? 0,
+      expenses: state.budget?.expenses ?? 0,
+      breakdown: {
+        revenue: {
+          base: state.budget?.breakdown.revenue.base ?? 0,
+          residents: state.budget?.breakdown.revenue.residents ?? 0,
+          commercial: state.budget?.breakdown.revenue.commercial ?? 0,
+          industrial: state.budget?.breakdown.revenue.industrial ?? 0
+        },
+        expenses: {
+          transport: state.budget?.breakdown.expenses.transport ?? 0,
+          buildings: state.budget?.breakdown.expenses.buildings ?? 0
+        }
+      }
     },
     population: {
       pop: state.population,

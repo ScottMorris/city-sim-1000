@@ -1,7 +1,8 @@
 import { computeDeltas } from './deltas';
 import { EventJournal } from './eventJournal';
+import { generateBudgetInsights } from './channels/budgetInsightsRule';
 import { generateTickerItems } from './channels/tickerRule';
-import type { CitySnapshot, NarrativeInput, SimEvent, TickerItem } from './types';
+import type { BudgetInsights, CitySnapshot, NarrativeInput, SimEvent, TickerItem } from './types';
 
 export interface NarrativeSettings {
   enabled: boolean;
@@ -15,6 +16,7 @@ export class NarrativeManager {
   private tickerQueue: TickerItem[] = [];
   private lastTickerTexts = new Set<string>();
   private activeAlertByType = new Map<string, string>();
+  private currentBudgetInsights?: BudgetInsights;
 
   constructor(settings: NarrativeSettings, eventJournal = new EventJournal()) {
     this.settings = settings;
@@ -33,12 +35,17 @@ export class NarrativeManager {
     return [...this.tickerQueue];
   }
 
+  getBudgetInsights(): BudgetInsights | undefined {
+    return this.currentBudgetInsights;
+  }
+
   reset() {
     this.lastSnapshot = undefined;
     this.tickerQueue = [];
     this.lastTickerTexts = new Set();
     this.activeAlertByType = new Map();
     this.eventJournal.clear();
+    this.currentBudgetInsights = undefined;
   }
 
   onEvent(event: SimEvent) {
@@ -54,6 +61,12 @@ export class NarrativeManager {
 
     if (this.settings.enabled) {
       this.emitMonthlyEvents(snapshot, deltas, now);
+      const input: NarrativeInput = {
+        snapshot,
+        deltas,
+        recentEvents: this.eventJournal.latest(30)
+      };
+      this.currentBudgetInsights = generateBudgetInsights(input);
     }
 
     this.lastSnapshot = snapshot;
@@ -75,6 +88,18 @@ export class NarrativeManager {
       this.lastTickerTexts.add(text);
     }
     this.capQueue();
+  }
+
+  refreshBudgetInsights(buildSnapshot: () => CitySnapshot) {
+    if (!this.settings.enabled) return;
+    const snapshot = buildSnapshot();
+    const deltas = computeDeltas(this.lastSnapshot, snapshot);
+    const input: NarrativeInput = {
+      snapshot,
+      deltas,
+      recentEvents: this.eventJournal.latest(30)
+    };
+    this.currentBudgetInsights = generateBudgetInsights(input);
   }
 
   gc(now = Date.now()) {

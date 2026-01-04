@@ -32,6 +32,20 @@ export interface CitySnapshot {
     cash: number;
     netPerMonth: number;
     runwayMonths: number;
+    revenue: number;
+    expenses: number;
+    breakdown: {
+      revenue: {
+        base: number;
+        residents: number;
+        commercial: number;
+        industrial: number;
+      };
+      expenses: {
+        transport: number;
+        buildings: number;
+      };
+    };
   };
   population: {
     pop: number;
@@ -80,3 +94,11 @@ export interface TickerItem {
   sourceEventType?: SimEventType;
   sourceEventId?: string;
 }
+
+export type BudgetInsights = {
+  topChanges: { label: string; value: string; direction: 'up' | 'down' }[];
+  drivers: { label: string; explanation: string }[];
+  risks: { label: string; severity: 'low' | 'med' | 'high'; note: string }[];
+  recommendation: string;
+  tooltips?: { budgetLineId: string; blurb: string }[];
+};

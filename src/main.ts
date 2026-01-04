@@ -503,7 +503,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getReducedMotion: () => state.settings.accessibility.reducedMotion ?? false
   });
   const budgetModal = initBudgetModal({
-    getState: () => state
+    getState: () => state,
+    getNarrativeEnabled: () => state.settings.narrative.enabled,
+    getBudgetInsights: () => narrativeManager.getBudgetInsights(),
+    refreshBudgetInsights: () => narrativeManager.refreshBudgetInsights(() => buildCitySnapshot(state))
   });
   const bylawsModal = initBylawsModal({
     getState: () => state,
