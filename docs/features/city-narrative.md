@@ -24,56 +24,6 @@ A **toggleable, non-authoritative** storytelling system that observes the simula
 5. **Deterministic fallback**: rule-based narrator always available.
 6. **Cached**: same snapshot hash ⇒ same outputs.
 
----
-
-## Implemented
-
-### What exists now
-
-* Narrative settings toggles (global + ticker).
-* EventJournal ring buffer feeding narrative channels.
-* Month-end snapshot + delta pipeline (EventJournal → Snapshot → Deltas → NarrativeInput).
-* Rule-based channels: News Ticker and Budget Insights.
-* Budget Insights panel in the Budget modal (hidden when Narrative is disabled).
-
-### Schemas in use
-
-```ts
-export interface NarrativeInput {
-  snapshot: CitySnapshot;
-  deltas: CityDeltas;
-  recentEvents: SimEvent[];
-}
-
-export interface TickerItem {
-  text: string;
-  category: "utilities" | "economy" | "growth" | "civic" | "player" | "flavour";
-  severity: "info" | "warn" | "alert";
-  expiresAt?: number;
-  sourceEventType?: SimEventType;
-  sourceEventId?: string;
-}
-
-export type BudgetInsights = {
-  topChanges: { label: string; value: string; direction: "up" | "down" }[];
-  drivers: { label: string; explanation: string }[];
-  risks: { label: string; severity: "low" | "med" | "high"; note: string }[];
-  recommendation: string;
-  tooltips?: { budgetLineId: string; blurb: string }[];
-};
-```
-
-### Key files
-
-* EventJournal: `src/game/narrative/eventJournal.ts`
-* Snapshot builder: `src/game/narrative/snapshot.ts`
-* NarrativeManager: `src/game/narrative/narrativeManager.ts`
-* Ticker UI: `src/ui/newsTicker.ts`
-* Ticker rules: `src/game/narrative/channels/tickerRule.ts`
-* Budget Insights rules: `src/game/narrative/channels/budgetInsightsRule.ts`
-
----
-
 ## Inputs
 
 All narrative channels share the same core input package.
@@ -416,15 +366,22 @@ Validation checklist per output:
 
 ### What exists now
 
-* Narrative data pipeline: EventJournal → CitySnapshot → CityDeltas → NarrativeInput → Ticker output.
+* Narrative settings: global enable + ticker enable, surfaced in Settings.
+* Narrative data pipeline: EventJournal → CitySnapshot → CityDeltas → NarrativeInput.
 * Rule-based News Ticker with month-end generation plus immediate utility alerts (power/water) and runway warnings.
 * Ticker items persist for critical alerts until recovery; other items expire on a short timer.
-* Narrative settings: global enable + ticker enable, surfaced in Settings.
+* Rule-based Budget Insights with a panel in the Budget modal (hidden when Narrative is disabled).
 * Player action events (tool usage) are logged for low-priority flavour items.
 
-### Channel schema in use (News Ticker)
+### Channel schemas in use
 
 ```ts
+export interface NarrativeInput {
+  snapshot: CitySnapshot;
+  deltas: CityDeltas;
+  recentEvents: SimEvent[];
+}
+
 type TickerItem = {
   text: string; // short
   category: "utilities"|"economy"|"growth"|"civic"|"player"|"flavour";
@@ -432,6 +389,14 @@ type TickerItem = {
   expiresAt?: number;
   sourceEventType?: SimEventType;
   sourceEventId?: string;
+};
+
+type BudgetInsights = {
+  topChanges: { label: string; value: string; direction: "up" | "down" }[];
+  drivers: { label: string; explanation: string }[];
+  risks: { label: string; severity: "low" | "med" | "high"; note: string }[];
+  recommendation: string;
+  tooltips?: { budgetLineId: string; blurb: string }[];
 };
 ```
 
@@ -441,6 +406,8 @@ type TickerItem = {
 * Snapshot builder: `src/game/narrative/snapshot.ts`
 * NarrativeManager: `src/game/narrative/narrativeManager.ts`
 * Ticker UI: `src/ui/newsTicker.ts` and HUD wiring in `src/main.ts`
+* Ticker rules: `src/game/narrative/channels/tickerRule.ts`
+* Budget Insights rules: `src/game/narrative/channels/budgetInsightsRule.ts`
 
 ---
 
