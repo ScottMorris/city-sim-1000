@@ -39,7 +39,7 @@ export const toolLabels: Record<Tool, string> = {
 };
 
 export const primaryLabelOverrides: Partial<Record<Tool, string>> = {
-  [Tool.WaterPump]: '🚰 Water',
+  [Tool.WaterPipe]: '🚰 Water',
   [Tool.ElementarySchool]: '🎓 Schools'
 };
 

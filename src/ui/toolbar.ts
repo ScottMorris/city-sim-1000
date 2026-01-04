@@ -11,7 +11,7 @@ const powerOptions: Tool[] = [
   Tool.SolarFarm
 ];
 
-const waterOptions: Tool[] = [Tool.WaterPump, Tool.WaterTower, Tool.WaterPipe];
+const waterOptions: Tool[] = [Tool.WaterPipe, Tool.WaterPump, Tool.WaterTower];
 const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 
 interface ToolbarOptions {
@@ -56,7 +56,7 @@ export function initToolbar(
   const groupedTools: Tool[][] = [
     [Tool.Inspect, Tool.TerraformRaise, Tool.TerraformLower, Tool.Water, Tool.Tree],
     [Tool.Road, Tool.Rail],
-    [Tool.PowerLine, Tool.WaterPump],
+    [Tool.PowerLine, Tool.WaterPipe],
     [Tool.ElementarySchool],
     [Tool.Residential, Tool.Commercial, Tool.Industrial],
     [Tool.Park],
@@ -363,7 +363,7 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
     const isActive =
       key === active ||
       (activePower && key === Tool.PowerLine) ||
-      (activeWater && key === Tool.WaterPump) ||
+      (activeWater && key === Tool.WaterPipe) ||
       (activeEducation && key === Tool.ElementarySchool);
     btn.classList.toggle('active', isActive);
   });
@@ -407,7 +407,7 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
     waterRow.style.top = '';
     waterRow.style.minWidth = '';
     waterRow.classList.toggle('toolbar-sub-open', open);
-    if (open) positionSubmenu(waterRow, Tool.WaterPump);
+    if (open) positionSubmenu(waterRow, Tool.WaterPipe);
   }
   if (educationRow) {
     const open = educationOptions.includes(active);
