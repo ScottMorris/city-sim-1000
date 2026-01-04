@@ -453,7 +453,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   simulation.update(deltaSeconds);
   const calendar = getCalendarPosition(state.day);
   while (calendar.month > lastNarrativeMonth) {
-    narrativeManager.onMonthEnd(() => buildCitySnapshot(state));
+    narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
     lastNarrativeMonth += 1;
   }
   const nowMs = Date.now();

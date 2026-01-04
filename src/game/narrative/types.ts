@@ -1,5 +1,6 @@
 export type TickerCategory = 'utilities' | 'economy' | 'growth' | 'civic' | 'player' | 'flavour';
 export type TickerSeverity = 'info' | 'warn' | 'alert';
+export type TickerSourceTag = 'event' | 'month_end';
 
 export type SimEventType =
   | 'power_deficit_start'
@@ -91,6 +92,7 @@ export interface TickerItem {
   category: TickerCategory;
   severity: TickerSeverity;
   expiresAt?: number;
+  sourceTag?: TickerSourceTag;
   sourceEventType?: SimEventType;
   sourceEventId?: string;
 }

@@ -55,7 +55,7 @@ export class NarrativeManager {
     this.applyEventToTicker(event, Date.now());
   }
 
-  onMonthEnd(buildSnapshot: () => CitySnapshot, now = Date.now()) {
+  onMonthEnd(buildSnapshot: () => CitySnapshot, now = Date.now(), simSpeedMultiplier = 1) {
     const snapshot = buildSnapshot();
     const deltas = computeDeltas(this.lastSnapshot, snapshot);
 
@@ -77,14 +77,20 @@ export class NarrativeManager {
       deltas,
       recentEvents: this.eventJournal.latest(30)
     };
+    this.clearMonthEndItems();
     const items = generateTickerItems(input);
     if (items.length === 0) return;
 
-    const expiresAt = now + 90_000;
+    const safeSpeed = Math.max(0.1, simSpeedMultiplier);
+    const expiresAt = now + Math.round(180_000 / safeSpeed);
     for (const item of items) {
       const text = item.text.trim();
       if (!text || this.lastTickerTexts.has(text)) continue;
-      this.tickerQueue.push({ ...item, expiresAt: item.expiresAt ?? expiresAt });
+      this.tickerQueue.push({
+        ...item,
+        expiresAt: item.expiresAt ?? expiresAt,
+        sourceTag: 'month_end'
+      });
       this.lastTickerTexts.add(text);
     }
     this.capQueue();
@@ -198,6 +204,7 @@ export class NarrativeManager {
         text,
         category: event.category,
         severity: event.severity,
+        sourceTag: 'event',
         sourceEventType: event.type,
         sourceEventId: event.id
       };
@@ -214,6 +221,7 @@ export class NarrativeManager {
       text,
       category: event.category,
       severity: event.severity,
+      sourceTag: 'event',
       sourceEventType: event.type,
       sourceEventId: event.id,
       expiresAt: now + 60_000
@@ -226,6 +234,12 @@ export class NarrativeManager {
     if (!this.activeAlertByType.has(type)) return;
     this.tickerQueue = this.tickerQueue.filter((item) => item.sourceEventType !== type);
     this.activeAlertByType.delete(type);
+    this.lastTickerTexts = new Set(this.tickerQueue.map((item) => item.text));
+  }
+
+  private clearMonthEndItems() {
+    if (this.tickerQueue.length === 0) return;
+    this.tickerQueue = this.tickerQueue.filter((item) => item.sourceTag !== 'month_end');
     this.lastTickerTexts = new Set(this.tickerQueue.map((item) => item.text));
   }
 
