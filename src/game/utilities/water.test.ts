@@ -11,12 +11,21 @@ describe('water network', () => {
 
     // Place Water Tower at 1,1 (2x2). Occupies (1,1), (2,1), (1,2), (2,2)
     placeBuilding(state, towerTemplate, 1, 1);
+    [
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2]
+    ].forEach(([x, y]) => {
+      const tile = getTile(state, x, y)!;
+      tile.powered = true;
+    });
 
     // Place Pipe at 3,1 (adjacent to tower at 2,1)
     const pipeTile = getTile(state, 3, 1)!;
     pipeTile.underground = TileKind.WaterPipe;
 
-    // Ensure building status is active (towers don't need power)
+    // Ensure building status is active (towers need power)
     updateBuildingStates(state);
 
     recomputeWaterNetwork(state);
@@ -29,6 +38,15 @@ describe('water network', () => {
     const towerTemplate = getBuildingTemplate(TileKind.WaterTower)!;
 
     placeBuilding(state, towerTemplate, 1, 1);
+    [
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2]
+    ].forEach(([x, y]) => {
+      const tile = getTile(state, x, y)!;
+      tile.powered = true;
+    });
 
     getTile(state, 3, 1)!.underground = TileKind.WaterPipe;
     getTile(state, 4, 1)!.underground = TileKind.WaterPipe;
@@ -37,5 +55,26 @@ describe('water network', () => {
     recomputeWaterNetwork(state);
 
     expect(getTile(state, 4, 1)!.watered).toBe(true);
+  });
+
+  it('ignores unconnected water towers when tallying supply', () => {
+    const state = createInitialState(10, 10);
+    const towerTemplate = getBuildingTemplate(TileKind.WaterTower)!;
+
+    placeBuilding(state, towerTemplate, 1, 1);
+    [
+      [1, 1],
+      [2, 1],
+      [1, 2],
+      [2, 2]
+    ].forEach(([x, y]) => {
+      const tile = getTile(state, x, y)!;
+      tile.powered = true;
+    });
+
+    updateBuildingStates(state);
+    recomputeWaterNetwork(state);
+
+    expect(state.utilities.waterProduced).toBe(0);
   });
 });

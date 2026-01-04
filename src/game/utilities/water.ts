@@ -7,6 +7,27 @@ function getIndex(state: GameState, x: number, y: number) {
   return y * state.width + x;
 }
 
+export function hasWaterSourceConnection(
+  state: GameState,
+  origin: { x: number; y: number },
+  footprint: { width: number; height: number },
+  buildingId?: number
+) {
+  for (let dy = 0; dy < footprint.height; dy++) {
+    for (let dx = 0; dx < footprint.width; dx++) {
+      const x = origin.x + dx;
+      const y = origin.y + dy;
+      for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
+        const neighbour = state.tiles[getIndex(state, nx, ny)];
+        if (!neighbour) continue;
+        if (buildingId !== undefined && neighbour.buildingId === buildingId) continue;
+        if (isWaterCarrier(neighbour)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function recomputeWaterNetwork(state: GameState) {
   // Reset watered flags
   for (const tile of state.tiles) {
@@ -21,9 +42,9 @@ export function recomputeWaterNetwork(state: GameState) {
     const template = getBuildingTemplate(building.templateId);
     if (!template || !template.waterOutput) continue;
 
-    // Check if active (e.g. pumps need power)
-    // Towers (no power needed) will be active if not damaged
+    // Check if active (e.g. pumps and towers need power)
     if (building.state.status !== BuildingStatus.Active) continue;
+    if (!hasWaterSourceConnection(state, building.origin, template.footprint, building.id)) continue;
 
     produced += template.waterOutput;
 

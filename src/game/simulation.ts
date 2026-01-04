@@ -5,7 +5,7 @@ import { BuildingStatus } from './buildings/state';
 import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import { listPowerPlants, placeBuilding, updateBuildingStates } from './buildings/manager';
 import { recomputePowerNetwork } from './utilities/power';
-import { recomputeWaterNetwork } from './utilities/water';
+import { hasWaterSourceConnection, recomputeWaterNetwork } from './utilities/water';
 import {
   getOrthogonalNeighbourCoords,
   hasRoadAccess,
@@ -173,7 +173,10 @@ export class Simulation {
     const pumpTemplate = getBuildingTemplate(TileKind.WaterPump);
     const parkTemplate = getBuildingTemplate(TileKind.Park);
 
-    for (const tile of this.state.tiles) {
+    for (let index = 0; index < this.state.tiles.length; index++) {
+      const tile = this.state.tiles[index];
+      const tileX = index % this.state.width;
+      const tileY = Math.floor(index / this.state.width);
       if (tile.kind === TileKind.Residential) {
         residentialZones++;
         if (tile.buildingId !== undefined) developedResidentialZones++;
@@ -205,13 +208,14 @@ export class Simulation {
 
       if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
         const active = pumpTemplate.requiresPower === false ? true : tile.powered;
+        const connected = hasWaterSourceConnection(state, { x: tileX, y: tileY }, { width: 1, height: 1 });
         if (pumpTemplate.maintenance) {
           buildingMaintenance += pumpTemplate.maintenance;
           buildingMaintenanceCivic += pumpTemplate.maintenance;
           civicMaintenanceByType[pumpTemplate.id] =
             (civicMaintenanceByType[pumpTemplate.id] ?? 0) + pumpTemplate.maintenance;
         }
-        if (this.waterEnabled && active && pumpTemplate.waterOutput)
+        if (this.waterEnabled && active && connected && pumpTemplate.waterOutput)
           buildingWaterOutput += pumpTemplate.waterOutput;
       }
       if (tile.buildingId === undefined && tile.kind === TileKind.Park && parkTemplate) {
@@ -253,7 +257,13 @@ export class Simulation {
             building.state.status === BuildingStatus.InactiveNoWater));
 
       if (isActive) {
-        if (this.waterEnabled && template.waterOutput) buildingWaterOutput += template.waterOutput;
+        if (
+          this.waterEnabled &&
+          template.waterOutput &&
+          hasWaterSourceConnection(this.state, building.origin, template.footprint, building.id)
+        ) {
+          buildingWaterOutput += template.waterOutput;
+        }
         if (template.powerUse) {
           buildingPowerUse += template.powerUse;
           if (template.category === BuildingCategory.Civic) {

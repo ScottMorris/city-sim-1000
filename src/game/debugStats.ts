@@ -4,6 +4,7 @@ import { GameState, TileKind } from './gameState';
 import { computeDemand } from './demand';
 import { computeLabourStats, LabourStats } from './computeLabourStats';
 import { ServiceId } from './services';
+import { hasWaterSourceConnection } from './utilities/water';
 
 export interface DemandDetails {
   base: number;
@@ -87,7 +88,10 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
 
   const pumpTemplate = getBuildingTemplate(TileKind.WaterPump);
 
-  for (const tile of state.tiles) {
+  for (let index = 0; index < state.tiles.length; index++) {
+    const tile = state.tiles[index];
+    const tileX = index % state.width;
+    const tileY = Math.floor(index / state.width);
     if (tile.kind === TileKind.Residential) {
       residentialZones++;
       if (tile.buildingId !== undefined) developedResidentialZones++;
@@ -104,7 +108,13 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     const isLegacyPump = tile.buildingId === undefined && tile.kind === TileKind.WaterPump;
     if (isLegacyPump && pumpTemplate) {
       const active = pumpTemplate.requiresPower === false ? true : tile.powered;
-      if (active && pumpTemplate.waterOutput) buildingWaterOutput += pumpTemplate.waterOutput;
+      if (
+        active &&
+        pumpTemplate.waterOutput &&
+        hasWaterSourceConnection(state, { x: tileX, y: tileY }, { width: 1, height: 1 })
+      ) {
+        buildingWaterOutput += pumpTemplate.waterOutput;
+      }
     }
   }
 
@@ -119,7 +129,12 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
           building.state.status === BuildingStatus.InactiveNoWater));
     if (!isActive && !contributesCapacity) continue;
     if (isActive) {
-      if (template.waterOutput) buildingWaterOutput += template.waterOutput;
+      if (
+        template.waterOutput &&
+        hasWaterSourceConnection(state, building.origin, template.footprint, building.id)
+      ) {
+        buildingWaterOutput += template.waterOutput;
+      }
       if (template.powerUse) buildingPowerUse += template.powerUse;
       if (template.waterUse) buildingWaterUse += template.waterUse;
     }

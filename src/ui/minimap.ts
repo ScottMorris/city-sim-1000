@@ -302,7 +302,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
         return tile.powered ? '#7ad5ff' : '#ffcc70';
       }
-      return tile.powered ? 'rgba(90, 162, 255, 0.25)' : 'rgba(16, 26, 42, 0.92)';
+      return tile.powered ? 'rgba(76, 195, 255, 0.25)' : 'rgba(16, 26, 42, 0.92)';
     }
 
     if (settings.mode === 'alerts') {
@@ -339,7 +339,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     if (settings.mode === 'underground') {
       if (tile.underground === TileKind.WaterPipe) return '#4cc3ff';
       if (tile.kind === TileKind.Water) return '#1f68d6';
-      if (tile.watered) return 'rgba(90, 162, 255, 0.55)';
+      if (tile.watered) return 'rgba(76, 195, 255, 0.55)';
       // Fade others
       return 'rgba(16, 26, 42, 0.95)';
     }

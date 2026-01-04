@@ -102,13 +102,15 @@ describe('tools', () => {
     expect(state.utilities.water).toBeGreaterThan(0);
   });
 
-  it('adds a water tower with a 2x2 footprint that supplies water even without power', () => {
+  it('adds a water tower with a 2x2 footprint that supplies water when powered and connected', () => {
     const state = createInitialState(8, 8);
     const template = getBuildingTemplate(TileKind.WaterTower)!;
-    state.money = template.cost + 500;
+    state.money = template.cost + BUILD_COST[Tool.WindTurbine] + 500;
+    applyTool(state, Tool.WindTurbine, 1, 3);
     const result = applyTool(state, Tool.WaterTower, 3, 3);
     expect(result.success).toBe(true);
     expect(state.buildings.length).toBe(1);
+    getTile(state, 5, 3)!.underground = TileKind.WaterPipe;
     const ids = new Set<number>();
     const footprint: Array<[number, number]> = [
       [3, 3],

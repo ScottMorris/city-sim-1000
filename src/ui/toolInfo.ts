@@ -191,6 +191,7 @@ export function getToolDetails(tool: Tool): ToolDetails {
         addUtilityUse(rows, template.powerUse, template.waterUse, template.waterOutput);
       }
       hints.push(template?.requiresPower ? 'Requires power to run.' : 'Keeps running without power.');
+      hints.push('Connect it to pipes or roads to feed the network.');
       break;
     }
     case Tool.ElementarySchool:

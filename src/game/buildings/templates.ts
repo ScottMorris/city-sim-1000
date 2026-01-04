@@ -100,7 +100,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
     cost: BUILD_COST[Tool.WaterTower],
     maintenance: 12,
     tileKind: TileKind.WaterTower,
-    requiresPower: false,
+    requiresPower: true,
     waterOutput: 120
   },
   [TileKind.Park]: {

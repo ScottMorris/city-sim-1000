@@ -17,6 +17,7 @@ const GRID_LINE_COLOUR = 0x123a63;
 const FOOTPRINT_CONFLICT_COLOUR = 0xff7b7b;
 const FOOTPRINT_WARNING_COLOUR = 0xffcc70;
 const FOOTPRINT_PREVIEW_COLOUR = 0xffffff;
+const WATER_OVERLAY_COLOUR = 0x4cc3ff;
 
 export interface Position {
   x: number;
@@ -193,6 +194,10 @@ export class MapRenderer {
       }
     }
 
+    if (isUnderground) {
+      this.drawWaterAttachmentPoints(state, size, buildingLookup);
+    }
+
     this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
@@ -248,6 +253,46 @@ export class MapRenderer {
     return template?.footprint ?? { width: 1, height: 1 };
   }
 
+  private drawWaterAttachmentPoints(
+    state: GameState,
+    size: number,
+    buildingLookup: ReturnType<typeof createBuildingLookup>['buildingLookup']
+  ) {
+    const radius = size * 0.09;
+    const inset = size * 0.16;
+    for (const entry of buildingLookup.values()) {
+      const template = entry.template;
+      if (!template) continue;
+      if (template.tileKind !== TileKind.WaterPump && template.tileKind !== TileKind.WaterTower) continue;
+      const { width, height } = template.footprint;
+      const { x: originX, y: originY } = entry.origin;
+
+      for (let dx = 0; dx < width; dx++) {
+        const x = originX + dx;
+        const topY = originY;
+        const bottomY = originY + height - 1;
+        const px = this.camera.x + x * size;
+        const pyTop = this.camera.y + topY * size;
+        const pyBottom = this.camera.y + bottomY * size;
+        const midX = px + size / 2;
+        this.mapLayer.circle(midX, pyTop + inset, radius).fill({ color: WATER_OVERLAY_COLOUR, alpha: 0.9 });
+        this.mapLayer.circle(midX, pyBottom + size - inset, radius).fill({ color: WATER_OVERLAY_COLOUR, alpha: 0.9 });
+      }
+
+      for (let dy = 0; dy < height; dy++) {
+        const y = originY + dy;
+        const leftX = originX;
+        const rightX = originX + width - 1;
+        const py = this.camera.y + y * size;
+        const pxLeft = this.camera.x + leftX * size;
+        const pxRight = this.camera.x + rightX * size;
+        const midY = py + size / 2;
+        this.mapLayer.circle(pxLeft + inset, midY, radius).fill({ color: WATER_OVERLAY_COLOUR, alpha: 0.9 });
+        this.mapLayer.circle(pxRight + size - inset, midY, radius).fill({ color: WATER_OVERLAY_COLOUR, alpha: 0.9 });
+      }
+    }
+  }
+
   private footprintFits(state: GameState, origin: Position, footprint: { width: number; height: number }) {
     if (origin.x + footprint.width > state.width || origin.y + footprint.height > state.height) {
       return false;
@@ -290,15 +335,15 @@ export class MapRenderer {
       if (overlayMode === 'water' || overlayMode === 'underground') {
         if (tile.kind === TileKind.Water) return { color: 0x2f7be5, alpha: 0.32 };
         if (tile.underground === TileKind.WaterPipe) {
-          return { color: tile.watered ? 0x4cc3ff : 0x888888, alpha: 0.6 };
+          return { color: tile.watered ? WATER_OVERLAY_COLOUR : 0x888888, alpha: 0.6 };
         }
-        if (tile.kind === TileKind.WaterPipe) return { color: 0x4cc3ff, alpha: 0.38 }; // Legacy check
+        if (tile.kind === TileKind.WaterPipe) return { color: WATER_OVERLAY_COLOUR, alpha: 0.38 }; // Legacy check
 
         if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
           return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
         }
         // Show watered status on buildings/zones
-        if (tile.watered) return { color: 0x5aa2ff, alpha: 0.2 };
+        if (tile.watered) return { color: WATER_OVERLAY_COLOUR, alpha: 0.2 };
         return null;
       }
 
