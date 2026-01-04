@@ -1,11 +1,6 @@
 import { BUILD_COST, PowerPlantType } from './constants';
-import {
-  type BuildingTemplate,
-  getBuildingTemplate,
-  getPowerPlantTemplate,
-  placeBuilding,
-  removeBuilding
-} from './buildings';
+import { type BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './buildings/templates';
+import { placeBuilding, removeBuilding } from './buildings/manager';
 import { GameState, Tile, TileKind, getTile, setTile } from './gameState';
 import { Tool } from './toolTypes';
 
@@ -137,10 +132,14 @@ const registry: ToolRegistry = {
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.WaterPump), x, y, cost),
   [Tool.WaterTower]: ({ state, x, y }, cost) =>
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.WaterTower), x, y, cost),
-  [Tool.WaterPipe]: () => ({
-    success: false,
-    message: 'Underground pipes view is coming soon.'
-  }),
+  [Tool.WaterPipe]: ({ state, x, y }, cost) => {
+    state.money -= cost;
+    const tile = getTile(state, x, y);
+    if (tile) {
+      tile.underground = TileKind.WaterPipe;
+    }
+    return { success: true };
+  },
   [Tool.ElementarySchool]: ({ state, x, y }, cost) =>
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.ElementarySchool), x, y, cost),
   [Tool.HighSchool]: ({ state, x, y }, cost) =>
@@ -175,14 +174,23 @@ const registry: ToolRegistry = {
   [Tool.Park]: ({ state, x, y }, cost) =>
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.Park), x, y, cost),
   [Tool.Bulldoze]: ({ state, x, y }, cost) => {
-    state.money -= cost;
     const tile = getTile(state, x, y);
-    if (tile) {
-      if (tile.buildingId !== undefined) {
-        removeBuilding(state, tile.buildingId);
-      } else {
-        setTile(state, x, y, TileKind.Land);
+    if (!tile) return { success: false };
+
+    if (state.settings.minimap.mode === 'underground') {
+      if (tile.underground) {
+        state.money -= cost;
+        tile.underground = undefined;
+        return { success: true };
       }
+      return { success: true }; // Nothing to bulldoze underground
+    }
+
+    state.money -= cost;
+    if (tile.buildingId !== undefined) {
+      removeBuilding(state, tile.buildingId);
+    } else {
+      setTile(state, x, y, TileKind.Land);
     }
     return { success: true };
   }

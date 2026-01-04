@@ -1,15 +1,11 @@
 import type { GameState } from './gameState';
 import { bumpTileRevision, getTile, TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
-import {
-  BuildingStatus,
-  BuildingCategory,
-  getBuildingTemplate,
-  listPowerPlants,
-  placeBuilding,
-  updateBuildingStates
-} from './buildings';
-import { recomputePowerNetwork } from './power';
+import { BuildingStatus } from './buildings/state';
+import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
+import { listPowerPlants, placeBuilding, updateBuildingStates } from './buildings/manager';
+import { recomputePowerNetwork } from './utilities/power';
+import { recomputeWaterNetwork } from './utilities/water';
 import {
   getOrthogonalNeighbourCoords,
   hasRoadAccess,
@@ -18,7 +14,7 @@ import {
   zoneHasRoadPath
 } from './adjacency';
 import { DAYS_PER_MONTH } from './time';
-import { recordDailyBudget } from './budget';
+import { recordDailyBudget } from './economy';
 import { computeDemand } from './demand';
 import { computeLabourStats } from './computeLabourStats';
 import { recomputeEducation } from './education';
@@ -66,7 +62,7 @@ export class Simulation {
   private zoneGrowthTimers = new Map<number, number>();
   private vacantZoneIndices = new Set<number>();
   private lastTileRevision = -1;
-  private readonly waterEnabled = false;
+  private readonly waterEnabled = true;
   private speedMultiplier = 1;
   private notify?: (alert: SimulationAlert) => void;
   private powerDeficitActive = false;
@@ -140,9 +136,11 @@ export class Simulation {
       LIGHTING_POLICIES[lightingBylaw] ?? LIGHTING_POLICIES[DEFAULT_BYLAWS.lighting];
 
     recomputePowerNetwork(this.state);
-    const grew = this.spawnZoneBuildings();
-    updateBuildingStates(this.state);
-    if (grew) recomputePowerNetwork(this.state);
+    if (this.waterEnabled) recomputeWaterNetwork(this.state);
+    this.spawnZoneBuildings();
+    updateBuildingStates(this.state, { waterEnabled: this.waterEnabled });
+    recomputePowerNetwork(this.state);
+    if (this.waterEnabled) recomputeWaterNetwork(this.state);
     this.state.education = recomputeEducation(this.state);
 
     let residentialZones = 0;
@@ -197,6 +195,14 @@ export class Simulation {
         if (tile.kind === TileKind.WaterPipe) maintenancePipes += upkeep;
       }
 
+      if (tile.underground) {
+        const uUpkeep = MAINTENANCE[tile.underground];
+        if (uUpkeep) {
+          maintenance += uUpkeep;
+          if (tile.underground === TileKind.WaterPipe) maintenancePipes += uUpkeep;
+        }
+      }
+
       if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
         const active = pumpTemplate.requiresPower === false ? true : tile.powered;
         if (pumpTemplate.maintenance) {
@@ -240,6 +246,12 @@ export class Simulation {
         }
       }
       const isActive = building.state.status === BuildingStatus.Active;
+      const contributesCapacity =
+        isActive ||
+        (template.category === BuildingCategory.Zone &&
+          (building.state.status === BuildingStatus.InactiveNoPower ||
+            building.state.status === BuildingStatus.InactiveNoWater));
+
       if (isActive) {
         if (this.waterEnabled && template.waterOutput) buildingWaterOutput += template.waterOutput;
         if (template.powerUse) {
@@ -251,12 +263,6 @@ export class Simulation {
           }
         }
         if (this.waterEnabled && template.waterUse) buildingWaterUse += template.waterUse;
-        if (template.populationCapacity) populationCapacity += template.populationCapacity;
-        if (template.jobsCapacity) {
-          jobCapacity += template.jobsCapacity;
-          if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
-          if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
-        }
         if (template.category !== BuildingCategory.Power && lightingPolicy) {
           const { width, height } = template.footprint;
           for (let dy = 0; dy < height; dy++) {
@@ -266,6 +272,15 @@ export class Simulation {
               tile.happiness = nudgeTowards(tile.happiness, lightingPolicy.happinessTarget);
             }
           }
+        }
+      }
+
+      if (contributesCapacity) {
+        if (template.populationCapacity) populationCapacity += template.populationCapacity;
+        if (template.jobsCapacity) {
+          jobCapacity += template.jobsCapacity;
+          if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
+          if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
         }
       }
     }
@@ -353,7 +368,7 @@ export class Simulation {
     const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
     const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
     const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
-    const utilityPenalty = this.state.utilities.power < 0 ? 15 : 0;
+    const utilityPenalty = (this.state.utilities.power < 0 ? 15 : 0) + (this.waterEnabled && this.state.utilities.water < 0 ? 15 : 0);
     const pendingPenaltyEnabled = this.state.settings?.pendingPenaltyEnabled ?? true;
     const labourStats = computeLabourStats(this.state.population, populationCapacity, jobCapacity);
     const seeded = this.state.population === 0 && this.state.jobs === 0;
@@ -464,9 +479,9 @@ export class Simulation {
   private spawnZoneBuildings(): boolean {
     this.refreshVacantZoneCache();
 
-    const residentialCandidates: Array<{ idx: number; x: number; y: number }> = [];
-    const commercialCandidates: Array<{ idx: number; x: number; y: number }> = [];
-    const industrialCandidates: Array<{ idx: number; x: number; y: number }> = [];
+    const residentialCandidates: Array<{ idx: number; x: number; y: number; hasPower: boolean; hasWater: boolean }> = [];
+    const commercialCandidates: Array<{ idx: number; x: number; y: number; hasPower: boolean; hasWater: boolean }> = [];
+    const industrialCandidates: Array<{ idx: number; x: number; y: number; hasPower: boolean; hasWater: boolean }> = [];
 
     for (const idx of this.vacantZoneIndices) {
       const tile = this.state.tiles[idx];
@@ -486,17 +501,13 @@ export class Simulation {
       }
       const x = idx % this.state.width;
       const y = Math.floor(idx / this.state.width);
+      const hasPower = tileHasPower(this.state, x, y);
+      const hasWater = this.waterEnabled ? tile.watered === true : true;
 
       // Keep existing road access gating.
       const hasRoadChain = zoneHasRoadPath(this.state, x, y);
       const frontierAllowed = isFrontierZone(this.state, x, y);
       if (!hasRoadAccess(this.state, x, y) && !hasRoadChain && !frontierAllowed) {
-        this.zoneGrowthTimers.delete(idx);
-        continue;
-      }
-
-      const powerAvailable = this.state.utilities.powerProduced > 0;
-      if (powerAvailable && !tileHasPower(this.state, x, y)) {
         this.zoneGrowthTimers.delete(idx);
         continue;
       }
@@ -509,13 +520,10 @@ export class Simulation {
       }
       this.zoneGrowthTimers.delete(idx);
 
-      if (tile.kind === TileKind.Residential) residentialCandidates.push({ idx, x, y });
-      if (tile.kind === TileKind.Commercial) commercialCandidates.push({ idx, x, y });
-      if (tile.kind === TileKind.Industrial) industrialCandidates.push({ idx, x, y });
+      if (tile.kind === TileKind.Residential) residentialCandidates.push({ idx, x, y, hasPower, hasWater });
+      if (tile.kind === TileKind.Commercial) commercialCandidates.push({ idx, x, y, hasPower, hasWater });
+      if (tile.kind === TileKind.Industrial) industrialCandidates.push({ idx, x, y, hasPower, hasWater });
     }
-
-    // Early-out if power is negative; growth is blocked.
-    if (this.state.utilities.power < 0) return false;
 
     const grewResidential = this.applyZoneGrowthForType(
       TileKind.Residential,
@@ -546,10 +554,17 @@ export class Simulation {
   private applyZoneGrowthForType(
     kind: TileKind,
     demand: number,
-    candidates: Array<{ idx: number; x: number; y: number }>
+    candidates: Array<{ idx: number; x: number; y: number; hasPower: boolean; hasWater: boolean }>
   ): boolean {
     if (candidates.length === 0) return false;
     const debugWave = typeof process !== 'undefined' && process?.env?.WAVE_DEBUG === '1';
+    const template = getBuildingTemplate(kind);
+    if (!template) return false;
+    const needsPower = template?.requiresPower !== false;
+    const needsWater =
+      this.waterEnabled && template && template.requiresWater !== false && (template.waterUse ?? 0) > 0;
+    const powerBalance = this.state.utilities.power;
+    const waterBalance = this.waterEnabled ? this.state.utilities.water : 0;
 
     // Cap how many lots can start growing this tick. At demand 0 this is 1; it rises gently
     // with demand and is hard-capped to avoid big bursts.
@@ -569,9 +584,15 @@ export class Simulation {
     }
 
     let grown = 0;
-    for (const { idx, x, y } of candidates) {
+    for (const { idx, x, y, hasPower, hasWater } of candidates) {
       if (grown >= maxNewLots) break;
-      if (Math.random() > pGrow) continue;
+      let utilityFactor = 1;
+      if (needsPower && !hasPower) utilityFactor *= 0.15; // allow a tiny chance to seed but strongly discouraged
+      if (needsWater && !hasWater) utilityFactor *= 0.35;
+      if (powerBalance < 0) utilityFactor *= clamp(1 + powerBalance / 20, 0.05, 1);
+      if (needsWater && waterBalance < 0) utilityFactor *= clamp(1 + waterBalance / 30, 0.05, 1);
+      const adjustedPGrow = clamp(pGrow * utilityFactor, 0, 1);
+      if (adjustedPGrow <= 0 || Math.random() > adjustedPGrow) continue;
       const template = getBuildingTemplate(kind);
       if (!template) continue;
       const result = placeBuilding(this.state, template, x, y);
@@ -604,6 +625,7 @@ export class Simulation {
       let trouble = building.state.troubleTicks ?? 0;
       const demand = this.getDemandForZone(template.tileKind);
       const noPower = building.state.status === BuildingStatus.InactiveNoPower;
+      const noWater = building.state.status === BuildingStatus.InactiveNoWater;
       const unhappy = tile.happiness < happinessThreshold;
       const servedElementary = tile.services.served[ServiceId.EducationElementary];
       const servedHigh = tile.services.served[ServiceId.EducationHigh];
@@ -617,13 +639,14 @@ export class Simulation {
 
       // Pressure from low demand combined with bad services/power; avoid punishing stable equilibrium.
       const lowDemand = demand < demandLowThreshold;
-      if (lowDemand && (unhappy || noPower)) trouble += troubleIncrement;
-      if (unhappy && noPower) trouble += troubleIncrement; // stack when both are bad
+      if (lowDemand && (unhappy || noPower || noWater)) trouble += troubleIncrement;
+      if (unhappy && (noPower || noWater)) trouble += troubleIncrement; // stack when both are bad
       if (noPower) trouble += troublePowerPenalty;
+      if (noWater) trouble += troubleIncrement * 0.5;
       if (educationUnserved) trouble += troubleIncrement * 0.5;
 
       // If conditions are fine, bleed trouble down slowly.
-      if (!lowDemand && !unhappy && !noPower) {
+      if (!lowDemand && !unhappy && !noPower && !noWater) {
         trouble = Math.max(0, trouble - troubleDecay);
         if (!educationUnserved) trouble = Math.max(0, trouble - troubleDecay * 0.25);
       }
@@ -640,7 +663,7 @@ export class Simulation {
    * Clears a zone building when decay wins: remove the building instance and leave the zoned tile
    * ready to regrow. Capacity drops to 0, which naturally nudges demand upward again.
    */
-  private abandonZoneBuilding(building: import('./buildings').BuildingInstance, tile: import('./gameState').Tile) {
+  private abandonZoneBuilding(building: import('./buildings/state').BuildingInstance, tile: import('./gameState').Tile) {
     // Remove building instance
     this.state.buildings = this.state.buildings.filter((b) => b.id !== building.id);
     // Clear building references but keep the zone kind so it can regrow.

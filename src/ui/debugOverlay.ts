@@ -89,88 +89,93 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
 
   const renderStats = (state: GameState) => {
     if (!visible) return;
-    const stats = getSimulationDebugStats(state);
-    const heap = getHeapSnapshot();
-    const calendar = getCalendarPosition(stats.day);
-    const totalDays = Math.floor(stats.day);
-    const formatDemandHint = (details: DemandDetails) =>
-      details.seeded
-        ? 'Starter seed'
-        : `${details.base}×(1 - fill ${Math.round(details.fillFraction * 100)}%) = ${details.fillTerm.toFixed(
-            1
-          )}, workforce term ${details.workforceTerm.toFixed(1)}, labour term ${details.labourTerm.toFixed(
-            1
-          )}, pending ${details.pendingZones} → -${details.pendingPenaltyApplied.toFixed(
-            1
-          )} (cap ${details.pendingPenaltyCapped.toFixed(1)}, relief ${details.pressureRelief.toFixed(1)})${
-            details.floorApplied ? ', floor active' : ''
-          }${
-            details.utilityPenalty ? `, power penalty -${details.utilityPenalty.toFixed(1)}` : ''
-          }`;
+    try {
+      const stats = getSimulationDebugStats(state);
+      const heap = getHeapSnapshot();
+      const calendar = getCalendarPosition(stats.day);
+      const totalDays = Math.floor(stats.day);
+      const formatDemandHint = (details: DemandDetails) =>
+        details.seeded
+          ? 'Starter seed'
+          : `${details.base}×(1 - fill ${Math.round(details.fillFraction * 100)}%) = ${details.fillTerm.toFixed(
+              1
+            )}, workforce term ${details.workforceTerm.toFixed(1)}, labour term ${details.labourTerm.toFixed(
+              1
+            )}, pending ${details.pendingZones} → -${details.pendingPenaltyApplied.toFixed(
+              1
+            )} (cap ${details.pendingPenaltyCapped.toFixed(1)}, relief ${details.pressureRelief.toFixed(
+              1
+            )})${details.floorApplied ? ', floor active' : ''}${
+              details.utilityPenalty ? `, power penalty -${details.utilityPenalty.toFixed(1)}` : ''
+            }`;
 
-    overlay.innerHTML = `
-      <div class="debug-section">
-        <div class="debug-heading">Tick ${stats.tick} • Day ${totalDays} (Month ${calendar.month}, Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH})</div>
-        <div class="debug-row"><span>Population</span><strong>${Math.floor(stats.population)} / ${Math.floor(stats.capacities.population)}</strong></div>
-        <div class="debug-row"><span>Jobs</span><strong>${Math.floor(stats.jobs)} / ${Math.floor(stats.capacities.jobs)}</strong></div>
-        <div class="debug-row"><span>Workers</span><strong>${stats.labour.employed.toFixed(
-          0
-        )} / ${stats.labour.workers.toFixed(0)}</strong></div>
-        <div class="debug-hint">Unemployment ${(stats.labour.unemploymentRate * 100).toFixed(
-          1
-        )}% • Vacancy ${(stats.labour.vacancyRate * 100).toFixed(1)}% • Job cap ${stats.labour.jobCapacity.toFixed(0)}</div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-heading">Zones</div>
-        <div class="debug-row"><span>Residential</span><strong>${stats.zones.residential}</strong></div>
-      <div class="debug-row"><span>Commercial</span><strong>${stats.zones.commercial}</strong></div>
-      <div class="debug-row"><span>Industrial</span><strong>${stats.zones.industrial}</strong></div>
-    </div>
-    <div class="debug-section">
-      <div class="debug-heading">Education</div>
-      <div class="debug-row"><span>Score</span><strong>${(stats.education.score * 100).toFixed(0)}%</strong></div>
-      <div class="debug-row"><span>Elementary</span><strong>${(stats.education.elementaryCoverage * 100).toFixed(0)}%</strong></div>
-      <div class="debug-row"><span>High School</span><strong>${(stats.education.highCoverage * 100).toFixed(0)}%</strong></div>
-    </div>
-      <div class="debug-section">
-        <div class="debug-heading">Demand</div>
-        <div class="debug-hint">Over-zoning penalty: ${state.settings?.pendingPenaltyEnabled ?? true ? 'On' : 'Off'}</div>
-        <div class="debug-row"><span>Residential</span><strong>${stats.demand.residential.toFixed(1)}%</strong></div>
-        <div class="debug-hint">${formatDemandHint(stats.demandDetails.residential)}</div>
-        <div class="debug-row"><span>Commercial</span><strong>${stats.demand.commercial.toFixed(1)}%</strong></div>
-        <div class="debug-hint">${formatDemandHint(stats.demandDetails.commercial)}</div>
-        <div class="debug-row"><span>Industrial</span><strong>${stats.demand.industrial.toFixed(1)}%</strong></div>
-        <div class="debug-hint">${formatDemandHint(stats.demandDetails.industrial)}</div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-heading">Utilities</div>
-        <div class="debug-row"><span>Power</span><strong>${stats.utilities.powerProduced.toFixed(
-          1
-        )} prod / ${stats.utilities.powerUsed.toFixed(1)} use</strong></div>
-        <div class="debug-hint">Balance ${stats.utilities.powerBalance.toFixed(1)} MW</div>
-        <div class="debug-row"><span>Water</span><strong>${stats.utilities.waterOutput.toFixed(
-          1
-        )} out / ${stats.utilities.waterUse.toFixed(1)} use</strong></div>
-        <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
-      </div>
-      <div class="debug-section">
-        <div class="debug-heading">Memory</div>
-        ${
-          heap.available
-            ? `
-          <div class="debug-row"><span>JS heap</span><strong>${heap.usedMB?.toFixed(1)}${
-               heap.limitMB ? ` / ${heap.limitMB.toFixed(0)}` : ''
-             } MB</strong></div>
+      overlay.innerHTML = `
+        <div class="debug-section">
+          <div class="debug-heading">Tick ${stats.tick} • Day ${totalDays} (Month ${calendar.month}, Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH})</div>
+          <div class="debug-row"><span>Population</span><strong>${Math.floor(stats.population)} / ${Math.floor(stats.capacities.population)}</strong></div>
+          <div class="debug-row"><span>Jobs</span><strong>${Math.floor(stats.jobs)} / ${Math.floor(stats.capacities.jobs)}</strong></div>
+          <div class="debug-row"><span>Workers</span><strong>${stats.labour.employed.toFixed(
+            0
+          )} / ${stats.labour.workers.toFixed(0)}</strong></div>
+          <div class="debug-hint">Unemployment ${(stats.labour.unemploymentRate * 100).toFixed(
+            1
+          )}% • Vacancy ${(stats.labour.vacancyRate * 100).toFixed(1)}% • Job cap ${stats.labour.jobCapacity.toFixed(0)}</div>
+        </div>
+        <div class="debug-section">
+          <div class="debug-heading">Zones</div>
+          <div class="debug-row"><span>Residential</span><strong>${stats.zones.residential}</strong></div>
+          <div class="debug-row"><span>Commercial</span><strong>${stats.zones.commercial}</strong></div>
+          <div class="debug-row"><span>Industrial</span><strong>${stats.zones.industrial}</strong></div>
+        </div>
+        <div class="debug-section">
+          <div class="debug-heading">Education</div>
+          <div class="debug-row"><span>Score</span><strong>${(stats.education.score * 100).toFixed(0)}%</strong></div>
+          <div class="debug-row"><span>Elementary</span><strong>${(stats.education.elementaryCoverage * 100).toFixed(0)}%</strong></div>
+          <div class="debug-row"><span>High School</span><strong>${(stats.education.highCoverage * 100).toFixed(0)}%</strong></div>
+        </div>
+        <div class="debug-section">
+          <div class="debug-heading">Demand</div>
+          <div class="debug-hint">Over-zoning penalty: ${state.settings?.pendingPenaltyEnabled ?? true ? 'On' : 'Off'}</div>
+          <div class="debug-row"><span>Residential</span><strong>${stats.demand.residential.toFixed(1)}%</strong></div>
+          <div class="debug-hint">${formatDemandHint(stats.demandDetails.residential)}</div>
+          <div class="debug-row"><span>Commercial</span><strong>${stats.demand.commercial.toFixed(1)}%</strong></div>
+          <div class="debug-hint">${formatDemandHint(stats.demandDetails.commercial)}</div>
+          <div class="debug-row"><span>Industrial</span><strong>${stats.demand.industrial.toFixed(1)}%</strong></div>
+          <div class="debug-hint">${formatDemandHint(stats.demandDetails.industrial)}</div>
+        </div>
+        <div class="debug-section">
+          <div class="debug-heading">Utilities</div>
+          <div class="debug-row"><span>Power</span><strong>${stats.utilities.powerProduced.toFixed(
+            1
+          )} prod / ${stats.utilities.powerUsed.toFixed(1)} use</strong></div>
+          <div class="debug-hint">Balance ${stats.utilities.powerBalance.toFixed(1)} MW</div>
+          <div class="debug-row"><span>Water</span><strong>${stats.utilities.waterOutput.toFixed(
+            1
+          )} out / ${stats.utilities.waterUse.toFixed(1)} use</strong></div>
+          <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
+        </div>
+        <div class="debug-section">
+          <div class="debug-heading">Memory</div>
           ${
-            heap.allocatedMB
-              ? `<div class="debug-hint">Allocated ${heap.allocatedMB.toFixed(0)} MB</div>`
-              : ''
+            heap.available
+              ? `
+            <div class="debug-row"><span>JS heap</span><strong>${heap.usedMB?.toFixed(1)}${
+                 heap.limitMB ? ` / ${heap.limitMB.toFixed(0)}` : ''
+               } MB</strong></div>
+            ${
+              heap.allocatedMB
+                ? `<div class="debug-hint">Allocated ${heap.allocatedMB.toFixed(0)} MB</div>`
+                : ''
+            }
+          `
+              : `<div class="debug-row"><span>Status</span><strong>${heap.reason}</strong></div>`
           }
-        `
-            : `<div class="debug-row"><span>Status</span><strong>${heap.reason}</strong></div>`
-        }
-      </div>
-    `;
+        </div>
+      `;
+    } catch (err) {
+      console.error('Debug overlay render failed', err);
+      overlay.innerHTML = `<div class="debug-section"><div class="debug-heading">Debug overlay</div><div class="debug-row"><span>Status</span><strong>Render error</strong></div><div class="debug-hint">${(err as Error)?.message ?? err}</div></div>`;
+    }
   };
 
   toggleBtn.addEventListener('click', () => {

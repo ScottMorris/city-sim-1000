@@ -1,4 +1,5 @@
-import { BuildingStatus, getBuildingTemplate } from './buildings';
+import { BuildingStatus } from './buildings/state';
+import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import { GameState, TileKind } from './gameState';
 import { computeDemand } from './demand';
 import { computeLabourStats, LabourStats } from './computeLabourStats';
@@ -111,15 +112,24 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     const template = getBuildingTemplate(building.templateId);
     if (!template) continue;
     const isActive = building.state.status === BuildingStatus.Active;
-    if (!isActive) continue;
-    if (template.waterOutput) buildingWaterOutput += template.waterOutput;
-    if (template.powerUse) buildingPowerUse += template.powerUse;
-    if (template.waterUse) buildingWaterUse += template.waterUse;
-    if (template.populationCapacity) populationCapacity += template.populationCapacity;
-    if (template.jobsCapacity) {
-      jobCapacity += template.jobsCapacity;
-      if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
-      if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+    const contributesCapacity =
+      isActive ||
+      (template.category === BuildingCategory.Zone &&
+        (building.state.status === BuildingStatus.InactiveNoPower ||
+          building.state.status === BuildingStatus.InactiveNoWater));
+    if (!isActive && !contributesCapacity) continue;
+    if (isActive) {
+      if (template.waterOutput) buildingWaterOutput += template.waterOutput;
+      if (template.powerUse) buildingPowerUse += template.powerUse;
+      if (template.waterUse) buildingWaterUse += template.waterUse;
+    }
+    if (contributesCapacity) {
+      if (template.populationCapacity) populationCapacity += template.populationCapacity;
+      if (template.jobsCapacity) {
+        jobCapacity += template.jobsCapacity;
+        if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
+        if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+      }
     }
   }
 
@@ -139,7 +149,8 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     industrialJobCapacity > 0 ? Math.min(1, jobsInIndustrial / industrialJobCapacity) : 1;
   const workforceGap = Math.max(0, state.population - state.jobs);
   const jobsOverPopulation = Math.max(0, state.jobs - state.population);
-  const utilityPenalty = state.utilities.power < 0 ? 15 : 0;
+  const utilityPenalty =
+    (state.utilities.power < 0 ? 15 : 0) + (state.utilities.water < 0 ? 15 : 0);
   const pendingPenaltyEnabled = state.settings?.pendingPenaltyEnabled ?? true;
 
   const seeded = state.population === 0 && state.jobs === 0;

@@ -47,7 +47,7 @@ export function showToast(message: string, options: ToastOptions = {}) {
     toastRoot.style.gap = '8px';
     toastRoot.style.alignItems = 'flex-end';
     toastRoot.style.pointerEvents = 'none';
-    toastRoot.style.zIndex = '40';
+    toastRoot.style.zIndex = '3000';
     document.body.appendChild(toastRoot);
   }
 
