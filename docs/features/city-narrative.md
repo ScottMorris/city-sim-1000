@@ -364,6 +364,38 @@ Validation checklist per output:
 
 ---
 
+## Implemented (current)
+
+### What exists now
+
+* Narrative data pipeline: EventJournal → CitySnapshot → CityDeltas → NarrativeInput → Ticker output.
+* Rule-based News Ticker with month-end generation plus immediate utility alerts (power/water) and runway warnings.
+* Ticker items persist for critical alerts until recovery; other items expire on a short timer.
+* Narrative settings: global enable + ticker enable, surfaced in Settings.
+* Player action events (tool usage) are logged for low-priority flavour items.
+
+### Channel schema in use (News Ticker)
+
+```ts
+type TickerItem = {
+  text: string; // short
+  category: "utilities"|"economy"|"growth"|"civic"|"player"|"flavour";
+  severity: "info"|"warn"|"alert";
+  expiresAt?: number;
+  sourceEventType?: SimEventType;
+  sourceEventId?: string;
+};
+```
+
+### Key files
+
+* EventJournal: `src/game/narrative/eventJournal.ts`
+* Snapshot builder: `src/game/narrative/snapshot.ts`
+* NarrativeManager: `src/game/narrative/narrativeManager.ts`
+* Ticker UI: `src/ui/newsTicker.ts` and HUD wiring in `src/main.ts`
+
+---
+
 ## Phased implementation plan
 
 ### Phase 1 — Ship without LLM (fast fun)
