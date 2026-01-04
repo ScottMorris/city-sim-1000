@@ -26,6 +26,54 @@ A **toggleable, non-authoritative** storytelling system that observes the simula
 
 ---
 
+## Implemented
+
+### What exists now
+
+* Narrative settings toggles (global + ticker).
+* EventJournal ring buffer feeding narrative channels.
+* Month-end snapshot + delta pipeline (EventJournal → Snapshot → Deltas → NarrativeInput).
+* Rule-based channels: News Ticker and Budget Insights.
+* Budget Insights panel in the Budget modal (hidden when Narrative is disabled).
+
+### Schemas in use
+
+```ts
+export interface NarrativeInput {
+  snapshot: CitySnapshot;
+  deltas: CityDeltas;
+  recentEvents: SimEvent[];
+}
+
+export interface TickerItem {
+  text: string;
+  category: "utilities" | "economy" | "growth" | "civic" | "player" | "flavour";
+  severity: "info" | "warn" | "alert";
+  expiresAt?: number;
+  sourceEventType?: SimEventType;
+  sourceEventId?: string;
+}
+
+export type BudgetInsights = {
+  topChanges: { label: string; value: string; direction: "up" | "down" }[];
+  drivers: { label: string; explanation: string }[];
+  risks: { label: string; severity: "low" | "med" | "high"; note: string }[];
+  recommendation: string;
+  tooltips?: { budgetLineId: string; blurb: string }[];
+};
+```
+
+### Key files
+
+* EventJournal: `src/game/narrative/eventJournal.ts`
+* Snapshot builder: `src/game/narrative/snapshot.ts`
+* NarrativeManager: `src/game/narrative/narrativeManager.ts`
+* Ticker UI: `src/ui/newsTicker.ts`
+* Ticker rules: `src/game/narrative/channels/tickerRule.ts`
+* Budget Insights rules: `src/game/narrative/channels/budgetInsightsRule.ts`
+
+---
+
 ## Inputs
 
 All narrative channels share the same core input package.
@@ -37,7 +85,7 @@ A compact summary of current state.
 Suggested fields (extend as systems mature):
 
 * time: day/month/year
-* economy: cash, netPerMonth, runwayMonths
+* economy: cash, netPerMonth, runwayMonths, revenue/expenses breakdown
 * population/jobs: pop, jobs, unemploymentRate, vacancyRate
 * demand: R/C/I demand
 * utilities: power produced/used/balance; water (later)
