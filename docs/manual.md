@@ -7,7 +7,7 @@ Water is an essential utility for your city. Residential, Commercial, and Indust
 ### Production
 
 - **Water Pumps:** Extract water from the ground. Must be placed near water sources (lakes/rivers) for maximum efficiency (planned feature). Currently, they provide a steady supply of water. Requires Power.
-- **Water Towers:** Store and provide pressure. Can be placed anywhere. Do not require power, making them useful for starting a network or backup.
+- **Water Towers:** Store and provide pressure. Require power and a pipe/road connection to contribute to supply.
 
 ### Distribution
 
@@ -23,6 +23,7 @@ To view and manage your water network, use the **Underground View**.
 - In this view, buildings and terrain are dimmed, and pipes are clearly visible.
 - **Blue Pipes/Buildings:** Connected to a water source (Wet).
 - **Grey Pipes:** Not connected (Dry).
+- **Attachment points:** Water pumps and towers show connection dots where pipes can attach.
 
 ## Tools
 

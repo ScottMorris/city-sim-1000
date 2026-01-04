@@ -141,10 +141,10 @@ Tiles include:
 ### 5.4 Water Network (v1)
 
 * Tiles carry a `watered` flag.
-* Water sources: Pumps (must be adjacent to water) and Water Towers.
+* Water sources: Pumps and Water Towers (powered and connected sources seed the network).
 * Network edges: `TileKind.WaterPipe` (underground layer), Road, Rail, and Zones.
 * Connectivity: BFS flood-fill from sources through pipes and surface transport/zones.
-* Production: `waterProduced` sums pump/tower outputs.
+* Production: `waterProduced` sums powered, connected pump/tower outputs.
 * Maintenance: per-pipe upkeep plus per-building maintenance.
 
 ### 5.5 UI Patterns
@@ -301,7 +301,7 @@ Bulldoze
 
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
-* Water Tower: 2×2 footprint that boosts city water reserves, does not require power
+* Water Tower: 2×2 footprint that boosts city water reserves, requires power and a network connection
 * Water Pipe: Connects water network underground. Requires Underground View.
 * Power lines: graph-based connectivity
 

@@ -27,7 +27,7 @@ Then open the provided local URL. The service worker caches assets after first l
 ## Features
 - WebGL canvas renderer with zoom and pan for fast navigation.
 - Terraform tools for land, water, trees, parks, bulldozing, and infrastructure (roads, rail, power lines).
-- Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers (pipes coming soon with an underground view).
+- Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers and connect them with underground pipes.
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
 - Education submenu with Elementary and High Schools that need power, flood coverage along roads, and gently influence demand and decay when underserved.
 - Soft over-zoning: pending zones only trim demand with caps/floors so big paint jobs trickle-build, and high demand can still break through.
