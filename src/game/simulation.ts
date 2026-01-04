@@ -1,4 +1,5 @@
 import type { GameState } from './gameState';
+import type { SimEvent } from './narrative/types';
 import { bumpTileRevision, getTile, TileKind } from './gameState';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import { BuildingStatus } from './buildings/state';
@@ -24,6 +25,7 @@ import { applyLightingPolicy, DEFAULT_BYLAWS, LIGHTING_POLICIES } from './bylaws
 export interface SimulationConfig {
   ticksPerSecond: number;
   notify?: (alert: SimulationAlert) => void;
+  onNarrativeEvent?: (event: SimEvent) => void;
 }
 
 export type SimulationAlertSeverity = 'info' | 'warning' | 'success';
@@ -65,6 +67,7 @@ export class Simulation {
   private readonly waterEnabled = true;
   private speedMultiplier = 1;
   private notify?: (alert: SimulationAlert) => void;
+  private onNarrativeEvent?: (event: SimEvent) => void;
   private powerDeficitActive = false;
   private waterDeficitActive = false;
   private readonly decayConfig = {
@@ -81,6 +84,7 @@ export class Simulation {
     this.dt = 1 / config.ticksPerSecond;
     this.zoneGrowthDelayTicks = Math.max(1, Math.round(config.ticksPerSecond * 2)); // ~2s delay
     this.notify = config.notify;
+    this.onNarrativeEvent = config.onNarrativeEvent;
   }
 
   setState(state: GameState) {
@@ -693,42 +697,75 @@ export class Simulation {
   }
 
   private handleResourceAlerts(powerBalance: number, waterBalance: number) {
-    if (!this.notify) return;
+    if (!this.notify && !this.onNarrativeEvent) return;
+    const now = Date.now();
 
     if (powerBalance < 0 && !this.powerDeficitActive) {
       this.powerDeficitActive = true;
-      this.notify({
+      this.notify?.({
         id: 'power-deficit',
         message: 'Power deficit detected. Build more plants or reduce demand to restore growth.',
         severity: 'warning',
         sticky: true
       });
+      this.onNarrativeEvent?.({
+        id: `power-deficit-start-${now}`,
+        type: 'power_deficit_start',
+        timestamp: now,
+        category: 'utilities',
+        severity: 'alert',
+        message: 'Power deficit detected.'
+      });
     } else if (powerBalance >= 0 && this.powerDeficitActive) {
       this.powerDeficitActive = false;
-      this.notify({
+      this.notify?.({
         id: 'power-deficit',
         message: 'Power restored. Zones can grow again.',
         severity: 'success',
         sticky: false
+      });
+      this.onNarrativeEvent?.({
+        id: `power-deficit-end-${now}`,
+        type: 'power_deficit_end',
+        timestamp: now,
+        category: 'utilities',
+        severity: 'info',
+        message: 'Power restored.'
       });
     }
 
     if (!this.waterEnabled) return;
     if (waterBalance < 0 && !this.waterDeficitActive) {
       this.waterDeficitActive = true;
-      this.notify({
+      this.notify?.({
         id: 'water-deficit',
         message: 'Water deficit detected. Add pumps/towers or cut usage.',
         severity: 'warning',
         sticky: true
       });
+      this.onNarrativeEvent?.({
+        id: `water-deficit-start-${now}`,
+        type: 'water_deficit_start',
+        timestamp: now,
+        category: 'utilities',
+        severity: 'alert',
+        message: 'Water deficit detected.'
+      });
     } else if (waterBalance >= 0 && this.waterDeficitActive) {
       this.waterDeficitActive = false;
-      this.notify({
+      this.notify?.({
         id: 'water-deficit',
         message: 'Water restored. Supply is stable again.',
         severity: 'success',
         sticky: false
+      });
+      this.onNarrativeEvent?.({
+        id: `water-deficit-end-${now}`,
+        type: 'water_deficit_end',
+        timestamp: now,
+        category: 'utilities',
+        severity: 'info',
+        message: 'Water restored.'
       });
     }
   }

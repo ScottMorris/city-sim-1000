@@ -151,6 +151,34 @@ export function initSettingsModal(options: SettingsModalOptions) {
     });
     general.append(penaltiesRow);
 
+    const narrative = createSection('Narrative', 'Short commentary about city conditions.');
+    const tickerRow = createToggleRow({
+      label: 'News ticker',
+      description: 'Cycle short updates in the HUD ticker bar.',
+      checked: draft.narrative.tickerEnabled,
+      onChange: (checked) => {
+        draft.narrative.tickerEnabled = checked;
+        onApply(draft);
+      },
+      disabled: !draft.narrative.enabled
+    });
+    const tickerCheckbox = tickerRow.querySelector<HTMLInputElement>('input');
+    const narrativeRow = createToggleRow({
+      label: 'Narrative layer',
+      description: 'Enable commentary like the news ticker.',
+      checked: draft.narrative.enabled,
+      onChange: (checked) => {
+        draft.narrative.enabled = checked;
+        if (!checked) draft.narrative.tickerEnabled = false;
+        if (tickerCheckbox) {
+          tickerCheckbox.disabled = !checked;
+          if (!checked) tickerCheckbox.checked = false;
+        }
+        onApply(draft);
+      }
+    });
+    narrative.append(narrativeRow, tickerRow);
+
     const minimap = createSection('Minimap', 'A quick copy of the panel controls.');
     const minimapToggle = createToggleRow({
       label: 'Show minimap',
@@ -426,7 +454,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
 
     hotkeys.append(hotkeyHint, resetHotkeys, hotkeyTable, conflictLabel);
 
-    body.append(audio, general, minimap, input, accessibility, cosmetics, hotkeys);
+    body.append(audio, general, narrative, minimap, input, accessibility, cosmetics, hotkeys);
     modal.append(headerRow, body);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);

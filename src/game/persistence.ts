@@ -194,6 +194,10 @@ export function deserialize(payload: string): GameState {
     cosmetics: {
       ...defaultSettings.cosmetics,
       ...(incomingSettings.cosmetics ?? {})
+    },
+    narrative: {
+      ...defaultSettings.narrative,
+      ...(incomingSettings.narrative ?? {})
     }
   };
   return parsed as GameState;

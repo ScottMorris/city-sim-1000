@@ -80,6 +80,11 @@ export interface CosmeticSettings {
   geminiBuildingsEnabled: boolean;
 }
 
+export interface NarrativeSettings {
+  enabled: boolean;
+  tickerEnabled: boolean;
+}
+
 export interface GameSettings {
   pendingPenaltyEnabled: boolean;
   minimap: MinimapSettings;
@@ -88,6 +93,7 @@ export interface GameSettings {
   audio: AudioSettings;
   hotkeys: Record<string, string[]>;
   cosmetics: CosmeticSettings;
+  narrative: NarrativeSettings;
 }
 
 export interface UtilityStats {
@@ -199,6 +205,13 @@ export function createDefaultCosmeticSettings(): CosmeticSettings {
   };
 }
 
+export function createDefaultNarrativeSettings(): NarrativeSettings {
+  return {
+    enabled: true,
+    tickerEnabled: true
+  };
+}
+
 export function createDefaultSettings(): GameSettings {
   return {
     pendingPenaltyEnabled: true,
@@ -207,7 +220,8 @@ export function createDefaultSettings(): GameSettings {
     accessibility: createDefaultAccessibilitySettings(),
     audio: createDefaultAudioSettings(),
     hotkeys: { ...defaultHotkeys },
-    cosmetics: createDefaultCosmeticSettings()
+    cosmetics: createDefaultCosmeticSettings(),
+    narrative: createDefaultNarrativeSettings()
   };
 }
 

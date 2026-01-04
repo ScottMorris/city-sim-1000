@@ -6,6 +6,7 @@ import {
   createDefaultCosmeticSettings,
   createDefaultInputSettings,
   createDefaultMinimapSettings,
+  createDefaultNarrativeSettings,
   createInitialState,
   GameState,
   getTile
@@ -29,8 +30,13 @@ import { initMinimap } from './ui/minimap';
 import { initBudgetModal } from './ui/budgetModal';
 import { initSettingsModal } from './ui/settingsModal';
 import { initBylawsModal } from './ui/bylawsModal';
+import { initNewsTicker } from './ui/newsTicker';
 import type { RadioWidget } from './ui/radio';
 import { DEFAULT_BYLAWS } from './game/bylaws';
+import { buildCitySnapshot } from './game/narrative/snapshot';
+import { NarrativeManager } from './game/narrative/narrativeManager';
+import type { SimEvent } from './game/narrative/types';
+import { getCalendarPosition } from './game/time';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
 
@@ -50,6 +56,10 @@ appRoot.innerHTML = `
       <div class="panel"><h4>Manual</h4><div class="controls-row"><button id="manual-btn" class="secondary">Open manual</button></div><div class="panel-hint">Opens the in-game guide in a popup.</div></div>
       <div class="panel panel-right"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button><button id="pending-penalty-btn" class="secondary">Penalties: On</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
     </div>
+  </div>
+  <div class="news-ticker news-ticker-hidden" id="news-ticker">
+    <span class="news-ticker-label">News</span>
+    <span class="news-ticker-text"></span>
   </div>
   <div id="viewport">
     <div class="toolbar" id="toolbar"></div>
@@ -97,6 +107,7 @@ const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
+const newsTickerEl = requireElement<HTMLDivElement>('#news-ticker');
 
 const syncToolbarHeights = () => {
   const rect = toolbar.getBoundingClientRect();
@@ -126,6 +137,7 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
   const accessibilityDefaults = createDefaultAccessibilitySettings();
   const audioDefaults = createDefaultAudioSettings();
   const cosmeticDefaults = createDefaultCosmeticSettings();
+  const narrativeDefaults = createDefaultNarrativeSettings();
   return {
     pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
     minimap: minimapSettings,
@@ -133,7 +145,8 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
     accessibility: { ...accessibilityDefaults, ...(settings?.accessibility ?? {}) },
     audio: { ...audioDefaults, ...(settings?.audio ?? {}) },
     hotkeys: { ...defaultHotkeys, ...(settings?.hotkeys ?? {}) },
-    cosmetics: { ...cosmeticDefaults, ...(settings?.cosmetics ?? {}) }
+    cosmetics: { ...cosmeticDefaults, ...(settings?.cosmetics ?? {}) },
+    narrative: { ...narrativeDefaults, ...(settings?.narrative ?? {}) }
   };
 }
 
@@ -153,14 +166,20 @@ let temporaryTool: Tool | null = null;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 state.settings = ensureSettingsShape(state.settings);
 const notifications = createNotificationCenter();
+const narrativeManager = new NarrativeManager({
+  enabled: state.settings.narrative.enabled,
+  tickerEnabled: state.settings.narrative.tickerEnabled
+});
 const simulation = new Simulation(state, {
   ticksPerSecond: 20,
-  notify: notifications.publish
+  notify: notifications.publish,
+  onNarrativeEvent: (event: SimEvent) => narrativeManager.onEvent(event)
 });
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
 let minimap: ReturnType<typeof initMinimap> | null = null;
 let radioController: RadioWidget | null = null;
+let newsTicker: ReturnType<typeof initNewsTicker> | null = null;
 const PAN_SPEEDS = {
   slow: 420,
   normal: 700,
@@ -178,6 +197,59 @@ const simSpeeds = {
 } as const;
 type SimSpeedKey = keyof typeof simSpeeds;
 let simSpeed: SimSpeedKey = 'fast';
+let lastNarrativeMonth = getCalendarPosition(state.day).month;
+let lastNarrativeGc = Date.now();
+let lastPlayerEventAt = 0;
+const PLAYER_EVENT_COOLDOWN_MS = 1500;
+
+const getPlayerActionMessage = (tool: Tool) => {
+  switch (tool) {
+    case Tool.Road:
+      return 'New roads laid across the city.';
+    case Tool.Rail:
+      return 'Rail corridors extended.';
+    case Tool.PowerLine:
+      return 'Power lines expanded.';
+    case Tool.WaterPipe:
+      return 'Underground pipes laid.';
+    case Tool.HydroPlant:
+      return 'Hydro plant commissioned.';
+    case Tool.CoalPlant:
+      return 'Coal plant commissioned.';
+    case Tool.WindTurbine:
+      return 'Wind turbines installed.';
+    case Tool.SolarFarm:
+      return 'Solar farm installed.';
+    case Tool.WaterPump:
+      return 'Water pump added.';
+    case Tool.WaterTower:
+      return 'Water tower added.';
+    case Tool.ElementarySchool:
+      return 'Elementary school opened.';
+    case Tool.HighSchool:
+      return 'High school opened.';
+    case Tool.Residential:
+      return 'New residential zoning approved.';
+    case Tool.Commercial:
+      return 'New commercial zoning approved.';
+    case Tool.Industrial:
+      return 'New industrial zoning approved.';
+    case Tool.Park:
+      return 'New park opened.';
+    case Tool.Bulldoze:
+      return 'Demolition crews active.';
+    case Tool.Tree:
+      return 'Greenery planted.';
+    case Tool.TerraformRaise:
+      return 'Terrain raised for new works.';
+    case Tool.TerraformLower:
+      return 'Terrain lowered for new works.';
+    case Tool.Water:
+      return 'Waterway expanded.';
+    default:
+      return null;
+  }
+};
 const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
 const centerCameraOnTile = (tileX: number, tileY: number) => {
   const size = TILE_SIZE * camera.scale;
@@ -223,6 +295,20 @@ function applyCurrentTool(tilePos: Position) {
     showToast(result.message);
   } else if (result.success) {
     minimap?.markDirty();
+    const now = Date.now();
+    const message = getPlayerActionMessage(activeTool);
+    if (message && now - lastPlayerEventAt > PLAYER_EVENT_COOLDOWN_MS) {
+      narrativeManager.onEvent({
+        id: `player-action-${now}`,
+        type: 'player_action',
+        timestamp: now,
+        category: 'player',
+        severity: 'info',
+        message,
+        data: { tool: activeTool, x: tilePos.x, y: tilePos.y }
+      });
+      lastPlayerEventAt = now;
+    }
   }
   selected = null;
 }
@@ -365,11 +451,22 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     camera.y -= movement.y * panSpeed * direction * deltaSeconds;
   }
   simulation.update(deltaSeconds);
+  const calendar = getCalendarPosition(state.day);
+  while (calendar.month > lastNarrativeMonth) {
+    narrativeManager.onMonthEnd(() => buildCitySnapshot(state));
+    lastNarrativeMonth += 1;
+  }
+  const nowMs = Date.now();
+  if (nowMs - lastNarrativeGc > 1000) {
+    narrativeManager.gc(nowMs);
+    lastNarrativeGc = nowMs;
+  }
   const overlayMode = state.settings?.minimap?.mode ?? 'base';
   renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
   hud.update(state);
   hud.renderOverlays(state, selected, activeTool);
   minimap?.update(state, camera);
+  newsTicker?.update();
   debugOverlay?.update(state);
   requestAnimationFrame(() => gameLoop(renderer, hud));
 }
@@ -398,6 +495,12 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     monthEl,
     dayEl,
     overlayRoot: wrapper
+  });
+  newsTicker = initNewsTicker({
+    root: newsTickerEl,
+    getItems: () => narrativeManager.getTickerQueue(),
+    getEnabled: () => state.settings.narrative.enabled && state.settings.narrative.tickerEnabled,
+    getReducedMotion: () => state.settings.accessibility.reducedMotion ?? false
   });
   const budgetModal = initBudgetModal({
     getState: () => state
@@ -543,6 +646,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     const hotkeysChanged =
       JSON.stringify(previous.hotkeys ?? {}) !== JSON.stringify(normalized.hotkeys ?? {});
     state.settings = normalized;
+    narrativeManager.setSettings({
+      enabled: state.settings.narrative.enabled,
+      tickerEnabled: state.settings.narrative.tickerEnabled
+    });
+    newsTicker?.update();
     if (minimapChanged) {
       minimap?.syncSettings(state.settings.minimap);
       minimap?.markDirty();
@@ -604,6 +712,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       applySettings(state.settings);
       simulation.setState(state);
       centerCamera(state, wrapper, TILE_SIZE, camera);
+      narrativeManager.reset();
+      lastNarrativeMonth = getCalendarPosition(state.day).month;
     }
   });
 
