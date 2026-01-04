@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { projectLightingPolicy } from './bylawAnalytics';
 import { DEFAULT_BYLAWS, applyLightingPolicy } from './bylaws';
 import { createInitialState } from './gameState';
-import { BuildingStatus, createBuildingState, getBuildingTemplate } from './buildings';
+import { BuildingStatus, createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import { TileKind } from './gameState';
 
 describe('bylaws', () => {

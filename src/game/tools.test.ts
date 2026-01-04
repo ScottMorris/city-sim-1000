@@ -91,6 +91,8 @@ describe('tools', () => {
     expect(result.success).toBe(true);
     const pump = state.buildings.find((b) => b.templateId === template.id);
     expect(pump).toBeDefined();
+    const pumpConnection = getTile(state, 0, 1)!;
+    pumpConnection.underground = TileKind.WaterPipe;
     const spent = initialMoney - state.money;
     expect(spent).toBeCloseTo(
       BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3 + template.cost
@@ -109,7 +111,7 @@ describe('tools', () => {
     applyTool(state, Tool.WindTurbine, 1, 3);
     const result = applyTool(state, Tool.WaterTower, 3, 3);
     expect(result.success).toBe(true);
-    expect(state.buildings.length).toBe(1);
+    expect(state.buildings.filter((building) => building.templateId === template.id).length).toBe(1);
     getTile(state, 5, 3)!.underground = TileKind.WaterPipe;
     const ids = new Set<number>();
     const footprint: Array<[number, number]> = [
