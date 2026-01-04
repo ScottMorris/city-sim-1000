@@ -290,7 +290,7 @@ export class MapRenderer {
       if (overlayMode === 'water' || overlayMode === 'underground') {
         if (tile.kind === TileKind.Water) return { color: 0x2f7be5, alpha: 0.32 };
         if (tile.underground === TileKind.WaterPipe) {
-             return { color: tile.watered ? 0x4cc3ff : 0x888888, alpha: 0.6 };
+          return { color: tile.watered ? 0x4cc3ff : 0x888888, alpha: 0.6 };
         }
         if (tile.kind === TileKind.WaterPipe) return { color: 0x4cc3ff, alpha: 0.38 }; // Legacy check
 
@@ -298,7 +298,7 @@ export class MapRenderer {
           return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
         }
         // Show watered status on buildings/zones
-        if (overlayMode === 'water' && tile.watered) return { color: 0x5aa2ff, alpha: 0.2 };
+        if (tile.watered) return { color: 0x5aa2ff, alpha: 0.2 };
         return null;
       }
 
