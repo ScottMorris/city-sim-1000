@@ -37,10 +37,11 @@ Then open the provided local URL. The service worker caches assets after first l
 - Tool info card beside the tile inspector that surfaces cost, upkeep, and stats for the active tool with a pin toggle when you want it always-on.
 - Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile. Open the Budget screen for a quarterly breakdown, detailed revenue/expense shares, and runway.
 - Bylaws button in the toolbar’s city admin cluster next to Budget/Settings to set a city-wide lighting standard that nudges power demand, upkeep, and happiness (district overrides are on the way).
+- Narrative news ticker bar in the HUD that cycles short, grounded updates at month end, with immediate alerts for critical utility states and settings toggles to disable it.
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
 - Manual available at `public/manual.html` covering controls and systems.
 - Minimap in the bottom-right HUD: base map view plus power, water, and alerts overlay modes with click-to-jump navigation and viewport framing; the same mode tints the main map for quick at-a-glance status.
-- Settings gear in the toolbar with over-zoning penalty toggle, minimap controls, input presets (invert pan, pan speed, Shift+scroll to pan, zoom sensitivity), radio volume, Gemini sprite toggle (off by default), and placeholders for edge scroll, hotkey remapping, and accessibility.
+- Settings gear in the toolbar with over-zoning penalty toggle, narrative/news ticker toggles, minimap controls, input presets (invert pan, pan speed, Shift+scroll to pan, zoom sensitivity), radio volume, Gemini sprite toggle (off by default), and placeholders for edge scroll, hotkey remapping, and accessibility.
 - Toolbar radio widget with emoji controls (previous/play/pause/next), a playlist icon button that opens a station dropdown, a scrolling marquee for artist/title, hover/focus popover for details, and an offline state when no playlist exists.
 
 ## Budget and economy

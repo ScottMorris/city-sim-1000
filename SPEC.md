@@ -156,6 +156,7 @@ Tiles include:
 * Tile inspector lives in the bottom-left; the neighbouring tool info card shows cost/upkeep/output for the active tool with a pin toggle. The inspector only appears while the Inspect tool is active.
 * Minimap sits in the bottom-right HUD corner with click-to-jump navigation, a visible viewport rectangle, and a toggle/hotkey (`M`) to collapse or expand it. Base mode renders terrain, zones, roads, rail, power lines, and buildings; overlay modes for power/water/alerts/education tint both the minimap and main view. Use an offscreen canvas for redraws, throttle updates, and coarsen sampling on very large maps to protect performance.
 * Budget panel shows cash, a colour-coded monthly net projection, and a calendar month/day readout (30-day months) so per-month numbers have visible context. A Budget modal (HUD button) surfaces quarterly totals (last 3 months), per-month net, runway at current burn, and revenue/expense breakdowns. Revenue shows base stipend + residents/commercial/industrial; expenses split transport (roads/rail/lines/pipes) and buildings (power, civic, zones) with details.
+* A news ticker bar sits beneath the top HUD, cycling short, grounded updates at month end and surfacing immediate utility alerts that persist until resolved. It can be disabled independently in Settings.
 
 ### 5.6 Rendering
 

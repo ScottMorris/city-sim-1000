@@ -38,3 +38,11 @@ To view and manage your water network, use the **Underground View**.
 
 - Use the Inspect tool to click on any tile.
 - The info panel will show the **Water** status (Wet/Dry) alongside Power and Happiness.
+
+## News ticker
+
+The HUD includes a scrolling news ticker that surfaces short, grounded updates about city conditions.
+
+- Most items refresh at month end; critical alerts can appear immediately and stay until resolved.
+- Utilities, economy, growth, and player activity can all appear in the feed.
+- Disable the Narrative layer or the ticker itself from **Settings** if you prefer a quiet HUD.
