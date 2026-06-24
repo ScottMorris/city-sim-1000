@@ -8,7 +8,8 @@
     "lint":                 "cd app && bun run lint",
     "test":                 "cd app && bun run test",
     "build:favicon":        "cd app && bun run build:favicon",
-    "build:radio-playlist": "cd app && bun run build:radio-playlist"
+    "build:radio-playlist": "cd app && bun run build:radio-playlist",
+    "build:wasm":           "wasm-pack build crates/sim_wasm --target web --out-dir ../../app/src/wasm/sim_wasm"
   },
   "engines": {
     "node": ">=20",

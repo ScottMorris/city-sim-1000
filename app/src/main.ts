@@ -13,6 +13,8 @@ import {
 } from './game/gameState';
 import { Tool } from './game/toolTypes';
 import { LocalSimBridge } from './game/localSimBridge';
+import { WasmSimBridge } from './game/wasmSimBridge';
+import type { SimBridge } from './game/simBridge';
 import { applyToolCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
@@ -170,7 +172,10 @@ const narrativeManager = new NarrativeManager({
   enabled: state.settings.narrative.enabled,
   tickerEnabled: state.settings.narrative.tickerEnabled
 });
-const bridge = new LocalSimBridge(state, { ticksPerSecond: 20 });
+const useWasmBridge = new URLSearchParams(window.location.search).get('bridge') === 'wasm';
+const bridge: SimBridge = useWasmBridge
+  ? new WasmSimBridge(state)
+  : new LocalSimBridge(state, { ticksPerSecond: 20 });
 bridge.onMessage((msg: FromSim) => {
   if (msg.type === 'Alert') {
     notifications.publish({

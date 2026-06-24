@@ -36,7 +36,10 @@ bun run test                   # vitest run (singleThread baked in — always sa
 bun run test -- app/src/game/economy.test.ts  # run a single test file
 bun run build:favicon          # regenerate PWA icons/favicon from the 🏙️ emoji
 bun run build:radio-playlist   # scan app/public/audio/radio/<station> folders, emit playlist.json/stations.json
+bun run build:wasm             # compile crates/sim_wasm → app/src/wasm/sim_wasm/ (run after Rust changes)
 ```
+
+**Important:** `app/src/wasm/` is gitignored (generated output). Run `bun run build:wasm` once after a fresh clone before `bun run dev` or `bun run build`, otherwise the WASM Worker will fail to load. The game falls back gracefully if you omit `?bridge=wasm` from the URL.
 
 To run scripts directly inside `app/`:
 ```bash
@@ -60,8 +63,8 @@ Browser-based city simulator: TypeScript + Vite, PixiJS (WebGL) for rendering, v
 ### Core loop (`app/src/main.ts`)
 `main.ts` is the entry point and composition root: it builds the HUD DOM by string, wires up pointer/keyboard/wheel input, owns the single `GameState` instance, and drives `requestAnimationFrame(gameLoop)`. Each frame: apply camera pan, `bridge.step(dt)`, advance narrative on month boundaries, then render (`MapRenderer`, `hud`, `minimap`, `newsTicker`, `debugOverlay`). There is no separate "controller" layer — input handlers in `main.ts` call `bridge.send(applyToolCmd(...))` and read state through `bridge.getState()`.
 
-### SimBridge (`app/src/game/simBridge.ts`, `localSimBridge.ts`)
-All simulation access goes through the `SimBridge` interface: `step`, `send`, `onMessage`, `getState`, `loadState`, `setSpeed`, `dispose`. `LocalSimBridge` wraps the TS `Simulation` in-process (current production path). Future implementations: `WasmSimBridge` (Worker + SharedArrayBuffer, Phase 2), `TauriSimBridge` (native Rust via Tauri IPC, Phase 4).
+### SimBridge (`app/src/game/simBridge.ts`, `localSimBridge.ts`, `wasmSimBridge.ts`)
+All simulation access goes through the `SimBridge` interface: `step`, `send`, `onMessage`, `getState`, `loadState`, `setSpeed`, `dispose`. `LocalSimBridge` wraps the TS `Simulation` in-process (default path). `WasmSimBridge` (Phase 2) routes through a Web Worker running a WASM `SimHost` — activate with `?bridge=wasm`. `TauriSimBridge` (Phase 4): native Rust via Tauri IPC Channel. The active bridge is chosen at startup based on the URL param.
 
 ### State (`app/src/game/gameState.ts`)
 `GameState` is one large serializable object: a flat tile grid (`TileKind` enum per cell with elevation/power/water/happiness/building refs), utility stats, demand stats, budget stats, settings (minimap/input/accessibility/audio/hotkeys/cosmetics/narrative), bylaws, and building/service sub-states. Tiles reference buildings and power plants by id rather than embedding them. Settings have `createDefault*` factory functions in this file that `main.ts`'s `ensureSettingsShape` merges over loaded saves, so new settings fields must get a default factory here or old saves break.
