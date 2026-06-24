@@ -6,6 +6,7 @@ import {
   createDefaultMinimapSettings,
   createDefaultSettings
 } from './gameState';
+import { SeededRng } from './rng';
 import { createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
 import {
@@ -134,6 +135,13 @@ export function deserialize(payload: string): GameState {
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
   parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
   parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
+  // Old saves have no seed — assign 0 so they play deterministically going forward.
+  if (parsed.seed === undefined) {
+    parsed.seed = 0;
+  }
+  if (!Array.isArray(parsed.rngState) || parsed.rngState.length !== 4) {
+    parsed.rngState = new SeededRng(parsed.seed).toJSON();
+  }
   parsed.education = parsed.education ?? createEmptyEducationStats();
   parsed.bylaws = parsed.bylaws ?? { ...DEFAULT_BYLAWS };
   if (!parsed.bylaws.lighting) {

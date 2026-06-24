@@ -6,6 +6,7 @@ import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
 import type { ServiceSystemState, TileServiceState } from './services';
 import { createServiceSystemState, createTileServiceState } from './services';
+import { SeededRng } from './rng';
 
 export enum TileKind {
   Land = 'land',
@@ -152,6 +153,10 @@ export interface GameState {
   height: number;
   tiles: Tile[];
   tileRevision: number;
+  /** Original seed used to initialise the PRNG for this city. */
+  seed: number;
+  /** Live xoshiro128** state — persisted so saves resume mid-stream. */
+  rngState: [number, number, number, number];
   money: number;
   day: number;
   tick: number;
@@ -225,7 +230,8 @@ export function createDefaultSettings(): GameSettings {
   };
 }
 
-export function createInitialState(width = 64, height = 64): GameState {
+export function createInitialState(width = 64, height = 64, seed?: number): GameState {
+  const resolvedSeed = (seed ?? Date.now()) >>> 0;
   const tiles: Tile[] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -246,6 +252,8 @@ export function createInitialState(width = 64, height = 64): GameState {
     height,
     tiles,
     tileRevision: 0,
+    seed: resolvedSeed,
+    rngState: new SeededRng(resolvedSeed).toJSON(),
     money: 100000,
     day: 1,
     tick: 0,

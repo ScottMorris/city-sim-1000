@@ -1,6 +1,7 @@
 import type { GameState } from './gameState';
 import type { SimEvent } from './narrative/types';
 import { bumpTileRevision, getTile, TileKind } from './gameState';
+import { SeededRng } from './rng';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import { BuildingStatus } from './buildings/state';
 import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
@@ -70,6 +71,7 @@ export class Simulation {
   private onNarrativeEvent?: (event: SimEvent) => void;
   private powerDeficitActive = false;
   private waterDeficitActive = false;
+  rng: SeededRng;
   private readonly decayConfig = {
     demandLowThreshold: 5,
     happinessThreshold: 0.4,
@@ -85,6 +87,7 @@ export class Simulation {
     this.zoneGrowthDelayTicks = Math.max(1, Math.round(config.ticksPerSecond * 2)); // ~2s delay
     this.notify = config.notify;
     this.onNarrativeEvent = config.onNarrativeEvent;
+    this.rng = SeededRng.fromState(state.rngState);
   }
 
   setState(state: GameState) {
@@ -95,6 +98,7 @@ export class Simulation {
     this.accumulator = 0;
     this.powerDeficitActive = false;
     this.waterDeficitActive = false;
+    this.rng = SeededRng.fromState(state.rngState);
   }
 
   setSpeed(multiplier: number) {
@@ -488,6 +492,7 @@ export class Simulation {
     };
     recordDailyBudget(this.state);
     this.state.money = Math.max(0, this.state.money + netPerDay * (this.dt / 1.5));
+    this.state.rngState = this.rng.toJSON();
   }
 
   private spawnZoneBuildings(): boolean {
