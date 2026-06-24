@@ -19,29 +19,29 @@ city-sim-1000/
 │   └── sim_tauri/    — Tauri v2 plugin (Phase 4+)
 ├── docs/         ← architecture docs, migration plan & task list
 ├── Cargo.toml    ← workspace root
-└── package.json  ← root shim — proxies npm commands to app/
+└── package.json  ← root shim — proxies bun commands to app/
 ```
 
 ## Commands
 
-All npm commands work from the repo root (the root `package.json` proxies to `app/`):
+All commands work from the repo root (the root `package.json` proxies to `app/` via `bun --cwd app`):
 
 ```bash
-npm install                    # installs inside app/
-npm run dev                    # Vite dev server
-npm run build                  # Production bundle (app/dist/)
-npm run preview                # Preview a production build
-npm run lint                   # tsc --noEmit (no separate eslint setup)
-npm test                       # vitest run
-npm test -- --pool=threads --poolOptions.threads.singleThread=true  # use this — multi-thread vitest crashes here
-npm test -- app/src/game/economy.test.ts  # run a single test file
-npm run build:favicon          # regenerate PWA icons/favicon from the 🏙️ emoji
-npm run build:radio-playlist   # scan app/public/audio/radio/<station> folders, emit playlist.json/stations.json
+bun install                    # installs inside app/
+bun run dev                    # Vite dev server
+bun run build                  # Production bundle (app/dist/)
+bun run preview                # Preview a production build
+bun run lint                   # tsc --noEmit (no separate eslint setup)
+bun run test                   # vitest run (singleThread baked in — always safe)
+bun run test -- app/src/game/economy.test.ts  # run a single test file
+bun run build:favicon          # regenerate PWA icons/favicon from the 🏙️ emoji
+bun run build:radio-playlist   # scan app/public/audio/radio/<station> folders, emit playlist.json/stations.json
 ```
 
-To run npm scripts directly inside `app/` (e.g. to pass flags vitest understands):
+To run scripts directly inside `app/`:
 ```bash
-cd app && npm test -- --pool=threads --poolOptions.threads.singleThread=true
+cd app && bun run test
+cd app && bun run test -- app/src/game/economy.test.ts
 ```
 
 Rust:
@@ -51,7 +51,7 @@ cargo test -p sim_protocol
 cargo test --workspace
 ```
 
-Local GitHub Pages preview: `VITE_BASE=/city-sim-1000/ npm run build && npm run preview`.
+Local GitHub Pages preview: `VITE_BASE=/city-sim-1000/ bun run build && bun run preview`.
 
 ## Architecture
 
@@ -97,4 +97,5 @@ Each station lives under `app/public/audio/radio/<station>/` with audio files + 
 
 - **Canadian English** in code comments, docs, and identifiers where not constrained by a web standard: *colour, centre, licence (noun), organise, behaviour, favour*. CSS/DOM properties (`color`, `center`) keep their standard spelling.
 - **Commits**: Conventional Commits, imperative mood, atomic. Update `README.md`, `docs/game-parameters.md`, `app/public/manual.html`, and `SPEC.md` alongside any behaviour change they describe, in the same commit.
+- **Pull request labels**: Apply at least one label when opening a PR. Available labels: `bug`, `enhancement`, `documentation`, `infrastructure` (CI/CD/tooling), `chore` (maintenance/housekeeping), `refactor` (if added). Use `gh pr edit <number> --add-label "<label>"` after creation.
 - The in-game manual is `app/public/manual.html`, opened via a modal iframe — keep it in sync with UI/behaviour changes.
