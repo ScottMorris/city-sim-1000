@@ -13,8 +13,8 @@
 - Commits should be atomic; each commit should represent a single logical change or complete context.
 - Commit often to avoid large, unwieldy commits.
 - Test your changes thoroughly before committing to ensure stability and reliability.
-- Use `npm test -- --pool=threads --poolOptions.threads.singleThread=true` (vitest multi-thread crashes here).
-- Manual is available in-game via the “Open manual” button (modal iframe at `public/manual.html`); keep the manual in sync with behaviour changes.
+- Use `npm test -- --pool=threads --poolOptions.threads.singleThread=true` from the repo root (root `package.json` proxies to `app/`); or `cd app && npm test -- --pool=threads --poolOptions.threads.singleThread=true` directly.
+- Manual is available in-game via the “Open manual” button (modal iframe at `app/public/manual.html`); keep the manual in sync with behaviour changes.
 - When docs/specs change, commit those updates alongside the related code change.
 
 ## Project Notes
@@ -24,7 +24,7 @@
 - Docs to keep aligned:
   - `README.md`
   - `docs/game-parameters.md`
-  - `public/manual.html`
+  - `app/public/manual.html`
   - `SPEC.md`
 
 ## Canadian English Spelling
