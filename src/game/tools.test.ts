@@ -9,6 +9,10 @@ import { BuildingStatus } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
 import { placeBuilding } from './buildings/manager';
 import { hasRoadAccess } from './adjacency';
+import { SeededRng } from './rng';
+
+/** RNG that always returns 0 — forces every growth roll to pass. */
+const zeroRng = () => SeededRng.fromState([0, 0, 0, 0]);
 
 describe('tools', () => {
   it('blocks tool usage when funds are insufficient', () => {
@@ -311,10 +315,8 @@ describe('simulation', () => {
     state.utilities.water = -100;
 
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    const originalRandom = Math.random;
-    Math.random = () => 0; // force the growth roll to pass
+    sim.rng = zeroRng(); // force every growth roll to pass
     sim.update(2.5);
-    Math.random = originalRandom;
 
     const built = state.buildings.find((b) => b.templateId === 'zone-residential');
     expect(built).toBeDefined();
@@ -350,8 +352,7 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 3);
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    const originalRandom = Math.random;
-    Math.random = () => 0; // force growth when utility factors are low
+    sim.rng = zeroRng(); // force growth when utility factors are low
     sim.update(2.5);
     expect(hasRoadAccess(state, 3, 3)).toBe(false);
     expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeDefined();
@@ -360,7 +361,6 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 4, 3);
     applyTool(state, Tool.Road, 4, 2);
     sim.update(2.5);
-    Math.random = originalRandom;
     const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(secondZone.length).toBeGreaterThan(1);
   });
@@ -376,10 +376,8 @@ describe('simulation', () => {
     }
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    const originalRandom = Math.random;
-    Math.random = () => 0;
+    sim.rng = zeroRng();
     sim.update(2.5);
-    Math.random = originalRandom;
     const built = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(built.length).toBeGreaterThan(0);
     const centerTile = getTile(state, 3, 3)!;
@@ -403,13 +401,11 @@ describe('simulation', () => {
     applyTool(state, Tool.Residential, 3, 3); // interior tile with no road access
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
-    const originalRandom = Math.random;
-    Math.random = () => 0;
+    sim.rng = zeroRng();
     sim.update(2.5);
     const firstZone = state.buildings.find((b) => b.templateId === 'zone-residential');
     expect(firstZone).toBeDefined();
     sim.update(2.5);
-    Math.random = originalRandom;
     const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
     expect(secondZone.length).toBeGreaterThan(1);
   });

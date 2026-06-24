@@ -598,7 +598,7 @@ export class Simulation {
 
     // Shuffle candidates to avoid biasing toward map order.
     for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = this.rng.nextBelow(i + 1);
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
 
@@ -611,7 +611,7 @@ export class Simulation {
       if (powerBalance < 0) utilityFactor *= clamp(1 + powerBalance / 20, 0.05, 1);
       if (needsWater && waterBalance < 0) utilityFactor *= clamp(1 + waterBalance / 30, 0.05, 1);
       const adjustedPGrow = clamp(pGrow * utilityFactor, 0, 1);
-      if (adjustedPGrow <= 0 || Math.random() > adjustedPGrow) continue;
+      if (adjustedPGrow <= 0 || this.rng.nextF32() > adjustedPGrow) continue;
       const template = getBuildingTemplate(kind);
       if (!template) continue;
       const result = placeBuilding(this.state, template, x, y);
