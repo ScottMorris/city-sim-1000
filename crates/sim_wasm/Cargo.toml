@@ -1,0 +1,18 @@
+[package]
+name        = "sim_wasm"
+description = "WASM cdylib wrapper around sim_core for the browser Worker target"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+sim_core     = { path = "../sim_core" }
+sim_protocol = { path = "../sim_protocol" }
+serde        = { workspace = true }
+postcard     = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys       = { workspace = true }

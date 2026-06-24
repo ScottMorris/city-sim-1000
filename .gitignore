@@ -2,3 +2,11 @@ node_modules
 dist
 .DS_Store
 *.log
+
+# Rust build output
+/target
+crates/*/target
+
+# wasm-pack output
+pkg/
+

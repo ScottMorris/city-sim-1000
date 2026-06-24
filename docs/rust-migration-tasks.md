@@ -42,19 +42,19 @@ current codebase. No Rust yet. This is the safety net the whole migration leans 
 *Goal: app runs exactly as today, but the UI talks to the sim through `SimBridge`, and
 the Rust workspace exists and compiles.*
 
-- [ ] **P1-1 · Scaffold Cargo workspace** (`sim_core`, `sim_protocol`, `sim_wasm`,
+- [x] **P1-1 · Scaffold Cargo workspace** (`sim_core`, `sim_protocol`, `sim_wasm`,
   `sim_tauri`). Benches live inside `sim_core`, not a 5th crate. `deps:` none.
   **DoD:** `cargo check --workspace` green; `.gitignore` covers `/target`, wasm output.
-- [ ] **P1-2 · `sim_protocol` types.** `SimCommand`, `FromSim`, `SystemStats`,
+- [x] **P1-2 · `sim_protocol` types.** `SimCommand`, `FromSim`, `SystemStats`,
   `SimEvent`, **`TileKind` ↔ u8 mapping (single source of truth)**, and the **tile buffer
   layout** (SoA field offsets). serde + postcard. `deps:` P1-1.
   **DoD:** round-trip serialize test; the u8↔TileKind table has an exhaustive test.
-- [ ] **P1-3 · TS protocol mirror** `src/game/protocol/*.ts` (commands, diffs, tile-buffer
+- [x] **P1-3 · TS protocol mirror** `src/game/protocol/*.ts` (commands, diffs, tile-buffer
   offsets) kept in sync with P1-2 (codegen or hand-mirrored + a parity test). `deps:` P1-2.
   **DoD:** a test asserts the TS `TileKind`→u8 map equals the Rust one (via a committed
   JSON dump from Rust).
-- [ ] **P1-4 · `SimBridge` interface** in TS (`init/send/onMessage/dispose`). `deps:` P1-3.
-- [ ] **P1-5 · `LocalSimBridge`** wrapping the *existing* TS `Simulation` behind the
+- [x] **P1-4 · `SimBridge` interface** in TS (`init/send/onMessage/dispose`). `deps:` P1-3.
+- [x] **P1-5 · `LocalSimBridge`** wrapping the *existing* TS `Simulation` behind the
   interface; `main.ts` stops touching `Simulation` directly and goes through the bridge.
   `tools.ts` becomes a command *encoder* (Tool+coords → `SimCommand`). `deps:` P1-4.
   **DoD:** game plays identically to today; Phase-0 regression fixtures still pass.

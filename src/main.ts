@@ -11,9 +11,10 @@ import {
   GameState,
   getTile
 } from './game/gameState';
-import { applyTool } from './game/tools';
 import { Tool } from './game/toolTypes';
-import { Simulation } from './game/simulation';
+import { LocalSimBridge } from './game/localSimBridge';
+import { applyToolCmd } from './game/protocol/commands';
+import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
 import { createCamera, centerCamera, screenToTile } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
@@ -35,7 +36,6 @@ import type { RadioWidget } from './ui/radio';
 import { DEFAULT_BYLAWS } from './game/bylaws';
 import { buildCitySnapshot } from './game/narrative/snapshot';
 import { NarrativeManager } from './game/narrative/narrativeManager';
-import type { SimEvent } from './game/narrative/types';
 import { getCalendarPosition } from './game/time';
 
 const appRoot = document.querySelector<HTMLDivElement>('#app');
@@ -170,10 +170,17 @@ const narrativeManager = new NarrativeManager({
   enabled: state.settings.narrative.enabled,
   tickerEnabled: state.settings.narrative.tickerEnabled
 });
-const simulation = new Simulation(state, {
-  ticksPerSecond: 20,
-  notify: notifications.publish,
-  onNarrativeEvent: (event: SimEvent) => narrativeManager.onEvent(event)
+const bridge = new LocalSimBridge(state, { ticksPerSecond: 20 });
+bridge.onMessage((msg: FromSim) => {
+  if (msg.type === 'Alert') {
+    notifications.publish({
+      id: msg.data.kind,
+      message: msg.data.message,
+      sticky: msg.data.sticky,
+    });
+  } else if (msg.type === 'Narrative') {
+    narrativeManager.onEvent(msg.data.payload as Parameters<typeof narrativeManager.onEvent>[0]);
+  }
 });
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
@@ -290,7 +297,7 @@ function applyCurrentTool(tilePos: Position) {
     selected = tilePos;
     return;
   }
-  const result = applyTool(state, activeTool, tilePos.x, tilePos.y);
+  const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y));
   if (!result.success && result.message) {
     showToast(result.message);
   } else if (result.success) {
@@ -450,7 +457,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     camera.x -= movement.x * panSpeed * direction * deltaSeconds;
     camera.y -= movement.y * panSpeed * direction * deltaSeconds;
   }
-  simulation.update(deltaSeconds);
+  bridge.step(deltaSeconds);
   const calendar = getCalendarPosition(state.day);
   while (calendar.month > lastNarrativeMonth) {
     narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
@@ -539,7 +546,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
     simSpeed = speed;
-    simulation.setSpeed(simSpeeds[speed]);
+    bridge.setSpeed(simSpeeds[speed]);
     speedSlowBtn.classList.toggle('active', speed === 'slow');
     speedFastBtn.classList.toggle('active', speed === 'fast');
     speedLudicrousBtn.classList.toggle('active', speed === 'ludicrous');
@@ -713,7 +720,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     onStateLoaded: (loaded) => {
       state = loaded;
       applySettings(state.settings);
-      simulation.setState(state);
+      bridge.loadState(state);
       centerCamera(state, wrapper, TILE_SIZE, camera);
       narrativeManager.reset();
       lastNarrativeMonth = getCalendarPosition(state.day).month;
