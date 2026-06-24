@@ -6,3 +6,4 @@ pub mod state;
 pub mod utilities;
 pub mod adjacency;
 pub mod zones;
+pub mod demand;
