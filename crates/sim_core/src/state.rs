@@ -1,0 +1,277 @@
+use sim_protocol::tile_kind::TileKind;
+use crate::rng::SeededRng;
+
+// ---------------------------------------------------------------------------
+// Tile flags
+// ---------------------------------------------------------------------------
+
+pub const FLAG_POWERED:       u8 = 0b0000_0001;
+pub const FLAG_WATERED:       u8 = 0b0000_0010;
+pub const FLAG_ABANDONED:     u8 = 0b0000_0100;
+pub const FLAG_ROAD_UNDERLAY: u8 = 0b0000_1000;
+pub const FLAG_RAIL_UNDERLAY: u8 = 0b0001_0000;
+pub const FLAG_POWER_OVERLAY: u8 = 0b0010_0000;
+/// Zone density packed into bits 6–7: 00=Low, 01=Medium, 10=High.
+pub const FLAG_ZONE_DENSITY_MASK:  u8 = 0b1100_0000;
+pub const FLAG_ZONE_DENSITY_SHIFT: u8 = 6;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ZoneDensity { Low = 0, Medium = 1, High = 2 }
+
+// ---------------------------------------------------------------------------
+// Tile
+// ---------------------------------------------------------------------------
+
+/// One grid cell. Mirrors the TS `Tile` interface in `gameState.ts`.
+///
+/// `happiness` is stored as 0–100 (u8) to match the SoA tile buffer field.
+/// `building_id` is `None` for unbuildable/empty tiles; `Some(id)` otherwise.
+/// `underground` holds a buried `TileKind` (e.g. `WaterPipe`) if present.
+#[derive(Debug, Clone)]
+pub struct Tile {
+    pub kind:        TileKind,
+    pub flags:       u8,
+    pub happiness:   u8,
+    pub elevation:   u8,
+    pub building_id: Option<u16>,
+    pub underground: Option<TileKind>,
+}
+
+impl Tile {
+    pub fn land() -> Self {
+        Self {
+            kind:        TileKind::Land,
+            flags:       0,
+            happiness:   100,
+            elevation:   0,
+            building_id: None,
+            underground: None,
+        }
+    }
+
+    pub fn water() -> Self {
+        Self { kind: TileKind::Water, ..Self::land() }
+    }
+
+    // --- flag accessors ---
+
+    pub fn is_powered(&self)        -> bool { self.flags & FLAG_POWERED       != 0 }
+    pub fn is_watered(&self)        -> bool { self.flags & FLAG_WATERED       != 0 }
+    pub fn is_abandoned(&self)      -> bool { self.flags & FLAG_ABANDONED     != 0 }
+    pub fn has_road_underlay(&self) -> bool { self.flags & FLAG_ROAD_UNDERLAY != 0 }
+    pub fn has_rail_underlay(&self) -> bool { self.flags & FLAG_RAIL_UNDERLAY != 0 }
+    pub fn has_power_overlay(&self) -> bool { self.flags & FLAG_POWER_OVERLAY != 0 }
+
+    pub fn zone_density(&self) -> ZoneDensity {
+        match (self.flags & FLAG_ZONE_DENSITY_MASK) >> FLAG_ZONE_DENSITY_SHIFT {
+            1 => ZoneDensity::Medium,
+            2 => ZoneDensity::High,
+            _ => ZoneDensity::Low,
+        }
+    }
+
+    pub fn set_flag(&mut self, mask: u8, on: bool) {
+        if on { self.flags |= mask; } else { self.flags &= !mask; }
+    }
+
+    pub fn set_zone_density(&mut self, density: ZoneDensity) {
+        self.flags = (self.flags & !FLAG_ZONE_DENSITY_MASK)
+            | ((density as u8) << FLAG_ZONE_DENSITY_SHIFT);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GameState (minimal for P3-1; expanded per-task in later sub-phases)
+// ---------------------------------------------------------------------------
+
+/// Top-level simulation state. Mirrors the TS `GameState` interface, extended
+/// with Rust-native types where appropriate.
+#[derive(Debug, Clone)]
+pub struct GameState {
+    pub width:      u32,
+    pub height:     u32,
+    pub tiles:      Vec<Tile>,
+    /// Original seed used to initialise the PRNG for this city.
+    pub seed:       u32,
+    /// Live RNG instance — persisted so saves resume mid-stream.
+    pub rng:        SeededRng,
+    /// Treasury balance in whole dollars (can be negative).
+    pub money:      i64,
+    pub day:        u32,
+    pub tick:       u64,
+    pub population: u32,
+    pub jobs:       u32,
+}
+
+impl GameState {
+    /// Construct a new blank city (all-Land tiles).
+    ///
+    /// Initial values mirror `createInitialState()` in `gameState.ts`:
+    /// money=100 000, day=1, tick=0, population=12, jobs=4.
+    pub fn new(width: u32, height: u32, seed: u32) -> Self {
+        let n = (width * height) as usize;
+        Self {
+            width,
+            height,
+            tiles: vec![Tile::land(); n],
+            seed,
+            rng: SeededRng::new(seed),
+            money: 100_000,
+            day: 1,
+            tick: 0,
+            population: 12,
+            jobs: 4,
+        }
+    }
+
+    // --- coordinate accessors ---
+
+    /// Flat index for (x, y), or `None` if out of bounds.
+    pub fn tile_index(&self, x: u32, y: u32) -> Option<usize> {
+        if x < self.width && y < self.height {
+            Some((y * self.width + x) as usize)
+        } else {
+            None
+        }
+    }
+
+    /// Reverse a flat index to (x, y).
+    pub fn index_to_xy(&self, idx: usize) -> (u32, u32) {
+        let idx = idx as u32;
+        (idx % self.width, idx / self.width)
+    }
+
+    pub fn tile_at(&self, x: u32, y: u32) -> Option<&Tile> {
+        self.tile_index(x, y).map(|i| &self.tiles[i])
+    }
+
+    pub fn tile_at_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
+        self.tile_index(x, y).map(|i| &mut self.tiles[i])
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gs() -> GameState { GameState::new(10, 8, 42) }
+
+    #[test]
+    fn dimensions_and_tile_count() {
+        let g = gs();
+        assert_eq!(g.tiles.len(), 80);
+        assert_eq!(g.width, 10);
+        assert_eq!(g.height, 8);
+    }
+
+    #[test]
+    fn initial_values_match_ts() {
+        let g = gs();
+        assert_eq!(g.money, 100_000);
+        assert_eq!(g.day, 1);
+        assert_eq!(g.tick, 0);
+        assert_eq!(g.population, 12);
+        assert_eq!(g.jobs, 4);
+    }
+
+    #[test]
+    fn all_tiles_start_as_land() {
+        let g = gs();
+        assert!(g.tiles.iter().all(|t| t.kind == TileKind::Land));
+    }
+
+    #[test]
+    fn tile_index_in_bounds() {
+        let g = gs();
+        assert_eq!(g.tile_index(0, 0), Some(0));
+        assert_eq!(g.tile_index(9, 7), Some(79));
+        assert_eq!(g.tile_index(5, 3), Some(35)); // 3*10 + 5
+    }
+
+    #[test]
+    fn tile_index_out_of_bounds() {
+        let g = gs();
+        assert_eq!(g.tile_index(10, 0), None); // x == width
+        assert_eq!(g.tile_index(0, 8), None);  // y == height
+        assert_eq!(g.tile_index(u32::MAX, u32::MAX), None);
+    }
+
+    #[test]
+    fn index_to_xy_round_trips() {
+        let g = gs();
+        for idx in 0..80usize {
+            let (x, y) = g.index_to_xy(idx);
+            assert_eq!(g.tile_index(x, y), Some(idx));
+        }
+    }
+
+    #[test]
+    fn tile_at_returns_correct_tile() {
+        let mut g = gs();
+        g.tiles[35].kind = TileKind::Road;
+        assert_eq!(g.tile_at(5, 3).unwrap().kind, TileKind::Road);
+    }
+
+    #[test]
+    fn tile_at_out_of_bounds_returns_none() {
+        let g = gs();
+        assert!(g.tile_at(10, 0).is_none());
+        assert!(g.tile_at(0, 8).is_none());
+    }
+
+    #[test]
+    fn tile_at_mut_mutates() {
+        let mut g = gs();
+        g.tile_at_mut(2, 3).unwrap().kind = TileKind::Residential;
+        assert_eq!(g.tile_at(2, 3).unwrap().kind, TileKind::Residential);
+    }
+
+    #[test]
+    fn tile_flags_round_trip() {
+        let mut t = Tile::land();
+        assert!(!t.is_powered());
+        t.set_flag(FLAG_POWERED, true);
+        assert!(t.is_powered());
+        t.set_flag(FLAG_POWERED, false);
+        assert!(!t.is_powered());
+    }
+
+    #[test]
+    fn zone_density_default_is_low() {
+        let t = Tile::land();
+        assert_eq!(t.zone_density(), ZoneDensity::Low);
+    }
+
+    #[test]
+    fn zone_density_round_trips() {
+        let mut t = Tile::land();
+        for &d in &[ZoneDensity::Low, ZoneDensity::Medium, ZoneDensity::High] {
+            t.set_zone_density(d);
+            assert_eq!(t.zone_density(), d);
+        }
+    }
+
+    #[test]
+    fn zone_density_does_not_clobber_other_flags() {
+        let mut t = Tile::land();
+        t.set_flag(FLAG_POWERED, true);
+        t.set_flag(FLAG_WATERED, true);
+        t.set_zone_density(ZoneDensity::High);
+        assert!(t.is_powered());
+        assert!(t.is_watered());
+        assert_eq!(t.zone_density(), ZoneDensity::High);
+    }
+
+    #[test]
+    fn rng_is_seeded_from_state_seed() {
+        let mut g = GameState::new(4, 4, 0);
+        // Just confirm the RNG produces the same first value as SeededRng::new(0).
+        let expected = crate::rng::SeededRng::new(0).next_u32();
+        assert_eq!(g.rng.next_u32(), expected);
+    }
+}
