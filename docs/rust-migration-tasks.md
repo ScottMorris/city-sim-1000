@@ -81,26 +81,26 @@ porting any real logic. The Rust `step()` here is trivial (flip a few tiles).*
 regression fixtures (now driving the Rust sim via the bridge) — they must stay in band.
 Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergence.*
 
-- [ ] **P3-1 · `sim_core` state + accessors + RNG** (`GameState`, `Tile` SoA, tile(x,y),
+- [x] **P3-1 · `sim_core` state + accessors + RNG** (`GameState`, `Tile` SoA, tile(x,y),
   index↔coords, derived per-system RNG). `deps:` P2-3. **DoD:** Rust RNG matches the
   P0-1 reference vectors; state unit tests pass.
-- [ ] **P3-2 · Power network (BFS).** `deps:` P3-1.
-- [ ] **P3-3 · Water network (real model, not the stub).** Decide the actual pipe/source
+- [x] **P3-2 · Power network (BFS).** `deps:` P3-1.
+- [x] **P3-3 · Water network (real model, not the stub).** Decide the actual pipe/source
   model here. `deps:` P3-2.
-- [ ] **P3-4 · Zone growth (uses derived RNG).** `deps:` P3-3.
-- [ ] **P3-5 · Building state machine** (`updateBuildingStates`, statuses, trouble ticks,
+- [x] **P3-4 · Zone growth (uses derived RNG).** `deps:` P3-3.
+- [x] **P3-5 · Building state machine** (`updateBuildingStates`, statuses, trouble ticks,
   abandonment). `deps:` P3-4.
-- [ ] **P3-6 · Demand.** `deps:` P3-5.
-- [ ] **P3-7 · Economy / budget** incl. the `*ByType` breakdown maps (intern to a fixed
+- [x] **P3-6 · Demand.** `deps:` P3-5.
+- [x] **P3-7 · Economy / budget** incl. the `*ByType` breakdown maps (intern to a fixed
   enum table rather than `HashMap` — see plan §3). `deps:` P3-6.
-- [ ] **P3-8 · Education + services + serviceDistribution.** `deps:` P3-7.
-- [ ] **P3-9 · Command validation = port `applyTool` rules** (cost, road access,
+- [x] **P3-8 · Education + services + serviceDistribution.** `deps:` P3-7.
+- [x] **P3-9 · Command validation = port `applyTool` rules** (cost, road access,
   overwrite/clear, transport-vs-zone semantics) into `sim_core`; commands return
   success/error per protocol. `deps:` P3-5 (needs building placement).
   **DoD for P3-x (each):** the system's own unit tests pass **and** all Phase-0
   regression fixtures stay in band **and** the Rust golden hash is stable run-to-run.
-- [ ] **P3-10 · Parity milestone.** Full sim ported; all regression fixtures in band;
-  golden hash committed. `deps:` P3-1..P3-9.
+- [x] **P3-10 · Parity milestone.** Full sim ported; all regression fixtures in band;
+  golden hash committed (`0x3d128c538d40e908`, seed=42, 8×8 city, 100 ticks). `deps:` P3-1..P3-9.
 
 ## Phase 4 — Tauri v2 transport
 - [ ] **P4-1 · `sim_tauri` backend** runs `sim_core` natively; commands + Channel events;
