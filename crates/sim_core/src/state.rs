@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use sim_protocol::tile_kind::TileKind;
 use crate::rng::SeededRng;
 use crate::buildings::BuildingInstance;
@@ -115,6 +116,48 @@ impl DemandStats {
 }
 
 // ---------------------------------------------------------------------------
+// BudgetStats + BudgetHistoryEntry
+// ---------------------------------------------------------------------------
+
+/// Daily budget snapshot.  Mirrors the TS `BudgetStats` interface in `gameState.ts`.
+#[derive(Debug, Clone, Default)]
+pub struct BudgetStats {
+    pub revenue:            f32,
+    pub expenses:           f32,
+    pub net:                f32,
+    /// Dollars earned per in-game day (net * 0.2 * 1.5).
+    pub net_per_day:        f32,
+    /// `net_per_day * DAYS_PER_MONTH`.
+    pub net_per_month:      f32,
+    // Revenue breakdown
+    pub revenue_base:       f32,
+    pub revenue_pop:        f32,
+    pub revenue_commercial: f32,
+    pub revenue_industrial: f32,
+    // Expense breakdown
+    pub expenses_transport: f32,
+    pub expenses_buildings: f32,
+    // Building expense sub-breakdown
+    pub maint_power:        f32,
+    pub maint_civic:        f32,
+    pub maint_zones:        f32,
+    // Transport sub-breakdown
+    pub maint_roads:        f32,
+    pub maint_rail:         f32,
+    pub maint_power_lines:  f32,
+    pub maint_pipes:        f32,
+}
+
+/// One day's budget record, stored in the rolling history ring buffer.
+#[derive(Debug, Clone)]
+pub struct BudgetHistoryEntry {
+    pub day:      u32,
+    pub revenue:  f32,
+    pub expenses: f32,
+    pub net:      f32,
+}
+
+// ---------------------------------------------------------------------------
 // UtilityStats
 // ---------------------------------------------------------------------------
 
@@ -175,6 +218,10 @@ pub struct GameState {
     pub next_building_id: u32,
     /// All placed buildings — grows when zones develop, shrinks on abandonment.
     pub buildings:        Vec<BuildingInstance>,
+    /// Last computed daily budget snapshot.
+    pub budget:           BudgetStats,
+    /// Rolling 200-day budget history for the finance panel.
+    pub budget_history:   VecDeque<BudgetHistoryEntry>,
 }
 
 impl GameState {
@@ -200,6 +247,8 @@ impl GameState {
             tile_revision:    0,
             next_building_id: 1,
             buildings:        Vec::new(),
+            budget:           BudgetStats::default(),
+            budget_history:   VecDeque::new(),
         }
     }
 

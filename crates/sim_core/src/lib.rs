@@ -7,3 +7,4 @@ pub mod utilities;
 pub mod adjacency;
 pub mod zones;
 pub mod demand;
+pub mod economy;
