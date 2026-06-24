@@ -10,3 +10,4 @@ pub mod demand;
 pub mod economy;
 pub mod education;
 pub mod commands;
+pub mod sim;
