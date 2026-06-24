@@ -1,6 +1,6 @@
 use sim_protocol::tile_kind::TileKind;
 use crate::adjacency::{tile_has_power, tile_has_water};
-use crate::state::{GameState, FLAG_ABANDONED};
+use crate::state::{GameState, ServiceKind, FLAG_ABANDONED};
 
 // ---------------------------------------------------------------------------
 // BuildingStatus
@@ -37,6 +37,12 @@ pub struct BuildingTemplate {
     pub is_zone:             bool,
     pub is_power_plant:      bool,
     pub is_civic:            bool,
+    /// Which city service this building provides (None for non-service buildings).
+    pub service:             ServiceKind,
+    /// Maximum load units this service building can satisfy per tick.
+    pub service_capacity:    u32,
+    /// BFS radius (tiles) along roads/zones that this service can reach.
+    pub service_coverage:    u32,
 }
 
 /// Look up static template data by the tile kind used when placing a building.
@@ -47,12 +53,14 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
     macro_rules! tmpl {
         ($fp:expr, pwr=$p:expr, wat=$w:expr, wu=$wu:expr, wo=$wo:expr,
          pu=$pu:expr, pop=$pop:expr, jobs=$j:expr, maint=$m:expr,
-         zone=$z:expr, plant=$pl:expr, civic=$cv:expr) => {
+         zone=$z:expr, plant=$pl:expr, civic=$cv:expr,
+         svc=$svc:expr, scap=$scap:expr, scov=$scov:expr) => {
             BuildingTemplate {
                 footprint: $fp, requires_power: $p, requires_water: $w,
                 water_use: $wu, water_output: $wo, power_use: $pu,
                 population_capacity: $pop, jobs_capacity: $j,
                 maintenance: $m, is_zone: $z, is_power_plant: $pl, is_civic: $cv,
+                service: $svc, service_capacity: $scap, service_coverage: $scov,
             }
         };
     }
@@ -60,41 +68,52 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
     // Mirrors TS ZONE_BUILDING_TEMPLATES
     static RESIDENTIAL: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=true,  wu=1.0,  wo=0,  pu=1.5,
-        pop=14, jobs=0,  maint=1.0,    zone=true,  plant=false, civic=false
+        pop=14, jobs=0,  maint=1.0,    zone=true,  plant=false, civic=false,
+        svc=ServiceKind::None, scap=0, scov=0
     };
     static COMMERCIAL: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=true,  wu=1.5,  wo=0,  pu=2.5,
-        pop=0,  jobs=8,  maint=1.2,    zone=true,  plant=false, civic=false
+        pop=0,  jobs=8,  maint=1.2,    zone=true,  plant=false, civic=false,
+        svc=ServiceKind::None, scap=0, scov=0
     };
     static INDUSTRIAL: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=true,  wu=2.0,  wo=0,  pu=3.0,
-        pop=0,  jobs=12, maint=1.4,    zone=true,  plant=false, civic=false
+        pop=0,  jobs=12, maint=1.4,    zone=true,  plant=false, civic=false,
+        svc=ServiceKind::None, scap=0, scov=0
     };
     // Mirrors TS CIVIC_BUILDING_TEMPLATES
     static WATER_PUMP: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=false, wu=0.0,  wo=50, pu=0.0,
-        pop=0,  jobs=0,  maint=5.0,    zone=false, plant=false, civic=true
+        pop=0,  jobs=0,  maint=5.0,    zone=false, plant=false, civic=true,
+        svc=ServiceKind::None, scap=0, scov=0
     };
     static WATER_TOWER: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=120, pu=0.0,
-        pop=0,  jobs=0,  maint=12.0,   zone=false, plant=false, civic=true
+        pop=0,  jobs=0,  maint=12.0,   zone=false, plant=false, civic=true,
+        svc=ServiceKind::None, scap=0, scov=0
     };
     static PARK: BuildingTemplate = tmpl! {
         (1,1), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
-        pop=0,  jobs=0,  maint=0.05,   zone=false, plant=false, civic=true
+        pop=0,  jobs=0,  maint=0.05,   zone=false, plant=false, civic=true,
+        svc=ServiceKind::None, scap=0, scov=0
     };
+    // Elementary school: capacity=180, radius=8 (from services.ts DEFAULT_SERVICE_DEFINITIONS)
     static ELEM_SCHOOL: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=4.0,
-        pop=0,  jobs=0,  maint=40.0,   zone=false, plant=false, civic=true
+        pop=0,  jobs=0,  maint=40.0,   zone=false, plant=false, civic=true,
+        svc=ServiceKind::EducationElementary, scap=180, scov=8
     };
+    // High school: capacity=160, radius=9
     static HIGH_SCHOOL: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=5.0,
-        pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false, civic=true
+        pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false, civic=true,
+        svc=ServiceKind::EducationHigh, scap=160, scov=9
     };
     // Mirrors TS POWER_PLANT_TEMPLATES (all use HydroPlant tile kind in TS)
     static HYDRO_PLANT: BuildingTemplate = tmpl! {
         (2,2), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
-        pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true,  civic=false
+        pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true,  civic=false,
+        svc=ServiceKind::None, scap=0, scov=0
     };
 
     match kind {
@@ -259,8 +278,13 @@ pub fn apply_building_decay(state: &mut GameState, cfg: &DecayConfig) {
         let no_power = status == BuildingStatus::InactiveNoPower;
         let no_water = status == BuildingStatus::InactiveNoWater;
         let unhappy  = tile_happiness < cfg.happiness_threshold;
-        // Education service coverage — stub until P3-8 (always unserved for now)
-        let education_unserved = false;
+        // Education pressure: residential needs elementary; all zones need high school.
+        let tile_idx = (oy * state.width + ox) as usize;
+        let elem_served = state.tiles.get(tile_idx).map(|t| t.elementary_served).unwrap_or(true);
+        let high_served = state.tiles.get(tile_idx).map(|t| t.high_served).unwrap_or(true);
+        let needs_elementary = kind == TileKind::Residential;
+        let needs_high = matches!(kind, TileKind::Residential | TileKind::Commercial | TileKind::Industrial);
+        let education_unserved = (needs_elementary && !elem_served) || (needs_high && !high_served);
 
         let low_demand = demand < cfg.demand_low_threshold;
         let mut trouble = state.buildings[i].trouble_ticks;
@@ -388,7 +412,10 @@ mod tests {
         let mut s = gs(1, 1);
         place(&mut s, TileKind::Residential, 0, 0);
         s.buildings[0].status = BuildingStatus::InactiveNoPower;
-        s.demand.residential = 50.0;  // above low threshold — only noPower penalty
+        s.demand.residential = 50.0;  // above low threshold — only noPower + education penalty
+        // Mark tile as education-served so this test isolates the power penalty
+        s.tile_at_mut(0, 0).unwrap().elementary_served = true;
+        s.tile_at_mut(0, 0).unwrap().high_served       = true;
         let cfg = DecayConfig::default();
         apply_building_decay(&mut s, &cfg);
         assert_eq!(s.buildings[0].trouble_ticks, cfg.trouble_power_penalty);
@@ -417,9 +444,12 @@ mod tests {
         s.buildings[0].trouble_ticks = 5.0;
         s.demand.residential = 50.0;
         s.tile_at_mut(0, 0).unwrap().happiness = 1.0;  // above threshold
+        // Mark tile as education-served so trouble bleeds at the full rate
+        s.tile_at_mut(0, 0).unwrap().elementary_served = true;
+        s.tile_at_mut(0, 0).unwrap().high_served       = true;
         let cfg = DecayConfig::default();
         apply_building_decay(&mut s, &cfg);
-        // Trouble should decrease by trouble_decay + trouble_decay * 0.25 (no education unserved)
+        // All conditions good + education served → full bleed: trouble_decay + trouble_decay * 0.25
         let expected = (5.0_f32 - cfg.trouble_decay - cfg.trouble_decay * 0.25).max(0.0);
         assert!((s.buildings[0].trouble_ticks - expected).abs() < 0.001);
     }

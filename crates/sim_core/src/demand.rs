@@ -179,9 +179,8 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
 
     let seeded = state.population == 0 && state.jobs == 0;
 
-    // Education stub — P3-8 will compute these properly
-    let education_score   = 0.0_f32;
-    let high_coverage     = 0.0_f32;
+    let education_score   = state.education.score;
+    let high_coverage     = state.education.high_coverage;
     let education_demand_delta = education_score * 4.0 - (1.0 - education_score) * 12.0;
     let workforce_penalty = (1.0 - high_coverage) * 20.0;
 
