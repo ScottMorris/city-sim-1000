@@ -13,9 +13,10 @@
 - Commits should be atomic; each commit should represent a single logical change or complete context.
 - Commit often to avoid large, unwieldy commits.
 - Test your changes thoroughly before committing to ensure stability and reliability.
-- Use `npm test -- --pool=threads --poolOptions.threads.singleThread=true` from the repo root (root `package.json` proxies to `app/`); or `cd app && npm test -- --pool=threads --poolOptions.threads.singleThread=true` directly.
+- Use `bun run test` from the repo root (root `package.json` proxies to `app/`; singleThread flag is baked into the script); or `cd app && bun run test` directly.
 - Manual is available in-game via the “Open manual” button (modal iframe at `app/public/manual.html`); keep the manual in sync with behaviour changes.
 - When docs/specs change, commit those updates alongside the related code change.
+- Label every PR with at least one label: `bug`, `enhancement`, `documentation`, `infrastructure`, or `chore`. Use `gh pr edit <number> --add-label “<label>”` immediately after `gh pr create`.
 
 ## Project Notes
 
