@@ -1,0 +1,12 @@
+[package]
+name        = "sim_core"
+description = "Pure-Rust city simulation engine for city-sim-1000"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+
+[dependencies]
+sim_protocol = { path = "../sim_protocol" }
+serde        = { workspace = true }
+thiserror    = { workspace = true }
