@@ -18,21 +18,21 @@ criteria and dependencies. Update the checkboxes as you go.
 *Goal: a run-to-run deterministic TS sim and a regression harness, entirely in the
 current codebase. No Rust yet. This is the safety net the whole migration leans on.*
 
-- [ ] **P0-1 · Seeded PRNG in TS.** Add a small SplitMix64+xoshiro128** PRNG module
+- [x] **P0-1 · Seeded PRNG in TS.** Add a small SplitMix64+xoshiro128** PRNG module
   (mirror of the planned Rust one). `deps:` none.
   **DoD:** unit test proves same seed → same sequence; matches the Rust algorithm's
   reference vectors (record them now so Rust can assert against the same vectors).
-- [ ] **P0-2 · Thread `seed` into `GameState`.** Add `seed:number` + a live RNG instance;
+- [x] **P0-2 · Thread `seed` into `GameState`.** Add `seed:number` + a live RNG instance;
   default-seed factory; back-fill in `persistence.deserialize`. `deps:` P0-1.
   **DoD:** new field defaulted for old saves; `npm run lint` clean.
-- [ ] **P0-3 · Replace the 2 `Math.random()` calls** in `spawnZoneBuildings`
+- [x] **P0-3 · Replace the 2 `Math.random()` calls** in `spawnZoneBuildings`
   (`simulation.ts:596` shuffle, `:609` growth roll) with the seeded RNG. `deps:` P0-2.
   **DoD:** existing `tools.test.ts` random-stubbing tests updated to drive the seeded RNG;
   sim is run-to-run identical for a fixed seed + command list.
-- [ ] **P0-4 · State-hash util (TS).** Stable hash over gameplay-affecting state (sorted,
+- [x] **P0-4 · State-hash util (TS).** Stable hash over gameplay-affecting state (sorted,
   integer-quantised floats). `deps:` P0-3. **DoD:** running a fixture twice → identical
   hash, 10/10 runs.
-- [ ] **P0-5 · Golden scenarios + tolerance-banded fixtures.** Pick 3–4 seeds + command
+- [x] **P0-5 · Golden scenarios + tolerance-banded fixtures.** Pick 3–4 seeds + command
   logs (small/medium maps; cover power, water-stub, zones, abandonment). Record
   population, money trajectory, tile-kind counts, abandonment as JSON fixtures with
   tolerance bands. `deps:` P0-4.
