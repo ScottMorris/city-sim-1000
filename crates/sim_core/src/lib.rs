@@ -3,3 +3,5 @@
 pub mod rng;
 pub mod state;
 pub mod utilities;
+pub mod adjacency;
+pub mod zones;

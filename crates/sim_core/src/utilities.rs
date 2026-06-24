@@ -15,6 +15,9 @@ pub enum UtilityKind { Power, Water }
 // ---------------------------------------------------------------------------
 
 /// Mirrors `isPowerCarrier()` in `app/src/game/adjacency.ts`.
+/// Public alias for use by `adjacency.rs`.
+pub fn is_power_carrier_pub(tile: &Tile) -> bool { is_power_carrier(tile) }
+
 fn is_power_carrier(tile: &Tile) -> bool {
     use TileKind::*;
     if tile.power_plant_mw > 0       { return true; }
@@ -26,6 +29,9 @@ fn is_power_carrier(tile: &Tile) -> bool {
 }
 
 /// Mirrors `isWaterCarrier()` in `app/src/game/adjacency.ts`.
+/// Public alias for use by `adjacency.rs`.
+pub fn is_water_carrier_pub(tile: &Tile) -> bool { is_water_carrier(tile) }
+
 fn is_water_carrier(tile: &Tile) -> bool {
     use TileKind::*;
     if tile.underground == Some(WaterPipe) { return true; }
