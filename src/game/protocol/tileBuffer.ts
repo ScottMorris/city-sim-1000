@@ -41,7 +41,10 @@ export function decodeHappiness(u8: number): number {
   return u8 / 127.5;
 }
 
-/** Encode a [0, 2] happiness float to u8. */
+/**
+ * Encode a [0, 2] happiness float to u8.
+ * Uses truncation (Math.floor) to match Rust's `as u8` cast behaviour.
+ */
 export function encodeHappiness(h: number): number {
-  return Math.round(Math.min(Math.max(h, 0), 2) * 127.5);
+  return Math.floor(Math.min(Math.max(h, 0), 2) * 127.5);
 }
