@@ -36,6 +36,7 @@ pub struct BuildingTemplate {
     pub maintenance:         f32,         // $/day
     pub is_zone:             bool,
     pub is_power_plant:      bool,
+    pub is_civic:            bool,
 }
 
 /// Look up static template data by the tile kind used when placing a building.
@@ -46,12 +47,12 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
     macro_rules! tmpl {
         ($fp:expr, pwr=$p:expr, wat=$w:expr, wu=$wu:expr, wo=$wo:expr,
          pu=$pu:expr, pop=$pop:expr, jobs=$j:expr, maint=$m:expr,
-         zone=$z:expr, plant=$pl:expr) => {
+         zone=$z:expr, plant=$pl:expr, civic=$cv:expr) => {
             BuildingTemplate {
                 footprint: $fp, requires_power: $p, requires_water: $w,
                 water_use: $wu, water_output: $wo, power_use: $pu,
                 population_capacity: $pop, jobs_capacity: $j,
-                maintenance: $m, is_zone: $z, is_power_plant: $pl,
+                maintenance: $m, is_zone: $z, is_power_plant: $pl, is_civic: $cv,
             }
         };
     }
@@ -59,41 +60,41 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
     // Mirrors TS ZONE_BUILDING_TEMPLATES
     static RESIDENTIAL: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=true,  wu=1.0,  wo=0,  pu=1.5,
-        pop=14, jobs=0,  maint=1.0,    zone=true,  plant=false
+        pop=14, jobs=0,  maint=1.0,    zone=true,  plant=false, civic=false
     };
     static COMMERCIAL: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=true,  wu=1.5,  wo=0,  pu=2.5,
-        pop=0,  jobs=8,  maint=1.2,    zone=true,  plant=false
+        pop=0,  jobs=8,  maint=1.2,    zone=true,  plant=false, civic=false
     };
     static INDUSTRIAL: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=true,  wu=2.0,  wo=0,  pu=3.0,
-        pop=0,  jobs=12, maint=1.4,    zone=true,  plant=false
+        pop=0,  jobs=12, maint=1.4,    zone=true,  plant=false, civic=false
     };
     // Mirrors TS CIVIC_BUILDING_TEMPLATES
     static WATER_PUMP: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=false, wu=0.0,  wo=50, pu=0.0,
-        pop=0,  jobs=0,  maint=5.0,    zone=false, plant=false
+        pop=0,  jobs=0,  maint=5.0,    zone=false, plant=false, civic=true
     };
     static WATER_TOWER: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=120, pu=0.0,
-        pop=0,  jobs=0,  maint=12.0,   zone=false, plant=false
+        pop=0,  jobs=0,  maint=12.0,   zone=false, plant=false, civic=true
     };
     static PARK: BuildingTemplate = tmpl! {
         (1,1), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
-        pop=0,  jobs=0,  maint=0.05,   zone=false, plant=false
+        pop=0,  jobs=0,  maint=0.05,   zone=false, plant=false, civic=true
     };
     static ELEM_SCHOOL: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=4.0,
-        pop=0,  jobs=0,  maint=40.0,   zone=false, plant=false
+        pop=0,  jobs=0,  maint=40.0,   zone=false, plant=false, civic=true
     };
     static HIGH_SCHOOL: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=5.0,
-        pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false
+        pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false, civic=true
     };
     // Mirrors TS POWER_PLANT_TEMPLATES (all use HydroPlant tile kind in TS)
     static HYDRO_PLANT: BuildingTemplate = tmpl! {
         (2,2), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
-        pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true
+        pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true,  civic=false
     };
 
     match kind {
