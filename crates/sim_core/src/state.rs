@@ -89,6 +89,29 @@ impl Tile {
 }
 
 // ---------------------------------------------------------------------------
+// DemandStats
+// ---------------------------------------------------------------------------
+
+/// Zone demand levels in [0, 100].  Mirrors `DemandStats` in `gameState.ts`.
+///
+/// Computed each tick by the demand system (P3-6).  P3-4 zone growth reads
+/// these values; initial city starts with modest demand so early growth fires.
+#[derive(Debug, Clone)]
+pub struct DemandStats {
+    pub residential: f32,
+    pub commercial:  f32,
+    pub industrial:  f32,
+}
+
+impl DemandStats {
+    /// Matches the initial demand a freshly-placed city would exhibit before
+    /// the first demand tick runs.  Deliberately low: growth is demand-gated.
+    pub fn initial() -> Self {
+        Self { residential: 50.0, commercial: 30.0, industrial: 20.0 }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // UtilityStats
 // ---------------------------------------------------------------------------
 
@@ -138,9 +161,15 @@ pub struct GameState {
     pub money:      i64,
     pub day:        u32,
     pub tick:       u64,
-    pub population: u32,
-    pub jobs:       u32,
-    pub utilities:  UtilityStats,
+    pub population:       u32,
+    pub jobs:             u32,
+    pub utilities:        UtilityStats,
+    pub demand:           DemandStats,
+    /// Monotonically increasing counter — bumped whenever tiles change.
+    /// Used by the zone growth cache to know when to rescan vacant lots.
+    pub tile_revision:    u32,
+    /// Next building ID to assign on placement.
+    pub next_building_id: u32,
 }
 
 impl GameState {
@@ -161,7 +190,10 @@ impl GameState {
             tick: 0,
             population: 12,
             jobs: 4,
-            utilities: UtilityStats::initial(),
+            utilities:        UtilityStats::initial(),
+            demand:           DemandStats::initial(),
+            tile_revision:    0,
+            next_building_id: 1,
         }
     }
 
