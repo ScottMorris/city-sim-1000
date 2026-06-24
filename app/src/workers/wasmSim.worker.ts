@@ -1,0 +1,49 @@
+/**
+ * wasmSim.worker.ts — Web Worker that owns the WASM SimHost.
+ *
+ * Protocol (both directions use structured-clone via postMessage):
+ *
+ * Main → Worker:
+ *   { type: 'init';  payload: { width: number; height: number } }
+ *   { type: 'step';  payload: { dt: number } }
+ *   { type: 'send';  payload: { bytes: Uint8Array } }
+ *
+ * Worker → Main:
+ *   { type: 'ready' }
+ *   { type: 'tile_buffer'; bytes: Uint8Array }   (transferred ownership)
+ *   { type: 'cmd_result';  bytes: Uint8Array }
+ */
+import init, { SimHost } from '../wasm/sim_wasm/sim_wasm.js';
+
+type MainToWorker =
+  | { type: 'init'; payload: { width: number; height: number } }
+  | { type: 'step'; payload: { dt: number } }
+  | { type: 'send'; payload: { bytes: Uint8Array } };
+
+let host: SimHost | null = null;
+
+self.onmessage = async (e: MessageEvent<MainToWorker>) => {
+  const msg = e.data;
+  switch (msg.type) {
+    case 'init': {
+      await init();
+      host = new SimHost(msg.payload.width, msg.payload.height);
+      self.postMessage({ type: 'ready' });
+      break;
+    }
+    case 'step': {
+      if (!host) break;
+      host.step(msg.payload.dt);
+      // tile_buffer() returns a Uint8Array backed by JS heap — safe to transfer.
+      const bytes = host.tile_buffer();
+      self.postMessage({ type: 'tile_buffer', bytes }, { transfer: [bytes.buffer as ArrayBuffer] });
+      break;
+    }
+    case 'send': {
+      if (!host) break;
+      const result = host.send_command(msg.payload.bytes);
+      self.postMessage({ type: 'cmd_result', bytes: result });
+      break;
+    }
+  }
+};
