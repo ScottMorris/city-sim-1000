@@ -154,9 +154,9 @@ logic, BFS, and road-access checks never need to inspect it.
 ```
 TypeScript UI (src/)
   └─ SimBridge (interface)  ← renderer reads tile mirror; sends SimCommands; gets events/stats
-        ├─ WasmSimBridge   (web:  Worker + SharedArrayBuffer)
-        ├─ TauriSimBridge  (desktop: invoke + Channel)
-        └─ LocalSimBridge  (dev only: TS sim, used as the oracle during migration)
+        ├─ WasmSimBridge   (web:  Worker + SharedArrayBuffer — default browser path)
+        └─ TauriSimBridge  (desktop: invoke + Channel — auto-detected or ?bridge=tauri)
+        // LocalSimBridge removed in P5-4; simulation.ts retained as test-only oracle
 
 crates/                     (all stay in this repo)
   sim_core      pure, deterministic, no I/O. Owns GameState, step(), systems, RNG,
@@ -223,14 +223,15 @@ Two *different* guarantees, don't conflate them:
 
 ## 9. Fate of the TS sim
 
-- During migration the TS sim is wrapped as `LocalSimBridge` and used as the dev-time
-  oracle / fallback, so the UI runs against the *same bridge interface* from day one.
-- Once Rust passes the regression fixtures and golden-hash determinism, **delete** the
-  TS sim (`simulation.ts` and the sim-only helpers it owns). The UI keeps only the tile
-  mirror + protocol types. Narrative/services UI stays (fed by the event channel).
-- **Saves**: current saves are JSON `GameState` in localStorage. New snapshots are
-  postcard binary. This is v0.0.1/private — accept the save break, but ship a one-time
-  JSON→new import shim if cheap.
+- During migration the TS sim was wrapped as `LocalSimBridge` and used as the dev-time
+  oracle / fallback (Phase 1–4).
+- **P5-4 (done):** `LocalSimBridge` deleted. `simulation.ts` demoted to a test-only
+  parity oracle — still imported by `tools.test.ts`, `regression.test.ts`, and
+  `stateHash.test.ts` but marked off-limits to production code. WASM is now the required
+  browser runtime; no pure-TS fallback exists.
+- **Saves**: JSON `GameState` in localStorage is still supported via the existing
+  `deserialize` back-fill path. Postcard binary snapshots (`get_snapshot`/`load_snapshot`)
+  are the new primary save format on Tauri/WASM.
 
 ## 10. Phased plan (vertical-slice-first)
 

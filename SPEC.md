@@ -52,12 +52,11 @@ Game saves are stored in **LocalStorage** with optional import/export.
 * **Vite** for dev/build
 * **PixiJS** for rendering
 * **Vanilla CSS** for UI
+* **Rust** (`city-sim-core`) for the simulation engine
+* **WASM** (`city-sim-wasm`) — Web Worker + `WasmSimBridge` for browser play
+* **Tauri v2** (`tauri-plugin-city-sim`) — native desktop via `TauriSimBridge`
 * **Service worker** for caching
 * **LocalStorage** + file import/export for saves
-* Optional future:
-
-  * Web Workers for simulation
-  * WASM for heavy calculations
 
 ---
 
@@ -75,7 +74,7 @@ Game saves are stored in **LocalStorage** with optional import/export.
 │  ├─ main.ts
 │  ├─ game/
 │  │  ├─ gameState.ts
-│  │  ├─ simulation.ts
+│  │  ├─ simulation.ts  ← test-only oracle; production sim is Rust
 │  │  ├─ tools.ts
 │  │  ├─ toolTypes.ts
 │  │  ├─ persistence.ts
