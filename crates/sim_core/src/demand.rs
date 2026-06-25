@@ -2,6 +2,20 @@ use sim_protocol::tile_kind::TileKind;
 use crate::buildings::{get_building_template, BuildingStatus};
 use crate::state::{DemandStats, GameState};
 
+/// Population and job capacity totals — extracted from the city count so
+/// the simulation driver can use them for population growth without a second
+/// pass through all tiles and buildings.
+pub struct CityCapacity {
+    pub population: u32,
+    pub jobs:       u32,
+}
+
+/// Compute current capacity totals from active/pending zone buildings.
+pub fn count_city_capacity(state: &GameState) -> CityCapacity {
+    let c = count_city(state);
+    CityCapacity { population: c.population_capacity, jobs: c.job_capacity }
+}
+
 // ---------------------------------------------------------------------------
 // Constants (from `app/src/game/demand.ts` and `constants.ts`)
 // ---------------------------------------------------------------------------
