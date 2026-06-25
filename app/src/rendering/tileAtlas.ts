@@ -27,7 +27,7 @@ const tileTexturePaths: Partial<Record<TileKind, string>> = {
   [TileKind.Tree]: assetPath('assets/tiles/tree.png')
 };
 
-const roadTexturePaths: TileTextures['road'] = {
+const roadTexturePaths = {
   north: assetPath('assets/tiles/road-north.png'),
   east: assetPath('assets/tiles/road-east.png'),
   south: assetPath('assets/tiles/road-sud.png'),
@@ -66,7 +66,7 @@ const industrialBuildingTexturePaths = [
   assetPath('assets/tiles/ind-high-tech-1.png')
 ];
 
-const schoolTexturePaths: TileTextures['schools'] = {
+const schoolTexturePaths = {
   elementary: assetPath('assets/tiles/school-elementary.png'),
   high: assetPath('assets/tiles/school-high.png')
 };

@@ -173,8 +173,8 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   container.append(header, body);
   options.root.append(container);
 
-  const baseCtx = baseCanvas.getContext('2d');
-  const overlayCtx = overlayCanvas.getContext('2d');
+  const baseCtx = baseCanvas.getContext('2d') as CanvasRenderingContext2D;
+  const overlayCtx = overlayCanvas.getContext('2d') as CanvasRenderingContext2D;
   if (!baseCtx || !overlayCtx) {
     throw new Error('Minimap canvas context missing');
   }

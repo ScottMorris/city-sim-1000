@@ -1,6 +1,6 @@
 import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
-import { defaultHotkeys } from '../ui/hotkeys';
+import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
@@ -92,7 +92,7 @@ export interface GameSettings {
   input: InputSettings;
   accessibility: AccessibilitySettings;
   audio: AudioSettings;
-  hotkeys: Record<string, string[]>;
+  hotkeys: HotkeyBindings;
   cosmetics: CosmeticSettings;
   narrative: NarrativeSettings;
 }

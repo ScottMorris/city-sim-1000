@@ -15,10 +15,7 @@ class AudioStub extends EventTarget {
   load = vi.fn();
 }
 
-describe(
-  'radio widget',
-  { environment: 'jsdom' },
-  () => {
+describe('radio widget', () => {
     it('shows offline state when playlist is empty', async () => {
       const host = document.createElement('div');
       document.body.appendChild(host);

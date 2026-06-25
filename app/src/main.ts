@@ -400,9 +400,9 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         isPainting = true;
       }
       const alreadyPainted =
-        lastPainted && lastPainted.x === hovered.x && lastPainted.y === hovered.y;
+        lastPainted && lastPainted.x === hovered!.x && lastPainted.y === hovered!.y;
       if (!alreadyPainted) {
-        applyCurrentTool(hovered);
+        applyCurrentTool(hovered!);
         lastPainted = hovered;
       }
     } else if (!primaryDown && !secondaryDown && isPainting) {

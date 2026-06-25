@@ -382,7 +382,7 @@ export function initBudgetModal(options: BudgetModalOptions) {
         label: 'Lighting bylaw adj.',
         value: lightingUpkeepDelta,
         total: expensesTotal,
-        tone: (lightingUpkeepDelta >= 0 ? 'negative' : 'positive') as const,
+        tone: (lightingUpkeepDelta >= 0 ? 'negative' : 'positive') as 'negative' | 'positive',
         tooltip: 'Delta vs neutral baseline (already included in civic/zones upkeep)'
       }
     ]);

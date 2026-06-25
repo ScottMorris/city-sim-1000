@@ -216,7 +216,7 @@ export class Simulation {
 
       if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
         const active = pumpTemplate.requiresPower === false ? true : tile.powered;
-        const connected = hasWaterSourceConnection(state, { x: tileX, y: tileY }, { width: 1, height: 1 });
+        const connected = hasWaterSourceConnection(this.state, { x: tileX, y: tileY }, { width: 1, height: 1 });
         if (pumpTemplate.maintenance) {
           buildingMaintenance += pumpTemplate.maintenance;
           buildingMaintenanceCivic += pumpTemplate.maintenance;

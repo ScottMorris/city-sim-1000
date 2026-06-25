@@ -39,8 +39,8 @@ describe('stateHash', () => {
     const state = createInitialState(6, 6, 0);
     const snap = extractSnapshot(state);
     // settings and budgetHistory are intentionally absent
-    expect((snap as Record<string, unknown>).settings).toBeUndefined();
-    expect((snap as Record<string, unknown>).budgetHistory).toBeUndefined();
+    expect((snap as unknown as Record<string, unknown>).settings).toBeUndefined();
+    expect((snap as unknown as Record<string, unknown>).budgetHistory).toBeUndefined();
   });
 
   it('snapshotToString is stable (same input → same string)', () => {
