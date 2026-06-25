@@ -217,3 +217,22 @@ export async function getCommandLog(): Promise<Uint8Array> {
 export async function loadCommandLog(bytes: Uint8Array): Promise<void> {
   await invoke('plugin:city-sim|load_command_log', { bytes: Array.from(bytes) })
 }
+
+// ── Undo ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Undo the most recent player tool action.
+ *
+ * Removes the last entry from the active command log and replays from the city
+ * seed, rewinding the simulation to just before that action was taken.
+ *
+ * Returns `true` if an action was undone, `false` if the log was already empty
+ * (i.e. no player actions have been taken since `start()` or the last
+ * `loadSnapshot`/`loadCommandLog`).
+ *
+ * Replay runs synchronously on the sim thread; a very long session may delay
+ * the next `TickEvent` briefly. Blocks until the sim thread responds (max 2 s).
+ */
+export async function undoLastCommand(): Promise<boolean> {
+  return await invoke<boolean>('plugin:city-sim|undo_last_command', {})
+}

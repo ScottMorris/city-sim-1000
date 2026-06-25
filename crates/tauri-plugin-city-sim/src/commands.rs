@@ -54,6 +54,7 @@ pub enum SimCmd {
     GetMapSeed(mpsc::SyncSender<MapSeed>),
     GetCommandLog(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadCommandLog(Box<CommandLog>),
+    UndoLast(mpsc::SyncSender<bool>),
     Stop,
 }
 
@@ -200,6 +201,15 @@ pub fn start(
                         sim.set_speed(prev_speed);
                         log = *loaded_log;
                     }
+                    Ok(SimCmd::UndoLast(tx)) => {
+                        let happened = log.pop();
+                        if happened {
+                            let prev_speed = sim.speed();
+                            sim = log.replay();
+                            sim.set_speed(prev_speed);
+                        }
+                        let _ = tx.send(happened);
+                    }
                     Ok(SimCmd::Stop) => return,
                     Err(_) => break,
                 }
@@ -323,4 +333,22 @@ pub fn get_command_log(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
 pub fn load_command_log(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
     let log = CommandLog::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
     state.send(SimCmd::LoadCommandLog(Box::new(log)))
+}
+
+/// Undo the most recent player tool action.
+///
+/// Removes the last entry from the active command log and replays from the city
+/// seed, rewinding the simulation to just before that action. Returns `true` if
+/// an action was undone, `false` if the log was already empty.
+///
+/// Blocks until the sim thread responds (max 2 s).
+#[tauri::command]
+pub fn undo_last_command(state: State<'_, SimState>) -> Result<bool, Error> {
+    let (tx, rx) = mpsc::sync_channel(0);
+    state.send(SimCmd::UndoLast(tx))?;
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })
 }

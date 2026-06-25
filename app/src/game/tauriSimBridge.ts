@@ -29,6 +29,7 @@ import {
   applyTool as pluginApplyTool,
   setSpeed as pluginSetSpeed,
   stop as pluginStop,
+  undoLastCommand as pluginUndoLastCommand,
   TOOL_ID,
   type ToolId,
   type TickEvent,
@@ -116,6 +117,10 @@ export class TauriSimBridge implements SimBridge {
 
   setSpeed(multiplier: number): void {
     void pluginSetSpeed(multiplier);
+  }
+
+  undo(): Promise<boolean> {
+    return pluginUndoLastCommand();
   }
 
   dispose(): void {

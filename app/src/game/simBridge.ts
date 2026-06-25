@@ -1,14 +1,11 @@
-/**
- * SimBridge — transport-agnostic interface between the UI and the simulation.
- *
- * Implementations:
- *   LocalSimBridge  (P1-5) — wraps the TS Simulation in-process; used today
- *   WasmSimBridge   (P2-3) — TS Simulation runs in a Worker + SharedArrayBuffer
- *   TauriSimBridge  (P4-2) — native Rust sim via Tauri IPC Channel
- *
- * The UI layer (main.ts, toolbar, minimap, narrative) only speaks to this
- * interface — never to Simulation directly.
- */
+// simBridge.ts — transport-agnostic interface between the UI and the simulation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+//
+// Implementations:
+//   WasmSimBridge   (P2-3) — Rust sim in a Web Worker via WASM
+//   TauriSimBridge  (P4-2) — native Rust sim via Tauri IPC Channel
 
 import type { GameState } from './gameState';
 import type { SimCommand, CommandResult } from './protocol/commands';
@@ -54,6 +51,15 @@ export interface SimBridge {
    * Adjust simulation speed as a multiplier of the base tick rate.
    */
   setSpeed(multiplier: number): void;
+
+  /**
+   * Undo the most recent player tool action by removing it from the command log
+   * and replaying from the city seed. Resolves to `true` if an action was
+   * undone, `false` if the log was already empty.
+   *
+   * Bridges that do not yet support undo resolve immediately with `false`.
+   */
+  undo(): Promise<boolean>;
 
   /**
    * Tear down the bridge (terminate Worker, release SharedArrayBuffer, etc.).

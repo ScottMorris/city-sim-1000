@@ -85,6 +85,20 @@ impl CommandLog {
         postcard::from_bytes(&bytes[8..]).map_err(CommandLogError::Postcard)
     }
 
+    /// Remove the most-recently recorded entry and return `true`, or return
+    /// `false` if the log is empty.
+    ///
+    /// Used by the undo system: after `pop()`, call [`replay()`] to rewind
+    /// the simulation to just before the popped command was applied.
+    pub fn pop(&mut self) -> bool {
+        if self.entries.is_empty() {
+            false
+        } else {
+            self.entries.pop();
+            true
+        }
+    }
+
     /// Replay the log from scratch and return the resulting [`Simulation`].
     ///
     /// Creates a fresh `Simulation::new(width, height, seed)` and applies
