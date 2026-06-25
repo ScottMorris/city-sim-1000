@@ -262,6 +262,8 @@ pub fn load_snapshot(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), E
 pub fn get_map_seed(state: State<'_, SimState>) -> Result<MapSeed, Error> {
     let (tx, rx) = mpsc::sync_channel(0);
     state.send(SimCmd::GetMapSeed(tx))?;
+    // Reuses SnapshotTimeout — both paths mean "sim thread did not respond
+    // within 2 s"; the message is slightly imprecise but acceptable.
     rx.recv_timeout(Duration::from_secs(2))
         .map_err(|e| match e {
             RecvTimeoutError::Timeout => Error::SnapshotTimeout,

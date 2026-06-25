@@ -149,8 +149,8 @@ export interface MapSeed {
 /**
  * Return the width, height, and seed that identify this city's starting map.
  *
- * The returned value can be passed back to `start()` to begin a fresh city
- * on the same grid — useful for sharing a blank canvas or restarting a run.
+ * To recreate an empty city on the same map:
+ * `const s = await getMapSeed(); start(s.width, s.height, s.seed, onTick)`
  */
 export async function getMapSeed(): Promise<MapSeed> {
   return await invoke<MapSeed>('plugin:city-sim|get_map_seed', {})
