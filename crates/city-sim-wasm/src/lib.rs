@@ -1,12 +1,12 @@
 // sim_wasm — WASM cdylib wrapper.
 // Phase 2: stub SimHost that proves the Worker→WASM→main-thread tile pipe works.
 // Phase 3: replace stub with real sim_core logic.
-use wasm_bindgen::prelude::*;
 use city_sim_protocol::{
     commands::{CommandResult, SimCommand},
     tile_buffer::{TileBufferOffsets, BYTES_PER_TILE},
     tile_kind::TileKind,
 };
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn version() -> String {
@@ -37,9 +37,15 @@ impl SimHost {
         }
     }
 
-    pub fn tick_count(&self) -> u32 { self.tick as u32 }
-    pub fn width(&self) -> u32 { self.width }
-    pub fn height(&self) -> u32 { self.height }
+    pub fn tick_count(&self) -> u32 {
+        self.tick as u32
+    }
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+    pub fn height(&self) -> u32 {
+        self.height
+    }
 
     /// Advance one step: increment tick, toggle demo tile at (1,1).
     pub fn step(&mut self, _dt: f64) {

@@ -13,7 +13,7 @@
 /// - **Seeding**: SplitMix64 expands a u32 seed (zero-extended to u64) into
 ///   four u32 state words.
 /// - **Generation**: xoshiro128** — fast, high-quality 32-bit output.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SeededRng {
     s0: u32,
     s1: u32,

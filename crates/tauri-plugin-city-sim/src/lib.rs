@@ -8,12 +8,14 @@
 //   apply_tool(tool: u8, x: u32, y: u32)
 //   set_speed(multiplier: f32)
 //   stop()
+//   get_snapshot() -> Vec<u8>
+//   load_snapshot(bytes: Vec<u8>)
 
-mod error;
 pub mod commands;
+mod error;
 
-pub use error::Error;
 pub use commands::{SimState, TickEvent};
+pub use error::Error;
 
 use tauri::{
     plugin::{Builder as PluginBuilder, TauriPlugin},
@@ -36,6 +38,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::apply_tool,
             commands::set_speed,
             commands::stop,
+            commands::get_snapshot,
+            commands::load_snapshot,
         ])
         .setup(|app, _api| {
             app.manage(SimState::default());

@@ -1,6 +1,6 @@
-use std::collections::VecDeque;
-use city_sim_protocol::tile_kind::TileKind;
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
+use city_sim_protocol::tile_kind::TileKind;
+use std::collections::VecDeque;
 
 /// Which utility network to recompute.
 ///
@@ -8,7 +8,10 @@ use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
 /// architecture decision in `docs/rust-migration-plan.md`. Extensible to
 /// sewage, heat, etc. by adding variants here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UtilityKind { Power, Water }
+pub enum UtilityKind {
+    Power,
+    Water,
+}
 
 // ---------------------------------------------------------------------------
 // Carrier / source predicates
@@ -16,28 +19,50 @@ pub enum UtilityKind { Power, Water }
 
 /// Mirrors `isPowerCarrier()` in `app/src/game/adjacency.ts`.
 /// Public alias for use by `adjacency.rs`.
-pub fn is_power_carrier_pub(tile: &Tile) -> bool { is_power_carrier(tile) }
+pub fn is_power_carrier_pub(tile: &Tile) -> bool {
+    is_power_carrier(tile)
+}
 
 fn is_power_carrier(tile: &Tile) -> bool {
     use TileKind::*;
-    if tile.power_plant_mw > 0       { return true; }
-    if tile.building_id.is_some()    { return true; }
-    if tile.kind == PowerLine        { return true; }
-    if tile.kind == Road || tile.has_road_underlay() { return true; }
-    if tile.kind == Rail || tile.has_rail_underlay() { return true; }
+    if tile.power_plant_mw > 0 {
+        return true;
+    }
+    if tile.building_id.is_some() {
+        return true;
+    }
+    if tile.kind == PowerLine {
+        return true;
+    }
+    if tile.kind == Road || tile.has_road_underlay() {
+        return true;
+    }
+    if tile.kind == Rail || tile.has_rail_underlay() {
+        return true;
+    }
     matches!(tile.kind, Residential | Commercial | Industrial)
 }
 
 /// Mirrors `isWaterCarrier()` in `app/src/game/adjacency.ts`.
 /// Public alias for use by `adjacency.rs`.
-pub fn is_water_carrier_pub(tile: &Tile) -> bool { is_water_carrier(tile) }
+pub fn is_water_carrier_pub(tile: &Tile) -> bool {
+    is_water_carrier(tile)
+}
 
 fn is_water_carrier(tile: &Tile) -> bool {
     use TileKind::*;
-    if tile.underground == Some(WaterPipe) { return true; }
-    if tile.building_id.is_some()          { return true; }
-    if tile.kind == Road || tile.has_road_underlay() { return true; }
-    if tile.kind == Rail || tile.has_rail_underlay() { return true; }
+    if tile.underground == Some(WaterPipe) {
+        return true;
+    }
+    if tile.building_id.is_some() {
+        return true;
+    }
+    if tile.kind == Road || tile.has_road_underlay() {
+        return true;
+    }
+    if tile.kind == Rail || tile.has_rail_underlay() {
+        return true;
+    }
     matches!(tile.kind, Residential | Commercial | Industrial)
 }
 
@@ -99,7 +124,10 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
     }
 
     // Collect sources, seed their flags, build initial queue
-    let sources: Vec<usize> = state.tiles.iter().enumerate()
+    let sources: Vec<usize> = state
+        .tiles
+        .iter()
+        .enumerate()
         .filter(|(_, t)| is_source(t, kind))
         .map(|(i, _)| i)
         .collect();
@@ -118,8 +146,12 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
             // Read phase (immutable)
             {
                 let t = &state.tiles[nidx];
-                if t.flags & flag != 0 { continue; }
-                if !is_carrier(t, kind) { continue; }
+                if t.flags & flag != 0 {
+                    continue;
+                }
+                if !is_carrier(t, kind) {
+                    continue;
+                }
             }
             // Write phase (mutable)
             state.tiles[nidx].set_flag(flag, true);
@@ -134,14 +166,14 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
             state.utilities.power_produced = produced;
             // power_used is updated by the economy tick; zero it here so
             // a fresh recompute starts clean.
-            state.utilities.power_used     = 0;
-            state.utilities.power          = produced;
+            state.utilities.power_used = 0;
+            state.utilities.power = produced;
         }
         UtilityKind::Water => {
             let produced = sum_output_water(state);
             state.utilities.water_produced = produced;
-            state.utilities.water_used     = 0;
-            state.utilities.water          = produced;
+            state.utilities.water_used = 0;
+            state.utilities.water = produced;
         }
     }
 }
@@ -155,11 +187,17 @@ fn sum_output_power(state: &GameState) -> i32 {
     let mut seen: std::collections::HashSet<u16> = std::collections::HashSet::new();
     let mut total = 0;
     for tile in &state.tiles {
-        if tile.power_plant_mw <= 0 { continue; }
+        if tile.power_plant_mw <= 0 {
+            continue;
+        }
         match tile.building_id {
-            Some(bid) if seen.insert(bid) => { total += tile.power_plant_mw; }
-            Some(_)                        => {}  // duplicate tile of same plant
-            None                           => { total += tile.power_plant_mw; }
+            Some(bid) if seen.insert(bid) => {
+                total += tile.power_plant_mw;
+            }
+            Some(_) => {} // duplicate tile of same plant
+            None => {
+                total += tile.power_plant_mw;
+            }
         }
     }
     total
@@ -169,11 +207,17 @@ fn sum_output_water(state: &GameState) -> i32 {
     let mut seen: std::collections::HashSet<u16> = std::collections::HashSet::new();
     let mut total = 0;
     for tile in &state.tiles {
-        if tile.water_output <= 0 { continue; }
+        if tile.water_output <= 0 {
+            continue;
+        }
         match tile.building_id {
-            Some(bid) if seen.insert(bid) => { total += tile.water_output; }
-            Some(_)                        => {}
-            None                           => { total += tile.water_output; }
+            Some(bid) if seen.insert(bid) => {
+                total += tile.water_output;
+            }
+            Some(_) => {}
+            None => {
+                total += tile.water_output;
+            }
         }
     }
     total
@@ -200,13 +244,19 @@ mod tests {
 
     #[test]
     fn power_line_is_power_carrier() {
-        let t = Tile { kind: TileKind::PowerLine, ..Tile::land() };
+        let t = Tile {
+            kind: TileKind::PowerLine,
+            ..Tile::land()
+        };
         assert!(is_power_carrier(&t));
     }
 
     #[test]
     fn road_is_power_carrier() {
-        let t = Tile { kind: TileKind::Road, ..Tile::land() };
+        let t = Tile {
+            kind: TileKind::Road,
+            ..Tile::land()
+        };
         assert!(is_power_carrier(&t));
     }
 
@@ -217,7 +267,10 @@ mod tests {
 
     #[test]
     fn residential_is_power_carrier() {
-        let t = Tile { kind: TileKind::Residential, ..Tile::land() };
+        let t = Tile {
+            kind: TileKind::Residential,
+            ..Tile::land()
+        };
         assert!(is_power_carrier(&t));
     }
 
@@ -231,19 +284,28 @@ mod tests {
 
     #[test]
     fn building_tile_is_power_carrier() {
-        let t = Tile { building_id: Some(1), ..Tile::land() };
+        let t = Tile {
+            building_id: Some(1),
+            ..Tile::land()
+        };
         assert!(is_power_carrier(&t));
     }
 
     #[test]
     fn water_pipe_underground_is_water_carrier() {
-        let t = Tile { underground: Some(TileKind::WaterPipe), ..Tile::land() };
+        let t = Tile {
+            underground: Some(TileKind::WaterPipe),
+            ..Tile::land()
+        };
         assert!(is_water_carrier(&t));
     }
 
     #[test]
     fn road_is_water_carrier() {
-        let t = Tile { kind: TileKind::Road, ..Tile::land() };
+        let t = Tile {
+            kind: TileKind::Road,
+            ..Tile::land()
+        };
         assert!(is_water_carrier(&t));
     }
 
@@ -285,7 +347,10 @@ mod tests {
         }
         recompute_utility_network(&mut g, UtilityKind::Power);
         for x in 0..=5 {
-            assert!(g.tile_at(x, 0).unwrap().is_powered(), "tile {x} should be powered");
+            assert!(
+                g.tile_at(x, 0).unwrap().is_powered(),
+                "tile {x} should be powered"
+            );
         }
         // Tile 6 is Land — not powered
         assert!(!g.tile_at(6, 0).unwrap().is_powered());
@@ -310,7 +375,7 @@ mod tests {
         place(&mut g, 2, 0, TileKind::Road);
         place(&mut g, 3, 0, TileKind::Road);
         recompute_utility_network(&mut g, UtilityKind::Power);
-        assert!( g.tile_at(0, 0).unwrap().is_powered());
+        assert!(g.tile_at(0, 0).unwrap().is_powered());
         assert!(!g.tile_at(1, 0).unwrap().is_powered());
         assert!(!g.tile_at(2, 0).unwrap().is_powered());
     }
@@ -387,7 +452,7 @@ mod tests {
         g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
         // (1,0) and (2,0) are plain Land — not water carriers
         recompute_utility_network(&mut g, UtilityKind::Water);
-        assert!( g.tile_at(0, 0).unwrap().is_watered());
+        assert!(g.tile_at(0, 0).unwrap().is_watered());
         assert!(!g.tile_at(1, 0).unwrap().is_watered());
     }
 
