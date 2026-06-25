@@ -263,6 +263,75 @@ jobs:
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+  wasm-build:
+    name: WASM build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Build WASM target
+        id: wasm_build
+        run: wasm-pack build crates/city-sim-wasm --target web --out-dir ../../app/src/wasm/sim_wasm
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## WASM build"
+            echo
+            echo "- Runner: \`ubuntu-24.04\`"
+            echo "- Result: \`${{ steps.wasm_build.outcome }}\`"
+            echo "- Command: \`wasm-pack build crates/city-sim-wasm --target web --out-dir ../../app/src/wasm/sim_wasm\`"
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  tauri-plugin-build:
+    name: Tauri plugin build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Build Tauri plugin
+        id: tauri_plugin_build
+        run: cargo build -p tauri-plugin-city-sim
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Tauri plugin build"
+            echo
+            echo "- Runner: \`ubuntu-24.04\`"
+            echo "- Result: \`${{ steps.tauri_plugin_build.outcome }}\`"
+            echo "- Command: \`cargo build -p tauri-plugin-city-sim\`"
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   report-pr-results:
     name: PR summary
     if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
@@ -273,6 +342,8 @@ jobs:
       - rust-determinism
       - ts-typecheck
       - ts-test
+      - wasm-build
+      - tauri-plugin-build
     runs-on: ubuntu-latest
     steps:
       - name: Post CI summary comment
@@ -290,6 +361,8 @@ jobs:
             const rustDeterm = '${{ needs.rust-determinism.result }}';
             const tsCheck    = '${{ needs.ts-typecheck.result }}';
             const tsTests    = '${{ needs.ts-test.result }}';
+            const wasmBuild  = '${{ needs.wasm-build.result }}';
+            const tauriBuild = '${{ needs.tauri-plugin-build.result }}';
 
             const body = [
               marker,
@@ -301,6 +374,8 @@ jobs:
               `- ${label(rustDeterm)} Rust determinism (x64 + arm64): \`${rustDeterm}\``,
               `- ${label(tsCheck)} TypeScript typecheck: \`${tsCheck}\``,
               `- ${label(tsTests)} TypeScript tests: \`${tsTests}\``,
+              `- ${label(wasmBuild)} WASM build: \`${wasmBuild}\``,
+              `- ${label(tauriBuild)} Tauri plugin build: \`${tauriBuild}\``,
             ].join('\n');
 
             const issue_number = context.issue.number;

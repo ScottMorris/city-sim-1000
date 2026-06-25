@@ -125,7 +125,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   **DoD:** `CommandLog::pop()` in core; `UndoLast` `SimCmd` + `undo_last_command()` Tauri
   command; `SimBridge.undo()` interface; `TauriSimBridge` (real) + `WasmSimBridge` (no-op)
   implementations; Ctrl+Z handler in `main.ts` with "Undone" notification.
-- [ ] **P5-6 · Benchmarks + CI for both targets** (criterion in `city-sim-core`; wasm + tauri
+- [x] **P5-6 · Benchmarks + CI for both targets** (criterion in `city-sim-core`; wasm + tauri
   build workflows). `deps:` P4-2.
 
 ---

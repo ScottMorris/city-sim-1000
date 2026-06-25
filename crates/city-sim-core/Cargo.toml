@@ -11,3 +11,10 @@ city-sim-protocol = { path = "../city-sim-protocol" }
 postcard     = { workspace = true }
 serde        = { workspace = true }
 thiserror    = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "sim_bench"
+harness = false
