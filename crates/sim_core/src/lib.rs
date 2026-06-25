@@ -8,3 +8,4 @@ pub mod adjacency;
 pub mod zones;
 pub mod demand;
 pub mod economy;
+pub mod education;

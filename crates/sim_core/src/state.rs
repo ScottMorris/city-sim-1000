@@ -22,6 +22,20 @@ pub const FLAG_ZONE_DENSITY_SHIFT: u8 = 6;
 pub enum ZoneDensity { Low = 0, Medium = 1, High = 2 }
 
 // ---------------------------------------------------------------------------
+// ServiceKind — which city service a building provides
+// ---------------------------------------------------------------------------
+
+/// Which city service a building provides (or `None` for non-service buildings).
+/// Mirrors `ServiceId` from `app/src/game/services.ts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ServiceKind {
+    #[default]
+    None,
+    EducationElementary,
+    EducationHigh,
+}
+
+// ---------------------------------------------------------------------------
 // Tile
 // ---------------------------------------------------------------------------
 
@@ -45,6 +59,14 @@ pub struct Tile {
     pub underground:     Option<TileKind>,
     pub power_plant_mw:  i32,
     pub water_output:    i32,
+    /// True when an active elementary school covers this tile.
+    pub elementary_served: bool,
+    /// True when an active high school covers this tile.
+    pub high_served:       bool,
+    /// Fraction of elementary load satisfied (0.0–1.0).
+    pub elementary_score:  f32,
+    /// Fraction of high-school load satisfied (0.0–1.0).
+    pub high_score:        f32,
 }
 
 impl Tile {
@@ -58,6 +80,10 @@ impl Tile {
             underground:    None,
             power_plant_mw: 0,
             water_output:   0,
+            elementary_served: false,
+            high_served:       false,
+            elementary_score:  0.0,
+            high_score:        0.0,
         }
     }
 
@@ -112,6 +138,37 @@ impl DemandStats {
     /// the first demand tick runs.  Deliberately low: growth is demand-gated.
     pub fn initial() -> Self {
         Self { residential: 50.0, commercial: 30.0, industrial: 20.0 }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EducationStats
+// ---------------------------------------------------------------------------
+
+/// City-wide education coverage snapshot.  Mirrors `EducationStats` in
+/// `app/src/game/education.ts`.  Recomputed each tick by `education::recompute_education`.
+#[derive(Debug, Clone)]
+pub struct EducationStats {
+    pub elementary_served:   f32,
+    pub elementary_capacity: f32,
+    pub elementary_load:     f32,
+    pub high_served:         f32,
+    pub high_capacity:       f32,
+    pub high_load:           f32,
+    /// Combined coverage score in [0, 1]:  elementary × 0.6 + high × 0.4.
+    pub score:               f32,
+    pub elementary_coverage: f32,
+    pub high_coverage:       f32,
+}
+
+impl Default for EducationStats {
+    fn default() -> Self {
+        // No schools → load = 0 → coverage = 1 (matches TS `?? 1` defaults)
+        Self {
+            elementary_served: 0.0, elementary_capacity: 0.0, elementary_load: 0.0,
+            high_served: 0.0, high_capacity: 0.0, high_load: 0.0,
+            score: 1.0, elementary_coverage: 1.0, high_coverage: 1.0,
+        }
     }
 }
 
@@ -218,6 +275,8 @@ pub struct GameState {
     pub next_building_id: u32,
     /// All placed buildings — grows when zones develop, shrinks on abandonment.
     pub buildings:        Vec<BuildingInstance>,
+    /// Education coverage stats, recomputed each tick by `education::recompute_education`.
+    pub education:        EducationStats,
     /// Last computed daily budget snapshot.
     pub budget:           BudgetStats,
     /// Rolling 200-day budget history for the finance panel.
@@ -247,6 +306,7 @@ impl GameState {
             tile_revision:    0,
             next_building_id: 1,
             buildings:        Vec::new(),
+            education:        EducationStats::default(),
             budget:           BudgetStats::default(),
             budget_history:   VecDeque::new(),
         }
