@@ -14,6 +14,7 @@ import {
 import { Tool } from './game/toolTypes';
 import { LocalSimBridge } from './game/localSimBridge';
 import { WasmSimBridge } from './game/wasmSimBridge';
+import { TauriSimBridge } from './game/tauriSimBridge';
 import type { SimBridge } from './game/simBridge';
 import { applyToolCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
@@ -172,10 +173,15 @@ const narrativeManager = new NarrativeManager({
   enabled: state.settings.narrative.enabled,
   tickerEnabled: state.settings.narrative.tickerEnabled
 });
-const useWasmBridge = new URLSearchParams(window.location.search).get('bridge') === 'wasm';
-const bridge: SimBridge = useWasmBridge
-  ? new WasmSimBridge(state)
-  : new LocalSimBridge(state, { ticksPerSecond: 20 });
+const bridgeParam = new URLSearchParams(window.location.search).get('bridge');
+// Auto-detect Tauri shell when no explicit param is set.
+const inTauri = '__TAURI_INTERNALS__' in window;
+const bridge: SimBridge =
+  bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm' && bridgeParam !== 'local')
+    ? new TauriSimBridge(state)
+    : bridgeParam === 'wasm'
+      ? new WasmSimBridge(state)
+      : new LocalSimBridge(state, { ticksPerSecond: 20 });
 bridge.onMessage((msg: FromSim) => {
   if (msg.type === 'Alert') {
     notifications.publish({
