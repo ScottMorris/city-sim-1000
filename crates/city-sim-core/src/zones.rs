@@ -1,5 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
-use sim_protocol::tile_kind::TileKind;
+use city_sim_protocol::tile_kind::TileKind;
 use crate::adjacency::{has_road_access, is_frontier_zone, zone_has_road_path, tile_has_power, tile_has_water};
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;

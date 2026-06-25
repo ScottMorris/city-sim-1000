@@ -1,4 +1,4 @@
-use sim_protocol::tile_kind::TileKind;
+use city_sim_protocol::tile_kind::TileKind;
 use crate::adjacency::{tile_has_power, tile_has_water};
 use crate::state::{GameState, ServiceKind, FLAG_ABANDONED};
 

@@ -7,6 +7,6 @@ authors.workspace    = true
 license.workspace    = true
 
 [dependencies]
-sim_protocol = { path = "../city-sim-protocol", package = "city-sim-protocol" }
+city-sim-protocol = { path = "../city-sim-protocol" }
 serde        = { workspace = true }
 thiserror    = { workspace = true }

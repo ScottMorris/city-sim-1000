@@ -2,7 +2,7 @@
 // Phase 2: stub SimHost that proves the Worker→WASM→main-thread tile pipe works.
 // Phase 3: replace stub with real sim_core logic.
 use wasm_bindgen::prelude::*;
-use sim_protocol::{
+use city_sim_protocol::{
     commands::{CommandResult, SimCommand},
     tile_buffer::{TileBufferOffsets, BYTES_PER_TILE},
     tile_kind::TileKind,
@@ -68,7 +68,7 @@ impl SimHost {
 
     /// Return a fresh SoA tile buffer with the current tile state.
     ///
-    /// Layout (see `sim_protocol::tile_buffer`):
+    /// Layout (see `city_sim_protocol::tile_buffer`):
     ///   `kind[N] | flags[N] | happiness[N] | elevation[N] | building_id[N*2]`
     pub fn tile_buffer(&self) -> Vec<u8> {
         let n = (self.width * self.height) as usize;

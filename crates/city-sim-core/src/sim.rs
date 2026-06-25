@@ -193,7 +193,7 @@ mod tests {
     const GOLDEN_HASH_SEED42_4X4_100TICKS: u64 = 0x3d128c538d40e908;
 
     fn make_city_sim(seed: u32) -> Simulation {
-        use sim_protocol::commands::Tool;
+        use city_sim_protocol::commands::Tool;
         use crate::commands::apply_tool;
         let mut sim = Simulation::new(8, 8, seed);
         // Place roads + zones so zone growth fires and RNG is exercised

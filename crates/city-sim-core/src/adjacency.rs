@@ -1,5 +1,5 @@
 use std::collections::{HashSet, VecDeque};
-use sim_protocol::tile_kind::TileKind;
+use city_sim_protocol::tile_kind::TileKind;
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
 
 /// Four orthogonal directions as (dx, dy) pairs.

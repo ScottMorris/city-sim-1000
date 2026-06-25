@@ -1,4 +1,4 @@
-use sim_protocol::{
+use city_sim_protocol::{
     commands::{CommandResult, Tool},
     tile_kind::TileKind,
 };

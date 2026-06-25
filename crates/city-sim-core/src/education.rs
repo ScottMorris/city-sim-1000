@@ -1,6 +1,6 @@
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Reverse;
-use sim_protocol::tile_kind::TileKind;
+use city_sim_protocol::tile_kind::TileKind;
 use crate::buildings::{get_building_template, BuildingStatus};
 use crate::state::{EducationStats, GameState, ServiceKind};
 

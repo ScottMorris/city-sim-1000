@@ -2,9 +2,9 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use sim_core::commands::apply_tool as sim_apply_tool;
-use sim_core::sim::Simulation;
-use sim_protocol::commands::Tool;
+use city_sim_core::commands::apply_tool as sim_apply_tool;
+use city_sim_core::sim::Simulation;
+use city_sim_protocol::commands::Tool;
 use tauri::{ipc::Channel, State};
 
 use crate::error::Error;
@@ -178,7 +178,7 @@ pub fn start(
 }
 
 /// Apply a player tool at tile (x, y). `tool` is the `Tool` u8 discriminant
-/// (matching `sim_protocol::commands::Tool as u8`).
+/// (matching `city_sim_protocol::commands::Tool as u8`).
 #[tauri::command]
 pub fn apply_tool(state: State<'_, SimState>, tool: u8, x: u32, y: u32) -> Result<(), Error> {
     let tool = tool_from_u8(tool).ok_or(Error::InvalidTool(tool))?;

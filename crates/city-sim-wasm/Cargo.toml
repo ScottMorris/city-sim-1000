@@ -12,8 +12,8 @@ name       = "sim_wasm"
 crate-type = ["cdylib"]
 
 [dependencies]
-sim_core     = { path = "../city-sim-core",     package = "city-sim-core"     }
-sim_protocol = { path = "../city-sim-protocol", package = "city-sim-protocol" }
+city-sim-core     = { path = "../city-sim-core"     }
+city-sim-protocol = { path = "../city-sim-protocol" }
 serde        = { workspace = true }
 postcard     = { workspace = true }
 wasm-bindgen = { workspace = true }
