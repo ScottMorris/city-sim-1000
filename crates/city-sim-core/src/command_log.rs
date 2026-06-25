@@ -199,23 +199,23 @@ mod tests {
         let mut log = CommandLog::new(8, 8, 42);
         let mut sim = Simulation::new(8, 8, 42);
 
-        // Apply a few commands and record them.
-        apply_tool(&mut sim.state, Tool::Road, 3, 0);
+        // Record before apply — mirrors production order in commands.rs.
         log.record(sim.state.tick, Tool::Road, 3, 0);
+        apply_tool(&mut sim.state, Tool::Road, 3, 0);
 
-        apply_tool(&mut sim.state, Tool::Road, 3, 1);
         log.record(sim.state.tick, Tool::Road, 3, 1);
+        apply_tool(&mut sim.state, Tool::Road, 3, 1);
 
-        apply_tool(&mut sim.state, Tool::Residential, 0, 0);
         log.record(sim.state.tick, Tool::Residential, 0, 0);
+        apply_tool(&mut sim.state, Tool::Residential, 0, 0);
 
         // Advance a few ticks.
         for _ in 0..10 {
             sim.tick(1.0 / 20.0);
         }
 
-        apply_tool(&mut sim.state, Tool::Commercial, 0, 2);
         log.record(sim.state.tick, Tool::Commercial, 0, 2);
+        apply_tool(&mut sim.state, Tool::Commercial, 0, 2);
 
         // Run to tick 50.
         while sim.state.tick < 50 {

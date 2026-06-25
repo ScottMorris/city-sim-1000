@@ -52,7 +52,7 @@ pub enum SimCmd {
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
     GetCommandLog(mpsc::SyncSender<Result<Vec<u8>, String>>),
-    LoadCommandLog(Vec<u8>),
+    LoadCommandLog(Box<CommandLog>),
     Stop,
 }
 
@@ -163,20 +163,21 @@ pub fn start(
                         let _ = tx.send(result);
                     }
                     Ok(SimCmd::LoadSnapshot(gs)) => {
+                        // Reset the log: recorded commands were against the
+                        // old city and cannot replay correctly through a
+                        // snapshot-loaded state.
+                        log = CommandLog::new(gs.width, gs.height, gs.seed);
                         sim.load_state(*gs);
                     }
                     Ok(SimCmd::GetCommandLog(tx)) => {
                         let result = log.to_bytes().map_err(|e| e.to_string());
                         let _ = tx.send(result);
                     }
-                    Ok(SimCmd::LoadCommandLog(bytes)) => {
-                        match CommandLog::from_bytes(&bytes) {
-                            Ok(loaded_log) => {
-                                sim = loaded_log.replay();
-                                log = loaded_log;
-                            }
-                            Err(_) => {} // invalid bytes — leave sim unchanged
-                        }
+                    Ok(SimCmd::LoadCommandLog(loaded_log)) => {
+                        let prev_speed = sim.speed();
+                        sim = loaded_log.replay();
+                        sim.set_speed(prev_speed);
+                        log = *loaded_log;
                     }
                     Ok(SimCmd::Stop) => return,
                     Err(_) => break,
@@ -281,6 +282,6 @@ pub fn get_command_log(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
 /// the sim thread; a very long log may delay the next `TickEvent` briefly.
 #[tauri::command]
 pub fn load_command_log(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
-    CommandLog::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
-    state.send(SimCmd::LoadCommandLog(bytes))
+    let log = CommandLog::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
+    state.send(SimCmd::LoadCommandLog(Box::new(log)))
 }
