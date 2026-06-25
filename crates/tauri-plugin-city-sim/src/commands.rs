@@ -7,6 +7,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
+use city_sim_core::command_log::CommandLog;
 use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
@@ -50,6 +51,8 @@ pub enum SimCmd {
     SetSpeed(f32),
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
+    GetCommandLog(mpsc::SyncSender<Result<Vec<u8>, String>>),
+    LoadCommandLog(Vec<u8>),
     Stop,
 }
 
@@ -138,6 +141,7 @@ pub fn start(
 
     std::thread::spawn(move || {
         let mut sim = Simulation::new(width, height, seed);
+        let mut log = CommandLog::new(width, height, seed);
         let dt = 1.0_f64 / 20.0;
         let frame = Duration::from_micros(50_000); // 50 ms ≈ 20 Hz
 
@@ -148,6 +152,7 @@ pub fn start(
             loop {
                 match rx.try_recv() {
                     Ok(SimCmd::ApplyTool(tool, x, y)) => {
+                        log.record(sim.state.tick, tool, x, y);
                         sim_apply_tool(&mut sim.state, tool, x, y);
                     }
                     Ok(SimCmd::SetSpeed(m)) => {
@@ -159,6 +164,19 @@ pub fn start(
                     }
                     Ok(SimCmd::LoadSnapshot(gs)) => {
                         sim.load_state(*gs);
+                    }
+                    Ok(SimCmd::GetCommandLog(tx)) => {
+                        let result = log.to_bytes().map_err(|e| e.to_string());
+                        let _ = tx.send(result);
+                    }
+                    Ok(SimCmd::LoadCommandLog(bytes)) => {
+                        match CommandLog::from_bytes(&bytes) {
+                            Ok(loaded_log) => {
+                                sim = loaded_log.replay();
+                                log = loaded_log;
+                            }
+                            Err(_) => {} // invalid bytes — leave sim unchanged
+                        }
                     }
                     Ok(SimCmd::Stop) => return,
                     Err(_) => break,
@@ -230,4 +248,39 @@ pub fn get_snapshot(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
 pub fn load_snapshot(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
     let game_state = snapshot::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
     state.send(SimCmd::LoadSnapshot(Box::new(game_state)))
+}
+
+/// Return the command log for the current session as raw bytes.
+///
+/// The log records every `applyTool` call since `start()`, tagged with the
+/// sim tick at which it occurred. Combined with the embedded `width`, `height`,
+/// and `seed`, the log is sufficient to deterministically replay the entire
+/// session — see `loadCommandLog`.
+///
+/// Blocks until the sim thread responds (max 2 s).
+#[tauri::command]
+pub fn get_command_log(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
+    let (tx, rx) = mpsc::sync_channel(0);
+    state.send(SimCmd::GetCommandLog(tx))?;
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })?
+        .map_err(Error::Snapshot)
+}
+
+/// Replace the running simulation by replaying a command log from scratch.
+///
+/// `bytes` must be a log produced by `getCommandLog`. The sim thread replays
+/// all recorded commands at their original ticks starting from a fresh city
+/// (same `width`, `height`, `seed`). The replayed log becomes the active log,
+/// so subsequent `applyTool` calls extend it.
+///
+/// Rejects if `bytes` is not a valid CLOG file. Replay runs synchronously on
+/// the sim thread; a very long log may delay the next `TickEvent` briefly.
+#[tauri::command]
+pub fn load_command_log(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
+    CommandLog::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
+    state.send(SimCmd::LoadCommandLog(bytes))
 }

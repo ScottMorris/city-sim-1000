@@ -1,0 +1,255 @@
+// command_log.rs — record and deterministic replay of player tool commands.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
+use city_sim_protocol::commands::Tool;
+
+use crate::commands::apply_tool;
+use crate::sim::Simulation;
+
+const MAGIC: &[u8; 4] = b"CLOG";
+const VERSION: u32 = 1;
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/// One recorded player action: the sim tick at which it was applied, the tool
+/// used, and the tile coordinates.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommandLogEntry {
+    pub tick: u64,
+    pub tool: u8,
+    pub x: u32,
+    pub y: u32,
+}
+
+/// A complete record of every player tool action issued during a session,
+/// plus the city dimensions and RNG seed needed to recreate the starting map.
+///
+/// Serialised with a `CLOG` magic header (same pattern as `snapshot.rs`),
+/// followed by a postcard-encoded payload. The format is compact: each entry
+/// is ~10 bytes, so even a long session produces a small file.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CommandLog {
+    pub width: u32,
+    pub height: u32,
+    pub seed: u32,
+    pub entries: Vec<CommandLogEntry>,
+}
+
+impl CommandLog {
+    /// Create an empty log for a new city.
+    pub fn new(width: u32, height: u32, seed: u32) -> Self {
+        Self {
+            width,
+            height,
+            seed,
+            entries: Vec::new(),
+        }
+    }
+
+    /// Append a tool action at the current sim tick.
+    pub fn record(&mut self, tick: u64, tool: Tool, x: u32, y: u32) {
+        self.entries.push(CommandLogEntry {
+            tick,
+            tool: tool as u8,
+            x,
+            y,
+        });
+    }
+
+    /// Serialise to bytes: `CLOG` magic (4 B) + version u32 LE (4 B) + postcard payload.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
+        let payload = postcard::to_allocvec(self)?;
+        let mut out = Vec::with_capacity(8 + payload.len());
+        out.extend_from_slice(MAGIC);
+        out.extend_from_slice(&VERSION.to_le_bytes());
+        out.extend_from_slice(&payload);
+        Ok(out)
+    }
+
+    /// Deserialise a command log produced by [`to_bytes`].
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, CommandLogError> {
+        if bytes.len() < 8 {
+            return Err(CommandLogError::TooShort);
+        }
+        if &bytes[..4] != MAGIC {
+            return Err(CommandLogError::BadMagic);
+        }
+        let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+        if version != VERSION {
+            return Err(CommandLogError::UnsupportedVersion(version));
+        }
+        postcard::from_bytes(&bytes[8..]).map_err(CommandLogError::Postcard)
+    }
+
+    /// Replay the log from scratch and return the resulting [`Simulation`].
+    ///
+    /// Creates a fresh `Simulation::new(width, height, seed)` and applies
+    /// each recorded command at its original tick by advancing the sim at
+    /// `dt = 1/20 s` until the tick count matches. The returned `Simulation`
+    /// is in the same state as at the end of the original session.
+    ///
+    /// Note: replay runs at full CPU speed with no frame limiter. A very long
+    /// session may take several seconds on a slow machine.
+    pub fn replay(&self) -> Simulation {
+        let mut sim = Simulation::new(self.width, self.height, self.seed);
+        for entry in &self.entries {
+            while sim.state.tick < entry.tick {
+                sim.tick(1.0 / 20.0);
+            }
+            if let Ok(tool) = Tool::try_from(entry.tool) {
+                apply_tool(&mut sim.state, tool, entry.x, entry.y);
+            }
+        }
+        sim
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Error type
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, thiserror::Error)]
+pub enum CommandLogError {
+    #[error("command log too short to contain header")]
+    TooShort,
+    #[error("bad magic — not a CLOG file")]
+    BadMagic,
+    #[error("unsupported command log version {0}")]
+    UnsupportedVersion(u32),
+    #[error("postcard decode error: {0}")]
+    Postcard(#[from] postcard::Error),
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use city_sim_protocol::commands::Tool;
+
+    fn make_log() -> CommandLog {
+        let mut log = CommandLog::new(8, 8, 42);
+        log.record(0, Tool::Road, 3, 0);
+        log.record(0, Tool::Road, 3, 1);
+        log.record(0, Tool::Residential, 0, 0);
+        log.record(5, Tool::Commercial, 0, 2);
+        log
+    }
+
+    #[test]
+    fn round_trip_preserves_entries() {
+        let original = make_log();
+        let bytes = original.to_bytes().expect("serialise");
+        let restored = CommandLog::from_bytes(&bytes).expect("deserialise");
+        assert_eq!(restored.width, original.width);
+        assert_eq!(restored.height, original.height);
+        assert_eq!(restored.seed, original.seed);
+        assert_eq!(restored.entries.len(), original.entries.len());
+        for (a, b) in original.entries.iter().zip(restored.entries.iter()) {
+            assert_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn header_magic_and_version() {
+        let bytes = CommandLog::new(4, 4, 0).to_bytes().unwrap();
+        assert_eq!(&bytes[..4], b"CLOG");
+        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 1);
+    }
+
+    #[test]
+    fn bad_magic_returns_error() {
+        let mut bytes = CommandLog::new(4, 4, 0).to_bytes().unwrap();
+        bytes[0] = 0x00;
+        assert!(matches!(
+            CommandLog::from_bytes(&bytes),
+            Err(CommandLogError::BadMagic)
+        ));
+    }
+
+    #[test]
+    fn wrong_version_returns_error() {
+        let mut bytes = CommandLog::new(4, 4, 0).to_bytes().unwrap();
+        bytes[4..8].copy_from_slice(&99u32.to_le_bytes());
+        assert!(matches!(
+            CommandLog::from_bytes(&bytes),
+            Err(CommandLogError::UnsupportedVersion(99))
+        ));
+    }
+
+    #[test]
+    fn too_short_returns_error() {
+        assert!(matches!(
+            CommandLog::from_bytes(&[0u8; 4]),
+            Err(CommandLogError::TooShort)
+        ));
+    }
+
+    #[test]
+    fn replay_produces_same_state_as_live_run() {
+        use crate::sim::state_hash;
+
+        // Run a live session, recording manually.
+        let mut log = CommandLog::new(8, 8, 42);
+        let mut sim = Simulation::new(8, 8, 42);
+
+        // Apply a few commands and record them.
+        apply_tool(&mut sim.state, Tool::Road, 3, 0);
+        log.record(sim.state.tick, Tool::Road, 3, 0);
+
+        apply_tool(&mut sim.state, Tool::Road, 3, 1);
+        log.record(sim.state.tick, Tool::Road, 3, 1);
+
+        apply_tool(&mut sim.state, Tool::Residential, 0, 0);
+        log.record(sim.state.tick, Tool::Residential, 0, 0);
+
+        // Advance a few ticks.
+        for _ in 0..10 {
+            sim.tick(1.0 / 20.0);
+        }
+
+        apply_tool(&mut sim.state, Tool::Commercial, 0, 2);
+        log.record(sim.state.tick, Tool::Commercial, 0, 2);
+
+        // Run to tick 50.
+        while sim.state.tick < 50 {
+            sim.tick(1.0 / 20.0);
+        }
+
+        let live_hash = state_hash(&sim.state);
+
+        // Replay and advance to the same tick.
+        let mut replayed = log.replay();
+        while replayed.state.tick < 50 {
+            replayed.tick(1.0 / 20.0);
+        }
+
+        assert_eq!(
+            live_hash,
+            state_hash(&replayed.state),
+            "replay must produce identical state to live run"
+        );
+    }
+
+    #[test]
+    fn empty_log_replay_matches_fresh_sim() {
+        use crate::sim::state_hash;
+
+        let log = CommandLog::new(4, 4, 7);
+        let mut replayed = log.replay();
+        let mut fresh = Simulation::new(4, 4, 7);
+
+        for _ in 0..20 {
+            replayed.tick(1.0 / 20.0);
+            fresh.tick(1.0 / 20.0);
+        }
+
+        assert_eq!(state_hash(&replayed.state), state_hash(&fresh.state));
+    }
+}
