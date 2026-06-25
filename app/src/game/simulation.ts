@@ -1,4 +1,6 @@
-// Fixed-timestep Simulation engine: power/water networks, zone growth, budget, and narrative events.
+// simulation.ts — TypeScript simulation engine retained as a test-only parity oracle.
+// Production simulation runs in Rust (city-sim-core via WasmSimBridge or TauriSimBridge).
+// Do not import this file from production code.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
