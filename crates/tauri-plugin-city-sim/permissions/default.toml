@@ -1,0 +1,5 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = "Grants access to all city-sim simulation commands."
+permissions = ["allow-start", "allow-apply-tool", "allow-set-speed", "allow-stop"]

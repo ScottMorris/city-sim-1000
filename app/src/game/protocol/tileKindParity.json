@@ -1,0 +1,18 @@
+[
+  { "u8": 0,  "ts": "land" },
+  { "u8": 1,  "ts": "water" },
+  { "u8": 2,  "ts": "tree" },
+  { "u8": 3,  "ts": "road" },
+  { "u8": 4,  "ts": "rail" },
+  { "u8": 5,  "ts": "residential" },
+  { "u8": 6,  "ts": "commercial" },
+  { "u8": 7,  "ts": "industrial" },
+  { "u8": 8,  "ts": "powerline" },
+  { "u8": 9,  "ts": "hydro" },
+  { "u8": 10, "ts": "pump" },
+  { "u8": 11, "ts": "water_tower" },
+  { "u8": 12, "ts": "water_pipe" },
+  { "u8": 13, "ts": "elementary_school" },
+  { "u8": 14, "ts": "high_school" },
+  { "u8": 15, "ts": "park" }
+]

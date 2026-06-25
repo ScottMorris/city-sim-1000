@@ -1,0 +1,13 @@
+[package]
+name        = "city-sim-protocol"
+description = "Shared types, wire protocol, and TileKind mapping for city-sim-1000"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+
+[dependencies]
+serde     = { workspace = true }
+postcard  = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }

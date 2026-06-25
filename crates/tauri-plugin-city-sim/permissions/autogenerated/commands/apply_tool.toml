@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-apply-tool"
+description = "Enables the apply_tool command without any pre-configured scope."
+commands.allow = ["apply_tool"]
+
+[[permission]]
+identifier = "deny-apply-tool"
+description = "Denies the apply_tool command without any pre-configured scope."
+commands.deny = ["apply_tool"]

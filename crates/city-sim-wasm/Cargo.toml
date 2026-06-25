@@ -1,0 +1,20 @@
+[package]
+name        = "city-sim-wasm"
+description = "WASM cdylib wrapper around city-sim-core for the browser Worker target"
+version.workspace    = true
+edition.workspace    = true
+authors.workspace    = true
+license.workspace    = true
+
+[lib]
+# Keep lib name as sim_wasm so wasm-pack output files (sim_wasm.js etc.) are stable.
+name       = "sim_wasm"
+crate-type = ["cdylib"]
+
+[dependencies]
+city-sim-core     = { path = "../city-sim-core"     }
+city-sim-protocol = { path = "../city-sim-protocol" }
+serde        = { workspace = true }
+postcard     = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys       = { workspace = true }

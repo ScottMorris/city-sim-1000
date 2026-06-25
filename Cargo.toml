@@ -1,0 +1,30 @@
+[workspace]
+members = [
+    "crates/city-sim-core",
+    "crates/city-sim-protocol",
+    "crates/city-sim-wasm",
+    "crates/tauri-plugin-city-sim",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Scott Morris"]
+license = "MIT"
+
+[workspace.dependencies]
+# Serialisation
+serde       = { version = "1", features = ["derive"] }
+postcard    = { version = "1", features = ["alloc"] }
+serde_json  = "1"
+
+# Utility
+thiserror   = "1"
+
+# WASM
+wasm-bindgen = "0.2"
+js-sys       = "0.3"
+
+# Tauri (only in tauri-plugin-city-sim)
+# tauri = { version = "2", optional = true }
