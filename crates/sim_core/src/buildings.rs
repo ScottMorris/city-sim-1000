@@ -20,30 +20,22 @@ pub enum BuildingStatus {
 // BuildingTemplate (static per-kind data)
 // ---------------------------------------------------------------------------
 
-/// Static properties of a building kind — looked up by `TileKind`.
-/// Mirrors the `BuildingTemplate` interface in `buildings/templates.ts`.
+/// Static properties of a building kind.  Mirrors the `BuildingTemplate`
+/// interface in `buildings/templates.ts`.
+///
+/// Values are taken directly from the TS static template objects.
 pub struct BuildingTemplate {
-    pub footprint:      (u32, u32),   // (width, height)
-    pub requires_power: bool,
-    pub requires_water: bool,
-    pub water_use:      f32,
-    pub is_zone:        bool,
-    pub is_power_plant: bool,
-}
-
-impl BuildingTemplate {
-    const fn zone(w: u32, h: u32) -> Self {
-        Self { footprint: (w, h), requires_power: true, requires_water: true, water_use: 1.0, is_zone: true, is_power_plant: false }
-    }
-    const fn civic_power(w: u32, h: u32) -> Self {
-        Self { footprint: (w, h), requires_power: true, requires_water: false, water_use: 0.0, is_zone: false, is_power_plant: false }
-    }
-    const fn civic_no_power(w: u32, h: u32) -> Self {
-        Self { footprint: (w, h), requires_power: false, requires_water: false, water_use: 0.0, is_zone: false, is_power_plant: false }
-    }
-    const fn power_plant(w: u32, h: u32) -> Self {
-        Self { footprint: (w, h), requires_power: false, requires_water: false, water_use: 0.0, is_zone: false, is_power_plant: true }
-    }
+    pub footprint:           (u32, u32),  // (width, height) in tiles
+    pub requires_power:      bool,
+    pub requires_water:      bool,
+    pub water_use:           f32,         // kL/day consumed (demand side)
+    pub water_output:        i32,         // kL/day produced (supply side, 0 if not a source)
+    pub power_use:           f32,         // MW consumed when active
+    pub population_capacity: u32,
+    pub jobs_capacity:       u32,
+    pub maintenance:         f32,         // $/day
+    pub is_zone:             bool,
+    pub is_power_plant:      bool,
 }
 
 /// Look up static template data by the tile kind used when placing a building.
@@ -51,27 +43,70 @@ impl BuildingTemplate {
 /// Returns `None` for non-building tile kinds (Land, Road, etc.).
 pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate> {
     use TileKind::*;
-    static RESIDENTIAL: BuildingTemplate  = BuildingTemplate::zone(1, 1);
-    static COMMERCIAL:  BuildingTemplate  = BuildingTemplate::zone(1, 1);
-    static INDUSTRIAL:  BuildingTemplate  = BuildingTemplate::zone(1, 1);
-    static WATER_PUMP:  BuildingTemplate  = BuildingTemplate::civic_power(1, 1);
-    static WATER_TOWER: BuildingTemplate  = BuildingTemplate::civic_power(2, 2);
-    static PARK:        BuildingTemplate  = BuildingTemplate::civic_no_power(1, 1);
-    static ELEM_SCHOOL: BuildingTemplate  = BuildingTemplate::civic_power(2, 2);
-    static HIGH_SCHOOL: BuildingTemplate  = BuildingTemplate::civic_power(2, 2);
-    static HYDRO_PLANT: BuildingTemplate  = BuildingTemplate::power_plant(2, 2);
+    macro_rules! tmpl {
+        ($fp:expr, pwr=$p:expr, wat=$w:expr, wu=$wu:expr, wo=$wo:expr,
+         pu=$pu:expr, pop=$pop:expr, jobs=$j:expr, maint=$m:expr,
+         zone=$z:expr, plant=$pl:expr) => {
+            BuildingTemplate {
+                footprint: $fp, requires_power: $p, requires_water: $w,
+                water_use: $wu, water_output: $wo, power_use: $pu,
+                population_capacity: $pop, jobs_capacity: $j,
+                maintenance: $m, is_zone: $z, is_power_plant: $pl,
+            }
+        };
+    }
+
+    // Mirrors TS ZONE_BUILDING_TEMPLATES
+    static RESIDENTIAL: BuildingTemplate = tmpl! {
+        (1,1), pwr=true,  wat=true,  wu=1.0,  wo=0,  pu=1.5,
+        pop=14, jobs=0,  maint=1.0,    zone=true,  plant=false
+    };
+    static COMMERCIAL: BuildingTemplate = tmpl! {
+        (1,1), pwr=true,  wat=true,  wu=1.5,  wo=0,  pu=2.5,
+        pop=0,  jobs=8,  maint=1.2,    zone=true,  plant=false
+    };
+    static INDUSTRIAL: BuildingTemplate = tmpl! {
+        (1,1), pwr=true,  wat=true,  wu=2.0,  wo=0,  pu=3.0,
+        pop=0,  jobs=12, maint=1.4,    zone=true,  plant=false
+    };
+    // Mirrors TS CIVIC_BUILDING_TEMPLATES
+    static WATER_PUMP: BuildingTemplate = tmpl! {
+        (1,1), pwr=true,  wat=false, wu=0.0,  wo=50, pu=0.0,
+        pop=0,  jobs=0,  maint=5.0,    zone=false, plant=false
+    };
+    static WATER_TOWER: BuildingTemplate = tmpl! {
+        (2,2), pwr=true,  wat=false, wu=0.0,  wo=120, pu=0.0,
+        pop=0,  jobs=0,  maint=12.0,   zone=false, plant=false
+    };
+    static PARK: BuildingTemplate = tmpl! {
+        (1,1), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
+        pop=0,  jobs=0,  maint=0.05,   zone=false, plant=false
+    };
+    static ELEM_SCHOOL: BuildingTemplate = tmpl! {
+        (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=4.0,
+        pop=0,  jobs=0,  maint=40.0,   zone=false, plant=false
+    };
+    static HIGH_SCHOOL: BuildingTemplate = tmpl! {
+        (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=5.0,
+        pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false
+    };
+    // Mirrors TS POWER_PLANT_TEMPLATES (all use HydroPlant tile kind in TS)
+    static HYDRO_PLANT: BuildingTemplate = tmpl! {
+        (2,2), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
+        pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true
+    };
 
     match kind {
-        Residential     => Some(&RESIDENTIAL),
-        Commercial      => Some(&COMMERCIAL),
-        Industrial      => Some(&INDUSTRIAL),
-        WaterPump       => Some(&WATER_PUMP),
-        WaterTower      => Some(&WATER_TOWER),
-        Park            => Some(&PARK),
+        Residential      => Some(&RESIDENTIAL),
+        Commercial       => Some(&COMMERCIAL),
+        Industrial       => Some(&INDUSTRIAL),
+        WaterPump        => Some(&WATER_PUMP),
+        WaterTower       => Some(&WATER_TOWER),
+        Park             => Some(&PARK),
         ElementarySchool => Some(&ELEM_SCHOOL),
-        HighSchool      => Some(&HIGH_SCHOOL),
-        HydroPlant      => Some(&HYDRO_PLANT),
-        _               => None,
+        HighSchool       => Some(&HIGH_SCHOOL),
+        HydroPlant       => Some(&HYDRO_PLANT),
+        _                => None,
     }
 }
 
