@@ -1,3 +1,8 @@
+// Fixed-timestep Simulation engine: power/water networks, zone growth, budget, and narrative events.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import type { GameState } from './gameState';
 import type { SimEvent } from './narrative/types';
 import { bumpTileRevision, getTile, TileKind } from './gameState';

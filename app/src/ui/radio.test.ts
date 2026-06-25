@@ -1,3 +1,8 @@
+// Tests for the radio widget: offline state, playlist loading, and control wiring.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, expect, it, vi } from 'vitest';
 import { initRadioWidget } from './radio';
 

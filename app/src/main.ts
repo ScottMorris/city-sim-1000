@@ -1,3 +1,8 @@
+// Entry point and composition root: HUD DOM, input wiring, game loop, and SimBridge selection.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import './style.css';
 import { Application } from 'pixi.js';
 import {

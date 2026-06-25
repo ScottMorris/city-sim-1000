@@ -1,3 +1,8 @@
+// Tile, road, school, and building texture path constants and async asset loader.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import * as PIXI from 'pixi.js';
 import { TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';

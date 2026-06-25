@@ -1,3 +1,8 @@
+// Web Worker that hosts the WASM SimHost for the WasmSimBridge.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
  * wasmSim.worker.ts — Web Worker that owns the WASM SimHost.
  *

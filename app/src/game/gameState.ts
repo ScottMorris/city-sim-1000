@@ -1,3 +1,8 @@
+// GameState type definition and default factory helpers for all settings sub-objects.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';

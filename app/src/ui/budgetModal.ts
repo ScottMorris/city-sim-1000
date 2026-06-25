@@ -1,3 +1,8 @@
+// Budget breakdown modal: income/expense rows, narrative insights column, and bylaw deltas.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { GameState } from '../game/gameState';
 import {
   computeRunwayDays,

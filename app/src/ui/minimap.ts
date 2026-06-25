@@ -1,3 +1,8 @@
+// Minimap panel: dual-canvas base/overlay rendering, mode buttons, and camera viewport rect.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { Camera } from '../rendering/camera';
 import {
   GameState,

@@ -1,3 +1,8 @@
+// Tests for stateHash snapshot extraction, string serialisation, and the golden-hash check.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from './gameState';
 import { Simulation } from './simulation';
