@@ -1,3 +1,14 @@
+## Default Permission
+
+Grants access to all city-sim simulation commands.
+
+#### This default permission set includes the following:
+
+- `allow-start`
+- `allow-apply-tool`
+- `allow-set-speed`
+- `allow-stop`
+
 ## Permission Table
 
 <table>

@@ -1,6 +1,7 @@
 {
   "name": "city-sim-1000-workspace",
   "private": true,
+  "workspaces": ["app", "crates/sim_tauri"],
   "scripts": {
     "dev":                  "cd app && bun run dev",
     "build":                "cd app && bun run build",
@@ -9,7 +10,8 @@
     "test":                 "cd app && bun run test",
     "build:favicon":        "cd app && bun run build:favicon",
     "build:radio-playlist": "cd app && bun run build:radio-playlist",
-    "build:wasm":           "wasm-pack build crates/sim_wasm --target web --out-dir ../../app/src/wasm/sim_wasm"
+    "build:wasm":           "wasm-pack build crates/sim_wasm --target web --out-dir ../../app/src/wasm/sim_wasm",
+    "build:plugin-js":      "bun --cwd crates/sim_tauri install && bun --cwd crates/sim_tauri run build"
   },
   "engines": {
     "node": ">=20",

@@ -341,6 +341,12 @@
           "type": "string",
           "const": "deny-stop",
           "markdownDescription": "Denies the stop command without any pre-configured scope."
+        },
+        {
+          "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-stop`",
+          "type": "string",
+          "const": "default",
+          "markdownDescription": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-stop`"
         }
       ]
     }
