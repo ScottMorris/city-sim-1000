@@ -184,3 +184,36 @@ export async function getSnapshot(): Promise<Uint8Array> {
 export async function loadSnapshot(bytes: Uint8Array): Promise<void> {
   await invoke('plugin:city-sim|load_snapshot', { bytes: Array.from(bytes) })
 }
+
+// ── Command log ───────────────────────────────────────────────────────────────
+
+/**
+ * Return the command log for the current session as raw bytes.
+ *
+ * The log records every `applyTool` call since `start()`, tagged with the sim
+ * tick at which it occurred. The format is a `CLOG`-magic postcard payload
+ * that embeds `width`, `height`, and `seed` alongside the entry list.
+ *
+ * Pass the bytes to `loadCommandLog` (on any platform) to replay the session
+ * deterministically, or to `burgomaster` for inspection and conversion.
+ *
+ * Blocks until the sim thread responds (max 2 s).
+ */
+export async function getCommandLog(): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>('plugin:city-sim|get_command_log', {})
+  return new Uint8Array(bytes)
+}
+
+/**
+ * Replace the running simulation by replaying a command log from scratch.
+ *
+ * `bytes` must be a log previously returned by `getCommandLog`. The sim thread
+ * replays all recorded commands at their original ticks from a fresh city
+ * (`width`, `height`, `seed` are embedded in the log). The replayed log
+ * becomes the active log, so subsequent `applyTool` calls extend it.
+ *
+ * Rejects if `bytes` is not a valid CLOG file.
+ */
+export async function loadCommandLog(bytes: Uint8Array): Promise<void> {
+  await invoke('plugin:city-sim|load_command_log', { bytes: Array.from(bytes) })
+}

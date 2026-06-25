@@ -118,6 +118,11 @@ impl Simulation {
         self.state.tick += 1;
     }
 
+    /// Current speed multiplier (1.0 = normal, 0.0 = paused).
+    pub fn speed(&self) -> f32 {
+        self.speed
+    }
+
     /// Set simulation speed multiplier.
     pub fn set_speed(&mut self, multiplier: f32) {
         self.speed = multiplier.max(0.0);

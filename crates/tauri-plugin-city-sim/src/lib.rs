@@ -14,6 +14,8 @@
 //   get_snapshot() -> Vec<u8>
 //   load_snapshot(bytes: Vec<u8>)
 //   get_map_seed() -> MapSeed
+//   get_command_log() -> Vec<u8>
+//   load_command_log(bytes: Vec<u8>)
 
 pub mod commands;
 mod error;
@@ -45,6 +47,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_snapshot,
             commands::load_snapshot,
             commands::get_map_seed,
+            commands::get_command_log,
+            commands::load_command_log,
         ])
         .setup(|app, _api| {
             app.manage(SimState::default());
