@@ -117,10 +117,10 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
 - [x] **P5-2 · Command-log replays** (record + play back; the real shareable artifact).
   `deps:` P5-1.
 - [x] **P5-3 · Map/seed export.** `deps:` P5-1.
-- [ ] **P5-4 · Delete the TS sim** (`simulation.ts` + sim-only helpers); UI keeps tile
+- [x] **P5-4 · Delete the TS sim** (`simulation.ts` + sim-only helpers); UI keeps tile
   mirror + protocol + narrative/services UI only. `deps:` P3-10, P5-1.
-  **DoD:** `LocalSimBridge` removed or demoted to a test-only oracle; app ships on
-  Rust core; docs/manual/SPEC updated.
+  **DoD:** `LocalSimBridge` removed; `simulation.ts` demoted to test-only oracle; app
+  ships on Rust core; CLAUDE.md, SPEC.md, rust-migration-plan.md updated.
 - [ ] **P5-5 · (Optional) Undo via delta ring buffer** (~50 s / ~6 MB). Only if an undo
   feature is wanted. `deps:` P3-10.
 - [ ] **P5-6 · Benchmarks + CI for both targets** (criterion in `city-sim-core`; wasm + tauri
