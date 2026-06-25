@@ -132,6 +132,32 @@ export async function stop(): Promise<void> {
   await invoke('plugin:city-sim|stop', {})
 }
 
+// ── Map seed ──────────────────────────────────────────────────────────────────
+
+/**
+ * The three parameters that uniquely identify a city's starting conditions.
+ *
+ * Pass all three back to `start()` to recreate an empty city on the same map.
+ * Can be serialised to JSON for sharing: `JSON.stringify(seed)`.
+ */
+export interface MapSeed {
+  width: number
+  height: number
+  seed: number
+}
+
+/**
+ * Return the width, height, and seed that identify this city's starting map.
+ *
+ * The returned value can be passed back to `start()` to begin a fresh city
+ * on the same grid — useful for sharing a blank canvas or restarting a run.
+ */
+export async function getMapSeed(): Promise<MapSeed> {
+  return await invoke<MapSeed>('plugin:city-sim|get_map_seed', {})
+}
+
+// ── Snapshots ─────────────────────────────────────────────────────────────────
+
 /**
  * Serialise the current simulation state to a compact postcard snapshot.
  *
