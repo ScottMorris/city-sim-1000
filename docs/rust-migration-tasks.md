@@ -105,7 +105,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
 ## Phase 4 — Tauri v2 transport
 - [x] **P4-1 · `tauri-plugin-city-sim` backend** runs `city-sim-core` natively; commands + Channel events;
   tile buffer over a Channel. `deps:` P3-10.
-- [ ] **P4-2 · `TauriSimBridge`** + runtime detection (web→WASM, desktop→Tauri). `deps:`
+- [x] **P4-2 · `TauriSimBridge`** + runtime detection (web→WASM, desktop→Tauri). `deps:`
   P4-1. **DoD:** desktop build plays identically; same renderer, same fixtures pass.
 - [ ] **P4-3 · Cross-platform determinism check** — golden hash identical on x64 + ARM,
   web + native. `deps:` P4-2. **DoD:** CI matrix proves it (validates the fixed-point
