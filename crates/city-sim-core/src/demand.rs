@@ -1,3 +1,8 @@
+// demand.rs — residential, commercial, and industrial demand simulation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::buildings::{get_building_template, BuildingStatus};
 use crate::state::{DemandStats, GameState};
 use city_sim_protocol::tile_kind::TileKind;

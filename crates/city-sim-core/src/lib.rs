@@ -1,5 +1,7 @@
-// sim_core — pure-Rust city simulation engine.
-// Systems are ported incrementally (Phase 3); see docs/rust-migration-tasks.md.
+// lib.rs — pure-Rust city simulation engine (city-sim-core crate root).
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
 pub mod adjacency;
 pub mod buildings;
 pub mod commands;

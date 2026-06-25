@@ -1,6 +1,7 @@
-// sim_wasm — WASM cdylib wrapper.
-// Phase 2: stub SimHost that proves the Worker→WASM→main-thread tile pipe works.
-// Phase 3: replace stub with real sim_core logic.
+// lib.rs — WASM cdylib wrapper bridging sim_core to the browser Worker.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
 use city_sim_protocol::{
     commands::{CommandResult, SimCommand},
     tile_buffer::{TileBufferOffsets, BYTES_PER_TILE},

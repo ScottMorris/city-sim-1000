@@ -1,3 +1,8 @@
+// tile_kind.rs — canonical TileKind ↔ u8 mapping, single source of truth for the wire protocol.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /// Canonical TileKind ↔ u8 mapping — single source of truth for the wire protocol.
 ///
 /// The TS side (`src/game/protocol/tileKind.ts`) mirrors this table. If you add a

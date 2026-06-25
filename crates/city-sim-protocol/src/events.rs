@@ -1,3 +1,8 @@
+// events.rs — messages emitted by the simulation back to the UI.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /// Messages emitted by the simulation back to the UI.
 ///
 /// Mirrors the TS `SimulationAlert` and `SimEvent` union but expressed as a
