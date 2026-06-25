@@ -31,8 +31,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
 
       - name: Check Rust formatting
         id: rust_fmt
@@ -68,8 +66,6 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
 
       - name: Restore Rust cache
         uses: swatinem/rust-cache@v2
