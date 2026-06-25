@@ -28,10 +28,10 @@ jobs:
           targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        uses: taiki-e/install-action@wasm-pack
 
       - name: Build WASM
-        run: wasm-pack build crates/sim_wasm --target web --out-dir ../../app/src/wasm/sim_wasm
+        run: wasm-pack build crates/city-sim-wasm --target web --out-dir ../../app/src/wasm/sim_wasm
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
