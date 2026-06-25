@@ -1,5 +1,5 @@
 {
-  "name": "sim-tauri",
+  "name": "tauri-plugin-city-sim",
   "version": "0.1.0",
   "private": true,
   "description": "TypeScript bindings for the city-sim Tauri v2 plugin",

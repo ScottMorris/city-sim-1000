@@ -1,7 +1,7 @@
 [package]
-name        = "sim-tauri"
-description = "Tauri v2 plugin that runs sim_core natively for the desktop target"
-links       = "sim-tauri"
+name        = "tauri-plugin-city-sim"
+description = "Tauri v2 plugin that runs city-sim-core natively for the desktop target"
+links       = "tauri-plugin-city-sim"
 version.workspace    = true
 edition.workspace    = true
 authors.workspace    = true
@@ -14,8 +14,8 @@ crate-type = ["rlib"]
 tauri-plugin = { version = "2", features = ["build"] }
 
 [dependencies]
-sim_core     = { path = "../sim_core" }
-sim_protocol = { path = "../sim_protocol" }
+sim_core     = { path = "../city-sim-core",     package = "city-sim-core"     }
+sim_protocol = { path = "../city-sim-protocol", package = "city-sim-protocol" }
 serde        = { workspace = true }
 postcard     = { workspace = true }
 thiserror    = { workspace = true }

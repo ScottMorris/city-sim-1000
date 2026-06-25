@@ -21,7 +21,7 @@ Grants access to all city-sim simulation commands.
 <tr>
 <td>
 
-`sim-tauri:allow-apply-tool`
+`city-sim:allow-apply-tool`
 
 </td>
 <td>
@@ -34,7 +34,7 @@ Enables the apply_tool command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:deny-apply-tool`
+`city-sim:deny-apply-tool`
 
 </td>
 <td>
@@ -47,7 +47,7 @@ Denies the apply_tool command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:allow-set-speed`
+`city-sim:allow-set-speed`
 
 </td>
 <td>
@@ -60,7 +60,7 @@ Enables the set_speed command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:deny-set-speed`
+`city-sim:deny-set-speed`
 
 </td>
 <td>
@@ -73,7 +73,7 @@ Denies the set_speed command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:allow-start`
+`city-sim:allow-start`
 
 </td>
 <td>
@@ -86,7 +86,7 @@ Enables the start command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:deny-start`
+`city-sim:deny-start`
 
 </td>
 <td>
@@ -99,7 +99,7 @@ Denies the start command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:allow-stop`
+`city-sim:allow-stop`
 
 </td>
 <td>
@@ -112,7 +112,7 @@ Enables the stop command without any pre-configured scope.
 <tr>
 <td>
 
-`sim-tauri:deny-stop`
+`city-sim:deny-stop`
 
 </td>
 <td>

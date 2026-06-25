@@ -21,7 +21,7 @@ core/protocol/dual-transport investment is warranted:
 4. **Native Tauri v2** — run the sim core natively on desktop hardware, not just WASM.
 
 **Targets**: Web (PWA, WASM-in-Worker) **and** Desktop (Tauri v2, native Rust).
-**End state of the TS sim**: fully replaced. Rust `sim_core` becomes canonical; the TS
+**End state of the TS sim**: fully replaced. Rust `city-sim-core` becomes canonical; the TS
 sim is deleted once parity holds (kept only transiently as a dev oracle — see §7).
 
 ---
@@ -57,7 +57,7 @@ sim is deleted once parity holds (kept only transiently as a dev oracle — see 
 | `budgetHistory: { daily, monthly }` | Actually `{ daily, lastRecordedDay }`. |
 | Avoid `Record<string,number>` (hand-waved) | Budget breakdown really uses `powerByType`/`civicByType`/`zonesByType` maps. Decide: intern to a fixed enum table (preferred) vs `HashMap`. |
 | Narrative / services / serviceDistribution / bylawAnalytics | **Absent from docs entirely** — they exist and must be accounted for. Narrative stays UI-side, fed by the event channel. |
-| `TileKind` numeric mapping is canonical | `TileKind` is a **string enum** today. The u8 mapping must be defined once in `sim_protocol` and become the single source of truth. |
+| `TileKind` numeric mapping is canonical | `TileKind` is a **string enum** today. The u8 mapping must be defined once in `city-sim-protocol` and become the single source of truth. |
 | "JSON protocol phase 1, binary later" | Greenfield the Rust side **binary-first** (postcard). Keep a JSON debug encoding behind a flag for inspection. |
 | Golden hash proves TS↔Rust bit-parity | **Trap.** The TS sim is float-heavy; bit-exact TS↔Rust parity would require first making TS bit-deterministic. Use TS as a *behavioural oracle within tolerance*, and reserve exact golden-hash for **Rust-to-Rust** replay/cross-platform determinism. See §6. |
 | Big-bang: all systems in core, WASM at week 5 | **Vertical-slice-first** instead — prove the worker/bridge/tile-mirror pipe end-to-end with a stub sim *before* porting systems. See §8. |
@@ -87,7 +87,7 @@ serialized; the tile grid is bulk binary** (shared memory on web, channel on des
 This unifies both transports behind one renderer and is a better articulation than the
 docs' per-tick JSON.
 
-Tile layout (SoA-friendly, one source of truth in `sim_protocol`):
+Tile layout (SoA-friendly, one source of truth in `city-sim-protocol`):
 `kind:u8 · elevation:u8 · flags:u8 (powered/watered/abandoned/underlays/overlay) ·
 happiness:u8 (fixed-point) · building_id:u32 · underground:u8`.
 
@@ -173,8 +173,8 @@ crates/                     (all stay in this repo)
   (benches live as `#[bench]`/criterion in sim_core initially, not a 6th crate.)
 ```
 
-`sim_core` stays free of serde/wasm/tauri so it compiles tiny and tests fast; only
-`sim_protocol` and the binding crates touch serialization.
+`city-sim-core` stays free of serde/wasm/tauri so it compiles tiny and tests fast; only
+`city-sim-protocol` and the binding crates touch serialization.
 
 ### Tauri plugin catalogue (Phase 4)
 
@@ -242,13 +242,13 @@ Define golden scenarios (seed + command log) and record tolerance-banded fixture
 Deliverable: TS sim is run-to-run deterministic; regression harness exists.
 
 **Phase 1 — Monorepo + protocol + the bridge seam (no real sim yet).**
-Scaffold the 4 crates. Define `sim_protocol` (SimCommand, FromSim, TileKind↔u8, tile
+Scaffold the 4 crates. Define `city-sim-protocol` (SimCommand, FromSim, TileKind↔u8, tile
 buffer layout). Introduce `SimBridge` in TS and route the *existing* TS sim through
 `LocalSimBridge` so `main.ts` no longer touches `Simulation` directly. Deliverable: app
 runs exactly as today, but behind the bridge.
 
 **Phase 2 — End-to-end pipe with a STUB Rust sim.**
-`sim_wasm` + Worker + `SharedArrayBuffer` tile mirror; a trivial `step()` that just
+`city-sim-wasm` + Worker + `SharedArrayBuffer` tile mirror; a trivial `step()` that just
 flips a few tiles. Prove: Init → tick → renderer shows tiles from the mirror → one
 command round-trips → events arrive. **This de-risks the hardest integration before any
 system logic.** Verify COOP/COEP on GitHub Pages here; wire the `postMessage` fallback.
@@ -256,11 +256,11 @@ system logic.** Verify COOP/COEP on GitHub Pages here; wire the `postMessage` fa
 **Phase 3 — Port systems into `step()`, oracle-checked after each.**
 Order by dependency & risk: RNG → tiles/state accessors → power BFS → water (real model,
 not the stub) → zone growth (RNG) → building state machine → demand → economy →
-education → services. Move `applyTool` rules into `sim_core` command validation. Run the
+education → services. Move `applyTool` rules into `city-sim-core` command validation. Run the
 Phase-0 regression fixtures after each system.
 
 **Phase 4 — Tauri v2 transport.**
-`sim_tauri` backend; `TauriSimBridge` over invoke + Channel; runtime detection picks the
+`tauri-plugin-city-sim` backend; `TauriSimBridge` over invoke + Channel; runtime detection picks the
 bridge. Same core, same renderer, tile buffer over the channel instead of shared memory.
 
 **Phase 5 — Artifacts & polish.**
@@ -282,7 +282,7 @@ both targets, docs/manual sync.
   `Vec<(KindId, i32)>` sorted by id. No `HashMap`. ✅
 - **Zone density** — near-term feature; 2-bit field in tile flags, orthogonal to
   `TileKind`. Implement in Rust directly, not in the TS sim. ✅
-- **Utility network abstraction** — power and water share one generic BFS in `sim_core`,
+- **Utility network abstraction** — power and water share one generic BFS in `city-sim-core`,
   parameterised by `UtilityKind`. Future resources (sewage etc.) are new variants. ✅
 
 ### Still open
