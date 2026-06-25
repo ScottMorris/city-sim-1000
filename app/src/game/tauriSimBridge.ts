@@ -165,7 +165,8 @@ export class TauriSimBridge implements SimBridge {
     if (s.tiles.length !== n) {
       s.width  = event.width;
       s.height = event.height;
-      s.tiles  = new Array<Tile>(n).fill({ kind: s.tiles[0]?.kind ?? 'land' } as Tile);
+      const fallback = s.tiles[0]?.kind ?? 'land';
+      s.tiles = Array.from({ length: n }, () => ({ kind: fallback } as Tile));
     }
     for (let i = 0; i < n; i++) {
       const kind = tileKindFromU8(event.tiles[i]);
