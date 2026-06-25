@@ -42,10 +42,10 @@ current codebase. No Rust yet. This is the safety net the whole migration leans 
 *Goal: app runs exactly as today, but the UI talks to the sim through `SimBridge`, and
 the Rust workspace exists and compiles.*
 
-- [x] **P1-1 · Scaffold Cargo workspace** (`sim_core`, `sim_protocol`, `sim_wasm`,
-  `sim_tauri`). Benches live inside `sim_core`, not a 5th crate. `deps:` none.
+- [x] **P1-1 · Scaffold Cargo workspace** (`city-sim-core`, `city-sim-protocol`, `city-sim-wasm`,
+  `tauri-plugin-city-sim`). Benches live inside `city-sim-core`, not a 5th crate. `deps:` none.
   **DoD:** `cargo check --workspace` green; `.gitignore` covers `/target`, wasm output.
-- [x] **P1-2 · `sim_protocol` types.** `SimCommand`, `FromSim`, `SystemStats`,
+- [x] **P1-2 · `city-sim-protocol` types.** `SimCommand`, `FromSim`, `SystemStats`,
   `SimEvent`, **`TileKind` ↔ u8 mapping (single source of truth)**, and the **tile buffer
   layout** (SoA field offsets). serde + postcard. `deps:` P1-1.
   **DoD:** round-trip serialize test; the u8↔TileKind table has an exhaustive test.
@@ -63,7 +63,7 @@ the Rust workspace exists and compiles.*
 *Goal: de-risk the hardest integration — Worker + shared memory + tile mirror — before
 porting any real logic. The Rust `step()` here is trivial (flip a few tiles).*
 
-- [x] **P2-1 · `sim_wasm` cdylib + `SimHost`** with a stub `step()` and a tile buffer it
+- [x] **P2-1 · `city-sim-wasm` cdylib + `SimHost`** with a stub `step()` and a tile buffer it
   writes into. `deps:` P1-2. **DoD:** `wasm-pack build` produces a loadable module. ✓
 - [x] **P2-2 · Worker host + tile mirror.** Worker owns the WASM sim; tile buffer sent to
   main thread via transferable `ArrayBuffer`. `deps:` P2-1.
@@ -77,11 +77,11 @@ porting any real logic. The Rust `step()` here is trivial (flip a few tiles).*
   **DoD:** `crossOriginIsolated` is true on dev server; upgrade to SAB is a Phase 3 task. ✓
 
 ## Phase 3 — Port systems into `step()` (oracle-checked after each)
-*Goal: fill the real simulation into `sim_core`. After EACH task, run the Phase-0
+*Goal: fill the real simulation into `city-sim-core`. After EACH task, run the Phase-0
 regression fixtures (now driving the Rust sim via the bridge) — they must stay in band.
 Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergence.*
 
-- [x] **P3-1 · `sim_core` state + accessors + RNG** (`GameState`, `Tile` SoA, tile(x,y),
+- [x] **P3-1 · `city-sim-core` state + accessors + RNG** (`GameState`, `Tile` SoA, tile(x,y),
   index↔coords, derived per-system RNG). `deps:` P2-3. **DoD:** Rust RNG matches the
   P0-1 reference vectors; state unit tests pass.
 - [x] **P3-2 · Power network (BFS).** `deps:` P3-1.
@@ -95,7 +95,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   enum table rather than `HashMap` — see plan §3). `deps:` P3-6.
 - [x] **P3-8 · Education + services + serviceDistribution.** `deps:` P3-7.
 - [x] **P3-9 · Command validation = port `applyTool` rules** (cost, road access,
-  overwrite/clear, transport-vs-zone semantics) into `sim_core`; commands return
+  overwrite/clear, transport-vs-zone semantics) into `city-sim-core`; commands return
   success/error per protocol. `deps:` P3-5 (needs building placement).
   **DoD for P3-x (each):** the system's own unit tests pass **and** all Phase-0
   regression fixtures stay in band **and** the Rust golden hash is stable run-to-run.
@@ -103,7 +103,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   golden hash committed (`0x3d128c538d40e908`, seed=42, 8×8 city, 100 ticks). `deps:` P3-1..P3-9.
 
 ## Phase 4 — Tauri v2 transport
-- [ ] **P4-1 · `sim_tauri` backend** runs `sim_core` natively; commands + Channel events;
+- [x] **P4-1 · `tauri-plugin-city-sim` backend** runs `city-sim-core` natively; commands + Channel events;
   tile buffer over a Channel. `deps:` P3-10.
 - [ ] **P4-2 · `TauriSimBridge`** + runtime detection (web→WASM, desktop→Tauri). `deps:`
   P4-1. **DoD:** desktop build plays identically; same renderer, same fixtures pass.
@@ -123,7 +123,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   Rust core; docs/manual/SPEC updated.
 - [ ] **P5-5 · (Optional) Undo via delta ring buffer** (~50 s / ~6 MB). Only if an undo
   feature is wanted. `deps:` P3-10.
-- [ ] **P5-6 · Benchmarks + CI for both targets** (criterion in `sim_core`; wasm + tauri
+- [ ] **P5-6 · Benchmarks + CI for both targets** (criterion in `city-sim-core`; wasm + tauri
   build workflows). `deps:` P4-2.
 
 ---
