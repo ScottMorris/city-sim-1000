@@ -2,15 +2,16 @@
   "name": "city-sim-1000-workspace",
   "private": true,
   "scripts": {
-    "dev":                  "npm --prefix app run dev",
-    "build":                "npm --prefix app run build",
-    "preview":              "npm --prefix app run preview",
-    "lint":                 "npm --prefix app run lint",
-    "test":                 "npm --prefix app run test",
-    "build:favicon":        "npm --prefix app run build:favicon",
-    "build:radio-playlist": "npm --prefix app run build:radio-playlist"
+    "dev":                  "cd app && bun run dev",
+    "build":                "cd app && bun run build",
+    "preview":              "cd app && bun run preview",
+    "lint":                 "cd app && bun run lint",
+    "test":                 "cd app && bun run test",
+    "build:favicon":        "cd app && bun run build:favicon",
+    "build:radio-playlist": "cd app && bun run build:radio-playlist"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "bun": ">=1.2"
   }
 }
