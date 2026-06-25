@@ -1,3 +1,8 @@
+// commands.rs — player tool application; maps SimCommand to tile mutations.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::buildings::{get_building_template, BuildingInstance};
 use crate::state::{
     GameState, FLAG_ABANDONED, FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY,

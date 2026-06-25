@@ -1,3 +1,8 @@
+// commands.rs — Tauri plugin command handlers and simulation thread management.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 

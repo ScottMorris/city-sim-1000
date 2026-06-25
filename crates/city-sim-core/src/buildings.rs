@@ -1,3 +1,8 @@
+// buildings.rs — building templates, instances, and per-tick status updates.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::adjacency::{tile_has_power, tile_has_water};
 use crate::state::{GameState, ServiceKind, FLAG_ABANDONED};
 use city_sim_protocol::tile_kind::TileKind;

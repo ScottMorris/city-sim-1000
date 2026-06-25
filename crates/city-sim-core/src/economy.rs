@@ -1,3 +1,8 @@
+// economy.rs — budget tracking and per-tick revenue/expense ledger.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::buildings::get_building_template;
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
 use city_sim_protocol::tile_kind::TileKind;

@@ -1,3 +1,8 @@
+// education.rs — school coverage and zone education stat updates.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::buildings::{get_building_template, BuildingStatus};
 use crate::state::{EducationStats, GameState, ServiceKind};
 use city_sim_protocol::tile_kind::TileKind;
@@ -181,7 +186,7 @@ fn reachable_zone_candidates(
     }
 
     let mut out: Vec<(usize, u32)> = reachable.into_iter().collect();
-    out.sort_by_key(|&(_, d)| d);
+    out.sort_by_key(|&(idx, d)| (d, idx));
     out
 }
 

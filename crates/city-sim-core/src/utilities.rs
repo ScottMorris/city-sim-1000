@@ -1,3 +1,8 @@
+// utilities.rs — power and water network propagation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;

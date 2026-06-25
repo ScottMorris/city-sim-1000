@@ -1,4 +1,7 @@
-// sim_tauri — Tauri v2 plugin that runs sim_core natively for the desktop target.
+// lib.rs — Tauri v2 plugin that runs sim_core natively for the desktop target.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
 //
 // Plugin name: "city-sim"
 // JS invoke path: `invoke('plugin:city-sim|<command>', args)`

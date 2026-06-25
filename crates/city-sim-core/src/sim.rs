@@ -1,3 +1,8 @@
+// sim.rs — fixed-timestep simulation tick loop and golden hash determinism tests.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::buildings::{
     apply_building_decay, get_building_template, update_building_states, BuildingStatus,
     DecayConfig,
@@ -72,9 +77,10 @@ impl Simulation {
 
         // 3. Zone growth (delay_ticks ≈ ticksPerSecond * 2)
         let delay_ticks = (self.ticks_per_second * 2).max(1);
-        let rng = &mut self.state.rng.clone();
-        self.zone_growth.tick(&mut self.state, rng, delay_ticks);
-        self.state.rng = rng.clone();
+        let mut rng = self.state.rng.clone();
+        self.zone_growth
+            .tick(&mut self.state, &mut rng, delay_ticks);
+        self.state.rng = rng;
 
         // 4. Building states (power/water coverage per building footprint)
         update_building_states(&mut self.state, self.water_enabled);
@@ -207,7 +213,7 @@ mod tests {
     /// If this test fails, a determinism regression has been introduced.
     /// To re-commit after intentional sim changes, run:
     ///   REGEN=1 cargo test -p sim_core golden_hash 2>&1 | grep "new hash"
-    const GOLDEN_HASH_SEED42_4X4_100TICKS: u64 = 0x3d128c538d40e908;
+    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0x3d128c538d40e908;
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;
@@ -261,14 +267,14 @@ mod tests {
             return;
         }
 
-        if GOLDEN_HASH_SEED42_4X4_100TICKS == 0 {
+        if GOLDEN_HASH_SEED42_8X8_100TICKS == 0 {
             println!("golden hash (commit this): 0x{hash:016x}");
             // Bootstrap run: don't fail, just print. Commit GOLDEN_HASH_* after reading.
             return;
         }
 
         assert_eq!(
-            hash, GOLDEN_HASH_SEED42_4X4_100TICKS,
+            hash, GOLDEN_HASH_SEED42_8X8_100TICKS,
             "golden hash mismatch — run with REGEN=1 to update after intentional sim change"
         );
     }
