@@ -112,7 +112,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   decision).
 
 ## Phase 5 — Artifacts, cutover, polish
-- [ ] **P5-1 · Snapshot save/load** (postcard) + one-time JSON→new import shim. `deps:`
+- [x] **P5-1 · Snapshot save/load** (postcard) + one-time JSON→new import shim. `deps:`
   P3-10.
 - [ ] **P5-2 · Command-log replays** (record + play back; the real shareable artifact).
   `deps:` P5-1.
