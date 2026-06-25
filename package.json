@@ -8,6 +8,7 @@
     "preview":              "cd app && bun run preview",
     "lint":                 "cd app && bun run lint",
     "test":                 "cd app && bun run test",
+    "test:ci":              "cd app && bun run test:ci",
     "build:favicon":        "cd app && bun run build:favicon",
     "build:radio-playlist": "cd app && bun run build:radio-playlist",
     "build:wasm":           "wasm-pack build crates/city-sim-wasm --target web --out-dir ../../app/src/wasm/sim_wasm",

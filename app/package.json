@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "test": "vitest run --pool=threads --poolOptions.threads.singleThread=true",
+    "test:ci": "vitest run --pool=threads --poolOptions.threads.singleThread=true --reporter=verbose --reporter=junit --outputFile.junit=test-results/junit.xml",
     "build:favicon": "node scripts/generate-favicon.mjs",
     "build:radio-playlist": "tsx scripts/build-radio-playlist.ts --extract-embedded-covers"
   },
