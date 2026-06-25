@@ -51,9 +51,23 @@ pub enum SimCmd {
     SetSpeed(f32),
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
+    GetMapSeed(mpsc::SyncSender<MapSeed>),
     GetCommandLog(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadCommandLog(Box<CommandLog>),
     Stop,
+}
+
+// ── Map seed ──────────────────────────────────────────────────────────────────
+
+/// The three parameters that uniquely identify a city's starting conditions.
+///
+/// Pass all three back to `start()` to recreate an empty city on the same map.
+/// Serialises to `{ "width": N, "height": N, "seed": N }` via Tauri IPC.
+#[derive(Clone, Serialize)]
+pub struct MapSeed {
+    pub width: u32,
+    pub height: u32,
+    pub seed: u32,
 }
 
 // ── Managed plugin state ──────────────────────────────────────────────────────
@@ -169,6 +183,13 @@ pub fn start(
                         log = CommandLog::new(gs.width, gs.height, gs.seed);
                         sim.load_state(*gs);
                     }
+                    Ok(SimCmd::GetMapSeed(tx)) => {
+                        let _ = tx.send(MapSeed {
+                            width: sim.state.width,
+                            height: sim.state.height,
+                            seed: sim.state.seed,
+                        });
+                    }
                     Ok(SimCmd::GetCommandLog(tx)) => {
                         let result = log.to_bytes().map_err(|e| e.to_string());
                         let _ = tx.send(result);
@@ -249,6 +270,24 @@ pub fn get_snapshot(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
 pub fn load_snapshot(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
     let game_state = snapshot::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
     state.send(SimCmd::LoadSnapshot(Box::new(game_state)))
+}
+
+/// Return the width, height, and seed that identify this city's starting map.
+///
+/// The returned `MapSeed` can be passed back to `start()` to create a fresh
+/// city on the same grid with the same RNG seed — useful for sharing a blank
+/// canvas or starting a new run on a known map.
+#[tauri::command]
+pub fn get_map_seed(state: State<'_, SimState>) -> Result<MapSeed, Error> {
+    let (tx, rx) = mpsc::sync_channel(0);
+    state.send(SimCmd::GetMapSeed(tx))?;
+    // Reuses SnapshotTimeout — both paths mean "sim thread did not respond
+    // within 2 s"; the message is slightly imprecise but acceptable.
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })
 }
 
 /// Return the command log for the current session as raw bytes.

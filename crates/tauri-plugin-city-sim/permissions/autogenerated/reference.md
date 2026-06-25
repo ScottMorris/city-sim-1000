@@ -47,6 +47,136 @@ Denies the apply_tool command without any pre-configured scope.
 <tr>
 <td>
 
+`city-sim:allow-get-command-log`
+
+</td>
+<td>
+
+Enables the get_command_log command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-get-command-log`
+
+</td>
+<td>
+
+Denies the get_command_log command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-get-map-seed`
+
+</td>
+<td>
+
+Enables the get_map_seed command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-get-map-seed`
+
+</td>
+<td>
+
+Denies the get_map_seed command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-get-snapshot`
+
+</td>
+<td>
+
+Enables the get_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-get-snapshot`
+
+</td>
+<td>
+
+Denies the get_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-load-command-log`
+
+</td>
+<td>
+
+Enables the load_command_log command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-load-command-log`
+
+</td>
+<td>
+
+Denies the load_command_log command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-load-snapshot`
+
+</td>
+<td>
+
+Enables the load_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-load-snapshot`
+
+</td>
+<td>
+
+Denies the load_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `city-sim:allow-set-speed`
 
 </td>

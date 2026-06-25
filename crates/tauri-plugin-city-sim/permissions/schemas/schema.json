@@ -307,6 +307,66 @@
           "markdownDescription": "Denies the apply_tool command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_command_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-command-log",
+          "markdownDescription": "Enables the get_command_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_command_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-command-log",
+          "markdownDescription": "Denies the get_command_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_map_seed command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-map-seed",
+          "markdownDescription": "Enables the get_map_seed command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_map_seed command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-map-seed",
+          "markdownDescription": "Denies the get_map_seed command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the get_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-snapshot",
+          "markdownDescription": "Enables the get_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-snapshot",
+          "markdownDescription": "Denies the get_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the load_command_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-load-command-log",
+          "markdownDescription": "Enables the load_command_log command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the load_command_log command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-load-command-log",
+          "markdownDescription": "Denies the load_command_log command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the load_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-load-snapshot",
+          "markdownDescription": "Enables the load_snapshot command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the load_snapshot command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-load-snapshot",
+          "markdownDescription": "Denies the load_snapshot command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_speed command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-speed",
