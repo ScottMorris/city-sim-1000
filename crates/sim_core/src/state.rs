@@ -28,25 +28,32 @@ pub enum ZoneDensity { Low = 0, Medium = 1, High = 2 }
 /// `happiness` is stored as 0–100 (u8) to match the SoA tile buffer field.
 /// `building_id` is `None` for unbuildable/empty tiles; `Some(id)` otherwise.
 /// `underground` holds a buried `TileKind` (e.g. `WaterPipe`) if present.
+/// `power_plant_mw` is > 0 for power plant tiles; used as both source flag and
+///   output tracker in the power BFS (in MW, deduped by building_id at roll-up).
+/// `water_output` is > 0 for active water source tiles (pumps/towers) in the same fashion.
 #[derive(Debug, Clone)]
 pub struct Tile {
-    pub kind:        TileKind,
-    pub flags:       u8,
-    pub happiness:   u8,
-    pub elevation:   u8,
-    pub building_id: Option<u16>,
-    pub underground: Option<TileKind>,
+    pub kind:            TileKind,
+    pub flags:           u8,
+    pub happiness:       u8,
+    pub elevation:       u8,
+    pub building_id:     Option<u16>,
+    pub underground:     Option<TileKind>,
+    pub power_plant_mw:  i32,
+    pub water_output:    i32,
 }
 
 impl Tile {
     pub fn land() -> Self {
         Self {
-            kind:        TileKind::Land,
-            flags:       0,
-            happiness:   100,
-            elevation:   0,
-            building_id: None,
-            underground: None,
+            kind:           TileKind::Land,
+            flags:          0,
+            happiness:      100,
+            elevation:      0,
+            building_id:    None,
+            underground:    None,
+            power_plant_mw: 0,
+            water_output:   0,
         }
     }
 
@@ -82,6 +89,37 @@ impl Tile {
 }
 
 // ---------------------------------------------------------------------------
+// UtilityStats
+// ---------------------------------------------------------------------------
+
+/// Mirrors the TS `UtilityStats` interface in `gameState.ts`.
+#[derive(Debug, Clone)]
+pub struct UtilityStats {
+    /// Net power balance (produced − used), in MW.
+    pub power:          i32,
+    /// Net water balance (produced − used), in kL/day.
+    pub water:          i32,
+    pub power_produced: i32,
+    pub power_used:     i32,
+    pub water_produced: i32,
+    pub water_used:     i32,
+}
+
+impl UtilityStats {
+    /// Matches `createInitialState()` defaults in the TS game.
+    pub fn initial() -> Self {
+        Self {
+            power:          10,
+            water:          10,
+            power_produced: 0,
+            power_used:     0,
+            water_produced: 0,
+            water_used:     0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GameState (minimal for P3-1; expanded per-task in later sub-phases)
 // ---------------------------------------------------------------------------
 
@@ -102,6 +140,7 @@ pub struct GameState {
     pub tick:       u64,
     pub population: u32,
     pub jobs:       u32,
+    pub utilities:  UtilityStats,
 }
 
 impl GameState {
@@ -122,6 +161,7 @@ impl GameState {
             tick: 0,
             population: 12,
             jobs: 4,
+            utilities: UtilityStats::initial(),
         }
     }
 
