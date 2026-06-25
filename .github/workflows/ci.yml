@@ -7,7 +7,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - rust-migration/phase-1-bridge-seam
   workflow_dispatch:
 
 concurrency:
@@ -143,6 +143,44 @@ jobs:
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+  rust-determinism:
+    name: Rust determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run golden hash determinism test
+        id: rust_determinism
+        run: cargo nextest run --package city-sim-core -E 'test(golden_hash)' --profile ci
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Rust determinism (${{ matrix.os }})"
+            echo
+            echo "- Runner: \`${{ matrix.os }}\`"
+            echo "- Result: \`${{ steps.rust_determinism.outcome }}\`"
+            echo "- Command: \`cargo nextest run --package city-sim-core -E 'test(golden_hash)' --profile ci\`"
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   ts-typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-24.04
@@ -224,6 +262,7 @@ jobs:
       - rust-fmt
       - rust-clippy
       - rust-test
+      - rust-determinism
       - ts-typecheck
       - ts-test
     runs-on: ubuntu-latest
@@ -240,6 +279,7 @@ jobs:
             const rustFmt    = '${{ needs.rust-fmt.result }}';
             const rustCliffy = '${{ needs.rust-clippy.result }}';
             const rustTests  = '${{ needs.rust-test.result }}';
+            const rustDeterm = '${{ needs.rust-determinism.result }}';
             const tsCheck    = '${{ needs.ts-typecheck.result }}';
             const tsTests    = '${{ needs.ts-test.result }}';
 
@@ -250,6 +290,7 @@ jobs:
               `- ${label(rustFmt)} Rust format: \`${rustFmt}\``,
               `- ${label(rustCliffy)} Rust clippy: \`${rustCliffy}\``,
               `- ${label(rustTests)} Rust tests: \`${rustTests}\``,
+              `- ${label(rustDeterm)} Rust determinism (x64 + arm64): \`${rustDeterm}\``,
               `- ${label(tsCheck)} TypeScript typecheck: \`${tsCheck}\``,
               `- ${label(tsTests)} TypeScript tests: \`${tsTests}\``,
             ].join('\n');
