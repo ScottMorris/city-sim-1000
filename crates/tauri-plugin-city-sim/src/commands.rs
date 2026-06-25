@@ -1,10 +1,10 @@
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
 use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::sim::Simulation;
 use city_sim_protocol::commands::Tool;
+use serde::Serialize;
 use tauri::{ipc::Channel, State};
 
 use crate::error::Error;
@@ -17,22 +17,22 @@ use crate::error::Error;
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TickEvent {
-    pub tick:                 u64,
-    pub day:                  u32,
-    pub population:           u32,
-    pub jobs:                 u32,
-    pub money:                i64,
-    pub power:                i32,
-    pub water:                i32,
-    pub power_produced:       i32,
-    pub water_produced:       i32,
-    pub demand_residential:   f32,
-    pub demand_commercial:    f32,
-    pub demand_industrial:    f32,
-    pub width:                u32,
-    pub height:               u32,
+    pub tick: u64,
+    pub day: u32,
+    pub population: u32,
+    pub jobs: u32,
+    pub money: i64,
+    pub power: i32,
+    pub water: i32,
+    pub power_produced: i32,
+    pub water_produced: i32,
+    pub demand_residential: f32,
+    pub demand_commercial: f32,
+    pub demand_industrial: f32,
+    pub width: u32,
+    pub height: u32,
     /// Tile kinds, one byte per tile, row-major. Values match `TileKind` u8 discriminants.
-    pub tiles:                Vec<u8>,
+    pub tiles: Vec<u8>,
 }
 
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
@@ -51,7 +51,9 @@ pub struct SimState {
 
 impl Default for SimState {
     fn default() -> Self {
-        Self { sender: Mutex::new(None) }
+        Self {
+            sender: Mutex::new(None),
+        }
     }
 }
 
@@ -60,7 +62,7 @@ impl SimState {
         let guard = self.sender.lock().unwrap();
         match guard.as_ref() {
             Some(tx) => tx.try_send(cmd).map_err(|e| match e {
-                mpsc::TrySendError::Full(_)         => Error::ChannelFull,
+                mpsc::TrySendError::Full(_) => Error::ChannelFull,
                 mpsc::TrySendError::Disconnected(_) => Error::ChannelClosed,
             }),
             None => Err(Error::NotStarted),
@@ -74,20 +76,20 @@ fn build_tick_event(sim: &Simulation) -> TickEvent {
     let s = &sim.state;
     let tiles: Vec<u8> = s.tiles.iter().map(|t| t.kind as u8).collect();
     TickEvent {
-        tick:               s.tick,
-        day:                s.day,
-        population:         s.population,
-        jobs:               s.jobs,
-        money:              s.money,
-        power:              s.utilities.power,
-        water:              s.utilities.water,
-        power_produced:     s.utilities.power_produced,
-        water_produced:     s.utilities.water_produced,
+        tick: s.tick,
+        day: s.day,
+        population: s.population,
+        jobs: s.jobs,
+        money: s.money,
+        power: s.utilities.power,
+        water: s.utilities.water,
+        power_produced: s.utilities.power_produced,
+        water_produced: s.utilities.water_produced,
         demand_residential: s.demand.residential,
-        demand_commercial:  s.demand.commercial,
-        demand_industrial:  s.demand.industrial,
-        width:              s.width,
-        height:             s.height,
+        demand_commercial: s.demand.commercial,
+        demand_industrial: s.demand.industrial,
+        width: s.width,
+        height: s.height,
         tiles,
     }
 }
@@ -126,8 +128,8 @@ pub fn start(
 
     std::thread::spawn(move || {
         let mut sim = Simulation::new(width, height, seed);
-        let dt          = 1.0_f64 / 20.0;
-        let frame       = Duration::from_micros(50_000); // 50 ms ≈ 20 Hz
+        let dt = 1.0_f64 / 20.0;
+        let frame = Duration::from_micros(50_000); // 50 ms ≈ 20 Hz
 
         loop {
             let t0 = Instant::now();
@@ -135,10 +137,14 @@ pub fn start(
             // Drain all pending commands before ticking
             loop {
                 match rx.try_recv() {
-                    Ok(SimCmd::ApplyTool(tool, x, y)) => { sim_apply_tool(&mut sim.state, tool, x, y); }
-                    Ok(SimCmd::SetSpeed(m))            => { sim.set_speed(m); }
-                    Ok(SimCmd::Stop)                   => return,
-                    Err(_)                             => break,
+                    Ok(SimCmd::ApplyTool(tool, x, y)) => {
+                        sim_apply_tool(&mut sim.state, tool, x, y);
+                    }
+                    Ok(SimCmd::SetSpeed(m)) => {
+                        sim.set_speed(m);
+                    }
+                    Ok(SimCmd::Stop) => return,
+                    Err(_) => break,
                 }
             }
 

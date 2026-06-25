@@ -1,6 +1,11 @@
-use crate::buildings::{apply_building_decay, get_building_template, update_building_states, BuildingStatus, DecayConfig};
+use crate::buildings::{
+    apply_building_decay, get_building_template, update_building_states, BuildingStatus,
+    DecayConfig,
+};
 use crate::demand::{compute_city_demand, count_city_capacity};
-use crate::economy::{apply_money_tick, apply_population_growth, compute_daily_budget, record_daily_budget};
+use crate::economy::{
+    apply_money_tick, apply_population_growth, compute_daily_budget, record_daily_budget,
+};
 use crate::education::recompute_education;
 use crate::state::GameState;
 use crate::utilities::{recompute_utility_network, UtilityKind};
@@ -15,9 +20,9 @@ use crate::zones::ZoneGrowthSim;
 /// Owns the `GameState` and drives all simulation systems in the correct order,
 /// mirroring `Simulation.tick()` in `app/src/game/simulation.ts`.
 pub struct Simulation {
-    pub state:     GameState,
-    zone_growth:   ZoneGrowthSim,
-    decay_config:  DecayConfig,
+    pub state: GameState,
+    zone_growth: ZoneGrowthSim,
+    decay_config: DecayConfig,
     water_enabled: bool,
     /// Ticks per real second at 1× speed; matches TS `ticksPerSecond = 20`.
     ticks_per_second: u32,
@@ -29,12 +34,12 @@ impl Simulation {
     /// Create a new simulation on a blank all-Land grid.
     pub fn new(width: u32, height: u32, seed: u32) -> Self {
         Self {
-            state:            GameState::new(width, height, seed),
-            zone_growth:      ZoneGrowthSim::new(),
-            decay_config:     DecayConfig::default(),
-            water_enabled:    true,
+            state: GameState::new(width, height, seed),
+            zone_growth: ZoneGrowthSim::new(),
+            decay_config: DecayConfig::default(),
+            water_enabled: true,
             ticks_per_second: 20,
-            speed:            1.0,
+            speed: 1.0,
         }
     }
 
@@ -120,17 +125,23 @@ impl Simulation {
         let mut power_used: f32 = 0.0;
         let mut water_used: f32 = 0.0;
         for b in &self.state.buildings {
-            if b.status != BuildingStatus::Active { continue; }
-            let Some(tmpl) = get_building_template(b.kind) else { continue };
+            if b.status != BuildingStatus::Active {
+                continue;
+            }
+            let Some(tmpl) = get_building_template(b.kind) else {
+                continue;
+            };
             power_used += tmpl.power_use;
-            if self.water_enabled { water_used += tmpl.water_use; }
+            if self.water_enabled {
+                water_used += tmpl.water_use;
+            }
         }
         let pu = power_used.round() as i32;
         let wu = water_used.round() as i32;
-        self.state.utilities.power_used  = pu;
-        self.state.utilities.water_used  = wu;
-        self.state.utilities.power       = self.state.utilities.power_produced - pu;
-        self.state.utilities.water       = if self.water_enabled {
+        self.state.utilities.power_used = pu;
+        self.state.utilities.water_used = wu;
+        self.state.utilities.power = self.state.utilities.power_produced - pu;
+        self.state.utilities.water = if self.water_enabled {
             self.state.utilities.water_produced - wu
         } else {
             1_000_000
@@ -149,7 +160,9 @@ impl Simulation {
 pub fn state_hash(state: &GameState) -> u64 {
     fn fnv(data: &[u8]) -> u64 {
         let mut h: u64 = 0xcbf29ce484222325;
-        for &b in data { h = h.wrapping_mul(0x100000000001b3) ^ b as u64; }
+        for &b in data {
+            h = h.wrapping_mul(0x100000000001b3) ^ b as u64;
+        }
         h
     }
 
@@ -166,13 +179,17 @@ pub fn state_hash(state: &GameState) -> u64 {
     let mut kind_counts = [0u32; 64];
     for tile in &state.tiles {
         let k = tile.kind as u8 as usize;
-        if k < kind_counts.len() { kind_counts[k] += 1; }
+        if k < kind_counts.len() {
+            kind_counts[k] += 1;
+        }
     }
-    for c in kind_counts { buf.extend_from_slice(&c.to_le_bytes()); }
+    for c in kind_counts {
+        buf.extend_from_slice(&c.to_le_bytes());
+    }
     // Demand (quantised to i32 for stability)
     buf.extend_from_slice(&(state.demand.residential as i32).to_le_bytes());
-    buf.extend_from_slice(&(state.demand.commercial  as i32).to_le_bytes());
-    buf.extend_from_slice(&(state.demand.industrial  as i32).to_le_bytes());
+    buf.extend_from_slice(&(state.demand.commercial as i32).to_le_bytes());
+    buf.extend_from_slice(&(state.demand.industrial as i32).to_le_bytes());
 
     fnv(&buf)
 }
@@ -193,18 +210,23 @@ mod tests {
     const GOLDEN_HASH_SEED42_4X4_100TICKS: u64 = 0x3d128c538d40e908;
 
     fn make_city_sim(seed: u32) -> Simulation {
-        use city_sim_protocol::commands::Tool;
         use crate::commands::apply_tool;
+        use city_sim_protocol::commands::Tool;
         let mut sim = Simulation::new(8, 8, seed);
         // Place roads + zones so zone growth fires and RNG is exercised
-        apply_tool(&mut sim.state, Tool::Road, 3, 0); apply_tool(&mut sim.state, Tool::Road, 3, 1);
-        apply_tool(&mut sim.state, Tool::Road, 3, 2); apply_tool(&mut sim.state, Tool::Road, 3, 3);
-        apply_tool(&mut sim.state, Tool::Residential, 0, 0); apply_tool(&mut sim.state, Tool::Residential, 1, 0);
-        apply_tool(&mut sim.state, Tool::Residential, 0, 1); apply_tool(&mut sim.state, Tool::Residential, 1, 1);
-        apply_tool(&mut sim.state, Tool::Commercial,  0, 2); apply_tool(&mut sim.state, Tool::Industrial,  0, 3);
+        apply_tool(&mut sim.state, Tool::Road, 3, 0);
+        apply_tool(&mut sim.state, Tool::Road, 3, 1);
+        apply_tool(&mut sim.state, Tool::Road, 3, 2);
+        apply_tool(&mut sim.state, Tool::Road, 3, 3);
+        apply_tool(&mut sim.state, Tool::Residential, 0, 0);
+        apply_tool(&mut sim.state, Tool::Residential, 1, 0);
+        apply_tool(&mut sim.state, Tool::Residential, 0, 1);
+        apply_tool(&mut sim.state, Tool::Residential, 1, 1);
+        apply_tool(&mut sim.state, Tool::Commercial, 0, 2);
+        apply_tool(&mut sim.state, Tool::Industrial, 0, 3);
         sim.state.demand.residential = 80.0;
-        sim.state.demand.commercial  = 60.0;
-        sim.state.demand.industrial  = 60.0;
+        sim.state.demand.commercial = 60.0;
+        sim.state.demand.industrial = 60.0;
         sim
     }
 
@@ -212,7 +234,9 @@ mod tests {
     fn same_seed_same_hash() {
         fn run(seed: u32) -> u64 {
             let mut sim = make_city_sim(seed);
-            for _ in 0..100 { sim.tick(1.0 / 20.0); }
+            for _ in 0..100 {
+                sim.tick(1.0 / 20.0);
+            }
             state_hash(&sim.state)
         }
         // Key invariant: same seed must always produce the same result
@@ -227,7 +251,9 @@ mod tests {
     #[test]
     fn golden_hash_seed42_8x8_100ticks() {
         let mut sim = make_city_sim(42);
-        for _ in 0..100 { sim.tick(1.0 / 20.0); }
+        for _ in 0..100 {
+            sim.tick(1.0 / 20.0);
+        }
         let hash = state_hash(&sim.state);
 
         if std::env::var("REGEN").is_ok() {
@@ -241,8 +267,10 @@ mod tests {
             return;
         }
 
-        assert_eq!(hash, GOLDEN_HASH_SEED42_4X4_100TICKS,
-            "golden hash mismatch — run with REGEN=1 to update after intentional sim change");
+        assert_eq!(
+            hash, GOLDEN_HASH_SEED42_4X4_100TICKS,
+            "golden hash mismatch — run with REGEN=1 to update after intentional sim change"
+        );
     }
 
     #[test]
@@ -262,17 +290,23 @@ mod tests {
         slow.tick(1.0);
         fast.tick(1.0);
         // Fast sim should have a higher day than slow
-        assert!(fast.state.day >= slow.state.day,
-            "faster speed should advance the day further");
+        assert!(
+            fast.state.day >= slow.state.day,
+            "faster speed should advance the day further"
+        );
     }
 
     #[test]
     fn sim_money_changes_over_time() {
         let mut sim = Simulation::new(8, 8, 0);
         let start = sim.state.money;
-        for _ in 0..100 { sim.tick(1.0 / 20.0); }
+        for _ in 0..100 {
+            sim.tick(1.0 / 20.0);
+        }
         // With only BASE_INCOME revenue and no expenses, money should go up
-        assert!(sim.state.money >= start,
-            "blank city (no infrastructure costs) should be profitable");
+        assert!(
+            sim.state.money >= start,
+            "blank city (no infrastructure costs) should be profitable"
+        );
     }
 }

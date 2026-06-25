@@ -10,7 +10,10 @@ pub enum FromSim {
     /// A narrative event routed to the ticker / insights panel.
     Narrative(NarrativeEvent),
     /// Acknowledgement of a SimCommand with success/failure and optional message.
-    CommandResult { success: bool, message: Option<String> },
+    CommandResult {
+        success: bool,
+        message: Option<String>,
+    },
     /// Emitted once per tick — carries lightweight system stats for the HUD.
     TickStats(TickStats),
 }

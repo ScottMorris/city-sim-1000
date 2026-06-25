@@ -1,9 +1,11 @@
+use crate::buildings::{get_building_template, BuildingInstance};
+use crate::state::{
+    GameState, FLAG_ABANDONED, FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY,
+};
 use city_sim_protocol::{
     commands::{CommandResult, Tool},
     tile_kind::TileKind,
 };
-use crate::buildings::{get_building_template, BuildingInstance};
-use crate::state::{GameState, FLAG_ABANDONED, FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY};
 
 // ---------------------------------------------------------------------------
 // Build costs (from `app/src/game/constants.ts` BUILD_COST)
@@ -11,28 +13,28 @@ use crate::state::{GameState, FLAG_ABANDONED, FLAG_POWER_OVERLAY, FLAG_RAIL_UNDE
 
 pub fn tool_cost(tool: Tool) -> i64 {
     match tool {
-        Tool::Inspect          => 0,
-        Tool::TerraformRaise   => 10,
-        Tool::TerraformLower   => 10,
-        Tool::Water            => 12,
-        Tool::Tree             => 8,
-        Tool::Road             => 5,
-        Tool::Rail             => 15,
-        Tool::PowerLine        => 6,
-        Tool::HydroPlant       => 20_000,
-        Tool::CoalPlant        => 25_000,
-        Tool::WindTurbine      => 5_000,
-        Tool::SolarFarm        => 4_000,
-        Tool::WaterPump        => 400,
-        Tool::WaterTower       => 1_200,
-        Tool::WaterPipe        => 4,
+        Tool::Inspect => 0,
+        Tool::TerraformRaise => 10,
+        Tool::TerraformLower => 10,
+        Tool::Water => 12,
+        Tool::Tree => 8,
+        Tool::Road => 5,
+        Tool::Rail => 15,
+        Tool::PowerLine => 6,
+        Tool::HydroPlant => 20_000,
+        Tool::CoalPlant => 25_000,
+        Tool::WindTurbine => 5_000,
+        Tool::SolarFarm => 4_000,
+        Tool::WaterPump => 400,
+        Tool::WaterTower => 1_200,
+        Tool::WaterPipe => 4,
         Tool::ElementarySchool => 4_500,
-        Tool::HighSchool       => 7_000,
-        Tool::Residential      => 40,
-        Tool::Commercial       => 60,
-        Tool::Industrial       => 80,
-        Tool::Park             => 10,
-        Tool::Bulldoze         => 1,
+        Tool::HighSchool => 7_000,
+        Tool::Residential => 40,
+        Tool::Commercial => 60,
+        Tool::Industrial => 80,
+        Tool::Park => 10,
+        Tool::Bulldoze => 1,
     }
 }
 
@@ -86,34 +88,38 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
 
         Tool::Road => {
             let idx = state.tile_index(x, y).unwrap();
-            let had_rail = state.tiles[idx].kind == TileKind::Rail
-                || state.tiles[idx].has_rail_underlay();
+            let had_rail =
+                state.tiles[idx].kind == TileKind::Rail || state.tiles[idx].has_rail_underlay();
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
             state.tiles[idx].kind = TileKind::Road;
-            if had_rail { state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, true); }
+            if had_rail {
+                state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, true);
+            }
             state.tile_revision += 1;
             CommandResult::ok()
         }
         Tool::Rail => {
             let idx = state.tile_index(x, y).unwrap();
-            let had_road = state.tiles[idx].kind == TileKind::Road
-                || state.tiles[idx].has_road_underlay();
+            let had_road =
+                state.tiles[idx].kind == TileKind::Road || state.tiles[idx].has_road_underlay();
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
             state.tiles[idx].kind = TileKind::Rail;
-            if had_road { state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, true); }
+            if had_road {
+                state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, true);
+            }
             state.tile_revision += 1;
             CommandResult::ok()
         }
         Tool::PowerLine => {
             let idx = state.tile_index(x, y).unwrap();
-            let had_road = state.tiles[idx].kind == TileKind::Road
-                || state.tiles[idx].has_road_underlay();
-            let had_rail = state.tiles[idx].kind == TileKind::Rail
-                || state.tiles[idx].has_rail_underlay();
+            let had_road =
+                state.tiles[idx].kind == TileKind::Road || state.tiles[idx].has_road_underlay();
+            let had_rail =
+                state.tiles[idx].kind == TileKind::Rail || state.tiles[idx].has_rail_underlay();
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
@@ -137,13 +143,15 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         Tool::Residential | Tool::Commercial | Tool::Industrial => {
             let zone_kind = match tool {
                 Tool::Residential => TileKind::Residential,
-                Tool::Commercial  => TileKind::Commercial,
-                _                 => TileKind::Industrial,
+                Tool::Commercial => TileKind::Commercial,
+                _ => TileKind::Industrial,
             };
             let idx = state.tile_index(x, y).unwrap();
             let t = &state.tiles[idx];
-            if t.kind == TileKind::Road || t.kind == TileKind::Rail
-                || t.has_road_underlay() || t.has_rail_underlay()
+            if t.kind == TileKind::Road
+                || t.kind == TileKind::Rail
+                || t.has_road_underlay()
+                || t.has_rail_underlay()
             {
                 return CommandResult::fail("Cannot zone over roads or rail. Bulldoze first.");
             }
@@ -157,16 +165,17 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             // All power plant tools use HydroPlant tile kind for now (matches TS)
             place_footprint_building(state, TileKind::HydroPlant, x, y, cost, true)
         }
-        Tool::WaterPump =>
-            place_footprint_building(state, TileKind::WaterPump, x, y, cost, false),
-        Tool::WaterTower =>
-            place_footprint_building(state, TileKind::WaterTower, x, y, cost, false),
-        Tool::ElementarySchool =>
-            place_footprint_building(state, TileKind::ElementarySchool, x, y, cost, false),
-        Tool::HighSchool =>
-            place_footprint_building(state, TileKind::HighSchool, x, y, cost, false),
-        Tool::Park =>
-            place_footprint_building(state, TileKind::Park, x, y, cost, false),
+        Tool::WaterPump => place_footprint_building(state, TileKind::WaterPump, x, y, cost, false),
+        Tool::WaterTower => {
+            place_footprint_building(state, TileKind::WaterTower, x, y, cost, false)
+        }
+        Tool::ElementarySchool => {
+            place_footprint_building(state, TileKind::ElementarySchool, x, y, cost, false)
+        }
+        Tool::HighSchool => {
+            place_footprint_building(state, TileKind::HighSchool, x, y, cost, false)
+        }
+        Tool::Park => place_footprint_building(state, TileKind::Park, x, y, cost, false),
 
         Tool::Bulldoze => bulldoze(state, x, y, cost),
     }
@@ -197,9 +206,9 @@ pub fn remove_building(state: &mut GameState, building_id: u32) {
     // Clear all tiles that reference this building
     for tile in &mut state.tiles {
         if tile.building_id == Some(building_id as u16) {
-            tile.building_id    = None;
+            tile.building_id = None;
             tile.power_plant_mw = 0;
-            tile.water_output   = 0;
+            tile.water_output = 0;
             // Keep the tile kind so the zone lot can regrow
         }
     }
@@ -209,16 +218,16 @@ pub fn remove_building(state: &mut GameState, building_id: u32) {
 /// Place a multi-tile civic/power building at (x, y).
 /// Validates footprint bounds and overlap, then stamps tiles and pushes to buildings.
 fn place_footprint_building(
-    state:       &mut GameState,
-    kind:        TileKind,
-    x:           u32,
-    y:           u32,
-    cost:        i64,
-    is_power:    bool,
+    state: &mut GameState,
+    kind: TileKind,
+    x: u32,
+    y: u32,
+    cost: i64,
+    is_power: bool,
 ) -> CommandResult {
     let tmpl = match get_building_template(kind) {
         Some(t) => t,
-        None    => return CommandResult::fail("Unknown building type"),
+        None => return CommandResult::fail("Unknown building type"),
     };
     let (fw, fh) = tmpl.footprint;
 
@@ -244,10 +253,10 @@ fn place_footprint_building(
     for dy in 0..fh {
         for dx in 0..fw {
             let idx = state.tile_index(x + dx, y + dy).unwrap();
-            state.tiles[idx].kind         = kind;
-            state.tiles[idx].building_id  = Some(bid as u16);
+            state.tiles[idx].kind = kind;
+            state.tiles[idx].building_id = Some(bid as u16);
             state.tiles[idx].set_flag(FLAG_ABANDONED, false);
-            state.tiles[idx].happiness    = (state.tiles[idx].happiness + 0.05).min(1.5);
+            state.tiles[idx].happiness = (state.tiles[idx].happiness + 0.05).min(1.5);
             if is_power {
                 // Power plant mw will be set by the power BFS at next tick
                 state.tiles[idx].power_plant_mw = 1; // non-zero = is a source
@@ -255,7 +264,9 @@ fn place_footprint_building(
         }
     }
 
-    state.buildings.push(BuildingInstance::new(bid, kind, (x, y)));
+    state
+        .buildings
+        .push(BuildingInstance::new(bid, kind, (x, y)));
     state.tile_revision += 1;
     CommandResult::ok()
 }
@@ -283,7 +294,9 @@ fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
 mod tests {
     use super::*;
 
-    fn gs(w: u32, h: u32) -> GameState { GameState::new(w, h, 0) }
+    fn gs(w: u32, h: u32) -> GameState {
+        GameState::new(w, h, 0)
+    }
 
     #[test]
     fn inspect_always_succeeds() {
@@ -355,14 +368,21 @@ mod tests {
         s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
         let r = apply_tool(&mut s, Tool::Residential, 0, 0);
         assert!(!r.success);
-        assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::Road, "tile should not change");
+        assert_eq!(
+            s.tile_at(0, 0).unwrap().kind,
+            TileKind::Road,
+            "tile should not change"
+        );
     }
 
     #[test]
     fn water_pipe_sets_underground() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::WaterPipe, 1, 1);
-        assert_eq!(s.tile_at(1, 1).unwrap().underground, Some(TileKind::WaterPipe));
+        assert_eq!(
+            s.tile_at(1, 1).unwrap().underground,
+            Some(TileKind::WaterPipe)
+        );
     }
 
     #[test]
@@ -383,11 +403,13 @@ mod tests {
         let r = apply_tool(&mut s, Tool::WaterTower, 0, 0);
         assert!(r.success);
         let bid = s.tile_at(0, 0).unwrap().building_id.unwrap();
-        for dy in 0..2 { for dx in 0..2 {
-            let t = s.tile_at(dx, dy).unwrap();
-            assert_eq!(t.kind, TileKind::WaterTower);
-            assert_eq!(t.building_id, Some(bid));
-        }}
+        for dy in 0..2 {
+            for dx in 0..2 {
+                let t = s.tile_at(dx, dy).unwrap();
+                assert_eq!(t.kind, TileKind::WaterTower);
+                assert_eq!(t.building_id, Some(bid));
+            }
+        }
     }
 
     #[test]
@@ -423,16 +445,21 @@ mod tests {
         assert_eq!(s.buildings.len(), 1);
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
         assert!(s.buildings.is_empty());
-        for dy in 0..2 { for dx in 0..2 {
-            assert!(s.tile_at(dx, dy).unwrap().building_id.is_none());
-        }}
+        for dy in 0..2 {
+            for dx in 0..2 {
+                assert!(s.tile_at(dx, dy).unwrap().building_id.is_none());
+            }
+        }
     }
 
     #[test]
     fn bulldoze_removes_underground_pipe() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::WaterPipe, 0, 0);
-        assert_eq!(s.tile_at(0, 0).unwrap().underground, Some(TileKind::WaterPipe));
+        assert_eq!(
+            s.tile_at(0, 0).unwrap().underground,
+            Some(TileKind::WaterPipe)
+        );
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
         assert_eq!(s.tile_at(0, 0).unwrap().underground, None);
     }
@@ -456,13 +483,13 @@ mod tests {
 
     #[test]
     fn tool_cost_matches_ts_constants() {
-        assert_eq!(tool_cost(Tool::Road),            5);
-        assert_eq!(tool_cost(Tool::Rail),            15);
-        assert_eq!(tool_cost(Tool::WaterPipe),       4);
-        assert_eq!(tool_cost(Tool::Residential),     40);
-        assert_eq!(tool_cost(Tool::Commercial),      60);
-        assert_eq!(tool_cost(Tool::Industrial),      80);
-        assert_eq!(tool_cost(Tool::HydroPlant),      20_000);
+        assert_eq!(tool_cost(Tool::Road), 5);
+        assert_eq!(tool_cost(Tool::Rail), 15);
+        assert_eq!(tool_cost(Tool::WaterPipe), 4);
+        assert_eq!(tool_cost(Tool::Residential), 40);
+        assert_eq!(tool_cost(Tool::Commercial), 60);
+        assert_eq!(tool_cost(Tool::Industrial), 80);
+        assert_eq!(tool_cost(Tool::HydroPlant), 20_000);
         assert_eq!(tool_cost(Tool::ElementarySchool), 4_500);
     }
 }

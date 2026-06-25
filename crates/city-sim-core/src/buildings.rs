@@ -1,6 +1,6 @@
-use city_sim_protocol::tile_kind::TileKind;
 use crate::adjacency::{tile_has_power, tile_has_water};
 use crate::state::{GameState, ServiceKind, FLAG_ABANDONED};
+use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
 // BuildingStatus
@@ -25,24 +25,24 @@ pub enum BuildingStatus {
 ///
 /// Values are taken directly from the TS static template objects.
 pub struct BuildingTemplate {
-    pub footprint:           (u32, u32),  // (width, height) in tiles
-    pub requires_power:      bool,
-    pub requires_water:      bool,
-    pub water_use:           f32,         // kL/day consumed (demand side)
-    pub water_output:        i32,         // kL/day produced (supply side, 0 if not a source)
-    pub power_use:           f32,         // MW consumed when active
+    pub footprint: (u32, u32), // (width, height) in tiles
+    pub requires_power: bool,
+    pub requires_water: bool,
+    pub water_use: f32,    // kL/day consumed (demand side)
+    pub water_output: i32, // kL/day produced (supply side, 0 if not a source)
+    pub power_use: f32,    // MW consumed when active
     pub population_capacity: u32,
-    pub jobs_capacity:       u32,
-    pub maintenance:         f32,         // $/day
-    pub is_zone:             bool,
-    pub is_power_plant:      bool,
-    pub is_civic:            bool,
+    pub jobs_capacity: u32,
+    pub maintenance: f32, // $/day
+    pub is_zone: bool,
+    pub is_power_plant: bool,
+    pub is_civic: bool,
     /// Which city service this building provides (None for non-service buildings).
-    pub service:             ServiceKind,
+    pub service: ServiceKind,
     /// Maximum load units this service building can satisfy per tick.
-    pub service_capacity:    u32,
+    pub service_capacity: u32,
     /// BFS radius (tiles) along roads/zones that this service can reach.
-    pub service_coverage:    u32,
+    pub service_coverage: u32,
 }
 
 /// Look up static template data by the tile kind used when placing a building.
@@ -56,11 +56,21 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
          zone=$z:expr, plant=$pl:expr, civic=$cv:expr,
          svc=$svc:expr, scap=$scap:expr, scov=$scov:expr) => {
             BuildingTemplate {
-                footprint: $fp, requires_power: $p, requires_water: $w,
-                water_use: $wu, water_output: $wo, power_use: $pu,
-                population_capacity: $pop, jobs_capacity: $j,
-                maintenance: $m, is_zone: $z, is_power_plant: $pl, is_civic: $cv,
-                service: $svc, service_capacity: $scap, service_coverage: $scov,
+                footprint: $fp,
+                requires_power: $p,
+                requires_water: $w,
+                water_use: $wu,
+                water_output: $wo,
+                power_use: $pu,
+                population_capacity: $pop,
+                jobs_capacity: $j,
+                maintenance: $m,
+                is_zone: $z,
+                is_power_plant: $pl,
+                is_civic: $cv,
+                service: $svc,
+                service_capacity: $scap,
+                service_coverage: $scov,
             }
         };
     }
@@ -117,16 +127,16 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
     };
 
     match kind {
-        Residential      => Some(&RESIDENTIAL),
-        Commercial       => Some(&COMMERCIAL),
-        Industrial       => Some(&INDUSTRIAL),
-        WaterPump        => Some(&WATER_PUMP),
-        WaterTower       => Some(&WATER_TOWER),
-        Park             => Some(&PARK),
+        Residential => Some(&RESIDENTIAL),
+        Commercial => Some(&COMMERCIAL),
+        Industrial => Some(&INDUSTRIAL),
+        WaterPump => Some(&WATER_PUMP),
+        WaterTower => Some(&WATER_TOWER),
+        Park => Some(&PARK),
         ElementarySchool => Some(&ELEM_SCHOOL),
-        HighSchool       => Some(&HIGH_SCHOOL),
-        HydroPlant       => Some(&HYDRO_PLANT),
-        _                => None,
+        HighSchool => Some(&HIGH_SCHOOL),
+        HydroPlant => Some(&HYDRO_PLANT),
+        _ => None,
     }
 }
 
@@ -138,14 +148,14 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
 /// `app/src/game/buildings/state.ts`.
 #[derive(Debug, Clone)]
 pub struct BuildingInstance {
-    pub id:            u32,
+    pub id: u32,
     /// The tile kind used to identify this building (determines template lookup).
-    pub kind:          TileKind,
+    pub kind: TileKind,
     /// Top-left corner of the building footprint.
-    pub origin:        (u32, u32),
-    pub status:        BuildingStatus,
+    pub origin: (u32, u32),
+    pub status: BuildingStatus,
     /// 0–100; reaches 0 → InactiveDamaged (not yet implemented in the Rust sim).
-    pub health:        u8,
+    pub health: u8,
     /// Pressure counter — see `apply_building_decay`.  Float to accumulate fractional
     /// increments matching the TS implementation.
     pub trouble_ticks: f32,
@@ -153,7 +163,14 @@ pub struct BuildingInstance {
 
 impl BuildingInstance {
     pub fn new(id: u32, kind: TileKind, origin: (u32, u32)) -> Self {
-        Self { id, kind, origin, status: BuildingStatus::Active, health: 100, trouble_ticks: 0.0 }
+        Self {
+            id,
+            kind,
+            origin,
+            status: BuildingStatus::Active,
+            health: 100,
+            trouble_ticks: 0.0,
+        }
     }
 }
 
@@ -162,22 +179,22 @@ impl BuildingInstance {
 // ---------------------------------------------------------------------------
 
 pub struct DecayConfig {
-    pub demand_low_threshold:   f32,
-    pub happiness_threshold:    f32,
-    pub trouble_increment:      f32,
-    pub trouble_power_penalty:  f32,
-    pub trouble_decay:          f32,
+    pub demand_low_threshold: f32,
+    pub happiness_threshold: f32,
+    pub trouble_increment: f32,
+    pub trouble_power_penalty: f32,
+    pub trouble_decay: f32,
     pub trouble_abandon_thresh: f32,
 }
 
 impl Default for DecayConfig {
     fn default() -> Self {
         Self {
-            demand_low_threshold:   5.0,
-            happiness_threshold:    0.4,
-            trouble_increment:      1.0,
-            trouble_power_penalty:  3.0,
-            trouble_decay:          2.0,
+            demand_low_threshold: 5.0,
+            happiness_threshold: 0.4,
+            trouble_increment: 1.0,
+            trouble_power_penalty: 3.0,
+            trouble_decay: 2.0,
             trouble_abandon_thresh: 12.0,
         }
     }
@@ -191,11 +208,13 @@ impl Default for DecayConfig {
 /// coverage.  Mirrors `updateBuildingStates()` in `manager.ts`.
 pub fn update_building_states(state: &mut GameState, water_enabled: bool) {
     for i in 0..state.buildings.len() {
-        let bid      = state.buildings[i].kind;
+        let bid = state.buildings[i].kind;
         let (ox, oy) = state.buildings[i].origin;
-        let health   = state.buildings[i].health;
+        let health = state.buildings[i].health;
 
-        let Some(tmpl) = get_building_template(bid) else { continue };
+        let Some(tmpl) = get_building_template(bid) else {
+            continue;
+        };
 
         if health == 0 {
             state.buildings[i].status = BuildingStatus::InactiveDamaged;
@@ -254,15 +273,20 @@ pub fn apply_building_decay(state: &mut GameState, cfg: &DecayConfig) {
     let mut to_abandon: Vec<u32> = Vec::new();
 
     for i in 0..state.buildings.len() {
-        let kind   = state.buildings[i].kind;
+        let kind = state.buildings[i].kind;
         let origin = state.buildings[i].origin;
         let status = state.buildings[i].status;
 
-        let Some(tmpl) = get_building_template(kind) else { continue };
-        if !tmpl.is_zone { continue; }
+        let Some(tmpl) = get_building_template(kind) else {
+            continue;
+        };
+        if !tmpl.is_zone {
+            continue;
+        }
 
         let (ox, oy) = origin;
-        let tile_happiness = state.tiles
+        let tile_happiness = state
+            .tiles
             .get((oy * state.width + ox) as usize)
             .map(|t| t.happiness)
             .unwrap_or(1.0);
@@ -270,30 +294,51 @@ pub fn apply_building_decay(state: &mut GameState, cfg: &DecayConfig) {
         // Inline demand lookup to avoid a second borrow of `state`
         let demand: f32 = match kind {
             TileKind::Residential => state.demand.residential,
-            TileKind::Commercial  => state.demand.commercial,
-            TileKind::Industrial  => state.demand.industrial,
-            _                     => 0.0,
+            TileKind::Commercial => state.demand.commercial,
+            TileKind::Industrial => state.demand.industrial,
+            _ => 0.0,
         };
 
         let no_power = status == BuildingStatus::InactiveNoPower;
         let no_water = status == BuildingStatus::InactiveNoWater;
-        let unhappy  = tile_happiness < cfg.happiness_threshold;
+        let unhappy = tile_happiness < cfg.happiness_threshold;
         // Education pressure: residential needs elementary; all zones need high school.
         let tile_idx = (oy * state.width + ox) as usize;
-        let elem_served = state.tiles.get(tile_idx).map(|t| t.elementary_served).unwrap_or(true);
-        let high_served = state.tiles.get(tile_idx).map(|t| t.high_served).unwrap_or(true);
+        let elem_served = state
+            .tiles
+            .get(tile_idx)
+            .map(|t| t.elementary_served)
+            .unwrap_or(true);
+        let high_served = state
+            .tiles
+            .get(tile_idx)
+            .map(|t| t.high_served)
+            .unwrap_or(true);
         let needs_elementary = kind == TileKind::Residential;
-        let needs_high = matches!(kind, TileKind::Residential | TileKind::Commercial | TileKind::Industrial);
+        let needs_high = matches!(
+            kind,
+            TileKind::Residential | TileKind::Commercial | TileKind::Industrial
+        );
         let education_unserved = (needs_elementary && !elem_served) || (needs_high && !high_served);
 
         let low_demand = demand < cfg.demand_low_threshold;
         let mut trouble = state.buildings[i].trouble_ticks;
 
-        if low_demand && (unhappy || no_power || no_water) { trouble += cfg.trouble_increment; }
-        if unhappy && (no_power || no_water)               { trouble += cfg.trouble_increment; }
-        if no_power                                         { trouble += cfg.trouble_power_penalty; }
-        if no_water                                         { trouble += cfg.trouble_increment * 0.5; }
-        if education_unserved                               { trouble += cfg.trouble_increment * 0.5; }
+        if low_demand && (unhappy || no_power || no_water) {
+            trouble += cfg.trouble_increment;
+        }
+        if unhappy && (no_power || no_water) {
+            trouble += cfg.trouble_increment;
+        }
+        if no_power {
+            trouble += cfg.trouble_power_penalty;
+        }
+        if no_water {
+            trouble += cfg.trouble_increment * 0.5;
+        }
+        if education_unserved {
+            trouble += cfg.trouble_increment * 0.5;
+        }
 
         if !low_demand && !unhappy && !no_power && !no_water {
             trouble = (trouble - cfg.trouble_decay).max(0.0);
@@ -338,7 +383,9 @@ mod tests {
     use super::*;
     use crate::state::FLAG_POWERED;
 
-    fn gs(w: u32, h: u32) -> GameState { GameState::new(w, h, 0) }
+    fn gs(w: u32, h: u32) -> GameState {
+        GameState::new(w, h, 0)
+    }
 
     fn place(s: &mut GameState, kind: TileKind, x: u32, y: u32) -> u32 {
         let id = s.next_building_id;
@@ -356,7 +403,9 @@ mod tests {
         let mut s = gs(1, 1);
         place(&mut s, TileKind::Residential, 0, 0);
         s.tile_at_mut(0, 0).unwrap().set_flag(FLAG_POWERED, true);
-        s.tile_at_mut(0, 0).unwrap().set_flag(crate::state::FLAG_WATERED, true);
+        s.tile_at_mut(0, 0)
+            .unwrap()
+            .set_flag(crate::state::FLAG_WATERED, true);
         update_building_states(&mut s, true);
         assert_eq!(s.buildings[0].status, BuildingStatus::Active);
     }
@@ -400,11 +449,15 @@ mod tests {
                 tile.building_id = Some(id as u16);
             }
         }
-        s.buildings.push(BuildingInstance::new(id, TileKind::HydroPlant, (0, 0)));
+        s.buildings
+            .push(BuildingInstance::new(id, TileKind::HydroPlant, (0, 0)));
         s.next_building_id += 1;
         update_building_states(&mut s, true);
-        assert_eq!(s.buildings[0].status, BuildingStatus::Active,
-            "power plants require no external power");
+        assert_eq!(
+            s.buildings[0].status,
+            BuildingStatus::Active,
+            "power plants require no external power"
+        );
     }
 
     #[test]
@@ -412,10 +465,10 @@ mod tests {
         let mut s = gs(1, 1);
         place(&mut s, TileKind::Residential, 0, 0);
         s.buildings[0].status = BuildingStatus::InactiveNoPower;
-        s.demand.residential = 50.0;  // above low threshold — only noPower + education penalty
-        // Mark tile as education-served so this test isolates the power penalty
+        s.demand.residential = 50.0; // above low threshold — only noPower + education penalty
+                                     // Mark tile as education-served so this test isolates the power penalty
         s.tile_at_mut(0, 0).unwrap().elementary_served = true;
-        s.tile_at_mut(0, 0).unwrap().high_served       = true;
+        s.tile_at_mut(0, 0).unwrap().high_served = true;
         let cfg = DecayConfig::default();
         apply_building_decay(&mut s, &cfg);
         assert_eq!(s.buildings[0].trouble_ticks, cfg.trouble_power_penalty);
@@ -428,10 +481,13 @@ mod tests {
         s.buildings[0].status = BuildingStatus::InactiveNoPower;
         let cfg = DecayConfig::default();
         s.buildings[0].trouble_ticks = cfg.trouble_abandon_thresh - 1.0;
-        s.demand.residential = 0.0;  // low demand — extra pressure
+        s.demand.residential = 0.0; // low demand — extra pressure
         apply_building_decay(&mut s, &cfg);
         // Building should be abandoned
-        assert!(s.buildings.is_empty(), "building should be removed on abandon");
+        assert!(
+            s.buildings.is_empty(),
+            "building should be removed on abandon"
+        );
         assert!(s.tile_at(0, 0).unwrap().building_id.is_none());
         assert!(s.tile_at(0, 0).unwrap().is_abandoned());
     }
@@ -443,10 +499,10 @@ mod tests {
         s.buildings[0].status = BuildingStatus::Active;
         s.buildings[0].trouble_ticks = 5.0;
         s.demand.residential = 50.0;
-        s.tile_at_mut(0, 0).unwrap().happiness = 1.0;  // above threshold
-        // Mark tile as education-served so trouble bleeds at the full rate
+        s.tile_at_mut(0, 0).unwrap().happiness = 1.0; // above threshold
+                                                      // Mark tile as education-served so trouble bleeds at the full rate
         s.tile_at_mut(0, 0).unwrap().elementary_served = true;
-        s.tile_at_mut(0, 0).unwrap().high_served       = true;
+        s.tile_at_mut(0, 0).unwrap().high_served = true;
         let cfg = DecayConfig::default();
         apply_building_decay(&mut s, &cfg);
         // All conditions good + education served → full bleed: trouble_decay + trouble_decay * 0.25
@@ -462,7 +518,11 @@ mod tests {
 
     #[test]
     fn get_building_template_zone_footprint_is_1x1() {
-        for k in [TileKind::Residential, TileKind::Commercial, TileKind::Industrial] {
+        for k in [
+            TileKind::Residential,
+            TileKind::Commercial,
+            TileKind::Industrial,
+        ] {
             let tmpl = get_building_template(k).unwrap();
             assert_eq!(tmpl.footprint, (1, 1));
             assert!(tmpl.is_zone);

@@ -9,11 +9,11 @@
 //   set_speed(multiplier: f32)
 //   stop()
 
-mod error;
 pub mod commands;
+mod error;
 
-pub use error::Error;
 pub use commands::{SimState, TickEvent};
+pub use error::Error;
 
 use tauri::{
     plugin::{Builder as PluginBuilder, TauriPlugin},

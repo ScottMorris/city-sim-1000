@@ -1,25 +1,29 @@
-use std::collections::VecDeque;
-use city_sim_protocol::tile_kind::TileKind;
-use crate::rng::SeededRng;
 use crate::buildings::BuildingInstance;
+use crate::rng::SeededRng;
+use city_sim_protocol::tile_kind::TileKind;
+use std::collections::VecDeque;
 
 // ---------------------------------------------------------------------------
 // Tile flags
 // ---------------------------------------------------------------------------
 
-pub const FLAG_POWERED:       u8 = 0b0000_0001;
-pub const FLAG_WATERED:       u8 = 0b0000_0010;
-pub const FLAG_ABANDONED:     u8 = 0b0000_0100;
+pub const FLAG_POWERED: u8 = 0b0000_0001;
+pub const FLAG_WATERED: u8 = 0b0000_0010;
+pub const FLAG_ABANDONED: u8 = 0b0000_0100;
 pub const FLAG_ROAD_UNDERLAY: u8 = 0b0000_1000;
 pub const FLAG_RAIL_UNDERLAY: u8 = 0b0001_0000;
 pub const FLAG_POWER_OVERLAY: u8 = 0b0010_0000;
 /// Zone density packed into bits 6–7: 00=Low, 01=Medium, 10=High.
-pub const FLAG_ZONE_DENSITY_MASK:  u8 = 0b1100_0000;
+pub const FLAG_ZONE_DENSITY_MASK: u8 = 0b1100_0000;
 pub const FLAG_ZONE_DENSITY_SHIFT: u8 = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum ZoneDensity { Low = 0, Medium = 1, High = 2 }
+pub enum ZoneDensity {
+    Low = 0,
+    Medium = 1,
+    High = 2,
+}
 
 // ---------------------------------------------------------------------------
 // ServiceKind — which city service a building provides
@@ -49,56 +53,71 @@ pub enum ServiceKind {
 /// `water_output` is > 0 for active water source tiles (pumps/towers) in the same fashion.
 #[derive(Debug, Clone)]
 pub struct Tile {
-    pub kind:            TileKind,
-    pub flags:           u8,
+    pub kind: TileKind,
+    pub flags: u8,
     /// Happiness in [0.0, 1.5] matching the TS float range (createInitialState
     /// sets 1.0; the SoA wire buffer quantises this to u8 on output).
-    pub happiness:       f32,
-    pub elevation:       u8,
-    pub building_id:     Option<u16>,
-    pub underground:     Option<TileKind>,
-    pub power_plant_mw:  i32,
-    pub water_output:    i32,
+    pub happiness: f32,
+    pub elevation: u8,
+    pub building_id: Option<u16>,
+    pub underground: Option<TileKind>,
+    pub power_plant_mw: i32,
+    pub water_output: i32,
     /// True when an active elementary school covers this tile.
     pub elementary_served: bool,
     /// True when an active high school covers this tile.
-    pub high_served:       bool,
+    pub high_served: bool,
     /// Fraction of elementary load satisfied (0.0–1.0).
-    pub elementary_score:  f32,
+    pub elementary_score: f32,
     /// Fraction of high-school load satisfied (0.0–1.0).
-    pub high_score:        f32,
+    pub high_score: f32,
 }
 
 impl Tile {
     pub fn land() -> Self {
         Self {
-            kind:           TileKind::Land,
-            flags:          0,
-            happiness:      1.0,
-            elevation:      0,
-            building_id:    None,
-            underground:    None,
+            kind: TileKind::Land,
+            flags: 0,
+            happiness: 1.0,
+            elevation: 0,
+            building_id: None,
+            underground: None,
             power_plant_mw: 0,
-            water_output:   0,
+            water_output: 0,
             elementary_served: false,
-            high_served:       false,
-            elementary_score:  0.0,
-            high_score:        0.0,
+            high_served: false,
+            elementary_score: 0.0,
+            high_score: 0.0,
         }
     }
 
     pub fn water() -> Self {
-        Self { kind: TileKind::Water, ..Self::land() }
+        Self {
+            kind: TileKind::Water,
+            ..Self::land()
+        }
     }
 
     // --- flag accessors ---
 
-    pub fn is_powered(&self)        -> bool { self.flags & FLAG_POWERED       != 0 }
-    pub fn is_watered(&self)        -> bool { self.flags & FLAG_WATERED       != 0 }
-    pub fn is_abandoned(&self)      -> bool { self.flags & FLAG_ABANDONED     != 0 }
-    pub fn has_road_underlay(&self) -> bool { self.flags & FLAG_ROAD_UNDERLAY != 0 }
-    pub fn has_rail_underlay(&self) -> bool { self.flags & FLAG_RAIL_UNDERLAY != 0 }
-    pub fn has_power_overlay(&self) -> bool { self.flags & FLAG_POWER_OVERLAY != 0 }
+    pub fn is_powered(&self) -> bool {
+        self.flags & FLAG_POWERED != 0
+    }
+    pub fn is_watered(&self) -> bool {
+        self.flags & FLAG_WATERED != 0
+    }
+    pub fn is_abandoned(&self) -> bool {
+        self.flags & FLAG_ABANDONED != 0
+    }
+    pub fn has_road_underlay(&self) -> bool {
+        self.flags & FLAG_ROAD_UNDERLAY != 0
+    }
+    pub fn has_rail_underlay(&self) -> bool {
+        self.flags & FLAG_RAIL_UNDERLAY != 0
+    }
+    pub fn has_power_overlay(&self) -> bool {
+        self.flags & FLAG_POWER_OVERLAY != 0
+    }
 
     pub fn zone_density(&self) -> ZoneDensity {
         match (self.flags & FLAG_ZONE_DENSITY_MASK) >> FLAG_ZONE_DENSITY_SHIFT {
@@ -109,12 +128,16 @@ impl Tile {
     }
 
     pub fn set_flag(&mut self, mask: u8, on: bool) {
-        if on { self.flags |= mask; } else { self.flags &= !mask; }
+        if on {
+            self.flags |= mask;
+        } else {
+            self.flags &= !mask;
+        }
     }
 
     pub fn set_zone_density(&mut self, density: ZoneDensity) {
-        self.flags = (self.flags & !FLAG_ZONE_DENSITY_MASK)
-            | ((density as u8) << FLAG_ZONE_DENSITY_SHIFT);
+        self.flags =
+            (self.flags & !FLAG_ZONE_DENSITY_MASK) | ((density as u8) << FLAG_ZONE_DENSITY_SHIFT);
     }
 }
 
@@ -129,15 +152,19 @@ impl Tile {
 #[derive(Debug, Clone)]
 pub struct DemandStats {
     pub residential: f32,
-    pub commercial:  f32,
-    pub industrial:  f32,
+    pub commercial: f32,
+    pub industrial: f32,
 }
 
 impl DemandStats {
     /// Matches the initial demand a freshly-placed city would exhibit before
     /// the first demand tick runs.  Deliberately low: growth is demand-gated.
     pub fn initial() -> Self {
-        Self { residential: 50.0, commercial: 30.0, industrial: 20.0 }
+        Self {
+            residential: 50.0,
+            commercial: 30.0,
+            industrial: 20.0,
+        }
     }
 }
 
@@ -149,25 +176,31 @@ impl DemandStats {
 /// `app/src/game/education.ts`.  Recomputed each tick by `education::recompute_education`.
 #[derive(Debug, Clone)]
 pub struct EducationStats {
-    pub elementary_served:   f32,
+    pub elementary_served: f32,
     pub elementary_capacity: f32,
-    pub elementary_load:     f32,
-    pub high_served:         f32,
-    pub high_capacity:       f32,
-    pub high_load:           f32,
+    pub elementary_load: f32,
+    pub high_served: f32,
+    pub high_capacity: f32,
+    pub high_load: f32,
     /// Combined coverage score in [0, 1]:  elementary × 0.6 + high × 0.4.
-    pub score:               f32,
+    pub score: f32,
     pub elementary_coverage: f32,
-    pub high_coverage:       f32,
+    pub high_coverage: f32,
 }
 
 impl Default for EducationStats {
     fn default() -> Self {
         // No schools → load = 0 → coverage = 1 (matches TS `?? 1` defaults)
         Self {
-            elementary_served: 0.0, elementary_capacity: 0.0, elementary_load: 0.0,
-            high_served: 0.0, high_capacity: 0.0, high_load: 0.0,
-            score: 1.0, elementary_coverage: 1.0, high_coverage: 1.0,
+            elementary_served: 0.0,
+            elementary_capacity: 0.0,
+            elementary_load: 0.0,
+            high_served: 0.0,
+            high_capacity: 0.0,
+            high_load: 0.0,
+            score: 1.0,
+            elementary_coverage: 1.0,
+            high_coverage: 1.0,
         }
     }
 }
@@ -179,39 +212,39 @@ impl Default for EducationStats {
 /// Daily budget snapshot.  Mirrors the TS `BudgetStats` interface in `gameState.ts`.
 #[derive(Debug, Clone, Default)]
 pub struct BudgetStats {
-    pub revenue:            f32,
-    pub expenses:           f32,
-    pub net:                f32,
+    pub revenue: f32,
+    pub expenses: f32,
+    pub net: f32,
     /// Dollars earned per in-game day (net * 0.2 * 1.5).
-    pub net_per_day:        f32,
+    pub net_per_day: f32,
     /// `net_per_day * DAYS_PER_MONTH`.
-    pub net_per_month:      f32,
+    pub net_per_month: f32,
     // Revenue breakdown
-    pub revenue_base:       f32,
-    pub revenue_pop:        f32,
+    pub revenue_base: f32,
+    pub revenue_pop: f32,
     pub revenue_commercial: f32,
     pub revenue_industrial: f32,
     // Expense breakdown
     pub expenses_transport: f32,
     pub expenses_buildings: f32,
     // Building expense sub-breakdown
-    pub maint_power:        f32,
-    pub maint_civic:        f32,
-    pub maint_zones:        f32,
+    pub maint_power: f32,
+    pub maint_civic: f32,
+    pub maint_zones: f32,
     // Transport sub-breakdown
-    pub maint_roads:        f32,
-    pub maint_rail:         f32,
-    pub maint_power_lines:  f32,
-    pub maint_pipes:        f32,
+    pub maint_roads: f32,
+    pub maint_rail: f32,
+    pub maint_power_lines: f32,
+    pub maint_pipes: f32,
 }
 
 /// One day's budget record, stored in the rolling history ring buffer.
 #[derive(Debug, Clone)]
 pub struct BudgetHistoryEntry {
-    pub day:      u32,
-    pub revenue:  f32,
+    pub day: u32,
+    pub revenue: f32,
     pub expenses: f32,
-    pub net:      f32,
+    pub net: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -222,25 +255,25 @@ pub struct BudgetHistoryEntry {
 #[derive(Debug, Clone)]
 pub struct UtilityStats {
     /// Net power balance (produced − used), in MW.
-    pub power:          i32,
+    pub power: i32,
     /// Net water balance (produced − used), in kL/day.
-    pub water:          i32,
+    pub water: i32,
     pub power_produced: i32,
-    pub power_used:     i32,
+    pub power_used: i32,
     pub water_produced: i32,
-    pub water_used:     i32,
+    pub water_used: i32,
 }
 
 impl UtilityStats {
     /// Matches `createInitialState()` defaults in the TS game.
     pub fn initial() -> Self {
         Self {
-            power:          10,
-            water:          10,
+            power: 10,
+            water: 10,
             power_produced: 0,
-            power_used:     0,
+            power_used: 0,
             water_produced: 0,
-            water_used:     0,
+            water_used: 0,
         }
     }
 }
@@ -253,34 +286,34 @@ impl UtilityStats {
 /// with Rust-native types where appropriate.
 #[derive(Debug, Clone)]
 pub struct GameState {
-    pub width:      u32,
-    pub height:     u32,
-    pub tiles:      Vec<Tile>,
+    pub width: u32,
+    pub height: u32,
+    pub tiles: Vec<Tile>,
     /// Original seed used to initialise the PRNG for this city.
-    pub seed:       u32,
+    pub seed: u32,
     /// Live RNG instance — persisted so saves resume mid-stream.
-    pub rng:        SeededRng,
+    pub rng: SeededRng,
     /// Treasury balance in whole dollars (can be negative).
-    pub money:      i64,
-    pub day:        u32,
-    pub tick:       u64,
-    pub population:       u32,
-    pub jobs:             u32,
-    pub utilities:        UtilityStats,
-    pub demand:           DemandStats,
+    pub money: i64,
+    pub day: u32,
+    pub tick: u64,
+    pub population: u32,
+    pub jobs: u32,
+    pub utilities: UtilityStats,
+    pub demand: DemandStats,
     /// Monotonically increasing counter — bumped whenever tiles change.
     /// Used by the zone growth cache to know when to rescan vacant lots.
-    pub tile_revision:    u32,
+    pub tile_revision: u32,
     /// Next building ID to assign on placement.
     pub next_building_id: u32,
     /// All placed buildings — grows when zones develop, shrinks on abandonment.
-    pub buildings:        Vec<BuildingInstance>,
+    pub buildings: Vec<BuildingInstance>,
     /// Education coverage stats, recomputed each tick by `education::recompute_education`.
-    pub education:        EducationStats,
+    pub education: EducationStats,
     /// Last computed daily budget snapshot.
-    pub budget:           BudgetStats,
+    pub budget: BudgetStats,
     /// Rolling 200-day budget history for the finance panel.
-    pub budget_history:   VecDeque<BudgetHistoryEntry>,
+    pub budget_history: VecDeque<BudgetHistoryEntry>,
 }
 
 impl GameState {
@@ -301,14 +334,14 @@ impl GameState {
             tick: 0,
             population: 12,
             jobs: 4,
-            utilities:        UtilityStats::initial(),
-            demand:           DemandStats::initial(),
-            tile_revision:    0,
+            utilities: UtilityStats::initial(),
+            demand: DemandStats::initial(),
+            tile_revision: 0,
             next_building_id: 1,
-            buildings:        Vec::new(),
-            education:        EducationStats::default(),
-            budget:           BudgetStats::default(),
-            budget_history:   VecDeque::new(),
+            buildings: Vec::new(),
+            education: EducationStats::default(),
+            budget: BudgetStats::default(),
+            budget_history: VecDeque::new(),
         }
     }
 
@@ -346,7 +379,9 @@ impl GameState {
 mod tests {
     use super::*;
 
-    fn gs() -> GameState { GameState::new(10, 8, 42) }
+    fn gs() -> GameState {
+        GameState::new(10, 8, 42)
+    }
 
     #[test]
     fn dimensions_and_tile_count() {
@@ -384,7 +419,7 @@ mod tests {
     fn tile_index_out_of_bounds() {
         let g = gs();
         assert_eq!(g.tile_index(10, 0), None); // x == width
-        assert_eq!(g.tile_index(0, 8), None);  // y == height
+        assert_eq!(g.tile_index(0, 8), None); // y == height
         assert_eq!(g.tile_index(u32::MAX, u32::MAX), None);
     }
 
