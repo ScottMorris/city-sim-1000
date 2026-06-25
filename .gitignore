@@ -1,6 +1,13 @@
+# Node / Vite
+app/node_modules
+app/dist
+/dist
 node_modules
-dist
+
+# macOS
 .DS_Store
+
+# Logs
 *.log
 
 # Rust build output
@@ -9,4 +16,3 @@ crates/*/target
 
 # wasm-pack output
 pkg/
-
