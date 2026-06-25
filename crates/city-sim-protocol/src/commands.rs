@@ -57,6 +57,18 @@ impl CommandResult {
     }
 }
 
+impl TryFrom<u8> for Tool {
+    type Error = ();
+    fn try_from(v: u8) -> Result<Self, ()> {
+        if v <= Tool::Bulldoze as u8 {
+            // SAFETY: Tool is #[repr(u8)] with contiguous discriminants 0..=21.
+            Ok(unsafe { std::mem::transmute(v) })
+        } else {
+            Err(())
+        }
+    }
+}
+
 /// Mapping from `Tool` to the `TileKind` it places, where applicable.
 /// Returns `None` for tools that don't directly place a tile kind.
 pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
@@ -89,6 +101,16 @@ pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
 mod tests {
     use super::*;
     use postcard::{from_bytes, to_allocvec};
+
+    #[test]
+    fn tool_try_from_u8_roundtrips() {
+        for v in 0u8..=21 {
+            let tool = Tool::try_from(v).expect("valid discriminant");
+            assert_eq!(tool as u8, v);
+        }
+        assert!(Tool::try_from(22).is_err());
+        assert!(Tool::try_from(255).is_err());
+    }
 
     #[test]
     fn command_round_trips_postcard() {

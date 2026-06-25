@@ -4,8 +4,10 @@ use serde::{Serialize, Serializer};
 pub enum Error {
     #[error("simulation is not running — call start first")]
     NotStarted,
-    #[error("simulation channel closed")]
+    #[error("simulation thread has exited")]
     ChannelClosed,
+    #[error("command queue is full — slow down input")]
+    ChannelFull,
     #[error("unknown tool id: {0}")]
     InvalidTool(u8),
     #[error(transparent)]

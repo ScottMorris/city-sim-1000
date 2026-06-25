@@ -59,41 +59,16 @@ impl SimState {
     fn send(&self, cmd: SimCmd) -> Result<(), Error> {
         let guard = self.sender.lock().unwrap();
         match guard.as_ref() {
-            Some(tx) => tx.try_send(cmd).map_err(|_| Error::ChannelClosed),
-            None     => Err(Error::NotStarted),
+            Some(tx) => tx.try_send(cmd).map_err(|e| match e {
+                mpsc::TrySendError::Full(_)         => Error::ChannelFull,
+                mpsc::TrySendError::Disconnected(_) => Error::ChannelClosed,
+            }),
+            None => Err(Error::NotStarted),
         }
     }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn tool_from_u8(v: u8) -> Option<Tool> {
-    match v {
-         0 => Some(Tool::Inspect),
-         1 => Some(Tool::TerraformRaise),
-         2 => Some(Tool::TerraformLower),
-         3 => Some(Tool::Water),
-         4 => Some(Tool::Tree),
-         5 => Some(Tool::Road),
-         6 => Some(Tool::Rail),
-         7 => Some(Tool::PowerLine),
-         8 => Some(Tool::HydroPlant),
-         9 => Some(Tool::CoalPlant),
-        10 => Some(Tool::WindTurbine),
-        11 => Some(Tool::SolarFarm),
-        12 => Some(Tool::WaterPump),
-        13 => Some(Tool::WaterTower),
-        14 => Some(Tool::WaterPipe),
-        15 => Some(Tool::ElementarySchool),
-        16 => Some(Tool::HighSchool),
-        17 => Some(Tool::Residential),
-        18 => Some(Tool::Commercial),
-        19 => Some(Tool::Industrial),
-        20 => Some(Tool::Park),
-        21 => Some(Tool::Bulldoze),
-        _  => None,
-    }
-}
 
 fn build_tick_event(sim: &Simulation) -> TickEvent {
     let s = &sim.state;
@@ -132,7 +107,12 @@ pub fn start(
     seed: u32,
     on_tick: Channel<TickEvent>,
 ) -> Result<(), Error> {
-    // Stop any running sim first
+    // Stop any running sim first. The old thread exits asynchronously — it will
+    // drain its own rx, see Stop, and return on its next iteration (≤50 ms).
+    // The caller (TauriSimBridge) must tolerate a brief burst of stale TickEvents
+    // on the old Channel after start() returns; those arrive on the previous
+    // Channel object, not the new one, so they are harmless if the JS side drops
+    // the old callback reference before calling start() again.
     {
         let mut guard = state.sender.lock().unwrap();
         if let Some(tx) = guard.take() {
@@ -181,7 +161,7 @@ pub fn start(
 /// (matching `city_sim_protocol::commands::Tool as u8`).
 #[tauri::command]
 pub fn apply_tool(state: State<'_, SimState>, tool: u8, x: u32, y: u32) -> Result<(), Error> {
-    let tool = tool_from_u8(tool).ok_or(Error::InvalidTool(tool))?;
+    let tool = Tool::try_from(tool).map_err(|_| Error::InvalidTool(tool))?;
     state.send(SimCmd::ApplyTool(tool, x, y))
 }
 
