@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use sim_protocol::tile_kind::TileKind;
 use crate::adjacency::{has_road_access, is_frontier_zone, zone_has_road_path, tile_has_power, tile_has_water};
+use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
 use crate::state::{GameState, FLAG_ABANDONED};
 
@@ -181,19 +182,19 @@ fn grow_zone_type(
     grown > 0
 }
 
-/// Minimal building placement for zone tiles — sets `building_id` and bumps
-/// state counters.  Full building-record tracking is wired in P3-5.
+/// Place a zone building: set tile.building_id, add to state.buildings, bump counters.
 fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool {
     let Some(idx) = state.tile_index(x, y) else { return false };
     if state.tiles[idx].building_id.is_some() { return false; }
 
-    let bid = state.next_building_id as u16;
+    let bid  = state.next_building_id;
+    let kind = state.tiles[idx].kind;
     state.next_building_id += 1;
     state.tile_revision += 1;
 
-    let tile = &mut state.tiles[idx];
-    tile.building_id = Some(bid);
-    tile.set_flag(FLAG_ABANDONED, false);
+    state.tiles[idx].building_id = Some(bid as u16);
+    state.tiles[idx].set_flag(FLAG_ABANDONED, false);
+    state.buildings.push(BuildingInstance::new(bid, kind, (x, y)));
     true
 }
 

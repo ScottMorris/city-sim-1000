@@ -1,5 +1,6 @@
 use sim_protocol::tile_kind::TileKind;
 use crate::rng::SeededRng;
+use crate::buildings::BuildingInstance;
 
 // ---------------------------------------------------------------------------
 // Tile flags
@@ -35,7 +36,9 @@ pub enum ZoneDensity { Low = 0, Medium = 1, High = 2 }
 pub struct Tile {
     pub kind:            TileKind,
     pub flags:           u8,
-    pub happiness:       u8,
+    /// Happiness in [0.0, 1.5] matching the TS float range (createInitialState
+    /// sets 1.0; the SoA wire buffer quantises this to u8 on output).
+    pub happiness:       f32,
     pub elevation:       u8,
     pub building_id:     Option<u16>,
     pub underground:     Option<TileKind>,
@@ -48,7 +51,7 @@ impl Tile {
         Self {
             kind:           TileKind::Land,
             flags:          0,
-            happiness:      100,
+            happiness:      1.0,
             elevation:      0,
             building_id:    None,
             underground:    None,
@@ -170,6 +173,8 @@ pub struct GameState {
     pub tile_revision:    u32,
     /// Next building ID to assign on placement.
     pub next_building_id: u32,
+    /// All placed buildings — grows when zones develop, shrinks on abandonment.
+    pub buildings:        Vec<BuildingInstance>,
 }
 
 impl GameState {
@@ -194,6 +199,7 @@ impl GameState {
             demand:           DemandStats::initial(),
             tile_revision:    0,
             next_building_id: 1,
+            buildings:        Vec::new(),
         }
     }
 
