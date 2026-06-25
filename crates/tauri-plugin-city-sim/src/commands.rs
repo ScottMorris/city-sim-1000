@@ -3,11 +3,14 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::sim::Simulation;
+use city_sim_core::snapshot;
+use city_sim_core::state::GameState;
 use city_sim_protocol::commands::Tool;
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
@@ -45,6 +48,8 @@ pub struct TickEvent {
 pub enum SimCmd {
     ApplyTool(Tool, u32, u32),
     SetSpeed(f32),
+    GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
+    LoadSnapshot(Box<GameState>),
     Stop,
 }
 
@@ -148,6 +153,13 @@ pub fn start(
                     Ok(SimCmd::SetSpeed(m)) => {
                         sim.set_speed(m);
                     }
+                    Ok(SimCmd::GetSnapshot(tx)) => {
+                        let result = snapshot::to_bytes(&sim.state).map_err(|e| e.to_string());
+                        let _ = tx.send(result);
+                    }
+                    Ok(SimCmd::LoadSnapshot(gs)) => {
+                        sim.load_state(*gs);
+                    }
                     Ok(SimCmd::Stop) => return,
                     Err(_) => break,
                 }
@@ -190,4 +202,32 @@ pub fn stop(state: State<'_, SimState>) -> Result<(), Error> {
         let _ = tx.try_send(SimCmd::Stop);
     }
     Ok(())
+}
+
+/// Serialise the current simulation state to a postcard snapshot and return the
+/// raw bytes. The JS side receives a `Uint8Array` via `invoke`.
+///
+/// Blocks until the sim thread responds (max 2 s). Returns an error if the sim
+/// is not running or the round-trip times out.
+#[tauri::command]
+pub fn get_snapshot(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
+    let (tx, rx) = mpsc::sync_channel(0);
+    state.send(SimCmd::GetSnapshot(tx))?;
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })?
+        .map_err(Error::Snapshot)
+}
+
+/// Replace the running simulation state with the one encoded in `bytes`.
+///
+/// `bytes` must be a postcard snapshot produced by `get_snapshot`. The sim
+/// thread swaps the state in place on its next command drain; the next
+/// `TickEvent` reflects the restored state.
+#[tauri::command]
+pub fn load_snapshot(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
+    let game_state = snapshot::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
+    state.send(SimCmd::LoadSnapshot(Box::new(game_state)))
 }

@@ -1,4 +1,4 @@
-// buildings.rs — building templates, instances, and per-tick status updates.
+// buildings.rs — building templates, placement, status updates, and decay.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -13,7 +13,7 @@ use city_sim_protocol::tile_kind::TileKind;
 
 /// Runtime status of a building.  Mirrors `BuildingStatus` in
 /// `app/src/game/buildings/state.ts`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum BuildingStatus {
     Active,
     InactiveNoPower,
@@ -151,7 +151,7 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
 
 /// A placed building in the world.  Mirrors `BuildingInstance` in
 /// `app/src/game/buildings/state.ts`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BuildingInstance {
     pub id: u32,
     /// The tile kind used to identify this building (determines template lookup).

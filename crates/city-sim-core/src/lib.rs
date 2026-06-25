@@ -10,6 +10,7 @@ pub mod economy;
 pub mod education;
 pub mod rng;
 pub mod sim;
+pub mod snapshot;
 pub mod state;
 pub mod utilities;
 pub mod zones;

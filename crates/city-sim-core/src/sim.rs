@@ -123,6 +123,12 @@ impl Simulation {
         self.speed = multiplier.max(0.0);
     }
 
+    /// Replace the current state and reset transient caches.
+    pub fn load_state(&mut self, state: GameState) {
+        self.state = state;
+        self.zone_growth = ZoneGrowthSim::new();
+    }
+
     // --- internal ---
 
     /// Compute utility use (power_used, water_used) from active buildings and

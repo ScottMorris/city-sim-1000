@@ -8,5 +8,6 @@ license.workspace    = true
 
 [dependencies]
 city-sim-protocol = { path = "../city-sim-protocol" }
+postcard     = { workspace = true }
 serde        = { workspace = true }
 thiserror    = { workspace = true }

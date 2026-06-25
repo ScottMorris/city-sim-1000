@@ -1,4 +1,4 @@
-// state.rs — GameState definition: flat tile grid and all sim sub-states.
+// state.rs — GameState and all subordinate types (Tile, DemandStats, etc.).
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -22,7 +22,7 @@ pub const FLAG_POWER_OVERLAY: u8 = 0b0010_0000;
 pub const FLAG_ZONE_DENSITY_MASK: u8 = 0b1100_0000;
 pub const FLAG_ZONE_DENSITY_SHIFT: u8 = 6;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum ZoneDensity {
     Low = 0,
@@ -36,7 +36,7 @@ pub enum ZoneDensity {
 
 /// Which city service a building provides (or `None` for non-service buildings).
 /// Mirrors `ServiceId` from `app/src/game/services.ts`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ServiceKind {
     #[default]
     None,
@@ -56,7 +56,7 @@ pub enum ServiceKind {
 /// `power_plant_mw` is > 0 for power plant tiles; used as both source flag and
 ///   output tracker in the power BFS (in MW, deduped by building_id at roll-up).
 /// `water_output` is > 0 for active water source tiles (pumps/towers) in the same fashion.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
     pub kind: TileKind,
     pub flags: u8,
@@ -154,7 +154,7 @@ impl Tile {
 ///
 /// Computed each tick by the demand system (P3-6).  P3-4 zone growth reads
 /// these values; initial city starts with modest demand so early growth fires.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DemandStats {
     pub residential: f32,
     pub commercial: f32,
@@ -179,7 +179,7 @@ impl DemandStats {
 
 /// City-wide education coverage snapshot.  Mirrors `EducationStats` in
 /// `app/src/game/education.ts`.  Recomputed each tick by `education::recompute_education`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EducationStats {
     pub elementary_served: f32,
     pub elementary_capacity: f32,
@@ -215,7 +215,7 @@ impl Default for EducationStats {
 // ---------------------------------------------------------------------------
 
 /// Daily budget snapshot.  Mirrors the TS `BudgetStats` interface in `gameState.ts`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct BudgetStats {
     pub revenue: f32,
     pub expenses: f32,
@@ -244,7 +244,7 @@ pub struct BudgetStats {
 }
 
 /// One day's budget record, stored in the rolling history ring buffer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BudgetHistoryEntry {
     pub day: u32,
     pub revenue: f32,
@@ -257,7 +257,7 @@ pub struct BudgetHistoryEntry {
 // ---------------------------------------------------------------------------
 
 /// Mirrors the TS `UtilityStats` interface in `gameState.ts`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UtilityStats {
     /// Net power balance (produced − used), in MW.
     pub power: i32,
@@ -289,7 +289,7 @@ impl UtilityStats {
 
 /// Top-level simulation state. Mirrors the TS `GameState` interface, extended
 /// with Rust-native types where appropriate.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GameState {
     pub width: u32,
     pub height: u32,
