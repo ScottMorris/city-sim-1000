@@ -335,6 +335,7 @@ name = "city-sim-core"
 version = "0.1.0"
 dependencies = [
  "city-sim-protocol",
+ "postcard",
  "serde",
  "thiserror 1.0.69",
 ]

@@ -103,4 +103,63 @@ mod tests {
             Err(SnapshotError::TooShort)
         ));
     }
+
+    #[test]
+    fn round_trip_preserves_rng_state() {
+        let mut original = GameState::new(8, 8, 99);
+        // Advance RNG so its internal state is non-trivial.
+        for _ in 0..50 {
+            original.rng.next_u32();
+        }
+        let bytes = to_bytes(&original).expect("serialise");
+        let mut restored = from_bytes(&bytes).expect("deserialise");
+        // Both RNG instances must produce the same sequence post-restore.
+        for _ in 0..20 {
+            assert_eq!(
+                original.rng.next_u32(),
+                restored.rng.next_u32(),
+                "RNG state diverged after round-trip"
+            );
+        }
+    }
+
+    #[test]
+    fn round_trip_city_with_buildings_and_history() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        use crate::state::BudgetHistoryEntry;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut state = GameState::new(4, 4, 7);
+        state.buildings.push(BuildingInstance {
+            id: 1,
+            kind: TileKind::Residential,
+            origin: (0, 0),
+            status: BuildingStatus::Active,
+            health: 80,
+            trouble_ticks: 2.5,
+        });
+        state.budget_history.push_back(BudgetHistoryEntry {
+            day: 1,
+            revenue: 100.0,
+            expenses: 60.0,
+            net: 40.0,
+        });
+        state.budget_history.push_back(BudgetHistoryEntry {
+            day: 2,
+            revenue: 110.0,
+            expenses: 65.0,
+            net: 45.0,
+        });
+
+        let bytes = to_bytes(&state).expect("serialise");
+        let restored = from_bytes(&bytes).expect("deserialise");
+
+        assert_eq!(restored.buildings.len(), 1);
+        assert_eq!(restored.buildings[0].id, 1);
+        assert_eq!(restored.buildings[0].health, 80);
+        assert_eq!(restored.buildings[0].trouble_ticks, 2.5);
+        assert_eq!(restored.buildings[0].status, BuildingStatus::Active);
+        assert_eq!(restored.budget_history.len(), 2);
+        assert_eq!(restored.budget_history[1].net, 45.0);
+    }
 }

@@ -1,3 +1,9 @@
+// commands.rs — Tauri plugin command handlers and simulation thread management.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -149,10 +155,10 @@ pub fn start(
                     }
                     Ok(SimCmd::GetSnapshot(tx)) => {
                         let result = snapshot::to_bytes(&sim.state).map_err(|e| e.to_string());
-                        let _ = tx.try_send(result);
+                        let _ = tx.send(result);
                     }
                     Ok(SimCmd::LoadSnapshot(gs)) => {
-                        sim.state = *gs;
+                        sim.load_state(*gs);
                     }
                     Ok(SimCmd::Stop) => return,
                     Err(_) => break,
@@ -208,7 +214,10 @@ pub fn get_snapshot(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
     let (tx, rx) = mpsc::sync_channel(0);
     state.send(SimCmd::GetSnapshot(tx))?;
     rx.recv_timeout(Duration::from_secs(2))
-        .map_err(|_| Error::SnapshotTimeout)?
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })?
         .map_err(Error::Snapshot)
 }
 

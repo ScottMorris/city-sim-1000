@@ -1,3 +1,8 @@
+// index.ts — guest-JS bindings for the city-sim Tauri plugin.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
  * Guest-JS bindings for the `city-sim` Tauri plugin.
  *

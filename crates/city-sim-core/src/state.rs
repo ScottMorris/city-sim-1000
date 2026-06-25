@@ -1,3 +1,8 @@
+// state.rs — GameState and all subordinate types (Tile, DemandStats, etc.).
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
 use city_sim_protocol::tile_kind::TileKind;

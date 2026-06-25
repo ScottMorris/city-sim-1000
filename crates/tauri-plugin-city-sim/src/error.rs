@@ -1,3 +1,8 @@
+// error.rs — plugin-level error type exposed to Tauri and JS callers.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, thiserror::Error)]
