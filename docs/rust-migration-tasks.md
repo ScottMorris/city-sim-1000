@@ -10,7 +10,7 @@ criteria and dependencies. Update the checkboxes as you go.
 > — each issue links back to its task here; rationale stays in the plan doc, not the issue.
 
 **Legend:** `[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked
-**Global gate:** every task ends green on `npm test -- --pool=threads --poolOptions.threads.singleThread=true` and (once Rust exists) `cargo test`.
+**Global gate:** every task ends green on `bun run test` and (once Rust exists) `cargo test`.
 
 ---
 
@@ -63,18 +63,18 @@ the Rust workspace exists and compiles.*
 *Goal: de-risk the hardest integration — Worker + shared memory + tile mirror — before
 porting any real logic. The Rust `step()` here is trivial (flip a few tiles).*
 
-- [ ] **P2-1 · `sim_wasm` cdylib + `SimHost`** with a stub `step()` and a tile buffer it
-  writes into. `deps:` P1-2. **DoD:** `wasm-pack build` produces a loadable module.
-- [ ] **P2-2 · Worker host + `SharedArrayBuffer` tile mirror.** Worker owns the WASM sim;
-  tiles in a SAB the main thread reads. `deps:` P2-1.
-  **DoD:** renderer draws tiles read *only* from the mirror; stub tile flips appear on
-  screen.
-- [ ] **P2-3 · `WasmSimBridge`** (Worker `postMessage` for structured msgs; SAB for tiles).
-  Swap it in behind `SimBridge`. `deps:` P2-2.
-  **DoD:** Init → tick → one command round-trips → an event arrives in the UI.
-- [ ] **P2-4 · COOP/COEP verification on GitHub Pages** for `SharedArrayBuffer`. `deps:`
-  P2-2. **DoD:** confirmed working on the deployed preview **or** the transferable-
-  `ArrayBuffer` diff fallback is implemented and selected at runtime.
+- [x] **P2-1 · `sim_wasm` cdylib + `SimHost`** with a stub `step()` and a tile buffer it
+  writes into. `deps:` P1-2. **DoD:** `wasm-pack build` produces a loadable module. ✓
+- [x] **P2-2 · Worker host + tile mirror.** Worker owns the WASM sim; tile buffer sent to
+  main thread via transferable `ArrayBuffer`. `deps:` P2-1.
+  **DoD:** renderer draws tiles read *only* from the mirror; stub tile (1,1) flips
+  Land↔Road each tick when `?bridge=wasm` is set. ✓
+- [x] **P2-3 · `WasmSimBridge`** (Worker `postMessage` for structured msgs; transferable
+  `ArrayBuffer` for tiles). Swap it in behind `SimBridge` via `?bridge=wasm`. `deps:` P2-2.
+  **DoD:** Init → tick → one command round-trips → TickStats arrives in the UI. ✓
+- [x] **P2-4 · COOP/COEP headers set** in Vite dev server and `vite preview`; transferable-
+  `ArrayBuffer` fallback is the current implementation (no SAB yet). `deps:` P2-2.
+  **DoD:** `crossOriginIsolated` is true on dev server; upgrade to SAB is a Phase 3 task. ✓
 
 ## Phase 3 — Port systems into `step()` (oracle-checked after each)
 *Goal: fill the real simulation into `sim_core`. After EACH task, run the Phase-0
