@@ -126,3 +126,30 @@ export async function setSpeed(multiplier: number): Promise<void> {
 export async function stop(): Promise<void> {
   await invoke('plugin:city-sim|stop', {})
 }
+
+/**
+ * Serialise the current simulation state to a compact postcard snapshot.
+ *
+ * Returns raw bytes that can be stored to disk and later passed to
+ * `loadSnapshot`. The format is opaque: a 8-byte header (`CSIM` magic + u32
+ * version) followed by a postcard-encoded `GameState`.
+ *
+ * Blocks until the sim thread responds (max 2 s); rejects if the sim is not
+ * running or the round-trip times out.
+ */
+export async function getSnapshot(): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>('plugin:city-sim|get_snapshot', {})
+  return new Uint8Array(bytes)
+}
+
+/**
+ * Replace the running simulation state with the one encoded in `bytes`.
+ *
+ * `bytes` must be a snapshot previously returned by `getSnapshot`. The sim
+ * thread swaps state in-place; the next `TickEvent` reflects the restored city.
+ *
+ * Rejects if `bytes` is not a valid CSIM snapshot or if the sim is not running.
+ */
+export async function loadSnapshot(bytes: Uint8Array): Promise<void> {
+  await invoke('plugin:city-sim|load_snapshot', { bytes: Array.from(bytes) })
+}

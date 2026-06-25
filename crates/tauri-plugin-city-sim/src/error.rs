@@ -10,6 +10,10 @@ pub enum Error {
     ChannelFull,
     #[error("unknown tool id: {0}")]
     InvalidTool(u8),
+    #[error("snapshot error: {0}")]
+    Snapshot(String),
+    #[error("timed out waiting for snapshot from sim thread")]
+    SnapshotTimeout,
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }
