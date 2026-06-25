@@ -103,7 +103,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   golden hash committed (`0x3d128c538d40e908`, seed=42, 8×8 city, 100 ticks). `deps:` P3-1..P3-9.
 
 ## Phase 4 — Tauri v2 transport
-- [ ] **P4-1 · `sim_tauri` backend** runs `sim_core` natively; commands + Channel events;
+- [x] **P4-1 · `sim_tauri` backend** runs `sim_core` natively; commands + Channel events;
   tile buffer over a Channel. `deps:` P3-10.
 - [ ] **P4-2 · `TauriSimBridge`** + runtime detection (web→WASM, desktop→Tauri). `deps:`
   P4-1. **DoD:** desktop build plays identically; same renderer, same fixtures pass.

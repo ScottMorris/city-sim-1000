@@ -1,13 +1,17 @@
 [package]
-name        = "sim_tauri"
-description = "Tauri v2 plugin/backend that runs sim_core natively for the desktop target"
+name        = "sim-tauri"
+description = "Tauri v2 plugin that runs sim_core natively for the desktop target"
+links       = "sim-tauri"
 version.workspace    = true
 edition.workspace    = true
 authors.workspace    = true
 license.workspace    = true
 
 [lib]
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
 
 [dependencies]
 sim_core     = { path = "../sim_core" }
@@ -15,6 +19,4 @@ sim_protocol = { path = "../sim_protocol" }
 serde        = { workspace = true }
 postcard     = { workspace = true }
 thiserror    = { workspace = true }
-
-# Tauri added when the desktop app phase begins:
-# tauri        = { version = "2", features = ["wry"] }
+tauri        = { version = "2" }
