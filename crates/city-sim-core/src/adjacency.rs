@@ -1,6 +1,11 @@
-use std::collections::{HashSet, VecDeque};
-use city_sim_protocol::tile_kind::TileKind;
+// Road, rail, power, and water adjacency queries used throughout the simulation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
+use city_sim_protocol::tile_kind::TileKind;
+use std::collections::{HashSet, VecDeque};
 
 /// Four orthogonal directions as (dx, dy) pairs.
 const DIRS: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
@@ -26,14 +31,19 @@ pub fn orthogonal_neighbours(
 /// Returns true if the tile is a zone (residential / commercial / industrial).
 /// Mirrors `isZone()` in `app/src/game/adjacency.ts`.
 pub fn is_zone(tile: &Tile) -> bool {
-    matches!(tile.kind, TileKind::Residential | TileKind::Commercial | TileKind::Industrial)
+    matches!(
+        tile.kind,
+        TileKind::Residential | TileKind::Commercial | TileKind::Industrial
+    )
 }
 
 /// Returns true if any orthogonal neighbour of (x, y) is a road, road-underlay,
 /// or power line.  Mirrors `hasRoadAccess()` in `adjacency.ts`.
 pub fn has_road_access(state: &GameState, x: u32, y: u32) -> bool {
     for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
-        let Some(t) = state.tile_at(nx, ny) else { continue };
+        let Some(t) = state.tile_at(nx, ny) else {
+            continue;
+        };
         if t.kind == TileKind::Road || t.has_road_underlay() || t.kind == TileKind::PowerLine {
             return true;
         }
@@ -44,11 +54,19 @@ pub fn has_road_access(state: &GameState, x: u32, y: u32) -> bool {
 /// Returns true if (x, y) is a zone tile that has at least one non-zone
 /// orthogonal neighbour.  Mirrors `isFrontierZone()` in `adjacency.ts`.
 pub fn is_frontier_zone(state: &GameState, x: u32, y: u32) -> bool {
-    let Some(tile) = state.tile_at(x, y) else { return false };
-    if !is_zone(tile) { return false; }
+    let Some(tile) = state.tile_at(x, y) else {
+        return false;
+    };
+    if !is_zone(tile) {
+        return false;
+    }
     for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
-        let Some(n) = state.tile_at(nx, ny) else { continue };
-        if !is_zone(n) { return true; }
+        let Some(n) = state.tile_at(nx, ny) else {
+            continue;
+        };
+        if !is_zone(n) {
+            return true;
+        }
     }
     false
 }
@@ -56,9 +74,15 @@ pub fn is_frontier_zone(state: &GameState, x: u32, y: u32) -> bool {
 /// BFS through zone tiles from (start_x, start_y): returns true if a road
 /// tile can be reached.  Mirrors `zoneHasRoadPath()` in `adjacency.ts`.
 pub fn zone_has_road_path(state: &GameState, start_x: u32, start_y: u32) -> bool {
-    let Some(start) = state.tile_at(start_x, start_y) else { return false };
-    if !is_zone(start) { return false; }
-    if has_road_access(state, start_x, start_y) { return true; }
+    let Some(start) = state.tile_at(start_x, start_y) else {
+        return false;
+    };
+    if !is_zone(start) {
+        return false;
+    }
+    if has_road_access(state, start_x, start_y) {
+        return true;
+    }
 
     let mut visited: HashSet<usize> = HashSet::new();
     let mut queue: VecDeque<(u32, u32)> = VecDeque::new();
@@ -67,11 +91,19 @@ pub fn zone_has_road_path(state: &GameState, start_x: u32, start_y: u32) -> bool
     while let Some((x, y)) = queue.pop_front() {
         for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
             let idx = (ny * state.width + nx) as usize;
-            if visited.contains(&idx) { continue; }
+            if visited.contains(&idx) {
+                continue;
+            }
             visited.insert(idx);
-            let Some(n) = state.tile_at(nx, ny) else { continue };
-            if !is_zone(n) { continue; }
-            if has_road_access(state, nx, ny) { return true; }
+            let Some(n) = state.tile_at(nx, ny) else {
+                continue;
+            };
+            if !is_zone(n) {
+                continue;
+            }
+            if has_road_access(state, nx, ny) {
+                return true;
+            }
             queue.push_back((nx, ny));
         }
     }
@@ -81,7 +113,10 @@ pub fn zone_has_road_path(state: &GameState, start_x: u32, start_y: u32) -> bool
 /// Returns true if (x, y) is powered directly or via an adjacent powered carrier.
 /// Mirrors `tileHasPower()` in `adjacency.ts`.
 pub fn tile_has_power(state: &GameState, x: u32, y: u32) -> bool {
-    if state.tile_at(x, y).map_or(false, |t| t.flags & FLAG_POWERED != 0) {
+    if state
+        .tile_at(x, y)
+        .is_some_and(|t| t.flags & FLAG_POWERED != 0)
+    {
         return true;
     }
     use crate::utilities::is_power_carrier_pub;
@@ -98,7 +133,10 @@ pub fn tile_has_power(state: &GameState, x: u32, y: u32) -> bool {
 /// Returns true if (x, y) is watered directly or via an adjacent watered carrier.
 /// Mirrors `tileHasWater()` in `adjacency.ts`.
 pub fn tile_has_water(state: &GameState, x: u32, y: u32) -> bool {
-    if state.tile_at(x, y).map_or(false, |t| t.flags & FLAG_WATERED != 0) {
+    if state
+        .tile_at(x, y)
+        .is_some_and(|t| t.flags & FLAG_WATERED != 0)
+    {
         return true;
     }
     use crate::utilities::is_water_carrier_pub;
@@ -121,7 +159,9 @@ mod tests {
     use super::*;
     use crate::state::FLAG_ROAD_UNDERLAY;
 
-    fn g(w: u32, h: u32) -> GameState { GameState::new(w, h, 0) }
+    fn g(w: u32, h: u32) -> GameState {
+        GameState::new(w, h, 0)
+    }
     fn kind(state: &mut GameState, x: u32, y: u32, k: TileKind) {
         state.tile_at_mut(x, y).unwrap().kind = k;
     }
@@ -145,21 +185,33 @@ mod tests {
     fn road_underlay_gives_access() {
         let mut s = g(2, 1);
         kind(&mut s, 0, 0, TileKind::Residential);
-        s.tile_at_mut(1, 0).unwrap().set_flag(FLAG_ROAD_UNDERLAY, true);
+        s.tile_at_mut(1, 0)
+            .unwrap()
+            .set_flag(FLAG_ROAD_UNDERLAY, true);
         assert!(has_road_access(&s, 0, 0));
     }
 
     #[test]
     fn is_zone_true_for_zone_kinds() {
-        for k in [TileKind::Residential, TileKind::Commercial, TileKind::Industrial] {
-            assert!(is_zone(&Tile { kind: k, ..Tile::land() }));
+        for k in [
+            TileKind::Residential,
+            TileKind::Commercial,
+            TileKind::Industrial,
+        ] {
+            assert!(is_zone(&Tile {
+                kind: k,
+                ..Tile::land()
+            }));
         }
     }
 
     #[test]
     fn is_zone_false_for_non_zone() {
         assert!(!is_zone(&Tile::land()));
-        assert!(!is_zone(&Tile { kind: TileKind::Road, ..Tile::land() }));
+        assert!(!is_zone(&Tile {
+            kind: TileKind::Road,
+            ..Tile::land()
+        }));
     }
 
     #[test]
@@ -171,7 +223,10 @@ mod tests {
         kind(&mut s, 1, 0, TileKind::Residential);
         kind(&mut s, 2, 0, TileKind::Residential);
         // Row 1 stays as Land (default)
-        assert!(is_frontier_zone(&s, 0, 0), "(0,0) has non-zone neighbour (0,1)");
+        assert!(
+            is_frontier_zone(&s, 0, 0),
+            "(0,0) has non-zone neighbour (0,1)"
+        );
     }
 
     #[test]

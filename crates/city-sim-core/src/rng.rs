@@ -1,3 +1,8 @@
+// SeededRng: SplitMix64 seeding + xoshiro128** generation, mirroring app/src/game/rng.ts.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /// SeededRng — SplitMix64 seeding, xoshiro128** generation.
 ///
 /// Must match `app/src/game/rng.ts` exactly.  The reference vectors in the
@@ -20,8 +25,8 @@ impl SeededRng {
     /// Create from a u32 seed using SplitMix64 expansion.
     pub fn new(seed: u32) -> Self {
         const INCR: u64 = 0x9e3779b97f4a7c15;
-        const M1:   u64 = 0xbf58476d1ce4e5b9;
-        const M2:   u64 = 0x94d049bb133111eb;
+        const M1: u64 = 0xbf58476d1ce4e5b9;
+        const M2: u64 = 0x94d049bb133111eb;
 
         // TS: `let state = BigInt(seed >>> 0)` — u32 zero-extended to u64.
         let mut state: u64 = seed as u64;
@@ -47,7 +52,12 @@ impl SeededRng {
 
     /// Restore RNG from a saved state tuple (no re-seeding).
     pub fn from_state(s: [u32; 4]) -> Self {
-        Self { s0: s[0], s1: s[1], s2: s[2], s3: s[3] }
+        Self {
+            s0: s[0],
+            s1: s[1],
+            s2: s[2],
+            s3: s[3],
+        }
     }
 
     /// Serialise state for persistence.
@@ -75,7 +85,9 @@ impl SeededRng {
 
     /// Integer in [0, max).
     pub fn next_below(&mut self, max: u32) -> u32 {
-        if max == 0 { return 0; }
+        if max == 0 {
+            return 0;
+        }
         self.next_u32() % max
     }
 
@@ -90,7 +102,7 @@ impl SeededRng {
 
 #[inline]
 fn rotl(x: u32, k: u32) -> u32 {
-    (x << k) | (x >> (32 - k))
+    x.rotate_left(k)
 }
 
 /// FNV-1a 32-bit hash over ASCII bytes — used only by `derive()`.
@@ -113,9 +125,18 @@ mod tests {
     // Reference vectors hardcoded from the canonical TS rng.test.ts.
     // The Rust sim_core MUST produce identical values for the same seeds.
     // Do NOT change without also updating rng.test.ts.
-    const SEED0: [u32; 8]     = [3737715805,2584255861,2876756834,3286328325,1553311962,1625202774,3260698944,2754151956];
-    const SEED1: [u32; 8]     = [1695105466,1423115009,634581793,1068227753,716759206,4186505319,3777694425,2710820970];
-    const SEED12345: [u32; 8] = [2314518269,2498321016,2055377852,4042509560,1267802836,503974162,1443322985,3447162595];
+    const SEED0: [u32; 8] = [
+        3737715805, 2584255861, 2876756834, 3286328325, 1553311962, 1625202774, 3260698944,
+        2754151956,
+    ];
+    const SEED1: [u32; 8] = [
+        1695105466, 1423115009, 634581793, 1068227753, 716759206, 4186505319, 3777694425,
+        2710820970,
+    ];
+    const SEED12345: [u32; 8] = [
+        2314518269, 2498321016, 2055377852, 4042509560, 1267802836, 503974162, 1443322985,
+        3447162595,
+    ];
 
     fn collect8(rng: &mut SeededRng) -> [u32; 8] {
         std::array::from_fn(|_| rng.next_u32())
@@ -157,7 +178,9 @@ mod tests {
     #[test]
     fn from_state_round_trips() {
         let mut rng = SeededRng::new(999);
-        for _ in 0..10 { rng.next_u32(); }
+        for _ in 0..10 {
+            rng.next_u32();
+        }
         let saved = rng.to_state();
         let mut restored = SeededRng::from_state(saved);
         for _ in 0..20 {

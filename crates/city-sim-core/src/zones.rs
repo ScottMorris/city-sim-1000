@@ -1,9 +1,16 @@
-use std::collections::{BTreeSet, HashMap};
-use city_sim_protocol::tile_kind::TileKind;
-use crate::adjacency::{has_road_access, is_frontier_zone, zone_has_road_path, tile_has_power, tile_has_water};
+// Zone growth, demand scoring, and tile placement for residential/commercial/industrial.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
+use crate::adjacency::{
+    has_road_access, is_frontier_zone, tile_has_power, tile_has_water, zone_has_road_path,
+};
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
 use crate::state::{GameState, FLAG_ABANDONED};
+use city_sim_protocol::tile_kind::TileKind;
+use std::collections::{BTreeSet, HashMap};
 
 // ---------------------------------------------------------------------------
 // Zone growth simulation state (not serialised — rebuilt from GameState)
@@ -17,25 +24,34 @@ use crate::state::{GameState, FLAG_ABANDONED};
 #[derive(Debug, Default)]
 pub struct ZoneGrowthSim {
     /// Countdown timers (ticks remaining) per vacant-zone tile index.
-    timers:        HashMap<usize, u32>,
+    timers: HashMap<usize, u32>,
     /// Set of tile indices that are vacant zone tiles.
-    vacant:        BTreeSet<usize>,
+    vacant: BTreeSet<usize>,
     /// Last seen `GameState.tile_revision` — used to invalidate the cache.
     last_revision: u32,
 }
 
 impl ZoneGrowthSim {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Rebuild the vacant-zone cache if `tile_revision` changed or cache is empty.
     fn refresh_vacant(&mut self, state: &GameState) {
         let rev = state.tile_revision;
-        if rev == self.last_revision && !self.vacant.is_empty() { return; }
+        if rev == self.last_revision && !self.vacant.is_empty() {
+            return;
+        }
 
         self.vacant.clear();
         for (idx, tile) in state.tiles.iter().enumerate() {
-            if tile.building_id.is_some() { continue; }
-            if matches!(tile.kind, TileKind::Residential | TileKind::Commercial | TileKind::Industrial) {
+            if tile.building_id.is_some() {
+                continue;
+            }
+            if matches!(
+                tile.kind,
+                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
+            ) {
                 self.vacant.insert(idx);
             }
         }
@@ -46,7 +62,9 @@ impl ZoneGrowthSim {
 
     /// Number of tracked vacant zones (for tests / diagnostics).
     #[cfg(test)]
-    pub fn vacant_count(&self) -> usize { self.vacant.len() }
+    pub fn vacant_count(&self) -> usize {
+        self.vacant.len()
+    }
 
     /// Run one zone-growth tick.  Returns `true` if any building was placed.
     ///
@@ -57,8 +75,8 @@ impl ZoneGrowthSim {
 
         // --- build candidate lists ---
         let mut residential: Vec<Candidate> = Vec::new();
-        let mut commercial:  Vec<Candidate> = Vec::new();
-        let mut industrial:  Vec<Candidate> = Vec::new();
+        let mut commercial: Vec<Candidate> = Vec::new();
+        let mut industrial: Vec<Candidate> = Vec::new();
 
         let vacant_snapshot: Vec<usize> = self.vacant.iter().copied().collect();
 
@@ -70,7 +88,10 @@ impl ZoneGrowthSim {
                 self.vacant.remove(&idx);
                 continue;
             }
-            if !matches!(tile.kind, TileKind::Residential | TileKind::Commercial | TileKind::Industrial) {
+            if !matches!(
+                tile.kind,
+                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
+            ) {
                 self.timers.remove(&idx);
                 self.vacant.remove(&idx);
                 continue;
@@ -78,9 +99,9 @@ impl ZoneGrowthSim {
 
             let x = (idx as u32) % state.width;
             let y = (idx as u32) / state.width;
-            let has_road  = has_road_access(state, x, y);
+            let has_road = has_road_access(state, x, y);
             let has_chain = zone_has_road_path(state, x, y);
-            let frontier  = is_frontier_zone(state, x, y);
+            let frontier = is_frontier_zone(state, x, y);
             if !has_road && !has_chain && !frontier {
                 self.timers.remove(&idx);
                 continue;
@@ -99,9 +120,27 @@ impl ZoneGrowthSim {
             let has_water = tile_has_water(state, x, y);
             let kind = tile.kind;
             match kind {
-                TileKind::Residential => residential.push(Candidate { idx, x, y, has_power, has_water }),
-                TileKind::Commercial  => commercial .push(Candidate { idx, x, y, has_power, has_water }),
-                TileKind::Industrial  => industrial .push(Candidate { idx, x, y, has_power, has_water }),
+                TileKind::Residential => residential.push(Candidate {
+                    idx,
+                    x,
+                    y,
+                    has_power,
+                    has_water,
+                }),
+                TileKind::Commercial => commercial.push(Candidate {
+                    idx,
+                    x,
+                    y,
+                    has_power,
+                    has_water,
+                }),
+                TileKind::Industrial => industrial.push(Candidate {
+                    idx,
+                    x,
+                    y,
+                    has_power,
+                    has_water,
+                }),
                 _ => {}
             }
         }
@@ -109,9 +148,30 @@ impl ZoneGrowthSim {
         let demand_r = state.demand.residential;
         let demand_c = state.demand.commercial;
         let demand_i = state.demand.industrial;
-        let grew_r = grow_zone_type(state, rng, TileKind::Residential, demand_r, &mut residential, &mut self.vacant);
-        let grew_c = grow_zone_type(state, rng, TileKind::Commercial,  demand_c, &mut commercial,  &mut self.vacant);
-        let grew_i = grow_zone_type(state, rng, TileKind::Industrial,  demand_i, &mut industrial,  &mut self.vacant);
+        let grew_r = grow_zone_type(
+            state,
+            rng,
+            TileKind::Residential,
+            demand_r,
+            &mut residential,
+            &mut self.vacant,
+        );
+        let grew_c = grow_zone_type(
+            state,
+            rng,
+            TileKind::Commercial,
+            demand_c,
+            &mut commercial,
+            &mut self.vacant,
+        );
+        let grew_i = grow_zone_type(
+            state,
+            rng,
+            TileKind::Industrial,
+            demand_i,
+            &mut industrial,
+            &mut self.vacant,
+        );
 
         if grew_r || grew_c || grew_i {
             self.last_revision = state.tile_revision;
@@ -125,22 +185,32 @@ impl ZoneGrowthSim {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-struct Candidate { idx: usize, x: u32, y: u32, has_power: bool, has_water: bool }
+struct Candidate {
+    idx: usize,
+    x: u32,
+    y: u32,
+    has_power: bool,
+    has_water: bool,
+}
 
 /// Mirrors `applyZoneGrowthForType()` from `simulation.ts`.
 fn grow_zone_type(
-    state:      &mut GameState,
-    rng:        &mut SeededRng,
-    _kind:      TileKind,
-    demand:     f32,
-    candidates: &mut Vec<Candidate>,
-    vacant:     &mut BTreeSet<usize>,
+    state: &mut GameState,
+    rng: &mut SeededRng,
+    _kind: TileKind,
+    demand: f32,
+    candidates: &mut [Candidate],
+    vacant: &mut BTreeSet<usize>,
 ) -> bool {
-    if candidates.is_empty() { return false; }
+    if candidates.is_empty() {
+        return false;
+    }
 
     // Cap: how many lots can develop this tick
     let max_new = (1 + (demand / 40.0) as u32).clamp(0, 4);
-    if max_new == 0 { return false; }
+    if max_new == 0 {
+        return false;
+    }
 
     // Base growth probability
     let p_grow: f32 = if demand >= 50.0 {
@@ -163,16 +233,28 @@ fn grow_zone_type(
 
     let mut grown = 0u32;
     for c in candidates.iter() {
-        if grown >= max_new { break; }
+        if grown >= max_new {
+            break;
+        }
 
         let mut util_factor: f32 = 1.0;
-        if !c.has_power { util_factor *= 0.15; }
-        if !c.has_water { util_factor *= 0.35; }
-        if power_bal < 0.0 { util_factor *= (1.0 + power_bal / 20.0).clamp(0.05, 1.0); }
-        if water_bal < 0.0 { util_factor *= (1.0 + water_bal / 30.0).clamp(0.05, 1.0); }
+        if !c.has_power {
+            util_factor *= 0.15;
+        }
+        if !c.has_water {
+            util_factor *= 0.35;
+        }
+        if power_bal < 0.0 {
+            util_factor *= (1.0 + power_bal / 20.0).clamp(0.05, 1.0);
+        }
+        if water_bal < 0.0 {
+            util_factor *= (1.0 + water_bal / 30.0).clamp(0.05, 1.0);
+        }
 
         let adj_p = (p_grow * util_factor).clamp(0.0, 1.0);
-        if adj_p <= 0.0 || rng.next_f32() > adj_p { continue; }
+        if adj_p <= 0.0 || rng.next_f32() > adj_p {
+            continue;
+        }
 
         if place_zone_building(state, c.x, c.y) {
             vacant.remove(&c.idx);
@@ -184,17 +266,23 @@ fn grow_zone_type(
 
 /// Place a zone building: set tile.building_id, add to state.buildings, bump counters.
 fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool {
-    let Some(idx) = state.tile_index(x, y) else { return false };
-    if state.tiles[idx].building_id.is_some() { return false; }
+    let Some(idx) = state.tile_index(x, y) else {
+        return false;
+    };
+    if state.tiles[idx].building_id.is_some() {
+        return false;
+    }
 
-    let bid  = state.next_building_id;
+    let bid = state.next_building_id;
     let kind = state.tiles[idx].kind;
     state.next_building_id += 1;
     state.tile_revision += 1;
 
     state.tiles[idx].building_id = Some(bid as u16);
     state.tiles[idx].set_flag(FLAG_ABANDONED, false);
-    state.buildings.push(BuildingInstance::new(bid, kind, (x, y)));
+    state
+        .buildings
+        .push(BuildingInstance::new(bid, kind, (x, y)));
     true
 }
 
@@ -207,13 +295,17 @@ mod tests {
     use super::*;
     use crate::state::FLAG_POWERED;
 
-    fn gs(w: u32, h: u32) -> GameState { GameState::new(w, h, 42) }
+    fn gs(w: u32, h: u32) -> GameState {
+        GameState::new(w, h, 42)
+    }
 
     fn kind(s: &mut GameState, x: u32, y: u32, k: TileKind) {
         s.tile_at_mut(x, y).unwrap().kind = k;
     }
 
-    fn road(s: &mut GameState, x: u32, y: u32) { kind(s, x, y, TileKind::Road); }
+    fn road(s: &mut GameState, x: u32, y: u32) {
+        kind(s, x, y, TileKind::Road);
+    }
 
     fn residential(s: &mut GameState, x: u32, y: u32) {
         kind(s, x, y, TileKind::Residential);
@@ -253,7 +345,10 @@ mod tests {
         let mut rng = SeededRng::new(0);
         let mut grew = false;
         for _ in 0..50 {
-            if zg.tick(&mut s, &mut rng, 1) { grew = true; break; }
+            if zg.tick(&mut s, &mut rng, 1) {
+                grew = true;
+                break;
+            }
         }
         assert!(grew, "should have grown with demand=100");
         assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
@@ -335,7 +430,9 @@ mod tests {
             for _ in 0..30 {
                 zg.tick(&mut s, &mut rng, 1);
             }
-            s.tile_at(0, 0).unwrap().building_id
+            s.tile_at(0, 0)
+                .unwrap()
+                .building_id
                 .or_else(|| s.tile_at(1, 0).unwrap().building_id)
         }
         // Same seed → same outcome

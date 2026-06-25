@@ -1,16 +1,21 @@
-/// Structure-of-Arrays (SoA) tile buffer layout shared between the sim and the
-/// renderer via SharedArrayBuffer (web) or a Tauri Channel binary payload (desktop).
-///
-/// For a W×H map the buffer is divided into five contiguous field arrays:
-///
-/// ```text
-/// | kind[N]  u8  | flags[N]  u8  | happiness[N]  u8  | elevation[N]  i8  | building_id[N*2]  u16le |
-/// |--- N --------|--- N ---------|--- N --------------|--- N --------------|--- N*2 ------------------|
-/// ```
-///
-/// Where N = W × H.  All multi-byte values are little-endian.
-///
-/// The TS mirror is in `src/game/protocol/tileBuffer.ts`.
+// Structure-of-Arrays tile buffer layout shared between the sim and the renderer.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
+//! SoA tile buffer layout shared between the sim and the renderer via
+//! SharedArrayBuffer (web) or a Tauri Channel binary payload (desktop).
+//!
+//! For a W×H map the buffer is divided into five contiguous field arrays:
+//!
+//! ```text
+//! | kind[N]  u8  | flags[N]  u8  | happiness[N]  u8  | elevation[N]  i8  | building_id[N*2]  u16le |
+//! |--- N --------|--- N ---------|--- N --------------|--- N --------------|--- N*2 ------------------|
+//! ```
+//!
+//! Where N = W × H.  All multi-byte values are little-endian.
+//!
+//! The TS mirror is in `src/game/protocol/tileBuffer.ts`.
 
 /// Number of bytes per tile in the flat buffer (1+1+1+1+2 = 6).
 pub const BYTES_PER_TILE: usize = 6;
@@ -32,10 +37,10 @@ pub struct TileBufferOffsets {
 impl TileBufferOffsets {
     pub const fn for_size(n: usize) -> Self {
         Self {
-            kind:        0,
-            flags:       n,
-            happiness:   n * 2,
-            elevation:   n * 3,
+            kind: 0,
+            flags: n,
+            happiness: n * 2,
+            elevation: n * 3,
             building_id: n * 4,
         }
     }
@@ -47,12 +52,12 @@ impl TileBufferOffsets {
 
 /// Bit positions within the `flags` byte.
 pub mod flags {
-    pub const POWERED:   u8 = 1 << 0;
-    pub const WATERED:   u8 = 1 << 1;
+    pub const POWERED: u8 = 1 << 0;
+    pub const WATERED: u8 = 1 << 1;
     pub const ABANDONED: u8 = 1 << 2;
-    pub const ROAD_UNDERLAY:  u8 = 1 << 3;
-    pub const RAIL_UNDERLAY:  u8 = 1 << 4;
-    pub const POWER_OVERLAY:  u8 = 1 << 5;
+    pub const ROAD_UNDERLAY: u8 = 1 << 3;
+    pub const RAIL_UNDERLAY: u8 = 1 << 4;
+    pub const POWER_OVERLAY: u8 = 1 << 5;
 }
 
 /// Encode a happiness float (0.0–2.0) to a u8.
@@ -88,7 +93,10 @@ mod tests {
         for v in [0.0f32, 0.5, 1.0, 1.5, 2.0] {
             let encoded = encode_happiness(v);
             let decoded = decode_happiness(encoded);
-            assert!((decoded - v).abs() < 0.01, "happiness {v} → {encoded} → {decoded}");
+            assert!(
+                (decoded - v).abs() < 0.01,
+                "happiness {v} → {encoded} → {decoded}"
+            );
         }
     }
 

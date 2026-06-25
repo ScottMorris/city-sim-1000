@@ -1,3 +1,8 @@
+// SimCommand, CommandResult, Tool enum, and TileKind mapping for the sim protocol.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 use crate::tile_kind::TileKind;
 
 /// All tools the player can apply to the map.
@@ -7,28 +12,28 @@ use crate::tile_kind::TileKind;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum Tool {
-    Inspect          = 0,
-    TerraformRaise   = 1,
-    TerraformLower   = 2,
-    Water            = 3,
-    Tree             = 4,
-    Road             = 5,
-    Rail             = 6,
-    PowerLine        = 7,
-    HydroPlant       = 8,
-    CoalPlant        = 9,
-    WindTurbine      = 10,
-    SolarFarm        = 11,
-    WaterPump        = 12,
-    WaterTower       = 13,
-    WaterPipe        = 14,
+    Inspect = 0,
+    TerraformRaise = 1,
+    TerraformLower = 2,
+    Water = 3,
+    Tree = 4,
+    Road = 5,
+    Rail = 6,
+    PowerLine = 7,
+    HydroPlant = 8,
+    CoalPlant = 9,
+    WindTurbine = 10,
+    SolarFarm = 11,
+    WaterPump = 12,
+    WaterTower = 13,
+    WaterPipe = 14,
     ElementarySchool = 15,
-    HighSchool       = 16,
-    Residential      = 17,
-    Commercial       = 18,
-    Industrial       = 19,
-    Park             = 20,
-    Bulldoze         = 21,
+    HighSchool = 16,
+    Residential = 17,
+    Commercial = 18,
+    Industrial = 19,
+    Park = 20,
+    Bulldoze = 21,
 }
 
 /// A command sent from the UI/bridge into the simulation.
@@ -51,9 +56,17 @@ pub struct CommandResult {
 }
 
 impl CommandResult {
-    pub fn ok() -> Self { Self { success: true, message: None } }
+    pub fn ok() -> Self {
+        Self {
+            success: true,
+            message: None,
+        }
+    }
     pub fn fail(msg: impl Into<String>) -> Self {
-        Self { success: false, message: Some(msg.into()) }
+        Self {
+            success: false,
+            message: Some(msg.into()),
+        }
     }
 }
 
@@ -62,7 +75,7 @@ impl TryFrom<u8> for Tool {
     fn try_from(v: u8) -> Result<Self, ()> {
         if v <= Tool::Bulldoze as u8 {
             // SAFETY: Tool is #[repr(u8)] with contiguous discriminants 0..=21.
-            Ok(unsafe { std::mem::transmute(v) })
+            Ok(unsafe { std::mem::transmute::<u8, Tool>(v) })
         } else {
             Err(())
         }
@@ -73,26 +86,26 @@ impl TryFrom<u8> for Tool {
 /// Returns `None` for tools that don't directly place a tile kind.
 pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
     match tool {
-        Tool::Water          => Some(TileKind::Water),
-        Tool::Tree           => Some(TileKind::Tree),
-        Tool::Road           => Some(TileKind::Road),
-        Tool::Rail           => Some(TileKind::Rail),
-        Tool::PowerLine      => Some(TileKind::PowerLine),
-        Tool::HydroPlant     => Some(TileKind::HydroPlant),
+        Tool::Water => Some(TileKind::Water),
+        Tool::Tree => Some(TileKind::Tree),
+        Tool::Road => Some(TileKind::Road),
+        Tool::Rail => Some(TileKind::Rail),
+        Tool::PowerLine => Some(TileKind::PowerLine),
+        Tool::HydroPlant => Some(TileKind::HydroPlant),
         // BUG #30 (mirrored from TS): Coal/Wind/Solar all use HydroPlant TileKind.
         // TODO(P3): add CoalPlant, WindTurbine, SolarFarm variants to TileKind and fix here.
-        Tool::CoalPlant      => Some(TileKind::HydroPlant),
-        Tool::WindTurbine    => Some(TileKind::HydroPlant),
-        Tool::SolarFarm      => Some(TileKind::HydroPlant),
-        Tool::WaterPump      => Some(TileKind::WaterPump),
-        Tool::WaterTower     => Some(TileKind::WaterTower),
-        Tool::WaterPipe      => Some(TileKind::WaterPipe),
+        Tool::CoalPlant => Some(TileKind::HydroPlant),
+        Tool::WindTurbine => Some(TileKind::HydroPlant),
+        Tool::SolarFarm => Some(TileKind::HydroPlant),
+        Tool::WaterPump => Some(TileKind::WaterPump),
+        Tool::WaterTower => Some(TileKind::WaterTower),
+        Tool::WaterPipe => Some(TileKind::WaterPipe),
         Tool::ElementarySchool => Some(TileKind::ElementarySchool),
-        Tool::HighSchool     => Some(TileKind::HighSchool),
-        Tool::Residential    => Some(TileKind::Residential),
-        Tool::Commercial     => Some(TileKind::Commercial),
-        Tool::Industrial     => Some(TileKind::Industrial),
-        Tool::Park           => Some(TileKind::Park),
+        Tool::HighSchool => Some(TileKind::HighSchool),
+        Tool::Residential => Some(TileKind::Residential),
+        Tool::Commercial => Some(TileKind::Commercial),
+        Tool::Industrial => Some(TileKind::Industrial),
+        Tool::Park => Some(TileKind::Park),
         Tool::Inspect | Tool::TerraformRaise | Tool::TerraformLower | Tool::Bulldoze => None,
     }
 }
@@ -114,10 +127,21 @@ mod tests {
 
     #[test]
     fn command_round_trips_postcard() {
-        let cmd = SimCommand::ApplyTool { tool: Tool::Road, x: 5, y: 10 };
+        let cmd = SimCommand::ApplyTool {
+            tool: Tool::Road,
+            x: 5,
+            y: 10,
+        };
         let bytes = to_allocvec(&cmd).unwrap();
         let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(back, SimCommand::ApplyTool { tool: Tool::Road, x: 5, y: 10 }));
+        assert!(matches!(
+            back,
+            SimCommand::ApplyTool {
+                tool: Tool::Road,
+                x: 5,
+                y: 10
+            }
+        ));
     }
 
     #[test]
