@@ -35,7 +35,11 @@ export interface SimStats {
   population: number;
   jobs: number;
   powerBalance: number;
+  powerProduced: number;
+  powerUsed: number;
   waterBalance: number;
+  waterProduced: number;
+  waterUsed: number;
   demandResidential: number;
   demandCommercial: number;
   demandIndustrial: number;
@@ -60,7 +64,11 @@ function gatherStats(h: SimHost): SimStats {
     population:         h.population(),
     jobs:               h.jobs(),
     powerBalance:       h.power_balance(),
+    powerProduced:      h.power_produced(),
+    powerUsed:          h.power_used(),
     waterBalance:       h.water_balance(),
+    waterProduced:      h.water_produced(),
+    waterUsed:          h.water_used(),
     demandResidential:  h.demand_residential(),
     demandCommercial:   h.demand_commercial(),
     demandIndustrial:   h.demand_industrial(),

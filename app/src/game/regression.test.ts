@@ -109,11 +109,7 @@ describe('regression: scenario 2 — power + residential growth', () => {
 
 // ---------------------------------------------------------------------------
 // Scenario 3 — Water + zones
-// seed=3, 16×16, water pump + tower + pipe + road + 3 residential, 160 ticks
-//
-// 160 ticks is chosen to land in the middle of the second growth cycle
-// (~tick 120-190), avoiding the abandonment troughs at ~110 and ~190 that
-// occur when demand saturates and education is unserved.
+// seed=3, 16×16, water pump + tower + pipe + road + 3 residential, 300 ticks
 // ---------------------------------------------------------------------------
 
 describe('regression: scenario 3 — water + zones', () => {
@@ -137,12 +133,12 @@ describe('regression: scenario 3 — water + zones', () => {
     applyTool(state, Tool.Residential, 6, 2);
     applyTool(state, Tool.Residential, 6, 3);
     applyTool(state, Tool.Residential, 6, 4);
-  }, 160);
+  }, 300);
 
-  it('tick count', () => expect(snap.tick).toBe(160));
+  it('tick count', () => expect(snap.tick).toBe(300));
   it('water produced', () => expect(snap.utilities.waterProduced).toBeGreaterThan(0));
   it('buildings grew', () => expect(snap.buildingCount).toBeGreaterThan(0));
-  it('population grew', () => expect(snap.population).toBeGreaterThan(12));
+  it('population grew', () => expect(snap.population).toBeGreaterThan(20));
   it('residential tiles present', () => {
     expect(snap.tileCounts[TileKind.Residential] ?? 0).toBeGreaterThan(0);
   });

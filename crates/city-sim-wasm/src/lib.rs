@@ -56,8 +56,20 @@ impl SimHost {
     pub fn power_balance(&self) -> i32 {
         self.sim.state.utilities.power
     }
+    pub fn power_produced(&self) -> i32 {
+        self.sim.state.utilities.power_produced
+    }
+    pub fn power_used(&self) -> i32 {
+        self.sim.state.utilities.power_used
+    }
     pub fn water_balance(&self) -> i32 {
         self.sim.state.utilities.water
+    }
+    pub fn water_produced(&self) -> i32 {
+        self.sim.state.utilities.water_produced
+    }
+    pub fn water_used(&self) -> i32 {
+        self.sim.state.utilities.water_used
     }
     pub fn day(&self) -> u32 {
         self.sim.state.day

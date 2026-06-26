@@ -212,8 +212,12 @@ export class WasmSimBridge implements SimBridge {
     this.state.money = stats.money;
     this.state.population = stats.population;
     this.state.jobs = stats.jobs;
-    this.state.utilities.power = stats.powerBalance;
-    this.state.utilities.water = stats.waterBalance;
+    this.state.utilities.power         = stats.powerBalance;
+    this.state.utilities.powerProduced = stats.powerProduced;
+    this.state.utilities.powerUsed     = stats.powerUsed;
+    this.state.utilities.water         = stats.waterBalance;
+    this.state.utilities.waterProduced = stats.waterProduced;
+    this.state.utilities.waterUsed     = stats.waterUsed;
     this.state.demand.residential = stats.demandResidential;
     this.state.demand.commercial  = stats.demandCommercial;
     this.state.demand.industrial  = stats.demandIndustrial;
