@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "city-sim": {
+      "command": "bun",
+      "args": ["run", "mcp"],
+      "cwd": "/home/scott/source/city-sim-1000"
+    }
+  }
+}

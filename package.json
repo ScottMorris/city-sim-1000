@@ -1,9 +1,10 @@
 {
   "name": "city-sim-1000-workspace",
   "private": true,
-  "workspaces": ["app", "crates/tauri-plugin-city-sim"],
+  "workspaces": ["app", "crates/tauri-plugin-city-sim", "scripts/city-sim-mcp"],
   "scripts": {
     "dev":                  "cd app && bun run dev",
+    "mcp":                  "bun run --cwd scripts/city-sim-mcp start",
     "build":                "cd app && bun run build",
     "preview":              "cd app && bun run preview",
     "lint":                 "cd app && bun run lint",

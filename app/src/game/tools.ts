@@ -88,9 +88,9 @@ const registry: ToolRegistry = {
     return { success: true };
   },
   [Tool.Road]: ({ state, x, y }, cost) => {
-    state.money -= cost;
-    clearBuildingAt(state, x, y);
     const tile = getTile(state, x, y);
+    if (tile?.buildingId !== undefined) return { success: false, message: 'Bulldoze the building first.' };
+    state.money -= cost;
     const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
     setTile(state, x, y, TileKind.Road);
     const updated = getTile(state, x, y);
@@ -98,9 +98,9 @@ const registry: ToolRegistry = {
     return { success: true };
   },
   [Tool.Rail]: ({ state, x, y }, cost) => {
-    state.money -= cost;
-    clearBuildingAt(state, x, y);
     const tile = getTile(state, x, y);
+    if (tile?.buildingId !== undefined) return { success: false, message: 'Bulldoze the building first.' };
+    state.money -= cost;
     const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
     setTile(state, x, y, TileKind.Rail);
     const updated = getTile(state, x, y);
@@ -108,9 +108,14 @@ const registry: ToolRegistry = {
     return { success: true };
   },
   [Tool.PowerLine]: ({ state, x, y }, cost) => {
-    state.money -= cost;
-    clearBuildingAt(state, x, y);
     const tile = getTile(state, x, y);
+    if (tile?.buildingId !== undefined) return { success: false, message: 'Bulldoze the building first.' };
+    state.money -= cost;
+    // Powerlines pass through zones as an overlay — zone tiles keep their kind.
+    if (tile?.kind === TileKind.Residential || tile?.kind === TileKind.Commercial || tile?.kind === TileKind.Industrial) {
+      tile.powerOverlay = true;
+      return { success: true };
+    }
     const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
     const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
     setTile(state, x, y, TileKind.PowerLine);

@@ -148,7 +148,7 @@ describe('tools', () => {
     expect(state.money).toBe(before); // no charge on failure
   });
 
-  it('clears existing buildings when placing transport tools over them', () => {
+  it('rejects placing transport tools over existing buildings', () => {
     const state = createInitialState(6, 6);
     const template = getBuildingTemplate(TileKind.Residential)!;
     // seed a zone building manually
@@ -157,11 +157,12 @@ describe('tools', () => {
     expect(state.buildings.length).toBe(1);
     const buildingId = state.buildings[0].id;
     const moneyBefore = state.money;
-    applyTool(state, Tool.Road, 3, 3);
-    expect(state.buildings.find((b) => b.id === buildingId)).toBeUndefined();
-    expect(getTile(state, 3, 3)?.buildingId).toBeUndefined();
-    expect(getTile(state, 3, 3)?.kind).toBe(TileKind.Road);
-    expect(state.money).toBeLessThan(moneyBefore); // cost applied
+    const result = applyTool(state, Tool.Road, 3, 3);
+    expect(result.success).toBe(false); // building protection — must bulldoze first
+    expect(state.buildings.find((b) => b.id === buildingId)).toBeDefined();
+    expect(getTile(state, 3, 3)?.buildingId).toBeDefined();
+    expect(getTile(state, 3, 3)?.kind).toBe(TileKind.Residential); // tile unchanged
+    expect(state.money).toBe(moneyBefore); // no charge on failure
   });
 
   it('bulldozes an entire building footprint and removes the instance', () => {

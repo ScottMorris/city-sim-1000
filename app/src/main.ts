@@ -19,10 +19,12 @@ import {
 import { Tool } from './game/toolTypes';
 import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
+import { LocalSimBridge } from './game/localSimBridge';
 import type { SimBridge } from './game/simBridge';
 import { applyToolCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
+import { initMcpBridge } from './game/mcpBridge';
 import { createCamera, centerCamera, screenToTile } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
 import { palette, TILE_SIZE } from './rendering/sprites';
@@ -61,7 +63,7 @@ appRoot.innerHTML = `
       <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
       <div class="panel"><h4>Saves</h4><div class="controls-row"><button id="save-btn" class="secondary">Save</button><button id="load-btn" class="secondary">Load</button></div><div class="controls-row"><button id="download-btn" class="primary">Download</button><button id="upload-btn" class="secondary">Upload</button><input type="file" id="file-input" accept="application/json" style="display:none" /></div></div>
       <div class="panel"><h4>Manual</h4><div class="controls-row"><button id="manual-btn" class="secondary">Open manual</button></div><div class="panel-hint">Opens the in-game guide in a popup.</div></div>
-      <div class="panel panel-right"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button><button id="pending-penalty-btn" class="secondary">Penalties: On</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
+      <div class="panel panel-right"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button><button id="pending-penalty-btn" class="secondary">Penalties: On</button><button id="sim-bridge-btn" class="secondary">Sim: WASM</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
     </div>
   </div>
   <div class="news-ticker news-ticker-hidden" id="news-ticker">
@@ -114,6 +116,7 @@ const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
+const simBridgeBtn = requireElement<HTMLButtonElement>('#sim-bridge-btn');
 const newsTickerEl = requireElement<HTMLDivElement>('#news-ticker');
 
 const syncToolbarHeights = () => {
@@ -180,21 +183,42 @@ const narrativeManager = new NarrativeManager({
 const bridgeParam = new URLSearchParams(window.location.search).get('bridge');
 // Auto-detect Tauri shell when no explicit param is set.
 const inTauri = '__TAURI_INTERNALS__' in window;
-const bridge: SimBridge =
-  bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm')
-    ? new TauriSimBridge(state)
-    : new WasmSimBridge(state);
-bridge.onMessage((msg: FromSim) => {
-  if (msg.type === 'Alert') {
-    notifications.publish({
-      id: msg.data.kind,
-      message: msg.data.message,
-      sticky: msg.data.sticky,
-    });
-  } else if (msg.type === 'Narrative') {
-    narrativeManager.onEvent(msg.data.payload as Parameters<typeof narrativeManager.onEvent>[0]);
-  }
-});
+const isTauri = bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm');
+let activeBridgeKind: 'wasm' | 'local' | 'tauri' = isTauri ? 'tauri' : 'wasm';
+let bridge: SimBridge = isTauri ? new TauriSimBridge(state) : new WasmSimBridge(state);
+
+function wireBridge(b: SimBridge): void {
+  b.onMessage((msg: FromSim) => {
+    if (msg.type === 'Alert') {
+      notifications.publish({
+        id: msg.data.kind,
+        message: msg.data.message,
+        sticky: msg.data.sticky,
+      });
+    } else if (msg.type === 'Narrative') {
+      narrativeManager.onEvent(msg.data.payload as Parameters<typeof narrativeManager.onEvent>[0]);
+    }
+  });
+}
+
+wireBridge(bridge);
+initMcpBridge(bridge, state);
+
+function swapSimBridge(): void {
+  if (activeBridgeKind === 'tauri') return; // Tauri bridge is not swappable
+  const currentState = bridge.getState();
+  const nextKind = activeBridgeKind === 'wasm' ? 'local' : 'wasm';
+  const newBridge: SimBridge = nextKind === 'wasm'
+    ? new WasmSimBridge(currentState)
+    : new LocalSimBridge(currentState, { ticksPerSecond: 20 });
+  wireBridge(newBridge);
+  newBridge.setSpeed(simSpeeds[simSpeed]);
+  bridge.dispose();
+  bridge = newBridge;
+  activeBridgeKind = nextKind;
+  simBridgeBtn.textContent = `Sim: ${nextKind === 'wasm' ? 'WASM' : 'TS'}`;
+  simBridgeBtn.classList.toggle('active', nextKind === 'local');
+}
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
 let minimap: ReturnType<typeof initMinimap> | null = null;
@@ -753,6 +777,12 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     const current = state.settings?.pendingPenaltyEnabled ?? true;
     applySettings({ ...state.settings, pendingPenaltyEnabled: !current }, { skipHotkeyReload: true });
     showToast(`Over-zoning penalty ${state.settings.pendingPenaltyEnabled ? 'enabled' : 'disabled'}`);
+  });
+
+  simBridgeBtn.style.display = activeBridgeKind === 'tauri' ? 'none' : '';
+  simBridgeBtn.addEventListener('click', () => {
+    swapSimBridge();
+    showToast(`Switched to ${activeBridgeKind === 'local' ? 'TypeScript' : 'WASM'} simulation`);
   });
 
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));
