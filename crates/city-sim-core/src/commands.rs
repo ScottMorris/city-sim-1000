@@ -235,6 +235,7 @@ fn place_footprint_building(
         None => return CommandResult::fail("Unknown building type"),
     };
     let (fw, fh) = tmpl.footprint;
+    let water_out = tmpl.water_output;
 
     // Bounds check
     if x + fw > state.width || y + fh > state.height {
@@ -265,6 +266,9 @@ fn place_footprint_building(
             if is_power {
                 // Power plant mw will be set by the power BFS at next tick
                 state.tiles[idx].power_plant_mw = 1; // non-zero = is a source
+            }
+            if water_out > 0 {
+                state.tiles[idx].water_output = water_out;
             }
         }
     }
@@ -484,6 +488,19 @@ mod tests {
         assert!(r.success);
         assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::ElementarySchool);
         assert_eq!(s.buildings.len(), 1);
+    }
+
+    #[test]
+    fn water_pump_placement_sets_water_output_on_tile() {
+        // Regression: place_footprint_building must propagate water_output from
+        // the building template onto the tile so the water BFS sees it as a source.
+        let mut s = gs(4, 4);
+        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0);
+        assert!(r.success);
+        assert!(
+            s.tile_at(0, 0).unwrap().water_output > 0,
+            "water pump tile must have water_output > 0 after placement"
+        );
     }
 
     #[test]
