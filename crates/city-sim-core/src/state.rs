@@ -304,6 +304,13 @@ pub struct GameState {
     pub tick: u64,
     pub population: u32,
     pub jobs: u32,
+    /// Sub-integer population accumulator — fractional growth carries over between
+    /// ticks so low-demand cities still grow slowly (mirrors TS float `population`).
+    #[serde(default)]
+    pub pop_frac: f64,
+    /// Sub-integer jobs accumulator — same pattern as `pop_frac`.
+    #[serde(default)]
+    pub jobs_frac: f64,
     pub utilities: UtilityStats,
     pub demand: DemandStats,
     /// Monotonically increasing counter — bumped whenever tiles change.
@@ -339,6 +346,8 @@ impl GameState {
             tick: 0,
             population: 12,
             jobs: 4,
+            pop_frac: 0.0,
+            jobs_frac: 0.0,
             utilities: UtilityStats::initial(),
             demand: DemandStats::initial(),
             tile_revision: 0,

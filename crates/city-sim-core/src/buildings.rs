@@ -124,7 +124,9 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
         pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false, civic=true,
         svc=ServiceKind::EducationHigh, scap=160, scov=9
     };
-    // Mirrors TS POWER_PLANT_TEMPLATES (all use HydroPlant tile kind in TS)
+    // Mirrors TS POWER_PLANT_TEMPLATES (all share HydroPlant tile kind; per-type
+    // MW output and maintenance are passed at placement time and stored in
+    // BuildingInstance so they survive past the single-template lookup).
     static HYDRO_PLANT: BuildingTemplate = tmpl! {
         (2,2), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
         pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true,  civic=false,
@@ -146,6 +148,15 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
 }
 
 // ---------------------------------------------------------------------------
+// Power plant output constants (mirrors TS POWER_PLANT_CONFIGS outputMw)
+// ---------------------------------------------------------------------------
+
+pub const HYDRO_PLANT_MW: u32 = 60;
+pub const COAL_PLANT_MW: u32 = 80;
+pub const WIND_TURBINE_MW: u32 = 8;
+pub const SOLAR_FARM_MW: u32 = 5;
+
+// ---------------------------------------------------------------------------
 // BuildingInstance
 // ---------------------------------------------------------------------------
 
@@ -164,6 +175,11 @@ pub struct BuildingInstance {
     /// Pressure counter — see `apply_building_decay`.  Float to accumulate fractional
     /// increments matching the TS implementation.
     pub trouble_ticks: f32,
+    /// Per-building maintenance override in $/day.  Used by power plants so each
+    /// type (coal/wind/solar/hydro) can carry its own cost without separate tile
+    /// kinds.  Zero means "use the template value".
+    #[serde(default)]
+    pub maintenance_per_day: f32,
 }
 
 impl BuildingInstance {
@@ -175,6 +191,7 @@ impl BuildingInstance {
             status: BuildingStatus::Active,
             health: 100,
             trouble_ticks: 0.0,
+            maintenance_per_day: 0.0,
         }
     }
 }

@@ -3,6 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
+use crate::buildings::BuildingStatus;
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
@@ -128,12 +129,28 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
         tile.set_flag(flag, false);
     }
 
-    // Collect sources, seed their flags, build initial queue
+    // Collect sources, seed their flags, build initial queue.
+    // For water: a tile only seeds the BFS if its building is Active — an
+    // unpowered pump must not supply water (mirrors the TS check for
+    // `building.state.status === BuildingStatus.Active`).
     let sources: Vec<usize> = state
         .tiles
         .iter()
         .enumerate()
-        .filter(|(_, t)| is_source(t, kind))
+        .filter(|(_, t)| {
+            if !is_source(t, kind) {
+                return false;
+            }
+            if kind == UtilityKind::Water {
+                if let Some(bid) = t.building_id {
+                    return state
+                        .buildings
+                        .iter()
+                        .any(|b| b.id == bid as u32 && b.status == BuildingStatus::Active);
+                }
+            }
+            true
+        })
         .map(|(i, _)| i)
         .collect();
 
@@ -434,13 +451,20 @@ mod tests {
 
     // --- water BFS tests ---
 
+    fn active_pump(g: &mut GameState, id: u32, x: u32, y: u32) {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        g.tile_at_mut(x, y).unwrap().water_output = 50;
+        g.tile_at_mut(x, y).unwrap().kind = TileKind::WaterPump;
+        g.tile_at_mut(x, y).unwrap().building_id = Some(id as u16);
+        let mut b = BuildingInstance::new(id, TileKind::WaterPump, (x, y));
+        b.status = BuildingStatus::Active;
+        g.buildings.push(b);
+    }
+
     #[test]
     fn water_pump_seeds_water_network() {
         let mut g = grid(3, 1);
-        // Water pump at (0,0), water pipe underground along row
-        g.tile_at_mut(0, 0).unwrap().water_output = 50;
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::WaterPump;
-        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        active_pump(&mut g, 1, 0, 0);
         g.tile_at_mut(1, 0).unwrap().underground = Some(TileKind::WaterPipe);
         g.tile_at_mut(2, 0).unwrap().underground = Some(TileKind::WaterPipe);
         recompute_utility_network(&mut g, UtilityKind::Water);
@@ -453,11 +477,27 @@ mod tests {
     #[test]
     fn water_does_not_flow_without_carrier() {
         let mut g = grid(3, 1);
-        g.tile_at_mut(0, 0).unwrap().water_output = 50;
-        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        active_pump(&mut g, 1, 0, 0);
         // (1,0) and (2,0) are plain Land — not water carriers
         recompute_utility_network(&mut g, UtilityKind::Water);
         assert!(g.tile_at(0, 0).unwrap().is_watered());
+        assert!(!g.tile_at(1, 0).unwrap().is_watered());
+    }
+
+    #[test]
+    fn inactive_pump_does_not_seed_water_network() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        let mut g = grid(3, 1);
+        // Pump tile has water_output set but its building is Inactive (no power)
+        g.tile_at_mut(0, 0).unwrap().water_output = 50;
+        g.tile_at_mut(0, 0).unwrap().kind = TileKind::WaterPump;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+        b.status = BuildingStatus::InactiveNoPower;
+        g.buildings.push(b);
+        g.tile_at_mut(1, 0).unwrap().underground = Some(TileKind::WaterPipe);
+        recompute_utility_network(&mut g, UtilityKind::Water);
+        assert!(!g.tile_at(0, 0).unwrap().is_watered(), "inactive pump must not seed water");
         assert!(!g.tile_at(1, 0).unwrap().is_watered());
     }
 

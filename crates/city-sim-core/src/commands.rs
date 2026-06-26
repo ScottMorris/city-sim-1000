@@ -3,7 +3,10 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-use crate::buildings::{get_building_template, BuildingInstance};
+use crate::buildings::{
+    get_building_template, BuildingInstance, COAL_PLANT_MW, HYDRO_PLANT_MW, SOLAR_FARM_MW,
+    WIND_TURBINE_MW,
+};
 use crate::state::{
     GameState, FLAG_ABANDONED, FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY,
 };
@@ -174,22 +177,32 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             CommandResult::ok()
         }
 
-        // Footprint buildings — place via place_building helper
-        Tool::HydroPlant | Tool::CoalPlant | Tool::WindTurbine | Tool::SolarFarm => {
-            // All power plant tools use HydroPlant tile kind for now (matches TS)
-            place_footprint_building(state, TileKind::HydroPlant, x, y, cost, true)
-        }
-        Tool::WaterPump => place_footprint_building(state, TileKind::WaterPump, x, y, cost, false),
+        // Power plants — all use HydroPlant tile kind (matches TS); per-type MW
+        // output and maintenance are stored in BuildingInstance so the budget and
+        // power BFS get the correct values without separate TileKind variants.
+        Tool::HydroPlant => place_footprint_building(
+            state, TileKind::HydroPlant, x, y, cost, HYDRO_PLANT_MW, 150.0,
+        ),
+        Tool::CoalPlant => place_footprint_building(
+            state, TileKind::HydroPlant, x, y, cost, COAL_PLANT_MW, 300.0,
+        ),
+        Tool::WindTurbine => place_footprint_building(
+            state, TileKind::HydroPlant, x, y, cost, WIND_TURBINE_MW, 30.0,
+        ),
+        Tool::SolarFarm => place_footprint_building(
+            state, TileKind::HydroPlant, x, y, cost, SOLAR_FARM_MW, 20.0,
+        ),
+        Tool::WaterPump => place_footprint_building(state, TileKind::WaterPump, x, y, cost, 0, 0.0),
         Tool::WaterTower => {
-            place_footprint_building(state, TileKind::WaterTower, x, y, cost, false)
+            place_footprint_building(state, TileKind::WaterTower, x, y, cost, 0, 0.0)
         }
         Tool::ElementarySchool => {
-            place_footprint_building(state, TileKind::ElementarySchool, x, y, cost, false)
+            place_footprint_building(state, TileKind::ElementarySchool, x, y, cost, 0, 0.0)
         }
         Tool::HighSchool => {
-            place_footprint_building(state, TileKind::HighSchool, x, y, cost, false)
+            place_footprint_building(state, TileKind::HighSchool, x, y, cost, 0, 0.0)
         }
-        Tool::Park => place_footprint_building(state, TileKind::Park, x, y, cost, false),
+        Tool::Park => place_footprint_building(state, TileKind::Park, x, y, cost, 0, 0.0),
 
         Tool::Bulldoze => bulldoze(state, x, y, cost),
     }
@@ -231,13 +244,21 @@ pub fn remove_building(state: &mut GameState, building_id: u32) {
 
 /// Place a multi-tile civic/power building at (x, y).
 /// Validates footprint bounds and overlap, then stamps tiles and pushes to buildings.
+///
+/// `power_output_mw`: MW each tile contributes as a power source (0 = not a power
+/// plant).  Power plants pass their per-type constant; all other buildings pass 0.
+///
+/// `maintenance_per_day`: stored on the `BuildingInstance` so each power plant type
+/// can carry its own cost without needing a separate `TileKind`.  Pass 0.0 to fall
+/// back to the template's `maintenance` field at budget time.
 fn place_footprint_building(
     state: &mut GameState,
     kind: TileKind,
     x: u32,
     y: u32,
     cost: i64,
-    is_power: bool,
+    power_output_mw: u32,
+    maintenance_per_day: f32,
 ) -> CommandResult {
     let tmpl = match get_building_template(kind) {
         Some(t) => t,
@@ -272,9 +293,8 @@ fn place_footprint_building(
             state.tiles[idx].building_id = Some(bid as u16);
             state.tiles[idx].set_flag(FLAG_ABANDONED, false);
             state.tiles[idx].happiness = (state.tiles[idx].happiness + 0.05).min(1.5);
-            if is_power {
-                // Power plant mw will be set by the power BFS at next tick
-                state.tiles[idx].power_plant_mw = 1; // non-zero = is a source
+            if power_output_mw > 0 {
+                state.tiles[idx].power_plant_mw = power_output_mw as i32;
             }
             if water_out > 0 {
                 state.tiles[idx].water_output = water_out;
@@ -282,9 +302,9 @@ fn place_footprint_building(
         }
     }
 
-    state
-        .buildings
-        .push(BuildingInstance::new(bid, kind, (x, y)));
+    let mut instance = BuildingInstance::new(bid, kind, (x, y));
+    instance.maintenance_per_day = maintenance_per_day;
+    state.buildings.push(instance);
     state.tile_revision += 1;
     CommandResult::ok()
 }

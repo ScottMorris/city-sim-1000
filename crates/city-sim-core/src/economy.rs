@@ -80,15 +80,22 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         let Some(tmpl) = get_building_template(building.kind) else {
             continue;
         };
-        if tmpl.maintenance == 0.0 {
+        // Power plants carry their own maintenance in BuildingInstance so coal,
+        // wind, and solar can differ from hydro without separate TileKind variants.
+        let maint = if building.maintenance_per_day > 0.0 {
+            building.maintenance_per_day
+        } else {
+            tmpl.maintenance
+        };
+        if maint == 0.0 {
             continue;
         }
         if tmpl.is_power_plant {
-            maint_power += tmpl.maintenance;
+            maint_power += maint;
         } else if tmpl.is_civic {
-            maint_civic += tmpl.maintenance;
+            maint_civic += maint;
         } else if tmpl.is_zone {
-            maint_zones += tmpl.maintenance;
+            maint_zones += maint;
         }
     }
 
@@ -167,23 +174,28 @@ pub fn record_daily_budget(state: &mut GameState) {
 ///
 /// Mirrors the growth block in `simulation.ts:tick()`.
 pub fn apply_population_growth(state: &mut GameState, pop_cap: u32, job_cap: u32) {
-    fn clamp_i32(v: i32, lo: i32, hi: i32) -> i32 {
-        v.max(lo).min(hi)
+    // Use float accumulation so low-demand growth (e.g. +0.1/tick) carries over
+    // between ticks rather than truncating to zero — mirrors the TS engine where
+    // `state.population` is a JS float64.
+    let raw_pop_growth =
+        ((state.demand.residential as f64 * 0.05) as f64).clamp(-2.0, 2.0);
+    state.pop_frac += raw_pop_growth;
+    let whole_pop = state.pop_frac as i64;
+    if whole_pop != 0 {
+        state.pop_frac -= whole_pop as f64;
+        state.population = ((state.population as i64 + whole_pop).max(0) as u64)
+            .min(pop_cap as u64) as u32;
     }
 
-    let desired_pop = (state.population as i32) + (state.demand.residential * 0.05) as i32;
-    let desired_pop = desired_pop.min(pop_cap as i32).max(0);
-    let growth = clamp_i32(desired_pop - state.population as i32, -2, 2);
-    let new_pop = (state.population as i32 + growth).clamp(0, pop_cap as i32) as u32;
-
     let combined_demand = state.demand.commercial + state.demand.industrial;
-    let desired_jobs = (state.jobs as i32) + (combined_demand * 0.05) as i32;
-    let desired_jobs = desired_jobs.min(job_cap as i32).max(0);
-    let job_growth = clamp_i32(desired_jobs - state.jobs as i32, -2, 2);
-    let new_jobs = (state.jobs as i32 + job_growth).clamp(0, job_cap as i32) as u32;
-
-    state.population = new_pop;
-    state.jobs = new_jobs;
+    let raw_job_growth = (combined_demand as f64 * 0.05).clamp(-2.0, 2.0);
+    state.jobs_frac += raw_job_growth;
+    let whole_jobs = state.jobs_frac as i64;
+    if whole_jobs != 0 {
+        state.jobs_frac -= whole_jobs as f64;
+        state.jobs = ((state.jobs as i64 + whole_jobs).max(0) as u64)
+            .min(job_cap as u64) as u32;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +302,22 @@ mod tests {
         assert!((b.maint_civic - 0.05).abs() < 0.001, "park maintenance");
         assert!((b.maint_power - 150.0).abs() < 0.001, "hydro maintenance");
         assert!((b.expenses_buildings - (1.0 + 0.05 + 150.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn power_plant_maintenance_per_day_overrides_template() {
+        let mut s = gs(4, 4);
+        // Coal plant: maintenance_per_day = 300 (template value is 150 for HydroPlant)
+        let mut coal = BuildingInstance::new(1, TileKind::HydroPlant, (0, 0));
+        coal.status = BuildingStatus::Active;
+        coal.maintenance_per_day = 300.0;
+        s.buildings.push(coal);
+        let b = compute_daily_budget(&s);
+        assert!(
+            (b.maint_power - 300.0).abs() < 0.001,
+            "coal plant must use maintenance_per_day=300, got {}",
+            b.maint_power
+        );
     }
 
     #[test]

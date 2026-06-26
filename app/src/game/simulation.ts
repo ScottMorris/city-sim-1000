@@ -499,6 +499,7 @@ export class Simulation {
     };
     recordDailyBudget(this.state);
     this.state.money = Math.max(0, this.state.money + netPerDay * (this.dt / 1.5));
+    this.applyBuildingDecay();
     this.state.rngState = this.rng.toJSON();
   }
 

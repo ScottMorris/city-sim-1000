@@ -137,6 +137,7 @@ mod tests {
             status: BuildingStatus::Active,
             health: 80,
             trouble_ticks: 2.5,
+            maintenance_per_day: 0.0,
         });
         state.budget_history.push_back(BudgetHistoryEntry {
             day: 1,
