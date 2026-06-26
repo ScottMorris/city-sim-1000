@@ -112,7 +112,7 @@ impl CommandLog {
         let mut sim = Simulation::new(self.width, self.height, self.seed);
         for entry in &self.entries {
             while sim.state.tick < entry.tick {
-                sim.tick(1.0 / 20.0);
+                sim.step(1.0 / 20.0);
             }
             if let Ok(tool) = Tool::try_from(entry.tool) {
                 apply_tool(&mut sim.state, tool, entry.x, entry.y);
@@ -225,7 +225,7 @@ mod tests {
 
         // Advance a few ticks.
         for _ in 0..10 {
-            sim.tick(1.0 / 20.0);
+            sim.step(1.0 / 20.0);
         }
 
         log.record(sim.state.tick, Tool::Commercial, 0, 2);
@@ -233,7 +233,7 @@ mod tests {
 
         // Run to tick 50.
         while sim.state.tick < 50 {
-            sim.tick(1.0 / 20.0);
+            sim.step(1.0 / 20.0);
         }
 
         let live_hash = state_hash(&sim.state);
@@ -241,7 +241,7 @@ mod tests {
         // Replay and advance to the same tick.
         let mut replayed = log.replay();
         while replayed.state.tick < 50 {
-            replayed.tick(1.0 / 20.0);
+            replayed.step(1.0 / 20.0);
         }
 
         assert_eq!(
@@ -260,8 +260,8 @@ mod tests {
         let mut fresh = Simulation::new(4, 4, 7);
 
         for _ in 0..20 {
-            replayed.tick(1.0 / 20.0);
-            fresh.tick(1.0 / 20.0);
+            replayed.step(1.0 / 20.0);
+            fresh.step(1.0 / 20.0);
         }
 
         assert_eq!(state_hash(&replayed.state), state_hash(&fresh.state));

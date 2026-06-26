@@ -24,6 +24,14 @@ use crate::zones::ZoneGrowthSim;
 ///
 /// Owns the `GameState` and drives all simulation systems in the correct order,
 /// mirroring `Simulation.tick()` in `app/src/game/simulation.ts`.
+/// Maximum fixed ticks to fire per `step()` call.
+/// Prevents the "spiral of death" at very high speed multipliers — the sim
+/// runs at most this many ticks per frame, gracefully slowing apparent speed
+/// rather than starving the renderer.  At the game's max speed of 3× and
+/// 60 fps the sim fires ~3 ticks/frame, so this cap is never reached in
+/// practice; it exists as a safety net.
+const MAX_TICKS_PER_STEP: u32 = 8;
+
 pub struct Simulation {
     pub state: GameState,
     zone_growth: ZoneGrowthSim,
@@ -31,9 +39,11 @@ pub struct Simulation {
     water_enabled: bool,
     /// Ticks per real second at 1× speed; matches TS `ticksPerSecond = 20`.
     ticks_per_second: u32,
-    /// Speed multiplier (1.0 = normal).
+    /// Speed multiplier (1.0 = normal, 0.0 = paused).
     speed: f32,
-    /// Sub-day accumulator (seconds); avoids truncation-to-zero on fast frames.
+    /// Fixed-timestep accumulator — real seconds waiting to be consumed as ticks.
+    accumulator: f64,
+    /// Sub-day accumulator — fractional days not yet rounded to a whole day.
     day_frac: f64,
 }
 
@@ -47,11 +57,31 @@ impl Simulation {
             water_enabled: true,
             ticks_per_second: 20,
             speed: 1.0,
+            accumulator: 0.0,
             day_frac: 0.0,
         }
     }
 
-    /// Advance the simulation by one tick of duration `dt` seconds.
+    /// Advance the simulation by `dt` real seconds.
+    ///
+    /// Feeds `dt * speed` into a fixed-timestep accumulator and fires
+    /// `tick_fixed()` as many times as whole ticks have accumulated, up to
+    /// `MAX_TICKS_PER_STEP`.  Frame rate and simulation tick rate are fully
+    /// decoupled: the sim always advances at `ticks_per_second` ticks per
+    /// real second regardless of renderer cadence.
+    pub fn step(&mut self, dt: f64) {
+        self.accumulator += dt * self.speed as f64;
+        let tick_dt = 1.0 / self.ticks_per_second as f64;
+        let mut fired = 0u32;
+        while self.accumulator >= tick_dt && fired < MAX_TICKS_PER_STEP {
+            self.tick_fixed();
+            self.accumulator -= tick_dt;
+            fired += 1;
+        }
+    }
+
+    /// One fixed simulation tick — always represents exactly `1/ticks_per_second`
+    /// seconds of sim time.  Called by `step()`; never call directly.
     ///
     /// Tick order mirrors `simulation.ts:tick()`:
     /// 1. Advance day
@@ -66,12 +96,11 @@ impl Simulation {
     /// 10. Economy / budget
     /// 11. Building decay
     /// 12. Tick counter
-    pub fn tick(&mut self, dt: f64) {
-        let effective_dt = dt * self.speed as f64;
+    fn tick_fixed(&mut self) {
+        let tick_dt = 1.0 / self.ticks_per_second as f64;
 
-        // 1. Advance day via accumulator — per-frame `effective_dt / 1.5`
-        // is typically < 1.0 and would truncate to 0 as u32 without this.
-        self.day_frac += effective_dt / 1.5;
+        // 1. Advance day — accumulate fractional days to avoid truncation to 0.
+        self.day_frac += tick_dt / 1.5;
         let days_to_add = self.day_frac as u32;
         if days_to_add > 0 {
             self.state.day += days_to_add;
@@ -118,7 +147,7 @@ impl Simulation {
         let budget = compute_daily_budget(&self.state);
         self.state.budget = budget;
         record_daily_budget(&mut self.state);
-        apply_money_tick(&mut self.state, effective_dt);
+        apply_money_tick(&mut self.state, tick_dt);
 
         // 11. Building decay
         apply_building_decay(&mut self.state, &self.decay_config);
@@ -141,6 +170,8 @@ impl Simulation {
     pub fn load_state(&mut self, state: GameState) {
         self.state = state;
         self.zone_growth = ZoneGrowthSim::new();
+        self.accumulator = 0.0;
+        self.day_frac = 0.0;
     }
 
     // --- internal ---
@@ -261,7 +292,7 @@ mod tests {
         fn run(seed: u32) -> u64 {
             let mut sim = make_city_sim(seed);
             for _ in 0..100 {
-                sim.tick(1.0 / 20.0);
+                sim.step(1.0 / 20.0);
             }
             state_hash(&sim.state)
         }
@@ -278,7 +309,7 @@ mod tests {
     fn golden_hash_seed42_8x8_100ticks() {
         let mut sim = make_city_sim(42);
         for _ in 0..100 {
-            sim.tick(1.0 / 20.0);
+            sim.step(1.0 / 20.0);
         }
         let hash = state_hash(&sim.state);
 
@@ -303,7 +334,7 @@ mod tests {
     fn tick_advances_day_and_tick_counter() {
         let mut sim = Simulation::new(4, 4, 0);
         let before_tick = sim.state.tick;
-        sim.tick(1.0);
+        sim.step(1.0 / 20.0); // one tick's worth of real time → exactly one tick
         assert_eq!(sim.state.tick, before_tick + 1);
     }
 
@@ -314,7 +345,7 @@ mod tests {
         let mut sim = Simulation::new(4, 4, 0);
         let start_day = sim.state.day;
         for _ in 0..120 {
-            sim.tick(1.0 / 60.0);
+            sim.step(1.0 / 60.0);
         }
         assert!(
             sim.state.day > start_day,
@@ -329,8 +360,8 @@ mod tests {
         slow.set_speed(0.5);
         let mut fast = Simulation::new(4, 4, 0);
         fast.set_speed(2.0);
-        slow.tick(1.0);
-        fast.tick(1.0);
+        slow.step(1.0);
+        fast.step(1.0);
         // Fast sim should have a higher day than slow
         assert!(
             fast.state.day >= slow.state.day,
@@ -343,7 +374,7 @@ mod tests {
         let mut sim = Simulation::new(8, 8, 0);
         let start = sim.state.money;
         for _ in 0..100 {
-            sim.tick(1.0 / 20.0);
+            sim.step(1.0 / 20.0);
         }
         // With only BASE_INCOME revenue and no expenses, money should go up
         assert!(

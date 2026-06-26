@@ -274,6 +274,8 @@ pub fn update_building_states(state: &mut GameState, water_enabled: bool) {
 
 /// Increment trouble ticks for zone buildings under stress; abandon those that
 /// exceed the threshold.  Mirrors `applyBuildingDecay()` in `simulation.ts`.
+/// Called once per fixed simulation tick by `Simulation::tick_fixed()`.
+/// All increments are sized for a single tick at `ticks_per_second` (20 tps).
 pub fn apply_building_decay(state: &mut GameState, cfg: &DecayConfig) {
     let mut to_abandon: Vec<u32> = Vec::new();
 

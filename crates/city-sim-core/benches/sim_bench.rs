@@ -84,7 +84,7 @@ fn tick_100(c: &mut Criterion) {
             || make_populated_8x8(42),
             |mut sim| {
                 for _ in 0..100 {
-                    sim.tick(black_box(1.0 / 20.0));
+                    sim.step(black_box(1.0 / 20.0));
                 }
                 black_box(sim)
             },
@@ -104,7 +104,7 @@ fn tick_1000_64x64(c: &mut Criterion) {
             || Simulation::new(64, 64, 0),
             |mut sim| {
                 for _ in 0..1000 {
-                    sim.tick(black_box(1.0 / 20.0));
+                    sim.step(black_box(1.0 / 20.0));
                 }
                 black_box(sim)
             },

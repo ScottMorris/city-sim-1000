@@ -215,7 +215,7 @@ pub fn start(
                 }
             }
 
-            sim.tick(dt);
+            sim.step(dt);
 
             if on_tick.send(build_tick_event(&sim)).is_err() {
                 break; // JS side closed the channel

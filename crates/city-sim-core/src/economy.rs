@@ -159,9 +159,9 @@ pub fn record_daily_budget(state: &mut GameState) {
 // apply_population_growth
 // ---------------------------------------------------------------------------
 
-/// Apply one tick of population and job growth driven by demand.
+/// Apply one fixed tick of population and job growth driven by demand.
 ///
-/// Must be called AFTER `compute_city_demand` has updated `state.demand`.
+/// Called once per fixed simulation tick by `Simulation::tick_fixed()`.
 /// `pop_cap` and `job_cap` are the capacity totals already summed by the
 /// demand pass; passing them in avoids a redundant tile scan.
 ///
@@ -350,8 +350,8 @@ mod tests {
         let mut s = gs(2, 2);
         s.population = 10;
         s.demand.residential = 100.0;
-        apply_population_growth(&mut s, 10, 0); // at capacity
-                                                // desired_pop = min(10, 10 + 5) = 10; growth = clamp(0, -2, 2) = 0
+        // at capacity — growth clamped to 0
+        apply_population_growth(&mut s, 10, 0);
         assert_eq!(s.population, 10);
     }
 
