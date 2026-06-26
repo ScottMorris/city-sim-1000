@@ -672,11 +672,11 @@ export class Simulation {
       if (noWater) trouble += troubleIncrement * 0.5;
       if (educationUnserved) trouble += troubleIncrement * 0.5;
 
-      // Bleed trouble when physically healthy (power, water, happiness ok).
-      // lowDemand alone does NOT block decay — a fully-occupied zone with good
-      // services should heal; trapping it in a permanent abandon/regrow cycle
-      // when education is missing is a punishing player experience.
-      if (!unhappy && !noPower && !noWater) {
+      // Bleed trouble when powered and not unhappy. Water absence is a
+      // penalty (trouble + happiness hit) but not a hard gate — SC2K-style.
+      // Trapping waterless zones in a permanent cycle is punishing and
+      // removes agency before the player has built a water system.
+      if (!unhappy && !noPower) {
         trouble = Math.max(0, trouble - troubleDecay);
         if (!educationUnserved) trouble = Math.max(0, trouble - troubleDecay * 0.25);
       }

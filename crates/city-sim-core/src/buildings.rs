@@ -364,9 +364,10 @@ pub fn apply_building_decay(state: &mut GameState, cfg: &DecayConfig) {
             trouble += cfg.trouble_increment * 0.5;
         }
 
-        // Bleed trouble when physically healthy (power, water, happiness ok).
-        // low_demand alone does NOT block decay — see simulation.ts for rationale.
-        if !unhappy && !no_power && !no_water {
+        // Bleed trouble when powered and not unhappy. Water absence is a
+        // penalty (trouble + happiness hit) but not a hard gate — SC2K-style.
+        // See simulation.ts for the full rationale.
+        if !unhappy && !no_power {
             trouble = (trouble - cfg.trouble_decay).max(0.0);
             if !education_unserved {
                 trouble = (trouble - cfg.trouble_decay * 0.25).max(0.0);
