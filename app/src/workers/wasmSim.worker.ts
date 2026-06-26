@@ -44,6 +44,22 @@ export interface SimStats {
   demandCommercial: number;
   demandIndustrial: number;
   budgetNetPerDay: number;
+  budgetNetPerMonth: number;
+  budgetRevenue: number;
+  budgetExpenses: number;
+  budgetRevenueBase: number;
+  budgetRevenuePop: number;
+  budgetRevenueCommercial: number;
+  budgetRevenueIndustrial: number;
+  budgetExpensesTransport: number;
+  budgetExpensesBuildings: number;
+  budgetMaintPower: number;
+  budgetMaintCivic: number;
+  budgetMaintZones: number;
+  budgetMaintRoads: number;
+  budgetMaintRail: number;
+  budgetMaintPowerLines: number;
+  budgetMaintPipes: number;
 }
 
 type MainToWorker =
@@ -58,21 +74,37 @@ let host: SimHost | null = null;
 
 function gatherStats(h: SimHost): SimStats {
   return {
-    tick:               h.tick_count(),
-    day:                h.day(),
-    money:              h.money(),
-    population:         h.population(),
-    jobs:               h.jobs(),
-    powerBalance:       h.power_balance(),
-    powerProduced:      h.power_produced(),
-    powerUsed:          h.power_used(),
-    waterBalance:       h.water_balance(),
-    waterProduced:      h.water_produced(),
-    waterUsed:          h.water_used(),
-    demandResidential:  h.demand_residential(),
-    demandCommercial:   h.demand_commercial(),
-    demandIndustrial:   h.demand_industrial(),
-    budgetNetPerDay:    h.budget_net_per_day(),
+    tick:                    h.tick_count(),
+    day:                     h.day(),
+    money:                   h.money(),
+    population:              h.population(),
+    jobs:                    h.jobs(),
+    powerBalance:            h.power_balance(),
+    powerProduced:           h.power_produced(),
+    powerUsed:               h.power_used(),
+    waterBalance:            h.water_balance(),
+    waterProduced:           h.water_produced(),
+    waterUsed:               h.water_used(),
+    demandResidential:       h.demand_residential(),
+    demandCommercial:        h.demand_commercial(),
+    demandIndustrial:        h.demand_industrial(),
+    budgetNetPerDay:         h.budget_net_per_day(),
+    budgetNetPerMonth:       h.budget_net_per_month(),
+    budgetRevenue:           h.budget_revenue(),
+    budgetExpenses:          h.budget_expenses(),
+    budgetRevenueBase:       h.budget_revenue_base(),
+    budgetRevenuePop:        h.budget_revenue_pop(),
+    budgetRevenueCommercial: h.budget_revenue_commercial(),
+    budgetRevenueIndustrial: h.budget_revenue_industrial(),
+    budgetExpensesTransport: h.budget_expenses_transport(),
+    budgetExpensesBuildings: h.budget_expenses_buildings(),
+    budgetMaintPower:        h.budget_maint_power(),
+    budgetMaintCivic:        h.budget_maint_civic(),
+    budgetMaintZones:        h.budget_maint_zones(),
+    budgetMaintRoads:        h.budget_maint_roads(),
+    budgetMaintRail:         h.budget_maint_rail(),
+    budgetMaintPowerLines:   h.budget_maint_power_lines(),
+    budgetMaintPipes:        h.budget_maint_pipes(),
   };
 }
 
@@ -86,10 +118,10 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);
         }
-        // Fast-forward to the city's current tick so zone buildings have time
-        // to grow before 'ready' fires. Rust ticks are cheap (µs each), so
-        // even several hundred ticks completes well under 1 ms.
-        const targetTick = msg.payload.targetTick ?? 0;
+        // Fast-forward enough for zone buildings to spawn (growth delay ≈ 40
+        // ticks). Cap at 120 so we don't overshoot into territory where Rust
+        // tick logic would diverge from what the TS display expects.
+        const targetTick = Math.min(msg.payload.targetTick ?? 0, 120);
         const dt = 1 / 20;
         while (host.tick_count() < targetTick) {
           host.step(dt);

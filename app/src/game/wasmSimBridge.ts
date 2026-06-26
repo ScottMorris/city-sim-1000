@@ -10,6 +10,7 @@
 // Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
 import type { GameState } from './gameState';
+import { TileKind } from './gameState';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
@@ -72,15 +73,32 @@ export class WasmSimBridge implements SimBridge {
   private pendingStats: SimStats | null = null;
   private pendingUndo: ((happened: boolean) => void) | null = null;
   private cmdLog: { tool: Tool; x: number; y: number }[] = [];
+  // Natural terrain snapshot taken at engine-swap time. Rust starts with
+  // all-land, so without this, natural water/tree tiles would disappear after
+  // the first tile-buffer update.
+  private naturalTileKinds: TileKind[] | null = null;
+  // Tile indices the player has explicitly modified — exempt from natural override.
+  private modifiedTiles = new Set<number>();
 
   constructor(state: GameState, _config: WasmSimBridgeConfig = {}, preloadCommands?: WasmInitCommand[]) {
     // Hold the same reference as main.ts so updateStats / applyTileBuffer
     // mutate the object main.ts renders from. No clone — the Rust sim owns
     // sim state; this.state is only a display mirror.
     this.state = state;
+    // Snapshot current tile kinds as the natural terrain baseline. Rust
+    // GameState::new starts all-land, so the first tile-buffer update would
+    // erase any Water/Tree tiles from the TS terrain generator. We preserve
+    // them for all tiles the player hasn't explicitly touched.
+    this.naturalTileKinds = state.tiles.map(t => t.kind);
     // Seed the log with the replayed history so subsequent swaps carry the
     // full command history, not just commands added after this init.
-    if (preloadCommands) this.cmdLog = [...preloadCommands];
+    if (preloadCommands) {
+      this.cmdLog = [...preloadCommands];
+      // Every replayed command position is player-modified — don't override those.
+      for (const cmd of preloadCommands) {
+        this.modifiedTiles.add(cmd.y * state.width + cmd.x);
+      }
+    }
     this.worker = new Worker(
       new URL('../workers/wasmSim.worker.ts', import.meta.url),
       { type: 'module' },
@@ -121,6 +139,7 @@ export class WasmSimBridge implements SimBridge {
       case 'ApplyTool':
         if (this.ready) {
           this.cmdLog.push({ tool: cmd.tool, x: cmd.x, y: cmd.y });
+          this.modifiedTiles.add(cmd.y * this.state.width + cmd.x);
           this.worker.postMessage({
             type: 'apply_tool',
             payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y },
@@ -241,7 +260,25 @@ export class WasmSimBridge implements SimBridge {
     this.state.demand.residential = stats.demandResidential;
     this.state.demand.commercial  = stats.demandCommercial;
     this.state.demand.industrial  = stats.demandIndustrial;
-    this.state.budget.netPerDay   = stats.budgetNetPerDay;
+    const b = this.state.budget;
+    b.netPerDay   = stats.budgetNetPerDay;
+    b.netPerMonth = stats.budgetNetPerMonth;
+    b.revenue     = stats.budgetRevenue;
+    b.expenses    = stats.budgetExpenses;
+    b.net         = stats.budgetRevenue - stats.budgetExpenses;
+    b.breakdown.revenue.base        = stats.budgetRevenueBase;
+    b.breakdown.revenue.residents   = stats.budgetRevenuePop;
+    b.breakdown.revenue.commercial  = stats.budgetRevenueCommercial;
+    b.breakdown.revenue.industrial  = stats.budgetRevenueIndustrial;
+    b.breakdown.expenses.transport  = stats.budgetExpensesTransport;
+    b.breakdown.expenses.buildings  = stats.budgetExpensesBuildings;
+    b.breakdown.details.transport.roads      = stats.budgetMaintRoads;
+    b.breakdown.details.transport.rail       = stats.budgetMaintRail;
+    b.breakdown.details.transport.powerLines = stats.budgetMaintPowerLines;
+    b.breakdown.details.transport.waterPipes = stats.budgetMaintPipes;
+    b.breakdown.details.buildings.power      = stats.budgetMaintPower;
+    b.breakdown.details.buildings.civic      = stats.budgetMaintCivic;
+    b.breakdown.details.buildings.zones      = stats.budgetMaintZones;
     this.handler?.({
       type: 'TickStats',
       data: {
@@ -261,8 +298,23 @@ export class WasmSimBridge implements SimBridge {
     const o = tileBufferOffsets(n);
     for (let i = 0; i < n; i++) {
       const tile = this.state.tiles[i];
-      const kind = tileKindFromU8(bytes[o.kind + i]);
-      if (kind !== undefined) tile.kind = kind;
+      const rustKind = tileKindFromU8(bytes[o.kind + i]);
+      if (rustKind !== undefined) {
+        // Rust GameState::new starts with all-land; restore natural Water/Tree
+        // for tiles the player never explicitly placed on.
+        if (
+          rustKind === TileKind.Land &&
+          this.naturalTileKinds !== null &&
+          !this.modifiedTiles.has(i)
+        ) {
+          const natural = this.naturalTileKinds[i];
+          tile.kind = (natural === TileKind.Water || natural === TileKind.Tree)
+            ? natural
+            : rustKind;
+        } else {
+          tile.kind = rustKind;
+        }
+      }
       const flags = bytes[o.flags + i];
       tile.powered      = (flags & FLAGS.POWERED)       !== 0;
       tile.watered      = (flags & FLAGS.WATERED)        !== 0;

@@ -86,6 +86,54 @@ impl SimHost {
     pub fn budget_net_per_day(&self) -> f32 {
         self.sim.state.budget.net_per_day
     }
+    pub fn budget_net_per_month(&self) -> f32 {
+        self.sim.state.budget.net_per_month
+    }
+    pub fn budget_revenue(&self) -> f32 {
+        self.sim.state.budget.revenue
+    }
+    pub fn budget_expenses(&self) -> f32 {
+        self.sim.state.budget.expenses
+    }
+    pub fn budget_revenue_base(&self) -> f32 {
+        self.sim.state.budget.revenue_base
+    }
+    pub fn budget_revenue_pop(&self) -> f32 {
+        self.sim.state.budget.revenue_pop
+    }
+    pub fn budget_revenue_commercial(&self) -> f32 {
+        self.sim.state.budget.revenue_commercial
+    }
+    pub fn budget_revenue_industrial(&self) -> f32 {
+        self.sim.state.budget.revenue_industrial
+    }
+    pub fn budget_expenses_transport(&self) -> f32 {
+        self.sim.state.budget.expenses_transport
+    }
+    pub fn budget_expenses_buildings(&self) -> f32 {
+        self.sim.state.budget.expenses_buildings
+    }
+    pub fn budget_maint_power(&self) -> f32 {
+        self.sim.state.budget.maint_power
+    }
+    pub fn budget_maint_civic(&self) -> f32 {
+        self.sim.state.budget.maint_civic
+    }
+    pub fn budget_maint_zones(&self) -> f32 {
+        self.sim.state.budget.maint_zones
+    }
+    pub fn budget_maint_roads(&self) -> f32 {
+        self.sim.state.budget.maint_roads
+    }
+    pub fn budget_maint_rail(&self) -> f32 {
+        self.sim.state.budget.maint_rail
+    }
+    pub fn budget_maint_power_lines(&self) -> f32 {
+        self.sim.state.budget.maint_power_lines
+    }
+    pub fn budget_maint_pipes(&self) -> f32 {
+        self.sim.state.budget.maint_pipes
+    }
     pub fn set_money(&mut self, amount: f64) {
         self.sim.state.money = amount as i64;
     }
