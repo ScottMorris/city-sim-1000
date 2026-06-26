@@ -1,29 +1,56 @@
-/**
- * WasmSimBridge — implements SimBridge by routing through a Web Worker that
- * owns a WASM SimHost.
- *
- * Phase 2 (stub): the WASM SimHost flips tile (1,1) on each step; no real sim
- * logic runs. Activating this bridge with `?bridge=wasm` proves the full
- * Worker → WASM → tile-buffer → renderer pipe works end-to-end.
- *
- * Phase 3: replace the stub SimHost with the ported sim_core engine; remove
- * the LocalSimBridge entirely.
- *
- * Tile-buffer transport: transferable ArrayBuffer (one copy per step).
- * Phase 4: upgrade to SharedArrayBuffer when COOP/COEP headers are confirmed.
- */
+// wasmSimBridge.ts — SimBridge backed by the real city-sim-core Rust engine
+// running inside a Web Worker via WASM.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+//
+// Phase 3: SimHost wraps city-sim-core::Simulation + CommandLog. Tool
+// placement, ticking, and Ctrl+Z undo all run through the Rust engine.
+//
+// Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
 import type { GameState } from './gameState';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileBufferOffsets } from './protocol/tileBuffer';
+import type { SimStats } from '../workers/wasmSim.worker';
+import { tileBufferOffsets, decodeHappiness, FLAGS } from './protocol/tileBuffer';
 import { tileKindFromU8 } from './protocol/tileKind';
+import { Tool } from './toolTypes';
+
+// Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
+// Must remain in sync with city-sim-protocol/src/commands.rs Tool enum.
+const TOOL_TO_U8: Record<Tool, number> = {
+  [Tool.Inspect]:          0,
+  [Tool.TerraformRaise]:   1,
+  [Tool.TerraformLower]:   2,
+  [Tool.Water]:            3,
+  [Tool.Tree]:             4,
+  [Tool.Road]:             5,
+  [Tool.Rail]:             6,
+  [Tool.PowerLine]:        7,
+  [Tool.HydroPlant]:       8,
+  [Tool.CoalPlant]:        9,
+  [Tool.WindTurbine]:      10,
+  [Tool.SolarFarm]:        11,
+  [Tool.WaterPump]:        12,
+  [Tool.WaterTower]:       13,
+  [Tool.WaterPipe]:        14,
+  [Tool.ElementarySchool]: 15,
+  [Tool.HighSchool]:       16,
+  [Tool.Residential]:      17,
+  [Tool.Commercial]:       18,
+  [Tool.Industrial]:       19,
+  [Tool.Park]:             20,
+  [Tool.Bulldoze]:         21,
+};
 
 type WorkerToMain =
   | { type: 'ready' }
-  | { type: 'tile_buffer'; bytes: Uint8Array }
-  | { type: 'cmd_result'; bytes: Uint8Array };
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats }
+  | { type: 'apply_result'; success: boolean }
+  | { type: 'undo_result';  happened: false }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats };
 
 export interface WasmSimBridgeConfig {
   ticksPerSecond?: number;
@@ -36,10 +63,14 @@ export class WasmSimBridge implements SimBridge {
   private handler: ((msg: FromSim) => void) | null = null;
   private speedMult = 1;
   private pendingTileBuffer: Uint8Array | null = null;
-  private tickNum = 0;
+  private pendingStats: SimStats | null = null;
+  private pendingUndo: ((happened: boolean) => void) | null = null;
 
   constructor(state: GameState, _config: WasmSimBridgeConfig = {}) {
-    this.state = structuredClone(state);
+    // Hold the same reference as main.ts so updateStats / applyTileBuffer
+    // mutate the object main.ts renders from. No clone — the Rust sim owns
+    // sim state; this.state is only a display mirror.
+    this.state = state;
     this.worker = new Worker(
       new URL('../workers/wasmSim.worker.ts', import.meta.url),
       { type: 'module' },
@@ -49,40 +80,46 @@ export class WasmSimBridge implements SimBridge {
     };
     this.worker.postMessage({
       type: 'init',
-      payload: { width: state.width, height: state.height },
+      payload: { width: state.width, height: state.height, seed: state.seed },
     });
   }
 
   step(dt: number): void {
-    // Apply tile kinds received from the previous step before advancing.
+    // Apply tile state and stats received from the previous tick before advancing.
     if (this.pendingTileBuffer !== null) {
       this.applyTileBuffer(this.pendingTileBuffer);
       this.pendingTileBuffer = null;
     }
+    if (this.pendingStats !== null) {
+      this.updateStats(this.pendingStats);
+      this.pendingStats = null;
+    }
     if (!this.ready) return;
-    this.tickNum++;
-    this.worker.postMessage({ type: 'step', payload: { dt: dt * this.speedMult } });
-    // Emit TickStats so the handler contract is symmetric with LocalSimBridge.
-    this.handler?.({
-      type: 'TickStats',
-      data: {
-        tick: this.tickNum,
-        day: 0,
-        money: this.state.money,
-        population: this.state.population,
-        jobs: this.state.jobs,
-        powerBalance: this.state.utilities.power,
-        waterBalance: this.state.utilities.water,
-      },
-    });
+    // Pass raw dt — the speed multiplier is applied inside Simulation::tick.
+    this.worker.postMessage({ type: 'step', payload: { dt } });
   }
 
   send(cmd: SimCommand): CommandResult {
-    // Phase 2 stub: fire-and-forget; return optimistic success.
-    // TODO(P3): encode cmd to postcard bytes and await the result.
-    void cmd;
-    if (this.ready) {
-      this.worker.postMessage({ type: 'send', payload: { bytes: new Uint8Array(0) } });
+    switch (cmd.type) {
+      case 'ApplyTool':
+        if (this.ready) {
+          this.worker.postMessage({
+            type: 'apply_tool',
+            payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y },
+          });
+        }
+        break;
+      case 'SetSpeed':
+        this.setSpeed(cmd.multiplier);
+        break;
+      case 'LoadState':
+        if (this.ready) {
+          this.worker.postMessage({
+            type: 'reset',
+            payload: { width: this.state.width, height: this.state.height, seed: cmd.seed },
+          });
+        }
+        break;
     }
     return { success: true };
   }
@@ -96,19 +133,33 @@ export class WasmSimBridge implements SimBridge {
   }
 
   loadState(state: GameState): void {
-    this.state = structuredClone(state);
-    // TODO(P3): notify worker to reinitialise with new state.
+    this.state = state;
+    this.pendingTileBuffer = null;
+    this.pendingStats = null;
+    if (this.ready) {
+      this.worker.postMessage({
+        type: 'reset',
+        payload: { width: state.width, height: state.height, seed: state.seed },
+      });
+    }
   }
 
   setSpeed(multiplier: number): void {
     this.speedMult = multiplier;
+    if (this.ready) {
+      this.worker.postMessage({ type: 'set_speed', payload: { multiplier } });
+    }
   }
 
   undo(): Promise<boolean> {
-    // Undo is not yet implemented for the WASM path — the SimHost is still a
-    // stub that does not track a CommandLog. Returns false so the UI shows no
-    // "Undone" notification.
-    return Promise.resolve(false);
+    return new Promise((resolve) => {
+      if (!this.ready) {
+        resolve(false);
+        return;
+      }
+      this.pendingUndo = resolve;
+      this.worker.postMessage({ type: 'undo' });
+    });
   }
 
   dispose(): void {
@@ -123,25 +174,66 @@ export class WasmSimBridge implements SimBridge {
     switch (msg.type) {
       case 'ready':
         this.ready = true;
+        if (this.speedMult !== 1) {
+          this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
+        }
         break;
-      case 'tile_buffer':
-        // Buffer was transferred from the Worker — stash for next step().
+      case 'step_result':
         this.pendingTileBuffer = msg.bytes;
+        this.pendingStats = msg.stats;
         break;
-      case 'cmd_result':
-        // TODO(P3): surface result to pending send() callers.
+      case 'apply_result':
+        break;
+      case 'undo_result':
+        if (msg.happened) {
+          this.applyTileBuffer(msg.bytes);
+          this.updateStats(msg.stats);
+        }
+        this.pendingUndo?.(msg.happened);
+        this.pendingUndo = null;
         break;
     }
+  }
+
+  private updateStats(stats: SimStats): void {
+    this.state.money = stats.money;
+    this.state.population = stats.population;
+    this.state.jobs = stats.jobs;
+    this.state.utilities.power = stats.powerBalance;
+    this.state.utilities.water = stats.waterBalance;
+    this.handler?.({
+      type: 'TickStats',
+      data: {
+        tick: stats.tick,
+        day: stats.day,
+        money: stats.money,
+        population: stats.population,
+        jobs: stats.jobs,
+        powerBalance: stats.powerBalance,
+        waterBalance: stats.waterBalance,
+      },
+    });
   }
 
   private applyTileBuffer(bytes: Uint8Array): void {
     const n = this.state.tiles.length;
     const o = tileBufferOffsets(n);
     for (let i = 0; i < n; i++) {
+      const tile = this.state.tiles[i];
       const kind = tileKindFromU8(bytes[o.kind + i]);
-      if (kind !== undefined) {
-        this.state.tiles[i].kind = kind;
-      }
+      if (kind !== undefined) tile.kind = kind;
+      const flags = bytes[o.flags + i];
+      tile.powered      = (flags & FLAGS.POWERED)       !== 0;
+      tile.watered      = (flags & FLAGS.WATERED)        !== 0;
+      tile.abandoned    = (flags & FLAGS.ABANDONED)      !== 0;
+      tile.roadUnderlay = (flags & FLAGS.ROAD_UNDERLAY)  !== 0;
+      tile.railUnderlay = (flags & FLAGS.RAIL_UNDERLAY)  !== 0;
+      tile.powerOverlay = (flags & FLAGS.POWER_OVERLAY)  !== 0;
+      tile.happiness = decodeHappiness(bytes[o.happiness + i]);
+      tile.elevation = bytes[o.elevation + i];
+      const bidBase = o.buildingId + i * 2;
+      const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
+      tile.buildingId = bid === 0 ? undefined : bid;
     }
   }
 }
