@@ -203,6 +203,10 @@ export class WasmSimBridge implements SimBridge {
     this.state.jobs = stats.jobs;
     this.state.utilities.power = stats.powerBalance;
     this.state.utilities.water = stats.waterBalance;
+    this.state.demand.residential = stats.demandResidential;
+    this.state.demand.commercial  = stats.demandCommercial;
+    this.state.demand.industrial  = stats.demandIndustrial;
+    this.state.budget.netPerDay   = stats.budgetNetPerDay;
     this.handler?.({
       type: 'TickStats',
       data: {

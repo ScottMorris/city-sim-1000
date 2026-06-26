@@ -36,6 +36,10 @@ export interface SimStats {
   jobs: number;
   powerBalance: number;
   waterBalance: number;
+  demandResidential: number;
+  demandCommercial: number;
+  demandIndustrial: number;
+  budgetNetPerDay: number;
 }
 
 type MainToWorker =
@@ -50,13 +54,17 @@ let host: SimHost | null = null;
 
 function gatherStats(h: SimHost): SimStats {
   return {
-    tick:         h.tick_count(),
-    day:          h.day(),
-    money:        h.money(),
-    population:   h.population(),
-    jobs:         h.jobs(),
-    powerBalance: h.power_balance(),
-    waterBalance: h.water_balance(),
+    tick:               h.tick_count(),
+    day:                h.day(),
+    money:              h.money(),
+    population:         h.population(),
+    jobs:               h.jobs(),
+    powerBalance:       h.power_balance(),
+    waterBalance:       h.water_balance(),
+    demandResidential:  h.demand_residential(),
+    demandCommercial:   h.demand_commercial(),
+    demandIndustrial:   h.demand_industrial(),
+    budgetNetPerDay:    h.budget_net_per_day(),
   };
 }
 

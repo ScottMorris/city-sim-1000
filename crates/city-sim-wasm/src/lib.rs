@@ -62,11 +62,23 @@ impl SimHost {
     pub fn day(&self) -> u32 {
         self.sim.state.day
     }
+    pub fn demand_residential(&self) -> f32 {
+        self.sim.state.demand.residential
+    }
+    pub fn demand_commercial(&self) -> f32 {
+        self.sim.state.demand.commercial
+    }
+    pub fn demand_industrial(&self) -> f32 {
+        self.sim.state.demand.industrial
+    }
+    pub fn budget_net_per_day(&self) -> f32 {
+        self.sim.state.budget.net_per_day
+    }
 
     /// Advance the simulation by `dt` seconds (real time). The speed
     /// multiplier is applied internally by `Simulation::tick`.
     pub fn step(&mut self, dt: f64) {
-        self.sim.tick(dt);
+        self.sim.step(dt);
     }
 
     /// Apply a player tool at tile (x, y).
