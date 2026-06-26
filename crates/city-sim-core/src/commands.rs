@@ -93,6 +93,9 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
 
         Tool::Road => {
             let idx = state.tile_index(x, y).unwrap();
+            if state.tiles[idx].building_id.is_some() {
+                return CommandResult::fail("A building occupies this tile. Bulldoze first.");
+            }
             let had_rail =
                 state.tiles[idx].kind == TileKind::Rail || state.tiles[idx].has_rail_underlay();
             clear_building_at(state, x, y);
@@ -107,6 +110,9 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         }
         Tool::Rail => {
             let idx = state.tile_index(x, y).unwrap();
+            if state.tiles[idx].building_id.is_some() {
+                return CommandResult::fail("A building occupies this tile. Bulldoze first.");
+            }
             let had_road =
                 state.tiles[idx].kind == TileKind::Road || state.tiles[idx].has_road_underlay();
             clear_building_at(state, x, y);
@@ -121,6 +127,9 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         }
         Tool::PowerLine => {
             let idx = state.tile_index(x, y).unwrap();
+            if state.tiles[idx].building_id.is_some() {
+                return CommandResult::fail("A building occupies this tile. Bulldoze first.");
+            }
             let had_road =
                 state.tiles[idx].kind == TileKind::Road || state.tiles[idx].has_road_underlay();
             let had_rail =
@@ -501,6 +510,26 @@ mod tests {
             s.tile_at(0, 0).unwrap().water_output > 0,
             "water pump tile must have water_output > 0 after placement"
         );
+    }
+
+    #[test]
+    fn transport_tools_reject_placement_over_buildings() {
+        // Road, Rail, and PowerLine must refuse to overwrite an existing building.
+        // The player must Bulldoze first — matches the TS tools.ts guard.
+        for tool in [Tool::Road, Tool::Rail, Tool::PowerLine] {
+            let mut s = gs(4, 4);
+            apply_tool(&mut s, Tool::WaterPump, 1, 1);
+            assert!(s.tile_at(1, 1).unwrap().building_id.is_some());
+
+            let before_money = s.money;
+            let r = apply_tool(&mut s, tool, 1, 1);
+            assert!(!r.success, "{tool:?} should be rejected over a building");
+            assert_eq!(s.money, before_money, "{tool:?} must not charge on rejection");
+            assert!(
+                s.tile_at(1, 1).unwrap().building_id.is_some(),
+                "{tool:?} must not remove the building on rejection",
+            );
+        }
     }
 
     #[test]
