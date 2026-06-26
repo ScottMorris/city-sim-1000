@@ -181,17 +181,35 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         // output and maintenance are stored in BuildingInstance so the budget and
         // power BFS get the correct values without separate TileKind variants.
         Tool::HydroPlant => place_footprint_building(
-            state, TileKind::HydroPlant, x, y, cost, HYDRO_PLANT_MW, 150.0,
+            state,
+            TileKind::HydroPlant,
+            x,
+            y,
+            cost,
+            HYDRO_PLANT_MW,
+            150.0,
         ),
         Tool::CoalPlant => place_footprint_building(
-            state, TileKind::HydroPlant, x, y, cost, COAL_PLANT_MW, 300.0,
+            state,
+            TileKind::HydroPlant,
+            x,
+            y,
+            cost,
+            COAL_PLANT_MW,
+            300.0,
         ),
         Tool::WindTurbine => place_footprint_building(
-            state, TileKind::HydroPlant, x, y, cost, WIND_TURBINE_MW, 30.0,
+            state,
+            TileKind::HydroPlant,
+            x,
+            y,
+            cost,
+            WIND_TURBINE_MW,
+            30.0,
         ),
-        Tool::SolarFarm => place_footprint_building(
-            state, TileKind::HydroPlant, x, y, cost, SOLAR_FARM_MW, 20.0,
-        ),
+        Tool::SolarFarm => {
+            place_footprint_building(state, TileKind::HydroPlant, x, y, cost, SOLAR_FARM_MW, 20.0)
+        }
         Tool::WaterPump => place_footprint_building(state, TileKind::WaterPump, x, y, cost, 0, 0.0),
         Tool::WaterTower => {
             place_footprint_building(state, TileKind::WaterTower, x, y, cost, 0, 0.0)
@@ -544,7 +562,10 @@ mod tests {
             let before_money = s.money;
             let r = apply_tool(&mut s, tool, 1, 1);
             assert!(!r.success, "{tool:?} should be rejected over a building");
-            assert_eq!(s.money, before_money, "{tool:?} must not charge on rejection");
+            assert_eq!(
+                s.money, before_money,
+                "{tool:?} must not charge on rejection"
+            );
             assert!(
                 s.tile_at(1, 1).unwrap().building_id.is_some(),
                 "{tool:?} must not remove the building on rejection",

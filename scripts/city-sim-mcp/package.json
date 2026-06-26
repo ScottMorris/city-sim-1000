@@ -1,0 +1,15 @@
+{
+  "name": "city-sim-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MCP server for City Sim 1000 — lets AI agents drive the browser game via structured tool calls.",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
+  }
+}

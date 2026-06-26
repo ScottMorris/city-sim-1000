@@ -497,7 +497,10 @@ mod tests {
         g.buildings.push(b);
         g.tile_at_mut(1, 0).unwrap().underground = Some(TileKind::WaterPipe);
         recompute_utility_network(&mut g, UtilityKind::Water);
-        assert!(!g.tile_at(0, 0).unwrap().is_watered(), "inactive pump must not seed water");
+        assert!(
+            !g.tile_at(0, 0).unwrap().is_watered(),
+            "inactive pump must not seed water"
+        );
         assert!(!g.tile_at(1, 0).unwrap().is_watered());
     }
 

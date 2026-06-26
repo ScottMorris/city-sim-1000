@@ -177,14 +177,13 @@ pub fn apply_population_growth(state: &mut GameState, pop_cap: u32, job_cap: u32
     // Use float accumulation so low-demand growth (e.g. +0.1/tick) carries over
     // between ticks rather than truncating to zero — mirrors the TS engine where
     // `state.population` is a JS float64.
-    let raw_pop_growth =
-        ((state.demand.residential as f64 * 0.05) as f64).clamp(-2.0, 2.0);
+    let raw_pop_growth = (state.demand.residential as f64 * 0.05).clamp(-2.0, 2.0);
     state.pop_frac += raw_pop_growth;
     let whole_pop = state.pop_frac as i64;
     if whole_pop != 0 {
         state.pop_frac -= whole_pop as f64;
-        state.population = ((state.population as i64 + whole_pop).max(0) as u64)
-            .min(pop_cap as u64) as u32;
+        state.population =
+            ((state.population as i64 + whole_pop).max(0) as u64).min(pop_cap as u64) as u32;
     }
 
     let combined_demand = state.demand.commercial + state.demand.industrial;
@@ -193,8 +192,7 @@ pub fn apply_population_growth(state: &mut GameState, pop_cap: u32, job_cap: u32
     let whole_jobs = state.jobs_frac as i64;
     if whole_jobs != 0 {
         state.jobs_frac -= whole_jobs as f64;
-        state.jobs = ((state.jobs as i64 + whole_jobs).max(0) as u64)
-            .min(job_cap as u64) as u32;
+        state.jobs = ((state.jobs as i64 + whole_jobs).max(0) as u64).min(job_cap as u64) as u32;
     }
 }
 
