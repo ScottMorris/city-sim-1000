@@ -218,9 +218,20 @@ function swapSimBridge(): void {
   if (activeBridgeKind === 'tauri') return; // Tauri bridge is not swappable
   const currentState = bridge.getState();
   const nextKind = activeBridgeKind === 'wasm' ? 'local' : 'wasm';
-  const newBridge: SimBridge = nextKind === 'wasm'
-    ? new WasmSimBridge(currentState)
-    : new LocalSimBridge(currentState, { ticksPerSecond: 20 });
+  let newBridge: SimBridge;
+  if (nextKind === 'wasm') {
+    // WASM initialises from city seed only — it cannot import a TS GameState.
+    // Reset state in-place so the display mirror is clean and consistent with
+    // what Rust will compute; otherwise tiles blank out while the buildings
+    // array retains stale TS data, creating a partial desync.
+    const { width, height, seed, settings } = currentState;
+    Object.assign(state, createInitialState(width, height, seed));
+    state.settings = settings;
+    newBridge = new WasmSimBridge(state);
+  } else {
+    // TS bridge wraps the live state reference directly — state is preserved.
+    newBridge = new LocalSimBridge(currentState, { ticksPerSecond: 20 });
+  }
   wireBridge(newBridge);
   newBridge.setSpeed(simSpeeds[simSpeed]);
   bridge.dispose();
