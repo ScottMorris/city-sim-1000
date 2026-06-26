@@ -219,16 +219,14 @@ function swapSimBridge(): void {
   const currentState = bridge.getState();
   const nextKind = activeBridgeKind === 'wasm' ? 'local' : 'wasm';
   let newBridge: SimBridge;
+  // Carry the command log across the swap so the city survives in both
+  // directions. WASM→TS seeds the LocalSimBridge log so a second swap back to
+  // WASM can replay. TS→WASM replays the log into a fresh SimHost before ready.
+  const cmdLog = bridge.getCommandLog() ?? [];
   if (nextKind === 'wasm') {
-    // Replay the TS command log into the new WASM SimHost so the city layout
-    // survives the engine swap. The worker applies each tool before sending
-    // 'ready', then syncs money so the player's balance is preserved.
-    // Tile state and stats are overwritten from the first step_result.
-    const preload = bridge instanceof LocalSimBridge ? bridge.getCommandLog() : undefined;
-    newBridge = new WasmSimBridge(currentState, {}, preload);
+    newBridge = new WasmSimBridge(currentState, {}, cmdLog.length ? cmdLog : undefined);
   } else {
-    // TS bridge wraps the live state reference directly — state is preserved.
-    newBridge = new LocalSimBridge(currentState, { ticksPerSecond: 20 });
+    newBridge = new LocalSimBridge(currentState, { ticksPerSecond: 20, initialCmdLog: cmdLog });
   }
   wireBridge(newBridge);
   newBridge.setSpeed(simSpeeds[simSpeed]);

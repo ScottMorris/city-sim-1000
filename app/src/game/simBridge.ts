@@ -74,6 +74,13 @@ export interface SimBridge {
   getMetadata(): BuildingTemplate[] | null;
 
   /**
+   * Return the ordered list of tool placements made through this bridge, for
+   * use when swapping engines — the new bridge replays these to reconstruct
+   * the city. Returns null for bridges that don't support replay (Tauri).
+   */
+  getCommandLog(): { tool: import('./toolTypes').Tool; x: number; y: number }[] | null;
+
+  /**
    * Tear down the bridge (terminate Worker, release SharedArrayBuffer, etc.).
    */
   dispose(): void;

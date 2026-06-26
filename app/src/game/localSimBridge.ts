@@ -19,6 +19,7 @@ import type { Tool } from './toolTypes';
 
 export interface LocalSimBridgeConfig {
   ticksPerSecond: number;
+  initialCmdLog?: { tool: Tool; x: number; y: number }[];
 }
 
 // Merged, deduplicated template catalogue — built once at module load.
@@ -32,9 +33,10 @@ export class LocalSimBridge implements SimBridge {
   private simulation: Simulation;
   private state: GameState;
   private handler: ((msg: FromSim) => void) | null = null;
-  private cmdLog: { tool: Tool; x: number; y: number }[] = [];
+  private cmdLog: { tool: Tool; x: number; y: number }[];
 
   constructor(state: GameState, config: LocalSimBridgeConfig) {
+    this.cmdLog = config.initialCmdLog ? [...config.initialCmdLog] : [];
     this.state = state;
 
     const simConfig: SimulationConfig = {

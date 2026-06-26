@@ -131,6 +131,9 @@ export class TauriSimBridge implements SimBridge {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
+  // Tauri bridge is not swappable, so no command log is needed.
+  getCommandLog() { return null; }
+
   // Returns null until Option B (Rust building_metadata() export) is implemented.
   getMetadata() { return null; }
 

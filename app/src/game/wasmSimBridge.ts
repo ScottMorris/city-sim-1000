@@ -71,6 +71,7 @@ export class WasmSimBridge implements SimBridge {
   private pendingTileBuffer: Uint8Array | null = null;
   private pendingStats: SimStats | null = null;
   private pendingUndo: ((happened: boolean) => void) | null = null;
+  private cmdLog: { tool: Tool; x: number; y: number }[] = [];
 
   constructor(state: GameState, _config: WasmSimBridgeConfig = {}, preloadCommands?: WasmInitCommand[]) {
     // Hold the same reference as main.ts so updateStats / applyTileBuffer
@@ -115,6 +116,7 @@ export class WasmSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool':
         if (this.ready) {
+          this.cmdLog.push({ tool: cmd.tool, x: cmd.x, y: cmd.y });
           this.worker.postMessage({
             type: 'apply_tool',
             payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y },
@@ -173,6 +175,8 @@ export class WasmSimBridge implements SimBridge {
       this.worker.postMessage({ type: 'undo' });
     });
   }
+
+  getCommandLog() { return this.cmdLog; }
 
   // Returns null until Option B (Rust building_metadata() export) is implemented.
   getMetadata() { return null; }
