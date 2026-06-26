@@ -183,8 +183,15 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = msg.stats;
         break;
       case 'apply_result':
+        if (!msg.success) {
+          console.warn('[WasmSimBridge] apply_tool rejected by Rust sim');
+        }
         break;
       case 'undo_result':
+        // Discard any pending step_result — it was computed before the undo
+        // and would overwrite the rolled-back state on the next frame.
+        this.pendingTileBuffer = null;
+        this.pendingStats = null;
         if (msg.happened) {
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);

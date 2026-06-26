@@ -210,7 +210,7 @@ impl Simulation {
 // Golden hash (parity milestone P3-10)
 // ---------------------------------------------------------------------------
 
-/// Compute a deterministic FNV-1a-64 hash of the key simulation state fields.
+/// Compute a deterministic FNV-1-64 hash of the key simulation state fields.
 ///
 /// Used in the golden-hash regression test — if this value changes unexpectedly
 /// a determinism bug has been introduced.
