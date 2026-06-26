@@ -78,6 +78,9 @@ export class WasmSimBridge implements SimBridge {
     // mutate the object main.ts renders from. No clone — the Rust sim owns
     // sim state; this.state is only a display mirror.
     this.state = state;
+    // Seed the log with the replayed history so subsequent swaps carry the
+    // full command history, not just commands added after this init.
+    if (preloadCommands) this.cmdLog = [...preloadCommands];
     this.worker = new Worker(
       new URL('../workers/wasmSim.worker.ts', import.meta.url),
       { type: 'module' },
