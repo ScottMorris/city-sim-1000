@@ -162,6 +162,9 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
+  // Returns null until Option B (Rust building_metadata() export) is implemented.
+  getMetadata() { return null; }
+
   dispose(): void {
     this.worker.terminate();
   }
@@ -177,6 +180,7 @@ export class WasmSimBridge implements SimBridge {
         if (this.speedMult !== 1) {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
         }
+        this.handler?.({ type: 'Ready' });
         break;
       case 'step_result':
         this.pendingTileBuffer = msg.bytes;

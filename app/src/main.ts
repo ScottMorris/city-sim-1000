@@ -42,6 +42,7 @@ import { initSettingsModal } from './ui/settingsModal';
 import { initBylawsModal } from './ui/bylawsModal';
 import { initNewsTicker } from './ui/newsTicker';
 import type { RadioWidget } from './ui/radio';
+import { initLoadingScreen } from './ui/loadingScreen';
 import { DEFAULT_BYLAWS } from './game/bylaws';
 import { buildCitySnapshot } from './game/narrative/snapshot';
 import { NarrativeManager } from './game/narrative/narrativeManager';
@@ -183,13 +184,22 @@ const narrativeManager = new NarrativeManager({
 const bridgeParam = new URLSearchParams(window.location.search).get('bridge');
 // Auto-detect Tauri shell when no explicit param is set.
 const inTauri = '__TAURI_INTERNALS__' in window;
-const isTauri = bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm');
-let activeBridgeKind: 'wasm' | 'local' | 'tauri' = isTauri ? 'tauri' : 'wasm';
-let bridge: SimBridge = isTauri ? new TauriSimBridge(state) : new WasmSimBridge(state);
+const isTauri = bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm' && bridgeParam !== 'ts');
+const isTs    = bridgeParam === 'ts';
+let activeBridgeKind: 'wasm' | 'local' | 'tauri' = isTauri ? 'tauri' : isTs ? 'local' : 'wasm';
+let bridge: SimBridge = isTauri
+  ? new TauriSimBridge(state)
+  : isTs
+    ? new LocalSimBridge(state, { ticksPerSecond: 20 })
+    : new WasmSimBridge(state);
+
+const loadingScreen = initLoadingScreen(document.body);
 
 function wireBridge(b: SimBridge): void {
   b.onMessage((msg: FromSim) => {
-    if (msg.type === 'Alert') {
+    if (msg.type === 'Ready') {
+      loadingScreen.complete();
+    } else if (msg.type === 'Alert') {
       notifications.publish({
         id: msg.data.kind,
         message: msg.data.message,
@@ -780,6 +790,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   });
 
   simBridgeBtn.style.display = activeBridgeKind === 'tauri' ? 'none' : '';
+  simBridgeBtn.textContent = `Sim: ${activeBridgeKind === 'local' ? 'TS' : 'WASM'}`;
+  simBridgeBtn.classList.toggle('active', activeBridgeKind === 'local');
   simBridgeBtn.addEventListener('click', () => {
     swapSimBridge();
     showToast(`Switched to ${activeBridgeKind === 'local' ? 'TypeScript' : 'WASM'} simulation`);

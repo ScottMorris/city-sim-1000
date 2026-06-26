@@ -10,6 +10,8 @@ import type { GameState } from './gameState';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim, AlertKind, NarrativeKind } from './protocol/events';
+import type { BuildingTemplate } from './buildings/templates';
+import { POWER_PLANT_TEMPLATES, CIVIC_BUILDING_TEMPLATES, ZONE_BUILDING_TEMPLATES } from './buildings/templates';
 import { Simulation, type SimulationConfig, type SimulationAlert } from './simulation';
 import type { SimEvent, SimEventType } from './narrative/types';
 import { applyTool } from './tools';
@@ -17,6 +19,13 @@ import { applyTool } from './tools';
 export interface LocalSimBridgeConfig {
   ticksPerSecond: number;
 }
+
+// Merged, deduplicated template catalogue — built once at module load.
+const ALL_TEMPLATES: BuildingTemplate[] = [
+  ...Object.values(POWER_PLANT_TEMPLATES),
+  ...Object.values(CIVIC_BUILDING_TEMPLATES),
+  ...Object.values(ZONE_BUILDING_TEMPLATES),
+];
 
 export class LocalSimBridge implements SimBridge {
   private simulation: Simulation;
@@ -75,6 +84,9 @@ export class LocalSimBridge implements SimBridge {
 
   onMessage(handler: (msg: FromSim) => void): void {
     this.handler = handler;
+    // TS sim is ready synchronously; fire Ready in a microtask so the caller's
+    // wireBridge() finishes setting up before the handler is invoked.
+    queueMicrotask(() => handler({ type: 'Ready' }));
   }
 
   getState(): GameState {
@@ -93,6 +105,10 @@ export class LocalSimBridge implements SimBridge {
   // TS sim does not support command-log undo; resolves false so callers degrade gracefully.
   undo(): Promise<boolean> {
     return Promise.resolve(false);
+  }
+
+  getMetadata(): BuildingTemplate[] {
+    return ALL_TEMPLATES;
   }
 
   dispose(): void {

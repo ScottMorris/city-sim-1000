@@ -131,10 +131,14 @@ export class TauriSimBridge implements SimBridge {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
+  // Returns null until Option B (Rust building_metadata() export) is implemented.
+  getMetadata() { return null; }
+
   private async startPlugin(state: GameState): Promise<void> {
     await pluginStart(state.width, state.height, state.seed, (event) =>
       this.onTick(event),
     );
+    this.handler?.({ type: 'Ready' });
   }
 
   private async restartPlugin(width: number, height: number, seed: number): Promise<void> {

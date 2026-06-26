@@ -37,6 +37,7 @@ export interface TickStats {
 }
 
 export type FromSim =
+  | { type: 'Ready' }
   | { type: 'Alert'; data: SimAlert }
   | { type: 'Narrative'; data: NarrativeEvent }
   | { type: 'CommandResult'; success: boolean; message?: string }

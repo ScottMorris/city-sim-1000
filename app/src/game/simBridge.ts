@@ -4,14 +4,20 @@
 // SPDX-License-Identifier: MIT
 //
 // Implementations:
+//   LocalSimBridge  — TS sim in-process (?bridge=ts or debug toggle)
 //   WasmSimBridge   (P2-3) — Rust sim in a Web Worker via WASM
 //   TauriSimBridge  (P4-2) — native Rust sim via Tauri IPC Channel
 
 import type { GameState } from './gameState';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
+import type { BuildingTemplate } from './buildings/templates';
 
 export type { SimCommand, CommandResult, FromSim };
+
+// BuildingTemplate re-exported so callers of getMetadata() don't need a
+// separate import from buildings/templates.
+export type { BuildingTemplate };
 
 export interface SimBridge {
   /**
@@ -58,6 +64,14 @@ export interface SimBridge {
    * Bridges that do not yet support undo resolve immediately with `false`.
    */
   undo(): Promise<boolean>;
+
+  /**
+   * Return all building templates known to this bridge, or null if the bridge
+   * has not yet exported metadata.  LocalSimBridge returns data immediately
+   * (from templates.ts); WASM and Tauri bridges return null until Option B
+   * (Rust metadata export) is implemented.
+   */
+  getMetadata(): BuildingTemplate[] | null;
 
   /**
    * Tear down the bridge (terminate Worker, release SharedArrayBuffer, etc.).
