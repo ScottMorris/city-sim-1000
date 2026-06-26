@@ -56,6 +56,12 @@ export interface WasmSimBridgeConfig {
   ticksPerSecond?: number;
 }
 
+export interface WasmInitCommand {
+  tool: Tool;
+  x: number;
+  y: number;
+}
+
 export class WasmSimBridge implements SimBridge {
   private state: GameState;
   private worker: Worker;
@@ -66,7 +72,7 @@ export class WasmSimBridge implements SimBridge {
   private pendingStats: SimStats | null = null;
   private pendingUndo: ((happened: boolean) => void) | null = null;
 
-  constructor(state: GameState, _config: WasmSimBridgeConfig = {}) {
+  constructor(state: GameState, _config: WasmSimBridgeConfig = {}, preloadCommands?: WasmInitCommand[]) {
     // Hold the same reference as main.ts so updateStats / applyTileBuffer
     // mutate the object main.ts renders from. No clone — the Rust sim owns
     // sim state; this.state is only a display mirror.
@@ -80,7 +86,13 @@ export class WasmSimBridge implements SimBridge {
     };
     this.worker.postMessage({
       type: 'init',
-      payload: { width: state.width, height: state.height, seed: state.seed },
+      payload: {
+        width: state.width,
+        height: state.height,
+        seed: state.seed,
+        commands: preloadCommands?.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
+        money: preloadCommands ? state.money : undefined,
+      },
     });
   }
 

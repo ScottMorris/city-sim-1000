@@ -220,14 +220,12 @@ function swapSimBridge(): void {
   const nextKind = activeBridgeKind === 'wasm' ? 'local' : 'wasm';
   let newBridge: SimBridge;
   if (nextKind === 'wasm') {
-    // WASM initialises from city seed only — it cannot import a TS GameState.
-    // Reset state in-place so the display mirror is clean and consistent with
-    // what Rust will compute; otherwise tiles blank out while the buildings
-    // array retains stale TS data, creating a partial desync.
-    const { width, height, seed, settings } = currentState;
-    Object.assign(state, createInitialState(width, height, seed));
-    state.settings = settings;
-    newBridge = new WasmSimBridge(state);
+    // Replay the TS command log into the new WASM SimHost so the city layout
+    // survives the engine swap. The worker applies each tool before sending
+    // 'ready', then syncs money so the player's balance is preserved.
+    // Tile state and stats are overwritten from the first step_result.
+    const preload = bridge instanceof LocalSimBridge ? bridge.getCommandLog() : undefined;
+    newBridge = new WasmSimBridge(currentState, {}, preload);
   } else {
     // TS bridge wraps the live state reference directly — state is preserved.
     newBridge = new LocalSimBridge(currentState, { ticksPerSecond: 20 });

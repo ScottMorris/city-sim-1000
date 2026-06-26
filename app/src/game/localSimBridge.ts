@@ -15,6 +15,7 @@ import { POWER_PLANT_TEMPLATES, CIVIC_BUILDING_TEMPLATES, ZONE_BUILDING_TEMPLATE
 import { Simulation, type SimulationConfig, type SimulationAlert } from './simulation';
 import type { SimEvent, SimEventType } from './narrative/types';
 import { applyTool } from './tools';
+import type { Tool } from './toolTypes';
 
 export interface LocalSimBridgeConfig {
   ticksPerSecond: number;
@@ -31,6 +32,7 @@ export class LocalSimBridge implements SimBridge {
   private simulation: Simulation;
   private state: GameState;
   private handler: ((msg: FromSim) => void) | null = null;
+  private cmdLog: { tool: Tool; x: number; y: number }[] = [];
 
   constructor(state: GameState, config: LocalSimBridgeConfig) {
     this.state = state;
@@ -67,6 +69,9 @@ export class LocalSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool': {
         const result = applyTool(this.state, cmd.tool, cmd.x, cmd.y);
+        if (result.success) {
+          this.cmdLog.push({ tool: cmd.tool, x: cmd.x, y: cmd.y });
+        }
         this.handler?.({
           type: 'CommandResult',
           success: result.success,
@@ -105,6 +110,10 @@ export class LocalSimBridge implements SimBridge {
   // TS sim does not support command-log undo; resolves false so callers degrade gracefully.
   undo(): Promise<boolean> {
     return Promise.resolve(false);
+  }
+
+  getCommandLog(): { tool: Tool; x: number; y: number }[] {
+    return this.cmdLog;
   }
 
   getMetadata(): BuildingTemplate[] {

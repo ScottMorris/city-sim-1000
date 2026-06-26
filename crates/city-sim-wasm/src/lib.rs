@@ -86,6 +86,9 @@ impl SimHost {
     pub fn budget_net_per_day(&self) -> f32 {
         self.sim.state.budget.net_per_day
     }
+    pub fn set_money(&mut self, amount: f64) {
+        self.sim.state.money = amount as i64;
+    }
 
     /// Advance the simulation by `dt` seconds (real time). The speed
     /// multiplier is applied internally by `Simulation::tick`.

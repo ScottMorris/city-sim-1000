@@ -47,7 +47,7 @@ export interface SimStats {
 }
 
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number } }
+  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number } }
   | { type: 'step';       payload: { dt: number } }
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
@@ -82,6 +82,14 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'init': {
       await init();
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.commands) {
+        for (const cmd of msg.payload.commands) {
+          host.apply_tool(cmd.tool, cmd.x, cmd.y);
+        }
+        if (msg.payload.money !== undefined) {
+          host.set_money(msg.payload.money);
+        }
+      }
       self.postMessage({ type: 'ready' });
       break;
     }
