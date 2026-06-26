@@ -33,6 +33,8 @@ pub struct Simulation {
     ticks_per_second: u32,
     /// Speed multiplier (1.0 = normal).
     speed: f32,
+    /// Sub-day accumulator (seconds); avoids truncation-to-zero on fast frames.
+    day_frac: f64,
 }
 
 impl Simulation {
@@ -45,6 +47,7 @@ impl Simulation {
             water_enabled: true,
             ticks_per_second: 20,
             speed: 1.0,
+            day_frac: 0.0,
         }
     }
 
@@ -66,8 +69,14 @@ impl Simulation {
     pub fn tick(&mut self, dt: f64) {
         let effective_dt = dt * self.speed as f64;
 
-        // 1. Advance fractional day
-        self.state.day += (effective_dt / 1.5) as u32;
+        // 1. Advance day via accumulator — per-frame `effective_dt / 1.5`
+        // is typically < 1.0 and would truncate to 0 as u32 without this.
+        self.day_frac += effective_dt / 1.5;
+        let days_to_add = self.day_frac as u32;
+        if days_to_add > 0 {
+            self.state.day += days_to_add;
+            self.day_frac -= days_to_add as f64;
+        }
 
         // 2. Utility networks
         recompute_utility_network(&mut self.state, UtilityKind::Power);
@@ -224,7 +233,7 @@ mod tests {
     /// If this test fails, a determinism regression has been introduced.
     /// To re-commit after intentional sim changes, run:
     ///   REGEN=1 cargo test -p sim_core golden_hash 2>&1 | grep "new hash"
-    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0x3d128c538d40e908;
+    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0xb234ed590e7135fb;
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;
@@ -296,6 +305,22 @@ mod tests {
         let before_tick = sim.state.tick;
         sim.tick(1.0);
         assert_eq!(sim.state.tick, before_tick + 1);
+    }
+
+    #[test]
+    fn day_advances_with_small_dt() {
+        // Regression guard: per-frame dt (≈1/60) must accumulate and cross the
+        // 1.5s-per-day boundary rather than truncating to 0 each frame.
+        let mut sim = Simulation::new(4, 4, 0);
+        let start_day = sim.state.day;
+        for _ in 0..120 {
+            sim.tick(1.0 / 60.0);
+        }
+        assert!(
+            sim.state.day > start_day,
+            "day must advance after 120 ticks at dt=1/60 (got {})",
+            sim.state.day,
+        );
     }
 
     #[test]

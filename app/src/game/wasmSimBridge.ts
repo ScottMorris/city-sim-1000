@@ -196,6 +196,8 @@ export class WasmSimBridge implements SimBridge {
   }
 
   private updateStats(stats: SimStats): void {
+    this.state.tick = stats.tick;
+    this.state.day = stats.day;
     this.state.money = stats.money;
     this.state.population = stats.population;
     this.state.jobs = stats.jobs;
