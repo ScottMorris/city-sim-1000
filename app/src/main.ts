@@ -778,6 +778,15 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      void bridge.undo().then((happened) => {
+        if (happened) {
+          notifications.publish({ id: 'undo', message: 'Undone', sticky: false });
+        }
+      });
+      return;
+    }
     if (e.key === 'Escape') {
       e.preventDefault();
       cancelCurrentTool();

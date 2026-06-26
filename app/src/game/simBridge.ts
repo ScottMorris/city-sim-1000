@@ -21,9 +21,8 @@ export interface SimBridge {
   step(dt: number): void;
 
   /**
-   * Submit a player command. Returns the result synchronously for
-   * LocalSimBridge; async bridges should treat this as fire-and-wait
-   * (the CommandResult arrives via onMessage).
+   * Submit a player command. Returns optimistically — the CommandResult
+   * arrives via onMessage for async bridges.
    */
   send(cmd: SimCommand): CommandResult;
 
@@ -35,9 +34,8 @@ export interface SimBridge {
   onMessage(handler: (msg: FromSim) => void): void;
 
   /**
-   * Direct read access to the current GameState.
-   * For LocalSimBridge this is a live reference; other bridges may return a
-   * snapshot. Treat it as read-only — mutations go through send().
+   * Direct read access to the current GameState. Treat it as read-only —
+   * mutations go through send().
    */
   getState(): GameState;
 

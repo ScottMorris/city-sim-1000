@@ -1,8 +1,9 @@
 /**
  * SimCommand — TS mirror of crates/sim_protocol/src/commands.rs.
  *
- * Commands flow from the UI into the SimBridge. LocalSimBridge executes them
- * against the TS Simulation; WasmSimBridge posts them to the Worker.
+ * Commands flow from the UI into the SimBridge:
+ *   WasmSimBridge  — posts them to the Worker
+ *   TauriSimBridge — invokes the native plugin
  */
 
 import { Tool } from '../toolTypes';
