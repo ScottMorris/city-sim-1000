@@ -350,6 +350,7 @@ describe('simulation', () => {
   it('grows frontier zones even without roads, but roads still trigger growth', () => {
     const state = createInitialState(6, 6);
     state.money = 50000;
+    applyTool(state, Tool.HydroPlant, 1, 2); // powers zones at (3,3) and (4,3) via adjacency
     applyTool(state, Tool.Residential, 3, 3);
     state.demand.residential = 80;
     const sim = new Simulation(state, { ticksPerSecond: 1 });
@@ -397,6 +398,7 @@ describe('simulation', () => {
   it('allows interior zone tiles to grow when adjacent to a road-served zone', () => {
     const state = createInitialState(8, 8);
     state.money = 50000;
+    applyTool(state, Tool.HydroPlant, 0, 1); // powers road at (2,2) and zones via adjacency
     applyTool(state, Tool.Road, 2, 2);
     applyTool(state, Tool.Residential, 2, 3); // edge tile with road access
     applyTool(state, Tool.Residential, 3, 3); // interior tile with no road access
