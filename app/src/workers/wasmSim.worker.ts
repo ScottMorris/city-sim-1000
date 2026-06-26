@@ -47,7 +47,7 @@ export interface SimStats {
 }
 
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number } }
+  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number } }
   | { type: 'step';       payload: { dt: number } }
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
@@ -85,6 +85,14 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       if (msg.payload.commands) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);
+        }
+        // Fast-forward to the city's current tick so zone buildings have time
+        // to grow before 'ready' fires. Rust ticks are cheap (µs each), so
+        // even several hundred ticks completes well under 1 ms.
+        const targetTick = msg.payload.targetTick ?? 0;
+        const dt = 1 / 20;
+        while (host.tick_count() < targetTick) {
+          host.step(dt);
         }
         if (msg.payload.money !== undefined) {
           host.set_money(msg.payload.money);

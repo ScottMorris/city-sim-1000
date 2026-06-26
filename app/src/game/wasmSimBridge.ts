@@ -96,6 +96,7 @@ export class WasmSimBridge implements SimBridge {
         seed: state.seed,
         commands: preloadCommands?.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
         money: preloadCommands ? state.money : undefined,
+        targetTick: preloadCommands ? state.tick : undefined,
       },
     });
   }
