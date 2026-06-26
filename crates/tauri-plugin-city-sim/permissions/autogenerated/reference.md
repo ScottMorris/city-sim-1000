@@ -251,4 +251,30 @@ Denies the stop command without any pre-configured scope.
 
 </td>
 </tr>
+
+<tr>
+<td>
+
+`city-sim:allow-undo-last-command`
+
+</td>
+<td>
+
+Enables the undo_last_command command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-undo-last-command`
+
+</td>
+<td>
+
+Denies the undo_last_command command without any pre-configured scope.
+
+</td>
+</tr>
 </table>

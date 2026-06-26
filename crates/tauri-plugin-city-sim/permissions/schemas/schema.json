@@ -403,6 +403,18 @@
           "markdownDescription": "Denies the stop command without any pre-configured scope."
         },
         {
+          "description": "Enables the undo_last_command command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-undo-last-command",
+          "markdownDescription": "Enables the undo_last_command command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the undo_last_command command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-undo-last-command",
+          "markdownDescription": "Denies the undo_last_command command without any pre-configured scope."
+        },
+        {
           "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-stop`",
           "type": "string",
           "const": "default",

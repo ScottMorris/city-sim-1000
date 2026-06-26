@@ -16,6 +16,7 @@
 //   get_map_seed() -> MapSeed
 //   get_command_log() -> Vec<u8>
 //   load_command_log(bytes: Vec<u8>)
+//   undo_last_command() -> bool
 
 pub mod commands;
 mod error;
@@ -49,6 +50,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::get_map_seed,
             commands::get_command_log,
             commands::load_command_log,
+            commands::undo_last_command,
         ])
         .setup(|app, _api| {
             app.manage(SimState::default());

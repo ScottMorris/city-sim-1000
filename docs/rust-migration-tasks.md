@@ -121,8 +121,10 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   mirror + protocol + narrative/services UI only. `deps:` P3-10, P5-1.
   **DoD:** `LocalSimBridge` removed; `simulation.ts` demoted to test-only oracle; app
   ships on Rust core; CLAUDE.md, SPEC.md, rust-migration-plan.md updated.
-- [ ] **P5-5 · (Optional) Undo via delta ring buffer** (~50 s / ~6 MB). Only if an undo
-  feature is wanted. `deps:` P3-10.
+- [x] **P5-5 · Undo via `CommandLog.pop()` + replay** (Ctrl+Z / Cmd+Z). `deps:` P5-2.
+  **DoD:** `CommandLog::pop()` in core; `UndoLast` `SimCmd` + `undo_last_command()` Tauri
+  command; `SimBridge.undo()` interface; `TauriSimBridge` (real) + `WasmSimBridge` (no-op)
+  implementations; Ctrl+Z handler in `main.ts` with "Undone" notification.
 - [ ] **P5-6 · Benchmarks + CI for both targets** (criterion in `city-sim-core`; wasm + tauri
   build workflows). `deps:` P4-2.
 

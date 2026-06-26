@@ -104,6 +104,13 @@ export class WasmSimBridge implements SimBridge {
     this.speedMult = multiplier;
   }
 
+  undo(): Promise<boolean> {
+    // Undo is not yet implemented for the WASM path — the SimHost is still a
+    // stub that does not track a CommandLog. Returns false so the UI shows no
+    // "Undone" notification.
+    return Promise.resolve(false);
+  }
+
   dispose(): void {
     this.worker.terminate();
   }
