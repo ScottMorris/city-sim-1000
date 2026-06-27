@@ -156,7 +156,7 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             CommandResult::ok()
         }
 
-        // Zone tools — cannot place over road or rail
+        // Zone tools — cannot place over road, rail, or existing buildings
         Tool::Residential | Tool::Commercial | Tool::Industrial => {
             let zone_kind = match tool {
                 Tool::Residential => TileKind::Residential,
@@ -171,6 +171,9 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
                 || t.has_rail_underlay()
             {
                 return CommandResult::fail("Cannot zone over roads or rail. Bulldoze first.");
+            }
+            if t.building_id.is_some() {
+                return CommandResult::fail("Cannot zone over a building. Bulldoze first.");
             }
             state.money -= cost;
             set_kind(state, x, y, zone_kind);
@@ -290,12 +293,24 @@ fn place_footprint_building(
         return CommandResult::fail(format!("Needs {fw}×{fh} tiles in-bounds"));
     }
 
-    // Overlap check
+    // Overlap check — reject existing buildings and transport tiles
     for dy in 0..fh {
         for dx in 0..fw {
             let idx = state.tile_index(x + dx, y + dy).unwrap();
-            if state.tiles[idx].building_id.is_some() {
-                return CommandResult::fail("Cannot overlap another building");
+            let t = &state.tiles[idx];
+            if t.building_id.is_some() {
+                return CommandResult::fail("Cannot overlap another building. Bulldoze first.");
+            }
+            let k = t.kind;
+            if k == TileKind::Road
+                || k == TileKind::Rail
+                || k == TileKind::PowerLine
+                || t.has_road_underlay()
+                || t.has_rail_underlay()
+            {
+                return CommandResult::fail(
+                    "Cannot build here — clear roads and powerlines first.",
+                );
             }
         }
     }
@@ -571,6 +586,40 @@ mod tests {
                 "{tool:?} must not remove the building on rejection",
             );
         }
+    }
+
+    #[test]
+    fn zone_over_building_fails() {
+        let mut s = gs(4, 4);
+        apply_tool(&mut s, Tool::WaterPump, 1, 1);
+        let before_money = s.money;
+        for tool in [Tool::Residential, Tool::Commercial, Tool::Industrial] {
+            let r = apply_tool(&mut s, tool, 1, 1);
+            assert!(!r.success, "{tool:?} should be rejected over a building");
+            assert_eq!(s.money, before_money, "{tool:?} must not charge on rejection");
+            assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::WaterPump, "tile should not change");
+        }
+    }
+
+    #[test]
+    fn building_over_road_fails() {
+        let mut s = gs(4, 4);
+        apply_tool(&mut s, Tool::Road, 1, 1);
+        let before_money = s.money;
+        let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
+        assert!(!r.success, "building should be rejected over a road");
+        assert_eq!(s.money, before_money, "must not charge on rejection");
+        assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Road, "road should remain");
+    }
+
+    #[test]
+    fn building_over_powerline_fails() {
+        let mut s = gs(4, 4);
+        apply_tool(&mut s, Tool::PowerLine, 1, 1);
+        let before_money = s.money;
+        let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
+        assert!(!r.success, "building should be rejected over a powerline");
+        assert_eq!(s.money, before_money, "must not charge on rejection");
     }
 
     #[test]

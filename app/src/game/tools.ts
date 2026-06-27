@@ -154,6 +154,9 @@ const registry: ToolRegistry = {
     if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
       return { success: false, message: 'Cannot zone over roads or rail. Bulldoze first.' };
     }
+    if (tile?.buildingId !== undefined) {
+      return { success: false, message: 'Cannot zone over a building. Bulldoze first.' };
+    }
     state.money -= cost;
     setTile(state, x, y, TileKind.Residential);
     return { success: true };
@@ -163,6 +166,9 @@ const registry: ToolRegistry = {
     if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
       return { success: false, message: 'Cannot zone over roads or rail. Bulldoze first.' };
     }
+    if (tile?.buildingId !== undefined) {
+      return { success: false, message: 'Cannot zone over a building. Bulldoze first.' };
+    }
     state.money -= cost;
     setTile(state, x, y, TileKind.Commercial);
     return { success: true };
@@ -171,6 +177,9 @@ const registry: ToolRegistry = {
     const tile = getTile(state, x, y);
     if (tile && (tile.kind === TileKind.Road || tile.kind === TileKind.Rail || tile.roadUnderlay || tile.railUnderlay)) {
       return { success: false, message: 'Cannot zone over roads or rail. Bulldoze first.' };
+    }
+    if (tile?.buildingId !== undefined) {
+      return { success: false, message: 'Cannot zone over a building. Bulldoze first.' };
     }
     state.money -= cost;
     setTile(state, x, y, TileKind.Industrial);

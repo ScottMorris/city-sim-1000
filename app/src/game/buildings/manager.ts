@@ -30,7 +30,13 @@ export function placeBuilding(
         return { success: false, message: 'Invalid tile location' };
       }
       if (tile.buildingId !== undefined || tile.powerPlantType) {
-        return { success: false, message: 'Cannot overlap another building' };
+        return { success: false, message: 'Cannot overlap another building. Bulldoze first.' };
+      }
+      if (
+        tile.kind === TileKind.Road || tile.kind === TileKind.Rail ||
+        tile.kind === TileKind.PowerLine || tile.roadUnderlay || tile.railUnderlay
+      ) {
+        return { success: false, message: 'Cannot build here — clear roads and powerlines first.' };
       }
       tiles.push(tile);
     }
