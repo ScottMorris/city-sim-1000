@@ -92,11 +92,9 @@ pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
         Tool::Rail => Some(TileKind::Rail),
         Tool::PowerLine => Some(TileKind::PowerLine),
         Tool::HydroPlant => Some(TileKind::HydroPlant),
-        // BUG #30 (mirrored from TS): Coal/Wind/Solar all use HydroPlant TileKind.
-        // TODO(P3): add CoalPlant, WindTurbine, SolarFarm variants to TileKind and fix here.
-        Tool::CoalPlant => Some(TileKind::HydroPlant),
-        Tool::WindTurbine => Some(TileKind::HydroPlant),
-        Tool::SolarFarm => Some(TileKind::HydroPlant),
+        Tool::CoalPlant => Some(TileKind::CoalPlant),
+        Tool::WindTurbine => Some(TileKind::WindTurbine),
+        Tool::SolarFarm => Some(TileKind::SolarFarm),
         Tool::WaterPump => Some(TileKind::WaterPump),
         Tool::WaterTower => Some(TileKind::WaterTower),
         Tool::WaterPipe => Some(TileKind::WaterPipe),

@@ -1,6 +1,6 @@
 import type { Texture } from 'pixi.js';
 import { isPowerCarrier } from '../game/adjacency';
-import { POWER_PLANT_CONFIGS } from '../game/constants';
+import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
 import type { TileTextures } from './tileAtlas';
@@ -83,25 +83,26 @@ export function resolveTileSprite(
       }
     }
   }
-  if (tile.kind === TileKind.HydroPlant && tile.powerPlantType) {
+  const plantType = tile.powerPlantType ?? tileKindToPowerPlantType(tile.kind);
+  if (plantType) {
     const footprint =
       (tile.buildingId && buildingLookup.get(tile.buildingId)?.template?.footprint) ??
-      POWER_PLANT_CONFIGS[tile.powerPlantType]?.footprint;
+      POWER_PLANT_CONFIGS[plantType]?.footprint;
     const origin =
       (tile.buildingId && buildingLookup.get(tile.buildingId)?.origin) ??
       (footprint ? { x, y } : undefined);
     if (footprint && origin) {
       const { width, height } = footprint;
       if (x === origin.x && y === origin.y) {
-        const powerTexture = tileTextures.powerPlant[tile.powerPlantType];
+        const powerTexture = tileTextures.powerPlant[plantType];
         if (powerTexture) {
-            return { texture: powerTexture, widthTiles: width, heightTiles: height, borderWidth: BUILDING_BORDER_WIDTH };
-          }
-        } else if (x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height) {
-          return { skip: true };
+          return { texture: powerTexture, widthTiles: width, heightTiles: height, borderWidth: BUILDING_BORDER_WIDTH };
         }
+      } else if (x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height) {
+        return { skip: true };
       }
-    const fallbackTexture = tileTextures.powerPlant[tile.powerPlantType];
+    }
+    const fallbackTexture = tileTextures.powerPlant[plantType];
     if (fallbackTexture)
       return { texture: fallbackTexture, widthTiles: 1, heightTiles: 1, borderWidth: BUILDING_BORDER_WIDTH };
   }
@@ -144,7 +145,8 @@ export function resolveTileSprite(
 export function getTileColour(tile: ReturnType<typeof getTile>, palette: Record<TileKind, number>) {
   if (!tile) return 0x000000;
   const base = palette[tile.kind];
-  const isPowerTile = tile.kind === TileKind.PowerLine || !!tile.powerPlantType;
+  const isPowerTile = tile.kind === TileKind.PowerLine || !!tile.powerPlantType
+    || tileKindToPowerPlantType(tile.kind) !== undefined;
   if (!isPowerTile) return base;
   const factor = tile.powered ? 1.35 : 0.7;
   return scaleColor(base, factor);
@@ -155,6 +157,16 @@ export function scaleColor(color: number, factor: number): number {
   const g = Math.max(0, Math.min(255, ((color >> 8) & 0xff) * factor));
   const b = Math.max(0, Math.min(255, (color & 0xff) * factor));
   return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
+}
+
+function tileKindToPowerPlantType(kind: TileKind): PowerPlantType | undefined {
+  switch (kind) {
+    case TileKind.HydroPlant:  return PowerPlantType.Hydro;
+    case TileKind.CoalPlant:   return PowerPlantType.Coal;
+    case TileKind.WindTurbine: return PowerPlantType.Wind;
+    case TileKind.SolarFarm:   return PowerPlantType.Solar;
+    default:                   return undefined;
+  }
 }
 
 function pickRoadTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {

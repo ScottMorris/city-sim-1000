@@ -28,6 +28,9 @@ export const TILE_KIND_BY_U8: ReadonlyArray<TileKind> = [
   TileKind.ElementarySchool, // 13
   TileKind.HighSchool,       // 14
   TileKind.Park,             // 15
+  TileKind.CoalPlant,        // 16
+  TileKind.WindTurbine,      // 17
+  TileKind.SolarFarm,        // 18
 ];
 
 /** TileKind string → u8. */
@@ -36,7 +39,7 @@ export const TILE_KIND_TO_U8: ReadonlyMap<TileKind, number> = new Map(
 );
 
 /** Total number of tile kinds — must match `TileKind::ALL.len()` in Rust. */
-export const TILE_KIND_COUNT = 16;
+export const TILE_KIND_COUNT = 19;
 
 export function tileKindFromU8(u8: number): TileKind | undefined {
   return TILE_KIND_BY_U8[u8];

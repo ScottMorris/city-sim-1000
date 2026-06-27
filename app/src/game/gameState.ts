@@ -24,6 +24,9 @@ export enum TileKind {
   Industrial = 'industrial',
   PowerLine = 'powerline',
   HydroPlant = 'hydro',
+  CoalPlant = 'coal',
+  WindTurbine = 'wind',
+  SolarFarm = 'solar',
   WaterPump = 'pump',
   WaterTower = 'water_tower',
   WaterPipe = 'water_pipe',
@@ -329,7 +332,9 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
   tile.railUnderlay = undefined;
   tile.powerOverlay = undefined;
   tile.happiness = Math.min(1.5, tile.happiness + 0.05);
-  if (kind !== TileKind.HydroPlant) {
+  const isPowerPlant = kind === TileKind.HydroPlant || kind === TileKind.CoalPlant
+    || kind === TileKind.WindTurbine || kind === TileKind.SolarFarm;
+  if (!isPowerPlant) {
     tile.powerPlantType = undefined;
     tile.powerPlantId = undefined;
     tile.buildingId = undefined;

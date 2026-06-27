@@ -14,5 +14,8 @@
   { "u8": 12, "ts": "water_pipe" },
   { "u8": 13, "ts": "elementary_school" },
   { "u8": 14, "ts": "high_school" },
-  { "u8": 15, "ts": "park" }
+  { "u8": 15, "ts": "park" },
+  { "u8": 16, "ts": "coal" },
+  { "u8": 17, "ts": "wind" },
+  { "u8": 18, "ts": "solar" }
 ]

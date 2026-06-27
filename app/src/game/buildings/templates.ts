@@ -52,7 +52,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Coal].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Coal].maintenancePerDay,
-    tileKind: TileKind.HydroPlant,
+    tileKind: TileKind.CoalPlant,
     requiresPower: false,
     power: { type: PowerPlantType.Coal, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Coal].outputMw }
   },
@@ -63,7 +63,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Wind].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Wind].maintenancePerDay,
-    tileKind: TileKind.HydroPlant,
+    tileKind: TileKind.WindTurbine,
     requiresPower: false,
     power: { type: PowerPlantType.Wind, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Wind].outputMw }
   },
@@ -74,7 +74,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Solar].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Solar].maintenancePerDay,
-    tileKind: TileKind.HydroPlant,
+    tileKind: TileKind.SolarFarm,
     requiresPower: false,
     power: { type: PowerPlantType.Solar, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Solar].outputMw }
   }

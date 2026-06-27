@@ -180,9 +180,8 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             CommandResult::ok()
         }
 
-        // Power plants — all use HydroPlant tile kind (matches TS); per-type MW
-        // output and maintenance are stored in BuildingInstance so the budget and
-        // power BFS get the correct values without separate TileKind variants.
+        // Power plants — each uses its own TileKind; per-type MW output and
+        // maintenance are stored in BuildingInstance for the budget and power BFS.
         Tool::HydroPlant => place_footprint_building(
             state,
             TileKind::HydroPlant,
@@ -194,7 +193,7 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         ),
         Tool::CoalPlant => place_footprint_building(
             state,
-            TileKind::HydroPlant,
+            TileKind::CoalPlant,
             x,
             y,
             cost,
@@ -203,7 +202,7 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         ),
         Tool::WindTurbine => place_footprint_building(
             state,
-            TileKind::HydroPlant,
+            TileKind::WindTurbine,
             x,
             y,
             cost,
@@ -211,7 +210,7 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             30.0,
         ),
         Tool::SolarFarm => {
-            place_footprint_building(state, TileKind::HydroPlant, x, y, cost, SOLAR_FARM_MW, 20.0)
+            place_footprint_building(state, TileKind::SolarFarm, x, y, cost, SOLAR_FARM_MW, 20.0)
         }
         Tool::WaterPump => place_footprint_building(state, TileKind::WaterPump, x, y, cost, 0, 0.0),
         Tool::WaterTower => {

@@ -29,6 +29,9 @@ pub enum TileKind {
     ElementarySchool = 13,
     HighSchool = 14,
     Park = 15,
+    CoalPlant = 16,
+    WindTurbine = 17,
+    SolarFarm = 18,
 }
 
 impl TileKind {
@@ -51,6 +54,9 @@ impl TileKind {
             13 => Some(Self::ElementarySchool),
             14 => Some(Self::HighSchool),
             15 => Some(Self::Park),
+            16 => Some(Self::CoalPlant),
+            17 => Some(Self::WindTurbine),
+            18 => Some(Self::SolarFarm),
             _ => None,
         }
     }
@@ -78,6 +84,9 @@ impl TileKind {
         Self::ElementarySchool,
         Self::HighSchool,
         Self::Park,
+        Self::CoalPlant,
+        Self::WindTurbine,
+        Self::SolarFarm,
     ];
 
     /// Canonical string name — matches the TS `TileKind` string-enum value.
@@ -93,6 +102,9 @@ impl TileKind {
             Self::Industrial => "industrial",
             Self::PowerLine => "powerline",
             Self::HydroPlant => "hydro",
+            Self::CoalPlant => "coal",
+            Self::WindTurbine => "wind",
+            Self::SolarFarm => "solar",
             Self::WaterPump => "pump",
             Self::WaterTower => "water_tower",
             Self::WaterPipe => "water_pipe",
@@ -128,7 +140,7 @@ mod tests {
     #[test]
     fn count_matches_ts_mirror() {
         // Keep in sync with src/game/protocol/tileKind.ts TILE_KIND_COUNT.
-        assert_eq!(TileKind::ALL.len(), 16);
+        assert_eq!(TileKind::ALL.len(), 19);
     }
 
     /// Emit the parity JSON so CI can diff it against the committed fixture.
