@@ -501,34 +501,38 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
 
 let lastFrame = performance.now();
 function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
-  const now = performance.now();
-  const deltaSeconds = (now - lastFrame) / 1000;
-  lastFrame = now;
-  const movement = hotkeys?.getMovementVector();
-  if (movement) {
-    const panSpeed = PAN_SPEEDS[state.settings.input.panSpeed] ?? PAN_SPEEDS.normal;
-    const direction = state.settings.input.invertPan ? -1 : 1;
-    camera.x -= movement.x * panSpeed * direction * deltaSeconds;
-    camera.y -= movement.y * panSpeed * direction * deltaSeconds;
+  try {
+    const now = performance.now();
+    const deltaSeconds = (now - lastFrame) / 1000;
+    lastFrame = now;
+    const movement = hotkeys?.getMovementVector();
+    if (movement) {
+      const panSpeed = PAN_SPEEDS[state.settings.input.panSpeed] ?? PAN_SPEEDS.normal;
+      const direction = state.settings.input.invertPan ? -1 : 1;
+      camera.x -= movement.x * panSpeed * direction * deltaSeconds;
+      camera.y -= movement.y * panSpeed * direction * deltaSeconds;
+    }
+    bridge.step(deltaSeconds);
+    const calendar = getCalendarPosition(state.day);
+    while (calendar.month > lastNarrativeMonth) {
+      narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
+      lastNarrativeMonth += 1;
+    }
+    const nowMs = Date.now();
+    if (nowMs - lastNarrativeGc > 1000) {
+      narrativeManager.gc(nowMs);
+      lastNarrativeGc = nowMs;
+    }
+    const overlayMode = state.settings?.minimap?.mode ?? 'base';
+    renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
+    hud.update(state);
+    hud.renderOverlays(state, selected, activeTool);
+    minimap?.update(state, camera);
+    newsTicker?.update();
+    debugOverlay?.update(state);
+  } catch (err) {
+    console.error('[gameLoop] uncaught error — loop continuing', err);
   }
-  bridge.step(deltaSeconds);
-  const calendar = getCalendarPosition(state.day);
-  while (calendar.month > lastNarrativeMonth) {
-    narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
-    lastNarrativeMonth += 1;
-  }
-  const nowMs = Date.now();
-  if (nowMs - lastNarrativeGc > 1000) {
-    narrativeManager.gc(nowMs);
-    lastNarrativeGc = nowMs;
-  }
-  const overlayMode = state.settings?.minimap?.mode ?? 'base';
-  renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
-  hud.update(state);
-  hud.renderOverlays(state, selected, activeTool);
-  minimap?.update(state, camera);
-  newsTicker?.update();
-  debugOverlay?.update(state);
   requestAnimationFrame(() => gameLoop(renderer, hud));
 }
 
@@ -771,10 +775,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     uploadBtn,
     fileInput,
     getState: () => state,
-    onStateLoaded: (loaded) => {
+    getCmdLog: () => bridge.getCommandLog() ?? [],
+    onStateLoaded: (loaded, cmdLog) => {
       state = loaded;
       applySettings(state.settings);
-      bridge.loadState(state);
+      bridge.loadState(state, cmdLog as { tool: Tool; x: number; y: number }[] | undefined);
       centerCamera(state, wrapper, TILE_SIZE, camera);
       narrativeManager.reset();
       lastNarrativeMonth = getCalendarPosition(state.day).month;

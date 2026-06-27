@@ -225,8 +225,16 @@ export function loadFromBrowser(): GameState | null {
   return deserialize(data);
 }
 
-export function downloadState(state: GameState, filename = 'city-sim-save.json') {
-  const blob = new Blob([serialize(state)], { type: 'application/json' });
+export type CmdLogEntry = { tool: string; x: number; y: number };
+
+export function downloadState(
+  state: GameState,
+  cmdLog?: CmdLogEntry[],
+  filename = 'city-sim-save.json',
+) {
+  const data: Record<string, unknown> = JSON.parse(serialize(state));
+  if (cmdLog?.length) data.cmdLog = cmdLog;
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -235,7 +243,9 @@ export function downloadState(state: GameState, filename = 'city-sim-save.json')
   URL.revokeObjectURL(url);
 }
 
-export async function uploadState(file: File): Promise<GameState> {
-  const contents = await file.text();
-  return deserialize(contents);
+export async function uploadState(file: File): Promise<{ state: GameState; cmdLog?: CmdLogEntry[] }> {
+  const raw = JSON.parse(await file.text()) as Record<string, unknown>;
+  const { cmdLog, ...stateData } = raw;
+  const state = deserialize(JSON.stringify(stateData));
+  return { state, cmdLog: Array.isArray(cmdLog) ? (cmdLog as CmdLogEntry[]) : undefined };
 }

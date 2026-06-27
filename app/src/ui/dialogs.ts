@@ -105,11 +105,12 @@ interface PersistenceOptions {
   uploadBtn: HTMLButtonElement;
   fileInput: HTMLInputElement;
   getState: () => GameState;
-  onStateLoaded: (state: GameState) => void;
+  getCmdLog?: () => import('../game/persistence').CmdLogEntry[];
+  onStateLoaded: (state: GameState, cmdLog?: import('../game/persistence').CmdLogEntry[]) => void;
 }
 
 export function bindPersistenceControls(options: PersistenceOptions) {
-  const { saveBtn, loadBtn, downloadBtn, uploadBtn, fileInput, getState, onStateLoaded } = options;
+  const { saveBtn, loadBtn, downloadBtn, uploadBtn, fileInput, getState, getCmdLog, onStateLoaded } = options;
 
   saveBtn.addEventListener('click', () => {
     saveToBrowser(getState());
@@ -127,7 +128,7 @@ export function bindPersistenceControls(options: PersistenceOptions) {
   });
 
   downloadBtn.addEventListener('click', () => {
-    downloadState(getState());
+    downloadState(getState(), getCmdLog?.());
   });
 
   uploadBtn.addEventListener('click', () => fileInput.click());
@@ -135,8 +136,9 @@ export function bindPersistenceControls(options: PersistenceOptions) {
     const target = e.target as HTMLInputElement;
     const file = target.files?.[0];
     if (!file) return;
-    uploadState(file).then((state) => {
-      onStateLoaded(state);
+    fileInput.value = '';
+    uploadState(file).then(({ state, cmdLog }) => {
+      onStateLoaded(state, cmdLog);
       showToast('Save loaded');
     });
   });

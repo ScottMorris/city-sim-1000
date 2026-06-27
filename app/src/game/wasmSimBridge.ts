@@ -169,15 +169,35 @@ export class WasmSimBridge implements SimBridge {
     return this.state;
   }
 
-  loadState(state: GameState): void {
+  loadState(state: GameState, cmdLog?: { tool: import('./toolTypes').Tool; x: number; y: number }[]): void {
     this.state = state;
     this.pendingTileBuffer = null;
     this.pendingStats = null;
-    if (this.ready) {
+    // Re-snapshot natural terrain from the loaded state so water/tree tiles survive
+    // the first tile-buffer update from the replayed WASM.
+    this.naturalTileKinds = state.tiles.map(t => t.kind);
+    if (cmdLog?.length && this.ready) {
+      this.cmdLog = [...cmdLog];
+      this.modifiedTiles = new Set(cmdLog.map(c => c.y * state.width + c.x));
       this.worker.postMessage({
-        type: 'reset',
-        payload: { width: state.width, height: state.height, seed: state.seed },
+        type: 'load',
+        payload: {
+          width: state.width,
+          height: state.height,
+          seed: state.seed,
+          commands: cmdLog.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
+          money: state.money,
+        },
       });
+    } else {
+      this.cmdLog = [];
+      this.modifiedTiles = new Set();
+      if (this.ready) {
+        this.worker.postMessage({
+          type: 'reset',
+          payload: { width: state.width, height: state.height, seed: state.seed },
+        });
+      }
     }
   }
 

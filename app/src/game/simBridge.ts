@@ -47,9 +47,11 @@ export interface SimBridge {
 
   /**
    * Replace the active GameState (used after a save-file load). The bridge
-   * resets all internal sim state to match.
+   * resets all internal sim state to match. If `cmdLog` is provided the
+   * bridge replays those commands into the sim engine so WASM state matches
+   * the restored TS state; without it the engine resets to seed only.
    */
-  loadState(state: GameState): void;
+  loadState(state: GameState, cmdLog?: { tool: import('./toolTypes').Tool; x: number; y: number }[]): void;
 
   /**
    * Adjust simulation speed as a multiplier of the base tick rate.

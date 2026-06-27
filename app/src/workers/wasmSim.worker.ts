@@ -15,6 +15,7 @@
  *   { type: 'set_speed';  payload: { multiplier: number } }
  *   { type: 'undo' }
  *   { type: 'reset';      payload: { width: number; height: number; seed: number } }
+ *   { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number } }
  *
  * Worker → Main:
  *   { type: 'ready' }
@@ -68,7 +69,8 @@ type MainToWorker =
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
   | { type: 'undo' }
-  | { type: 'reset';      payload: { width: number; height: number; seed: number } };
+  | { type: 'reset';      payload: { width: number; height: number; seed: number } }
+  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number } };
 
 let host: SimHost | null = null;
 
@@ -169,6 +171,22 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     }
     case 'reset': {
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      break;
+    }
+    case 'load': {
+      if (!host) break;
+      host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.commands?.length) {
+        for (const cmd of msg.payload.commands) {
+          host.apply_tool(cmd.tool, cmd.x, cmd.y);
+        }
+        const dt = 1 / 20;
+        for (let t = 0; t < 120; t++) host.step(dt);
+      }
+      if (msg.payload.money !== undefined) host.set_money(msg.payload.money);
+      const bytes = host.tile_buffer();
+      const stats = gatherStats(host);
+      self.postMessage({ type: 'step_result', bytes, stats }, { transfer: [bytes.buffer as ArrayBuffer] });
       break;
     }
   }
