@@ -3,7 +3,7 @@ import { isPowerCarrier } from '../game/adjacency';
 import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
-import type { TileTextures } from './tileAtlas';
+import type { RoadVariant, TileTextures } from './tileAtlas';
 
 export type BuildingLookupEntry = {
   template: ReturnType<typeof getBuildingTemplate>;
@@ -175,29 +175,37 @@ function pickRoadTexture(state: GameState, x: number, y: number, tileTextures: T
     return neighbour?.kind === TileKind.Road || neighbour?.roadUnderlay === true;
   };
 
-  const north = y > 0 && connectsToRoad(x, y - 1);
-  const south = y < state.height - 1 && connectsToRoad(x, y + 1);
-  const east = x < state.width - 1 && connectsToRoad(x + 1, y);
-  const west = x > 0 && connectsToRoad(x - 1, y);
+  const n = y > 0 && connectsToRoad(x, y - 1);
+  const e = x < state.width  - 1 && connectsToRoad(x + 1, y);
+  const s = y < state.height - 1 && connectsToRoad(x, y + 1);
+  const w = x > 0 && connectsToRoad(x - 1, y);
 
-  const roadTextures = tileTextures.road;
-  const neighbours = [north, east, south, west].filter(Boolean).length;
+  const variant = roadVariant(n, e, s, w);
+  return tileTextures.road[variant];
+}
 
-  // Only render sprites for straights/endcaps; leave corners/crossings as grey to flag missing art.
-  if (neighbours === 2 && north && south && !east && !west) {
-    return roadTextures.north ?? roadTextures.south;
+/** Map the 4-bit N/E/S/W connectivity bitmask to the correct road tile variant. */
+function roadVariant(n: boolean, e: boolean, s: boolean, w: boolean): RoadVariant {
+  // Encode as 4-bit number: N=8 E=4 S=2 W=1
+  const bits = (n ? 8 : 0) | (e ? 4 : 0) | (s ? 2 : 0) | (w ? 1 : 0);
+  switch (bits) {
+    case 0b1010: return 'ns';
+    case 0b0101: return 'ew';
+    case 0b1100: return 'corner-ne';
+    case 0b1001: return 'corner-nw';
+    case 0b0110: return 'corner-se';
+    case 0b0011: return 'corner-sw';
+    case 0b1110: return 't-nes';
+    case 0b1101: return 't-new';
+    case 0b1011: return 't-nsw';
+    case 0b0111: return 't-esw';
+    case 0b1111: return 'cross';
+    case 0b1000: return 'end-n';
+    case 0b0100: return 'end-e';
+    case 0b0010: return 'end-s';
+    case 0b0001: return 'end-w';
+    default:     return 'cross'; // isolated tile — no neighbours
   }
-  if (neighbours === 2 && east && west && !north && !south) {
-    return roadTextures.east ?? roadTextures.west;
-  }
-  if (neighbours === 1) {
-    if (north) return roadTextures.north;
-    if (east) return roadTextures.east;
-    if (south) return roadTextures.south;
-    if (west) return roadTextures.west;
-  }
-
-  return undefined;
 }
 
 function pickPowerLineTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {

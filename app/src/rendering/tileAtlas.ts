@@ -8,9 +8,20 @@ import { TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
 import { withBasePath } from '../utils/assetPaths';
 
+/**
+ * All 15 road connectivity variants (a 4-bit bitmask of N/E/S/W neighbours).
+ * The isolated-road case (no neighbours) falls back to 'cross'.
+ */
+export type RoadVariant =
+  | 'ns' | 'ew'
+  | 'corner-ne' | 'corner-nw' | 'corner-se' | 'corner-sw'
+  | 't-nes' | 't-new' | 't-nsw' | 't-esw'
+  | 'cross'
+  | 'end-n' | 'end-e' | 'end-s' | 'end-w';
+
 export interface TileTextures {
   tiles: Partial<Record<TileKind, PIXI.Texture>>;
-  road: Partial<Record<'north' | 'east' | 'south' | 'west', PIXI.Texture>>;
+  road: Partial<Record<RoadVariant, PIXI.Texture>>;
   powerPlant: Partial<Record<PowerPlantType, PIXI.Texture>>;
   powerLine: Partial<Record<'north' | 'east' | 'south' | 'west', PIXI.Texture>>;
   residentialHouses: PIXI.Texture[];
@@ -27,53 +38,64 @@ export async function loadPaletteTexture(): Promise<PIXI.Texture> {
 }
 
 const tileTexturePaths: Partial<Record<TileKind, string>> = {
-  [TileKind.Land]: assetPath('assets/tiles/grass.png'),
-  [TileKind.Water]: assetPath('assets/tiles/water.png'),
-  [TileKind.Tree]: assetPath('assets/tiles/tree.png')
+  [TileKind.Land]:  assetPath('assets/tiles/terrain/grass.png'),
+  [TileKind.Water]: assetPath('assets/tiles/terrain/water.png'),
+  [TileKind.Tree]:  assetPath('assets/tiles/terrain/tree.png')
 };
 
-const roadTexturePaths = {
-  north: assetPath('assets/tiles/road-north.png'),
-  east: assetPath('assets/tiles/road-east.png'),
-  south: assetPath('assets/tiles/road-sud.png'),
-  west: assetPath('assets/tiles/road-ouest.png')
+const roadTexturePaths: Record<RoadVariant, string> = {
+  'ns':         assetPath('assets/tiles/roads/road-ns.png'),
+  'ew':         assetPath('assets/tiles/roads/road-ew.png'),
+  'corner-ne':  assetPath('assets/tiles/roads/road-corner-ne.png'),
+  'corner-nw':  assetPath('assets/tiles/roads/road-corner-nw.png'),
+  'corner-se':  assetPath('assets/tiles/roads/road-corner-se.png'),
+  'corner-sw':  assetPath('assets/tiles/roads/road-corner-sw.png'),
+  't-nes':      assetPath('assets/tiles/roads/road-t-nes.png'),
+  't-new':      assetPath('assets/tiles/roads/road-t-new.png'),
+  't-nsw':      assetPath('assets/tiles/roads/road-t-nsw.png'),
+  't-esw':      assetPath('assets/tiles/roads/road-t-esw.png'),
+  'cross':      assetPath('assets/tiles/roads/road-cross.png'),
+  'end-n':      assetPath('assets/tiles/roads/road-end-n.png'),
+  'end-e':      assetPath('assets/tiles/roads/road-end-e.png'),
+  'end-s':      assetPath('assets/tiles/roads/road-end-s.png'),
+  'end-w':      assetPath('assets/tiles/roads/road-end-w.png')
 };
 
 const powerPlantTexturePaths: Partial<Record<PowerPlantType, string>> = {
-  [PowerPlantType.Hydro]: assetPath('assets/tiles/power-plant-hydro.png'),
-  [PowerPlantType.Coal]: assetPath('assets/tiles/power-plant-coal.png'),
-  [PowerPlantType.Solar]: assetPath('assets/tiles/power-plant-solar.png'),
-  [PowerPlantType.Wind]: assetPath('assets/tiles/power-plant-wind.png')
+  [PowerPlantType.Hydro]: assetPath('assets/tiles/power/power-plant-hydro.png'),
+  [PowerPlantType.Coal]:  assetPath('assets/tiles/power/power-plant-coal.png'),
+  [PowerPlantType.Solar]: assetPath('assets/tiles/power/power-plant-solar.png'),
+  [PowerPlantType.Wind]:  assetPath('assets/tiles/power/power-plant-wind.png')
 };
 
 const powerLineTexturePaths = {
-  horizontal: assetPath('assets/tiles/power-line-horizontal.png'),
-  vertical: assetPath('assets/tiles/power-line-vertical.png')
+  horizontal: assetPath('assets/tiles/power/power-line-horizontal.png'),
+  vertical:   assetPath('assets/tiles/power/power-line-vertical.png')
 } as const;
 
 const residentialHouseTexturePaths = [
-  assetPath('assets/tiles/res-house-1.png'),
-  assetPath('assets/tiles/res-house-2.png'),
-  assetPath('assets/tiles/res-house-3.png')
+  assetPath('assets/tiles/buildings/res-house-1.png'),
+  assetPath('assets/tiles/buildings/res-house-2.png'),
+  assetPath('assets/tiles/buildings/res-house-3.png')
 ];
 
 const commercialBuildingTexturePaths = [
-  assetPath('assets/tiles/com-shop-1.png'),
-  assetPath('assets/tiles/com-shop-2.png'),
-  assetPath('assets/tiles/com-shop-3.png')
+  assetPath('assets/tiles/buildings/com-shop-1.png'),
+  assetPath('assets/tiles/buildings/com-shop-2.png'),
+  assetPath('assets/tiles/buildings/com-shop-3.png')
 ];
 
-const geminiCommercialTexturePaths = [assetPath('assets/tiles/com-1.png')];
+const geminiCommercialTexturePaths = [assetPath('assets/tiles/buildings/com-1.png')];
 
 const industrialBuildingTexturePaths = [
-  assetPath('assets/tiles/ind-factory-1.png'),
-  assetPath('assets/tiles/ind-factory-2.png'),
-  assetPath('assets/tiles/ind-high-tech-1.png')
+  assetPath('assets/tiles/buildings/ind-factory-1.png'),
+  assetPath('assets/tiles/buildings/ind-factory-2.png'),
+  assetPath('assets/tiles/buildings/ind-high-tech-1.png')
 ];
 
 const schoolTexturePaths = {
-  elementary: assetPath('assets/tiles/school-elementary.png'),
-  high: assetPath('assets/tiles/school-high.png')
+  elementary: assetPath('assets/tiles/buildings/school-elementary.png'),
+  high:       assetPath('assets/tiles/buildings/school-high.png')
 };
 
 export async function loadTileTextures(): Promise<TileTextures> {
@@ -85,9 +107,9 @@ export async function loadTileTextures(): Promise<TileTextures> {
   );
 
   const roadEntries = await Promise.all(
-    Object.entries(roadTexturePaths).map(async ([dir, path]) => {
-      const texture = await PIXI.Assets.load<PIXI.Texture>(path!);
-      return [dir, texture] as const;
+    (Object.entries(roadTexturePaths) as [RoadVariant, string][]).map(async ([variant, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [variant, texture] as const;
     })
   );
 
@@ -103,8 +125,8 @@ export async function loadTileTextures(): Promise<TileTextures> {
     PIXI.Assets.load<PIXI.Texture>(powerLineTexturePaths.vertical)
   ]);
   const powerLineTextures: TileTextures['powerLine'] = {
-    east: powerLineHorizontal,
-    west: powerLineHorizontal,
+    east:  powerLineHorizontal,
+    west:  powerLineHorizontal,
     north: powerLineVertical,
     south: powerLineVertical
   };
@@ -132,14 +154,14 @@ export async function loadTileTextures(): Promise<TileTextures> {
   );
 
   return {
-    tiles: Object.fromEntries(tileEntries),
-    road: Object.fromEntries(roadEntries),
-    powerPlant: Object.fromEntries(powerPlantEntries),
-    powerLine: powerLineTextures,
+    tiles:                  Object.fromEntries(tileEntries),
+    road:                   Object.fromEntries(roadEntries),
+    powerPlant:             Object.fromEntries(powerPlantEntries),
+    powerLine:              powerLineTextures,
     residentialHouses,
     commercialBuildings,
     commercialGeminiBuildings,
     industrialBuildings,
-    schools: Object.fromEntries(schoolEntries)
+    schools:                Object.fromEntries(schoolEntries)
   };
 }
