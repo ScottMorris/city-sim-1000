@@ -627,6 +627,46 @@ mod tests {
     }
 
     #[test]
+    fn all_power_plants_place_with_correct_tile_kind() {
+        // Regression: before the BUG-30 fix, CoalPlant/WindTurbine/SolarFarm all
+        // wrote TileKind::HydroPlant. After the fix their TileKinds were added to
+        // the protocol but get_building_template was not updated, so placement
+        // failed with "Unknown building type" for every non-hydro plant.
+        let cases = [
+            (Tool::HydroPlant, TileKind::HydroPlant, HYDRO_PLANT_MW),
+            (Tool::CoalPlant, TileKind::CoalPlant, COAL_PLANT_MW),
+            (Tool::WindTurbine, TileKind::WindTurbine, WIND_TURBINE_MW),
+            (Tool::SolarFarm, TileKind::SolarFarm, SOLAR_FARM_MW),
+        ];
+        for (tool, expected_kind, expected_mw) in cases {
+            let mut s = gs(6, 6);
+            s.money = 200_000;
+            let r = apply_tool(&mut s, tool, 0, 0);
+            assert!(
+                r.success,
+                "{tool:?} placement should succeed: {:?}",
+                r.message
+            );
+            assert_eq!(
+                s.tile_at(0, 0).unwrap().kind,
+                expected_kind,
+                "{tool:?} should stamp {expected_kind:?}"
+            );
+            // All four tiles of the 2×2 footprint must carry power_plant_mw
+            for dy in 0..2u32 {
+                for dx in 0..2u32 {
+                    assert_eq!(
+                        s.tile_at(dx, dy).unwrap().power_plant_mw,
+                        expected_mw as i32,
+                        "{tool:?} tile ({dx},{dy}) has wrong power_plant_mw"
+                    );
+                }
+            }
+            assert_eq!(s.buildings.len(), 1);
+        }
+    }
+
+    #[test]
     fn tool_cost_matches_ts_constants() {
         assert_eq!(tool_cost(Tool::Road), 5);
         assert_eq!(tool_cost(Tool::Rail), 15);

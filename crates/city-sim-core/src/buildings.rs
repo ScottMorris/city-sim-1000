@@ -124,10 +124,10 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
         pop=0,  jobs=0,  maint=55.0,   zone=false, plant=false, civic=true,
         svc=ServiceKind::EducationHigh, scap=160, scov=9
     };
-    // Mirrors TS POWER_PLANT_TEMPLATES (all share HydroPlant tile kind; per-type
-    // MW output and maintenance are passed at placement time and stored in
-    // BuildingInstance so they survive past the single-template lookup).
-    static HYDRO_PLANT: BuildingTemplate = tmpl! {
+    // All power plants share the same 2×2 footprint template. Per-type MW output
+    // and maintenance are passed as parameters to place_footprint_building and
+    // stored on the BuildingInstance, so the single static template is sufficient.
+    static POWER_PLANT: BuildingTemplate = tmpl! {
         (2,2), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
         pop=0,  jobs=0,  maint=150.0,  zone=false, plant=true,  civic=false,
         svc=ServiceKind::None, scap=0, scov=0
@@ -142,7 +142,7 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
         Park => Some(&PARK),
         ElementarySchool => Some(&ELEM_SCHOOL),
         HighSchool => Some(&HIGH_SCHOOL),
-        HydroPlant => Some(&HYDRO_PLANT),
+        HydroPlant | CoalPlant | WindTurbine | SolarFarm => Some(&POWER_PLANT),
         _ => None,
     }
 }
@@ -541,6 +541,27 @@ mod tests {
     fn get_building_template_returns_none_for_road() {
         assert!(get_building_template(TileKind::Road).is_none());
         assert!(get_building_template(TileKind::Land).is_none());
+    }
+
+    #[test]
+    fn get_building_template_returns_2x2_plant_for_all_power_plant_kinds() {
+        // Regression: after BUG-30 added CoalPlant/WindTurbine/SolarFarm as distinct
+        // TileKinds, get_building_template only handled HydroPlant, causing placement
+        // of the other three to fail with "Unknown building type".
+        for kind in [
+            TileKind::HydroPlant,
+            TileKind::CoalPlant,
+            TileKind::WindTurbine,
+            TileKind::SolarFarm,
+        ] {
+            let tmpl = get_building_template(kind)
+                .unwrap_or_else(|| panic!("get_building_template returned None for {kind:?}"));
+            assert_eq!(tmpl.footprint, (2, 2), "{kind:?} footprint should be 2×2");
+            assert!(
+                tmpl.is_power_plant,
+                "{kind:?} should be flagged as a power plant"
+            );
+        }
     }
 
     #[test]

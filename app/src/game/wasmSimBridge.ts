@@ -11,6 +11,7 @@
 
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
+import { createBuildingState } from './buildings/state';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
@@ -348,5 +349,26 @@ export class WasmSimBridge implements SimBridge {
       const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
       tile.buildingId = bid === 0 ? undefined : bid;
     }
+
+    // Rebuild state.buildings so multi-tile sprite rendering has correct origins.
+    // Rust is authoritative; TS state.buildings is a display mirror only.
+    // Scanning in row-major order means the first occurrence of each buildingId
+    // is always the top-left (origin) tile of its footprint.
+    const seen = new Map<number, { kind: TileKind; x: number; y: number }>();
+    for (let i = 0; i < n; i++) {
+      const tile = this.state.tiles[i];
+      if (tile.buildingId === undefined || seen.has(tile.buildingId)) continue;
+      seen.set(tile.buildingId, {
+        kind: tile.kind,
+        x: i % this.state.width,
+        y: Math.floor(i / this.state.width),
+      });
+    }
+    this.state.buildings = Array.from(seen.entries()).map(([id, { kind, x, y }]) => ({
+      id,
+      templateId: kind as string,
+      origin: { x, y },
+      state: createBuildingState(),
+    }));
   }
 }
