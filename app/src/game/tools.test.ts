@@ -297,8 +297,8 @@ describe('simulation', () => {
     applyTool(state, Tool.Rail, 5, 2);
     applyTool(state, Tool.Rail, 5, 3);
     applyTool(state, Tool.Rail, 5, 4);
-    // power source on the left
-    applyTool(state, Tool.WindTurbine, 1, 3);
+    // power source on the left — turbine is 2×2; (0,3) keeps its footprint clear of the road at (2,3)
+    applyTool(state, Tool.WindTurbine, 0, 3);
     recomputePowerNetwork(state);
     expect(hasRoadAccess(state, 8, 3)).toBe(true);
     expect(getTile(state, 8, 3)?.powered).toBe(true);
