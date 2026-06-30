@@ -191,15 +191,9 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             HYDRO_PLANT_MW,
             150.0,
         ),
-        Tool::CoalPlant => place_footprint_building(
-            state,
-            TileKind::CoalPlant,
-            x,
-            y,
-            cost,
-            COAL_PLANT_MW,
-            300.0,
-        ),
+        Tool::CoalPlant => {
+            place_footprint_building(state, TileKind::CoalPlant, x, y, cost, COAL_PLANT_MW, 300.0)
+        }
         Tool::WindTurbine => place_footprint_building(
             state,
             TileKind::WindTurbine,
@@ -595,8 +589,15 @@ mod tests {
         for tool in [Tool::Residential, Tool::Commercial, Tool::Industrial] {
             let r = apply_tool(&mut s, tool, 1, 1);
             assert!(!r.success, "{tool:?} should be rejected over a building");
-            assert_eq!(s.money, before_money, "{tool:?} must not charge on rejection");
-            assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::WaterPump, "tile should not change");
+            assert_eq!(
+                s.money, before_money,
+                "{tool:?} must not charge on rejection"
+            );
+            assert_eq!(
+                s.tile_at(1, 1).unwrap().kind,
+                TileKind::WaterPump,
+                "tile should not change"
+            );
         }
     }
 
@@ -608,7 +609,11 @@ mod tests {
         let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
         assert!(!r.success, "building should be rejected over a road");
         assert_eq!(s.money, before_money, "must not charge on rejection");
-        assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Road, "road should remain");
+        assert_eq!(
+            s.tile_at(1, 1).unwrap().kind,
+            TileKind::Road,
+            "road should remain"
+        );
     }
 
     #[test]
