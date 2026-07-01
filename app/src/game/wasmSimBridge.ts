@@ -11,7 +11,8 @@
 
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
-import { createBuildingState } from './buildings/state';
+import { BuildingStatus, createBuildingState } from './buildings/state';
+import { recomputeEducation } from './education';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
@@ -364,11 +365,17 @@ export class WasmSimBridge implements SimBridge {
         y: Math.floor(i / this.state.width),
       });
     }
-    this.state.buildings = Array.from(seen.entries()).map(([id, { kind, x, y }]) => ({
-      id,
-      templateId: kind as string,
-      origin: { x, y },
-      state: createBuildingState(),
-    }));
+    this.state.buildings = Array.from(seen.entries()).map(([id, { kind, x, y }]) => {
+      // Derive power status from the tile flag the Rust buffer already set.
+      // Avoids calling updateBuildingStates (which would misread water status
+      // for zones in cities without water infrastructure).
+      const originTile = this.state.tiles[y * this.state.width + x];
+      const bstate = createBuildingState();
+      if (!originTile?.powered) bstate.status = BuildingStatus.InactiveNoPower;
+      return { id, templateId: kind as string, origin: { x, y }, state: bstate };
+    });
+
+    // Recompute education coverage so the debug overlay and HUD stay current.
+    this.state.education = recomputeEducation(this.state);
   }
 }
