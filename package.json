@@ -1,27 +1,22 @@
 {
-  "name": "city-sim-1000",
-  "version": "0.0.1",
+  "name": "city-sim-1000-workspace",
   "private": true,
-  "type": "module",
+  "workspaces": ["app", "crates/tauri-plugin-city-sim", "scripts/city-sim-mcp"],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "tsc --noEmit",
-    "test": "vitest run",
-    "build:favicon": "node scripts/generate-favicon.mjs",
-    "build:radio-playlist": "tsx scripts/build-radio-playlist.ts --extract-embedded-covers"
+    "dev":                  "cd app && bun run dev",
+    "mcp":                  "bun run --cwd scripts/city-sim-mcp start",
+    "build":                "cd app && bun run build",
+    "preview":              "cd app && bun run preview",
+    "lint":                 "cd app && bun run lint",
+    "test":                 "cd app && bun run test",
+    "test:ci":              "cd app && bun run test:ci",
+    "build:favicon":        "cd app && bun run build:favicon",
+    "build:radio-playlist": "cd app && bun run build:radio-playlist",
+    "build:wasm":           "wasm-pack build crates/city-sim-wasm --target web --out-dir ../../app/src/wasm/sim_wasm",
+    "build:plugin-js":      "bun --cwd crates/tauri-plugin-city-sim install && bun --cwd crates/tauri-plugin-city-sim run build"
   },
-  "dependencies": {
-    "pixi.js": "^8.1.5"
-  },
-  "devDependencies": {
-    "@napi-rs/canvas": "^0.1.83",
-    "@types/node": "^24.10.1",
-    "jsdom": "^27.2.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.4.5",
-    "vite": "^5.3.1",
-    "vitest": "^2.1.1"
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.2"
   }
 }
