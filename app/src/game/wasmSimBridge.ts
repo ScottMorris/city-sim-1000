@@ -350,6 +350,8 @@ export class WasmSimBridge implements SimBridge {
       const bidBase = o.buildingId + i * 2;
       const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
       tile.buildingId = bid === 0 ? undefined : bid;
+      const ugKind = tileKindFromU8(bytes[o.undergroundKind + i]);
+      tile.underground = ugKind !== undefined ? ugKind : undefined;
     }
 
     // Rebuild state.buildings so multi-tile sprite rendering has correct origins.

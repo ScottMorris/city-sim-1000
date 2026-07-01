@@ -188,7 +188,7 @@ impl SimHost {
 
     /// Serialise current tile state as a flat SoA buffer.
     ///
-    /// Layout: `kind[N] | flags[N] | happiness[N] | elevation[N] | building_id[N×2]`
+    /// Layout: `kind[N] | flags[N] | happiness[N] | elevation[N] | building_id[N×2] | underground_kind[N]`
     pub fn tile_buffer(&self) -> Vec<u8> {
         let tiles = &self.sim.state.tiles;
         let n = tiles.len();
@@ -203,6 +203,7 @@ impl SimHost {
             let base = o.building_id + i * 2;
             buf[base] = (bid & 0xFF) as u8;
             buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
+            buf[o.underground_kind + i] = tile.underground.map_or(0, |k| k as u8);
         }
         buf
     }

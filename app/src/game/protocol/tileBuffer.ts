@@ -9,21 +9,22 @@
  *   elevation[N]   i8   — signed elevation
  *   building_id[N] u16  — building ID, little-endian (0 = none)
  *
- * Total: N × 6 bytes.
+ * Total: N × 7 bytes.
  *
  * On the web path the buffer is a SharedArrayBuffer owned by the Worker.
  * The main thread reads it via typed array views without copying.
  */
 
-export const BYTES_PER_TILE = 6;
+export const BYTES_PER_TILE = 7;
 
 export function tileBufferOffsets(n: number) {
   return {
-    kind:       0,
-    flags:      n,
-    happiness:  n * 2,
-    elevation:  n * 3,
-    buildingId: n * 4,   // u16le → occupies n*2 bytes starting here
+    kind:            0,
+    flags:           n,
+    happiness:       n * 2,
+    elevation:       n * 3,
+    buildingId:      n * 4,   // u16le → occupies n*2 bytes starting here
+    undergroundKind: n * 6,   // TileKind u8 (0 = none)
   } as const;
 }
 

@@ -68,7 +68,7 @@ describe('protocol: TileKind ↔ u8 parity with Rust', () => {
 // ---------------------------------------------------------------------------
 
 describe('protocol: tile buffer layout', () => {
-  it('BYTES_PER_TILE is 6', () => expect(BYTES_PER_TILE).toBe(6));
+  it('BYTES_PER_TILE is 7', () => expect(BYTES_PER_TILE).toBe(7));
 
   it('offsets for 64×64 map', () => {
     const n = 64 * 64;
@@ -78,6 +78,7 @@ describe('protocol: tile buffer layout', () => {
     expect(off.happiness).toBe(8192);
     expect(off.elevation).toBe(12288);
     expect(off.buildingId).toBe(16384);
+    expect(off.undergroundKind).toBe(24576);
   });
 
   it('FLAGS bitmask values are unique powers of 2', () => {

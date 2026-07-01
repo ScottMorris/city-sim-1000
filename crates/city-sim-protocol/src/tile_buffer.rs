@@ -17,21 +17,23 @@
 //!
 //! The TS mirror is in `src/game/protocol/tileBuffer.ts`.
 
-/// Number of bytes per tile in the flat buffer (1+1+1+1+2 = 6).
-pub const BYTES_PER_TILE: usize = 6;
+/// Number of bytes per tile in the flat buffer (1+1+1+1+2+1 = 7).
+pub const BYTES_PER_TILE: usize = 7;
 
 /// Byte offsets of each field array, as a function of N (number of tiles).
 pub struct TileBufferOffsets {
-    /// `kind[N]`        — TileKind u8 values.
+    /// `kind[N]`             — TileKind u8 values.
     pub kind: usize,
-    /// `flags[N]`       — bit-packed boolean fields (see FLAG_* constants).
+    /// `flags[N]`            — bit-packed boolean fields (see FLAG_* constants).
     pub flags: usize,
-    /// `happiness[N]`   — happiness quantised to u8 (0 = 0.0, 255 = 2.0).
+    /// `happiness[N]`        — happiness quantised to u8 (0 = 0.0, 255 = 2.0).
     pub happiness: usize,
-    /// `elevation[N]`   — signed elevation as i8.
+    /// `elevation[N]`        — signed elevation as i8.
     pub elevation: usize,
-    /// `building_id[N*2]` — building ID as u16le (0 = no building).
+    /// `building_id[N*2]`    — building ID as u16le (0 = no building).
     pub building_id: usize,
+    /// `underground_kind[N]` — TileKind u8 of buried tile (0 = none).
+    pub underground_kind: usize,
 }
 
 impl TileBufferOffsets {
@@ -42,6 +44,7 @@ impl TileBufferOffsets {
             happiness: n * 2,
             elevation: n * 3,
             building_id: n * 4,
+            underground_kind: n * 6,
         }
     }
 
@@ -85,7 +88,8 @@ mod tests {
         assert_eq!(off.happiness, 8192);
         assert_eq!(off.elevation, 12288);
         assert_eq!(off.building_id, 16384);
-        assert_eq!(TileBufferOffsets::total_bytes(n), 24576);
+        assert_eq!(off.underground_kind, 24576);
+        assert_eq!(TileBufferOffsets::total_bytes(n), 28672);
     }
 
     #[test]
@@ -102,7 +106,7 @@ mod tests {
 
     #[test]
     fn bytes_per_tile_matches_layout() {
-        // kind(1) + flags(1) + happiness(1) + elevation(1) + building_id(2) = 6
-        assert_eq!(BYTES_PER_TILE, 6);
+        // kind(1) + flags(1) + happiness(1) + elevation(1) + building_id(2) + underground_kind(1) = 7
+        assert_eq!(BYTES_PER_TILE, 7);
     }
 }
