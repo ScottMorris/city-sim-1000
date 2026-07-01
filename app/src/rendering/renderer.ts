@@ -31,6 +31,7 @@ export class MapRenderer {
   private mapLayer: Graphics;
   private gridLayer: Graphics;
   private overlayLayer: Graphics;
+  private indicatorLayer: Container;
   private labelLayer: Container;
   private container: Container;
   private tileLabels: Map<number, Text>;
@@ -38,6 +39,7 @@ export class MapRenderer {
   private palette: Record<TileKind, number>;
   private tileTextures: TileTextures;
   private tileSprites: Map<number, Sprite>;
+  private indicatorSprites: Map<number, Sprite>;
   private tilesWithSprites: Set<number>;
   private camera: Camera;
   private tileSize: number;
@@ -57,7 +59,8 @@ export class MapRenderer {
       commercialBuildings: [],
       commercialGeminiBuildings: [],
       industrialBuildings: [],
-      schools: {}
+      schools: {},
+      indicators: {}
     }
   ) {
     this.app = new Application();
@@ -70,6 +73,7 @@ export class MapRenderer {
     this.mapLayer = new Graphics();
     this.gridLayer = new Graphics();
     this.overlayLayer = new Graphics();
+    this.indicatorLayer = new Container();
     this.labelLayer = new Container();
     this.container = new Container();
     this.container.addChild(
@@ -77,10 +81,12 @@ export class MapRenderer {
       this.spriteLayer,
       this.gridLayer,
       this.overlayLayer,
+      this.indicatorLayer,
       this.labelLayer
     );
     this.gridDrawer = new GridDrawer(this.gridLayer);
     this.tileSprites = new Map();
+    this.indicatorSprites = new Map();
     this.tilesWithSprites = new Set();
     this.tileLabels = new Map();
   }
@@ -212,7 +218,7 @@ export class MapRenderer {
         educationPreview.existing
       );
     }
-    this.drawBuildingMarkers(state, size, buildingLookup);
+    this.drawBuildingIndicators(state, size, buildingLookup);
     this.drawTileLabels(state, size);
     if (hovered) {
       const shouldValidatePlacement = hoverFootprint.width > 1 || hoverFootprint.height > 1;
@@ -471,37 +477,67 @@ export class MapRenderer {
       .stroke({ width: 2, color, alpha: 0.9 });
   }
 
-  private drawBuildingMarkers(
+  private drawBuildingIndicators(
     state: GameState,
     size: number,
     buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ) {
-    const radius = Math.max(2, size * 0.12);
+    // Determine which service types have infrastructure on the map so we only
+    // show "no service" indicators when the player has actually built that service.
+    let hasWaterInfra = false;
+    for (const tile of state.tiles) {
+      if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
+        hasWaterInfra = true;
+        break;
+      }
+    }
+
+    // Target icon size scales with tile size but caps at half a tile.
+    const iconPx = 12; // native sprite size
+    const iconScale = Math.max(0.5, Math.min(size * 0.5 / iconPx, size / iconPx));
+    const iconSize = iconPx * iconScale;
+
+    const seen = new Set<number>();
     for (const building of state.buildings) {
+      const { status } = building.state;
+      if (status === BuildingStatus.Active) continue;
+
+      let texture: import('pixi.js').Texture | undefined;
+      if (status === BuildingStatus.InactiveNoPower) {
+        texture = this.tileTextures.indicators.noPower;
+      } else if (status === BuildingStatus.InactiveNoWater && hasWaterInfra) {
+        texture = this.tileTextures.indicators.noWater;
+      }
+      if (!texture) continue;
+
       const lookup = buildingLookup.get(building.id);
       const template = lookup?.template ?? getBuildingTemplate(building.templateId);
       const origin = lookup?.origin ?? building.origin;
       const width = template?.footprint.width ?? 1;
-      const height = template?.footprint.height ?? 1;
-      let hasSpriteCoverage = false;
-      for (let dy = 0; dy < height && !hasSpriteCoverage; dy++) {
-        for (let dx = 0; dx < width; dx++) {
-          const tx = origin.x + dx;
-          const ty = origin.y + dy;
-          if (tx < 0 || ty < 0 || tx >= state.width || ty >= state.height) continue;
-          const idx = ty * state.width + tx;
-          if (this.tilesWithSprites.has(idx)) {
-            hasSpriteCoverage = true;
-            break;
-          }
+      // Position indicator at top-centre of the building footprint.
+      const cx = this.camera.x + (origin.x + width / 2) * size - iconSize / 2;
+      const cy = this.camera.y + origin.y * size - iconSize / 2;
+
+      let sprite = this.indicatorSprites.get(building.id);
+      if (!sprite || sprite.texture !== texture) {
+        if (!sprite) {
+          sprite = new Sprite(texture);
+          this.indicatorLayer.addChild(sprite);
+          this.indicatorSprites.set(building.id, sprite);
+        } else {
+          sprite.texture = texture;
         }
       }
-      const powered = building.state.status === BuildingStatus.Active;
-      if (powered && hasSpriteCoverage) continue;
-      const cx = this.camera.x + (origin.x + width / 2) * size;
-      const cy = this.camera.y + (origin.y + height / 2) * size;
-      const color = powered ? 0x7bffb7 : 0xff7b7b;
-      this.overlayLayer.circle(cx, cy, radius).fill({ color, alpha: 0.9 });
+      sprite.x = cx;
+      sprite.y = cy;
+      sprite.scale.set(iconScale);
+      sprite.visible = true;
+      seen.add(building.id);
+    }
+
+    // Hide sprites for buildings that no longer need an indicator.
+    for (const [id, sprite] of this.indicatorSprites) {
+      if (!seen.has(id)) sprite.visible = false;
     }
   }
 

@@ -12,6 +12,7 @@
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import { recomputeEducation } from './education';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
@@ -366,12 +367,19 @@ export class WasmSimBridge implements SimBridge {
       });
     }
     this.state.buildings = Array.from(seen.entries()).map(([id, { kind, x, y }]) => {
-      // Derive power status from the tile flag the Rust buffer already set.
-      // Avoids calling updateBuildingStates (which would misread water status
-      // for zones in cities without water infrastructure).
+      // Derive status from the tile flags the Rust buffer already set.
+      // Avoids calling updateBuildingStates, which misreads water status for
+      // zones in cities without water infrastructure.
       const originTile = this.state.tiles[y * this.state.width + x];
+      const template = getBuildingTemplate(kind as string);
       const bstate = createBuildingState();
-      if (!originTile?.powered) bstate.status = BuildingStatus.InactiveNoPower;
+      const needsPower = template ? template.requiresPower !== false : false;
+      const needsWater = template ? (template.waterUse !== undefined && template.waterUse > 0) : false;
+      if (needsPower && !originTile?.powered) {
+        bstate.status = BuildingStatus.InactiveNoPower;
+      } else if (needsWater && !originTile?.watered) {
+        bstate.status = BuildingStatus.InactiveNoWater;
+      }
       return { id, templateId: kind as string, origin: { x, y }, state: bstate };
     });
 
