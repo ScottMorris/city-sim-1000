@@ -38,6 +38,10 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Build Tauri plugin JS bindings
+        run: bun install && bun run build
+        working-directory: crates/tauri-plugin-city-sim
+
       - name: Install dependencies
         run: bun install
         working-directory: app
