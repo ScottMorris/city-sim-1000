@@ -70,7 +70,7 @@ type MainToWorker =
   | { type: 'set_speed';  payload: { multiplier: number } }
   | { type: 'undo' }
   | { type: 'reset';      payload: { width: number; height: number; seed: number } }
-  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number } };
+  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number } };
 
 let host: SimHost | null = null;
 
@@ -180,8 +180,10 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);
         }
+        // Match init: cap fast-forward at 120 ticks to avoid overshooting early saves.
+        const targetTick = Math.min(msg.payload.targetTick ?? 120, 120);
         const dt = 1 / 20;
-        for (let t = 0; t < 120; t++) host.step(dt);
+        while (host.tick_count() < targetTick) host.step(dt);
       }
       if (msg.payload.money !== undefined) host.set_money(msg.payload.money);
       const bytes = host.tile_buffer();

@@ -3,11 +3,12 @@
  *
  * For an N-tile map (N = width × height) the flat ArrayBuffer is laid out as:
  *
- *   kind[N]        u8   — TileKind u8 values
- *   flags[N]       u8   — bit-packed booleans (see FLAGS)
- *   happiness[N]   u8   — quantised 0–255 (0.0–2.0)
- *   elevation[N]   i8   — signed elevation
- *   building_id[N] u16  — building ID, little-endian (0 = none)
+ *   kind[N]             u8   — TileKind u8 values
+ *   flags[N]            u8   — bit-packed booleans (see FLAGS)
+ *   happiness[N]        u8   — quantised 0–255 (0.0–2.0)
+ *   elevation[N]        u8   — unsigned elevation (0–255)
+ *   building_id[N]      u16  — building ID, little-endian (0 = none)
+ *   underground_kind[N] u8   — TileKind u8 of buried tile (0xFF = none)
  *
  * Total: N × 7 bytes.
  *
@@ -24,7 +25,7 @@ export function tileBufferOffsets(n: number) {
     happiness:       n * 2,
     elevation:       n * 3,
     buildingId:      n * 4,   // u16le → occupies n*2 bytes starting here
-    undergroundKind: n * 6,   // TileKind u8 (0 = none)
+    undergroundKind: n * 6,   // TileKind u8 (0xFF = none; 0 = TileKind::Land)
   } as const;
 }
 

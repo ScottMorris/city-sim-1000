@@ -181,7 +181,7 @@ impl SimHost {
         true
     }
 
-    /// Total byte length of the SoA tile buffer (width × height × 6).
+    /// Total byte length of the SoA tile buffer (width × height × `BYTES_PER_TILE`).
     pub fn tile_buffer_byte_len(&self) -> usize {
         self.sim.state.tiles.len() * BYTES_PER_TILE
     }

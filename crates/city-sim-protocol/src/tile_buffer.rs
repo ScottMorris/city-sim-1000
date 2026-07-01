@@ -6,14 +6,15 @@
 //! SoA tile buffer layout shared between the sim and the renderer via
 //! SharedArrayBuffer (web) or a Tauri Channel binary payload (desktop).
 //!
-//! For a W×H map the buffer is divided into five contiguous field arrays:
+//! For a W×H map the buffer is divided into six contiguous field arrays:
 //!
 //! ```text
-//! | kind[N]  u8  | flags[N]  u8  | happiness[N]  u8  | elevation[N]  i8  | building_id[N*2]  u16le |
-//! |--- N --------|--- N ---------|--- N --------------|--- N --------------|--- N*2 ------------------|
+//! | kind[N]  u8  | flags[N]  u8  | happiness[N]  u8  | elevation[N]  u8  | building_id[N*2]  u16le | underground_kind[N]  u8 |
+//! |--- N --------|--- N ---------|--- N --------------|--- N --------------|--- N*2 ------------------|--- N ------------------|
 //! ```
 //!
 //! Where N = W × H.  All multi-byte values are little-endian.
+//! `underground_kind` uses 0xFF as the "no underground" sentinel (0 = `TileKind::Land`).
 //!
 //! The TS mirror is in `src/game/protocol/tileBuffer.ts`.
 
@@ -32,7 +33,7 @@ pub struct TileBufferOffsets {
     pub elevation: usize,
     /// `building_id[N*2]`    — building ID as u16le (0 = no building).
     pub building_id: usize,
-    /// `underground_kind[N]` — TileKind u8 of buried tile (0 = none).
+    /// `underground_kind[N]` — TileKind u8 of buried tile (0xFF = none; 0 = `TileKind::Land`).
     pub underground_kind: usize,
 }
 

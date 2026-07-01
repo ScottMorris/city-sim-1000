@@ -1,3 +1,8 @@
+// Map renderer — PixiJS WebGL tile grid, overlays, and building indicators.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Camera } from './camera';
 import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
@@ -187,8 +192,10 @@ export class MapRenderer {
           const cy = this.camera.y + y * size + center;
 
           const hasNeighbour = (dx: number, dy: number) => {
-             const t = getTile(state, x + dx, y + dy);
-             return isWaterCarrier(t);
+            const t = getTile(state, x + dx, y + dy);
+            return t?.underground === TileKind.WaterPipe
+              || t?.kind === TileKind.WaterPump
+              || t?.kind === TileKind.WaterTower;
           };
 
           this.mapLayer.rect(cx - offset, cy - offset, pipeWidth, pipeWidth).fill({ color: 0x555555 });
@@ -537,8 +544,12 @@ export class MapRenderer {
     }
 
     // Hide sprites for buildings that no longer need an indicator.
+    // Destroy sprites for buildings that no longer exist (demolished).
     for (const [id, sprite] of this.indicatorSprites) {
-      if (!seen.has(id)) sprite.visible = false;
+      if (!seen.has(id)) {
+        sprite.destroy();
+        this.indicatorSprites.delete(id);
+      }
     }
   }
 

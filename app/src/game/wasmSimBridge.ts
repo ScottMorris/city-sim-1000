@@ -190,6 +190,7 @@ export class WasmSimBridge implements SimBridge {
           seed: state.seed,
           commands: cmdLog.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
           money: state.money,
+          targetTick: state.tick,
         },
       });
     } else {
@@ -259,6 +260,12 @@ export class WasmSimBridge implements SimBridge {
         this.pendingTileBuffer = null;
         this.pendingStats = null;
         if (msg.happened) {
+          // Keep cmdLog in sync with Rust's CommandLog so the next bridge swap
+          // or save-load doesn't replay the undone command.
+          const undone = this.cmdLog.pop();
+          if (undone !== undefined) {
+            this.modifiedTiles.delete(undone.y * this.state.width + undone.x);
+          }
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);
         }
