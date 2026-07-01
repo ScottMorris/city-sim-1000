@@ -514,9 +514,10 @@ export class MapRenderer {
       const template = lookup?.template ?? getBuildingTemplate(building.templateId);
       const origin = lookup?.origin ?? building.origin;
       const width = template?.footprint.width ?? 1;
-      // Position indicator at top-centre of the building footprint.
+      const height = template?.footprint.height ?? 1;
+      // Centre on the building footprint (same position the old dot used).
       const cx = this.camera.x + (origin.x + width / 2) * size - iconSize / 2;
-      const cy = this.camera.y + origin.y * size - iconSize / 2;
+      const cy = this.camera.y + (origin.y + height / 2) * size - iconSize / 2;
 
       let sprite = this.indicatorSprites.get(building.id);
       if (!sprite || sprite.texture !== texture) {
