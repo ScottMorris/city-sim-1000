@@ -492,10 +492,10 @@ export class MapRenderer {
       }
     }
 
-    // Target icon size scales with tile size but caps at half a tile.
-    const iconPx = 12; // native sprite size
-    const iconScale = Math.max(0.5, Math.min(size * 0.5 / iconPx, size / iconPx));
-    const iconSize = iconPx * iconScale;
+    // Target display size = half a tile; sprite texture is 128×128.
+    const iconPx = 128;
+    const iconScale = (size * 0.5) / iconPx;
+    const iconSize = size * 0.5;
 
     const seen = new Set<number>();
     for (const building of state.buildings) {
