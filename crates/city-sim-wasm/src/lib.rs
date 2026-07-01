@@ -203,7 +203,8 @@ impl SimHost {
             let base = o.building_id + i * 2;
             buf[base] = (bid & 0xFF) as u8;
             buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
-            buf[o.underground_kind + i] = tile.underground.map_or(0, |k| k as u8);
+            // 0xFF = no underground (0 = TileKind::Land, not a valid sentinel).
+            buf[o.underground_kind + i] = tile.underground.map_or(0xFF, |k| k as u8);
         }
         buf
     }
