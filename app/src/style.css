@@ -40,6 +40,10 @@ select {
 
 #app {
   display: grid;
+  /* minmax(0, 1fr) column: an auto column would size to the topbar's
+     max-content (all HUD cards in a row) and push the whole page wider
+     than the window instead of letting the HUD strip scroll. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100vh;
   height: 100dvh;
@@ -147,23 +151,33 @@ select {
   font-weight: bold;
 }
 
+/* Single-row strip: cards keep their natural width and the row scrolls
+   horizontally when it runs out of room (same interaction as the tool
+   picker below) instead of cards painting over their neighbours. Height
+   never grows, so the play area keeps its screen real estate. */
 .hud {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
+  align-items: stretch;
   gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  /* Keep the panels' drop shadow inside the scroll clip. */
+  padding-bottom: 6px;
 }
 
 .panel {
+  flex: 0 0 auto;
   background: var(--panel);
   border: 2px solid #223557;
   border-radius: 10px;
-  padding: 10px;
+  padding: 8px 10px;
   box-shadow: 0 6px 0 #0a1020;
 }
 
 .panel.panel-right {
-  justify-self: end;
+  margin-left: auto;
 }
 
 .panel h4 {
@@ -676,6 +690,9 @@ select {
   position: absolute;
   right: calc(12px + env(safe-area-inset-right, 0px));
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  /* Never grow past the canvas area up beneath the toolbar. */
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   background: rgba(12, 20, 40, 0.9);
   border: 2px solid #223557;
   border-radius: 12px;
@@ -798,6 +815,9 @@ select {
 }
 
 .demand-bar {
+  /* Fixed width — the card is content-sized, so the bar can't derive a
+     width from it. */
+  width: 140px;
   height: 12px;
   background: #0c1425;
   border: 1px solid #1f2c4b;
