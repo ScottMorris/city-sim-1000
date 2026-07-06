@@ -358,10 +358,6 @@ select {
   flex: 1;
 }
 
-.budget-button {
-  margin-left: auto;
-}
-
 .toolbar-sub {
   position: fixed;
   left: 0;

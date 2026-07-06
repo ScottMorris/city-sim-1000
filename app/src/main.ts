@@ -90,6 +90,8 @@ appRoot.innerHTML = `
         <button id="speed-fast" class="ribbon-btn" title="Fast (hotkey 2)" aria-label="Fast speed">⏩</button>
         <button id="speed-ludicrous" class="ribbon-btn" title="Ludicrous (hotkey 3)" aria-label="Ludicrous speed">⚡</button>
       </div>
+      <button id="budget-modal-btn" class="ribbon-btn" title="Open the budget screen" aria-label="Open budget">📊</button>
+      <button id="bylaws-modal-btn" class="ribbon-btn" title="Open city bylaws" aria-label="Open bylaws">📜</button>
       <details class="ribbon-menu">
         <summary class="ribbon-btn" title="Saves — save, load, download, upload" aria-label="Saves menu">💾</summary>
         <div class="ribbon-menu-panel">
@@ -101,6 +103,7 @@ appRoot.innerHTML = `
         </div>
       </details>
       <button id="manual-btn" class="ribbon-btn" title="Open the in-game manual" aria-label="Open manual">📖</button>
+      <button id="settings-btn" class="ribbon-btn" title="Open settings" aria-label="Open settings">⚙️</button>
       <details class="ribbon-menu">
         <summary class="ribbon-btn" title="Debug — overlay, state snapshot, penalties, sim engine" aria-label="Debug menu">🛠️</summary>
         <div class="ribbon-menu-panel">
@@ -159,6 +162,9 @@ const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
 const uploadBtn = requireElement<HTMLButtonElement>('#upload-btn');
 const fileInput = requireElement<HTMLInputElement>('#file-input');
 const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
+const budgetModalBtn = requireElement<HTMLButtonElement>('#budget-modal-btn');
+const bylawsModalBtn = requireElement<HTMLButtonElement>('#bylaws-modal-btn');
+const settingsBtn = requireElement<HTMLButtonElement>('#settings-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
@@ -932,6 +938,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     onApply: (next) => applySettings(next)
   });
 
+  budgetModalBtn.addEventListener('click', () => budgetModal.open());
+  bylawsModalBtn.addEventListener('click', () => bylawsModal.open());
+  settingsBtn.addEventListener('click', () => settingsModal?.open());
+
   const toolbarControllers = initToolbar(
     toolbar,
     (nextTool) => {
@@ -939,9 +949,6 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     },
     activeTool,
     {
-      onOpenBudget: () => budgetModal.open(),
-      onOpenBylaws: () => bylawsModal.open(),
-      onOpenSettings: () => settingsModal?.open(),
       radioVolume: state.settings.audio.radioVolume
     }
   );
