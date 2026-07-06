@@ -69,10 +69,9 @@ export function createHud(elements: HudElements) {
     elements.budgetNetEl.className = `budget-net ${netClass}`;
     elements.powerEl.textContent = `⚡ ${state.utilities.power.toFixed(1)} MW`;
     elements.waterEl.textContent = `💧 ${state.utilities.water.toFixed(1)} m³`;
-    // Vertical RCI demand columns — fill rises from the bottom of the track.
-    elements.resBar.style.height = `${state.demand.residential}%`;
-    elements.comBar.style.height = `${state.demand.commercial}%`;
-    elements.indBar.style.height = `${state.demand.industrial}%`;
+    elements.resBar.style.width = `${state.demand.residential}%`;
+    elements.comBar.style.width = `${state.demand.commercial}%`;
+    elements.indBar.style.width = `${state.demand.industrial}%`;
     const population = Math.floor(state.population).toLocaleString();
     const jobs = Math.floor(state.jobs).toLocaleString();
     elements.popEl.textContent = `👥 ${population}`;

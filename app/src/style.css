@@ -57,7 +57,8 @@ select {
 
 .topbar {
   display: flex;
-  align-items: center;
+  /* Stretch so the controls cluster matches the stat chips' height. */
+  align-items: stretch;
   gap: 12px;
   min-height: 0;
   /* Safety net for any width: if the HUD ever grows taller than the
@@ -175,18 +176,27 @@ select {
   padding-bottom: 4px;
 }
 
+/* Two-line chips: related stats stack (money over power/water, month over
+   day) so the ribbon stays one chip tall but carries more per chip. */
 .ribbon-chip {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
   white-space: nowrap;
   background: var(--panel);
   border: 2px solid #223557;
   border-radius: 10px;
-  padding: 6px 10px;
+  padding: 7px 10px;
   box-shadow: 0 4px 0 #0a1020;
   font-size: 12px;
+}
+
+.ribbon-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .ribbon-strong {
@@ -198,38 +208,37 @@ select {
   color: #9fb2d1;
 }
 
-/* Vertical RCI demand columns (SimCity-style). */
+/* Compact horizontal RCI demand meters. */
 .ribbon-rci {
-  gap: 6px;
+  gap: 4px;
+  justify-content: center;
 }
 
-.rci-col {
+.rci-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 5px;
 }
 
 .rci-track {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  width: 10px;
-  height: 22px;
+  width: 88px;
+  height: 8px;
   background: #0c1425;
   border: 1px solid #1f2c4b;
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .rci-fill {
-  width: 100%;
-  transition: height 0.2s ease;
+  display: block;
+  height: 100%;
+  transition: width 0.2s ease;
 }
 
 .rci-label {
   font-size: 9px;
   color: #9fb2d1;
+  width: 8px;
 }
 
 /* Icon buttons (speed segmented control, manual, menu summaries). */
@@ -261,6 +270,8 @@ select {
 
 /* Speed buttons live inside one chip as a segmented control. */
 .ribbon-btn-group {
+  flex-direction: row;
+  align-items: stretch;
   padding: 0;
   background: none;
   border: none;

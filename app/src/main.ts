@@ -60,26 +60,28 @@ appRoot.innerHTML = `
   <div class="topbar">
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
     <div class="ribbon">
-      <div class="ribbon-chip" title="City treasury and monthly net">
-        <span id="money" class="ribbon-strong">$0</span>
-        <span id="budget-net" class="budget-net">+$0 / month</span>
-      </div>
-      <div class="ribbon-chip" title="Power and water balance">
-        <span id="power">⚡ 0 MW</span>
-        <span id="water">💧 0 m³</span>
+      <div class="ribbon-chip" title="City treasury, monthly net, and utility balances">
+        <div class="ribbon-line">
+          <span id="money" class="ribbon-strong">$0</span>
+          <span id="budget-net" class="budget-net">+$0 / month</span>
+        </div>
+        <div class="ribbon-line">
+          <span id="power">⚡ 0 MW</span>
+          <span id="water">💧 0 m³</span>
+        </div>
       </div>
       <div class="ribbon-chip ribbon-rci" title="Zone demand — Residential / Commercial / Industrial">
-        <span class="rci-col"><span class="rci-track"><span id="res-bar" class="rci-fill" style="background:#7bffb7;height:30%"></span></span><span class="rci-label">R</span></span>
-        <span class="rci-col"><span class="rci-track"><span id="com-bar" class="rci-fill" style="background:#5bc0eb;height:30%"></span></span><span class="rci-label">C</span></span>
-        <span class="rci-col"><span class="rci-track"><span id="ind-bar" class="rci-fill" style="background:#f08c42;height:30%"></span></span><span class="rci-label">I</span></span>
+        <span class="rci-row"><span class="rci-label">R</span><span class="rci-track"><span id="res-bar" class="rci-fill" style="background:#7bffb7;width:30%"></span></span></span>
+        <span class="rci-row"><span class="rci-label">C</span><span class="rci-track"><span id="com-bar" class="rci-fill" style="background:#5bc0eb;width:30%"></span></span></span>
+        <span class="rci-row"><span class="rci-label">I</span><span class="rci-track"><span id="ind-bar" class="rci-fill" style="background:#f08c42;width:30%"></span></span></span>
       </div>
       <div class="ribbon-chip" title="Calendar">
-        <span id="month">Month 1</span>
-        <span id="day" class="ribbon-dim">Day 1/30</span>
+        <div class="ribbon-line"><span id="month">Month 1</span></div>
+        <div class="ribbon-line"><span id="day" class="ribbon-dim">Day 1/30</span></div>
       </div>
       <div class="ribbon-chip" title="Population and jobs">
-        <span id="population">👥 0</span>
-        <span id="jobs">💼 0</span>
+        <div class="ribbon-line"><span id="population">👥 0</span></div>
+        <div class="ribbon-line"><span id="jobs">💼 0</span></div>
       </div>
     </div>
     <div class="ribbon-controls">
