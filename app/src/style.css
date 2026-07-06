@@ -199,6 +199,18 @@ select {
   gap: 12px;
 }
 
+/* A chip that doubles as a button (treasury → budget screen). */
+.ribbon-chip-button {
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+}
+
+.ribbon-chip-button:hover {
+  border-color: var(--accent);
+}
+
 .ribbon-strong {
   color: #fff;
   font-weight: bold;

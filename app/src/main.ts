@@ -60,7 +60,7 @@ appRoot.innerHTML = `
   <div class="topbar">
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
     <div class="ribbon">
-      <div class="ribbon-chip" title="City treasury, monthly net, and utility balances">
+      <button type="button" id="treasury-chip" class="ribbon-chip ribbon-chip-button" title="City treasury and utilities — click to open the budget screen">
         <div class="ribbon-line">
           <span id="money" class="ribbon-strong">$0</span>
           <span id="budget-net" class="budget-net">+$0 / month</span>
@@ -69,7 +69,7 @@ appRoot.innerHTML = `
           <span id="power">⚡ 0 MW</span>
           <span id="water">💧 0 m³</span>
         </div>
-      </div>
+      </button>
       <div class="ribbon-chip ribbon-rci" title="Zone demand — Residential / Commercial / Industrial">
         <span class="rci-row"><span class="rci-label">R</span><span class="rci-track"><span id="res-bar" class="rci-fill" style="background:#7bffb7;width:30%"></span></span></span>
         <span class="rci-row"><span class="rci-label">C</span><span class="rci-track"><span id="com-bar" class="rci-fill" style="background:#5bc0eb;width:30%"></span></span></span>
@@ -162,6 +162,7 @@ const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
 const uploadBtn = requireElement<HTMLButtonElement>('#upload-btn');
 const fileInput = requireElement<HTMLInputElement>('#file-input');
 const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
+const treasuryChip = requireElement<HTMLButtonElement>('#treasury-chip');
 const budgetModalBtn = requireElement<HTMLButtonElement>('#budget-modal-btn');
 const bylawsModalBtn = requireElement<HTMLButtonElement>('#bylaws-modal-btn');
 const settingsBtn = requireElement<HTMLButtonElement>('#settings-btn');
@@ -938,6 +939,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     onApply: (next) => applySettings(next)
   });
 
+  treasuryChip.addEventListener('click', () => budgetModal.open());
   budgetModalBtn.addEventListener('click', () => budgetModal.open());
   bylawsModalBtn.addEventListener('click', () => bylawsModal.open());
   settingsBtn.addEventListener('click', () => settingsModal?.open());
