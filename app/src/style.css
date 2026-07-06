@@ -149,50 +149,160 @@ select {
   gap: 8px;
   align-items: center;
   font-weight: bold;
+  white-space: nowrap;
 }
 
-/* Single-row strip: cards keep their natural width and the row scrolls
-   horizontally when it runs out of room (same interaction as the tool
-   picker below) instead of cards painting over their neighbours. Height
-   never grows, so the play area keeps its screen real estate. */
-.hud {
+/* Status ribbon: one slim line of stat chips. The stats section scrolls
+   horizontally if it ever runs out of room; the controls cluster on the
+   right never scrolls, so speed/saves/manual/debug stay reachable. */
+.ribbon {
   flex: 1;
   display: flex;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: thin;
-  /* Keep the panels' drop shadow inside the scroll clip. */
-  padding-bottom: 6px;
+  /* Keep the chips' drop shadow inside the scroll clip. */
+  padding-bottom: 4px;
 }
 
-.panel {
+.ribbon-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
   flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
+.ribbon-chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
   background: var(--panel);
   border: 2px solid #223557;
   border-radius: 10px;
-  padding: 8px 10px;
-  box-shadow: 0 6px 0 #0a1020;
-}
-
-.panel.panel-right {
-  margin-left: auto;
-}
-
-.panel h4 {
-  margin: 0 0 8px 0;
+  padding: 6px 10px;
+  box-shadow: 0 4px 0 #0a1020;
   font-size: 12px;
-  letter-spacing: 0.5px;
-  color: var(--accent);
 }
 
-.panel strong {
+.ribbon-strong {
   color: #fff;
+  font-weight: bold;
+}
+
+.ribbon-dim {
+  color: #9fb2d1;
+}
+
+/* Vertical RCI demand columns (SimCity-style). */
+.ribbon-rci {
+  gap: 6px;
+}
+
+.rci-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.rci-track {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 10px;
+  height: 22px;
+  background: #0c1425;
+  border: 1px solid #1f2c4b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rci-fill {
+  width: 100%;
+  transition: height 0.2s ease;
+}
+
+.rci-label {
+  font-size: 9px;
+  color: #9fb2d1;
+}
+
+/* Icon buttons (speed segmented control, manual, menu summaries). */
+.ribbon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 6px 8px;
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020;
+  list-style: none;
+}
+
+.ribbon-btn:hover {
+  border-color: var(--accent);
+}
+
+.ribbon-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 4px 0 #0a1020, 0 0 10px rgba(123, 255, 183, 0.25);
+}
+
+/* Speed buttons live inside one chip as a segmented control. */
+.ribbon-btn-group {
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  gap: 4px;
+}
+
+/* Dropdowns for Saves and Debug. */
+.ribbon-menu {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.ribbon-menu > summary {
+  display: flex;
+}
+
+.ribbon-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ribbon-menu[open] > summary {
+  border-color: var(--accent);
+}
+
+.ribbon-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: #0f1d34;
+  border: 2px solid #223557;
+  border-radius: 12px;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55);
+  min-width: max-content;
+  z-index: 3000;
 }
 
 .budget-net {
-  margin-top: 4px;
   font-weight: bold;
 }
 
@@ -814,36 +924,9 @@ select {
   font-size: 12px;
 }
 
-.demand-bar {
-  /* Fixed width — the card is content-sized, so the bar can't derive a
-     width from it. */
-  width: 140px;
-  height: 12px;
-  background: #0c1425;
-  border: 1px solid #1f2c4b;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.demand-fill {
-  height: 100%;
-  transition: width 0.2s ease;
-}
-
 .map-stats {
   font-size: 11px;
   color: #9fb2d1;
-}
-
-.panel-hint {
-  margin-top: 6px;
-  color: #9fb2d1;
-  font-size: 11px;
-}
-
-.controls-row {
-  display: flex;
-  gap: 8px;
 }
 
 button.primary {
@@ -977,24 +1060,6 @@ button.secondary.active {
 
 .tool-hints.subtle {
   opacity: 0.9;
-}
-
-.demand-rows {
-  display: grid;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.demand-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 6px;
-}
-
-.demand-label {
-  font-size: 11px;
-  color: #9fb2d1;
 }
 
 footer {
@@ -1725,6 +1790,21 @@ footer {
 .hotkey-row-header {
   color: #9fb2d1;
   font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .ribbon-chip {
+    font-size: 10px;
+    gap: 6px;
+    padding: 5px 8px;
+  }
+  .ribbon,
+  .ribbon-controls {
+    gap: 6px;
+  }
+  .logo span {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {

@@ -59,14 +59,55 @@ if (!appRoot) {
 appRoot.innerHTML = `
   <div class="topbar">
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
-    <div class="hud">
-      <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="budget-net" class="budget-net">+$0 / month</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
-      <div class="panel"><h4>Demands</h4><div class="demand-rows"><div class="demand-row"><span class="demand-label">R</span><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">C</span><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">I</span><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div></div></div>
-      <div class="panel"><h4>City</h4><div id="month">Month 1</div><div id="day">Day 1 of 30</div><div id="population">Population 0</div><div id="jobs">Jobs 0</div></div>
-      <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
-      <div class="panel"><h4>Saves</h4><div class="controls-row"><button id="save-btn" class="secondary">Save</button><button id="load-btn" class="secondary">Load</button></div><div class="controls-row"><button id="download-btn" class="primary">Download</button><button id="upload-btn" class="secondary">Upload</button><input type="file" id="file-input" accept="application/json" style="display:none" /></div></div>
-      <div class="panel"><h4>Manual</h4><div class="controls-row"><button id="manual-btn" class="secondary">Open manual</button></div><div class="panel-hint">Opens the in-game guide in a popup.</div></div>
-      <div class="panel panel-right"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button><button id="pending-penalty-btn" class="secondary">Penalties: On</button><button id="sim-bridge-btn" class="secondary">Sim: WASM</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
+    <div class="ribbon">
+      <div class="ribbon-chip" title="City treasury and monthly net">
+        <span id="money" class="ribbon-strong">$0</span>
+        <span id="budget-net" class="budget-net">+$0 / month</span>
+      </div>
+      <div class="ribbon-chip" title="Power and water balance">
+        <span id="power">⚡ 0 MW</span>
+        <span id="water">💧 0 m³</span>
+      </div>
+      <div class="ribbon-chip ribbon-rci" title="Zone demand — Residential / Commercial / Industrial">
+        <span class="rci-col"><span class="rci-track"><span id="res-bar" class="rci-fill" style="background:#7bffb7;height:30%"></span></span><span class="rci-label">R</span></span>
+        <span class="rci-col"><span class="rci-track"><span id="com-bar" class="rci-fill" style="background:#5bc0eb;height:30%"></span></span><span class="rci-label">C</span></span>
+        <span class="rci-col"><span class="rci-track"><span id="ind-bar" class="rci-fill" style="background:#f08c42;height:30%"></span></span><span class="rci-label">I</span></span>
+      </div>
+      <div class="ribbon-chip" title="Calendar">
+        <span id="month">Month 1</span>
+        <span id="day" class="ribbon-dim">Day 1/30</span>
+      </div>
+      <div class="ribbon-chip" title="Population and jobs">
+        <span id="population">👥 0</span>
+        <span id="jobs">💼 0</span>
+      </div>
+    </div>
+    <div class="ribbon-controls">
+      <div class="ribbon-chip ribbon-btn-group" role="group" aria-label="Simulation speed">
+        <button id="speed-slow" class="ribbon-btn" title="Slow (hotkey 1)" aria-label="Slow speed">▶</button>
+        <button id="speed-fast" class="ribbon-btn" title="Fast (hotkey 2)" aria-label="Fast speed">⏩</button>
+        <button id="speed-ludicrous" class="ribbon-btn" title="Ludicrous (hotkey 3)" aria-label="Ludicrous speed">⚡</button>
+      </div>
+      <details class="ribbon-menu">
+        <summary class="ribbon-btn" title="Saves — save, load, download, upload" aria-label="Saves menu">💾</summary>
+        <div class="ribbon-menu-panel">
+          <button id="save-btn" class="secondary">Save</button>
+          <button id="load-btn" class="secondary">Load</button>
+          <button id="download-btn" class="primary">Download</button>
+          <button id="upload-btn" class="secondary">Upload</button>
+          <input type="file" id="file-input" accept="application/json" style="display:none" />
+        </div>
+      </details>
+      <button id="manual-btn" class="ribbon-btn" title="Open the in-game manual" aria-label="Open manual">📖</button>
+      <details class="ribbon-menu">
+        <summary class="ribbon-btn" title="Debug — overlay, state snapshot, penalties, sim engine" aria-label="Debug menu">🛠️</summary>
+        <div class="ribbon-menu-panel">
+          <button id="debug-overlay-btn" class="secondary">Show overlay</button>
+          <button id="debug-copy-btn" class="secondary">Copy state</button>
+          <button id="pending-penalty-btn" class="secondary">Penalties: On</button>
+          <button id="sim-bridge-btn" class="secondary">Sim: WASM</button>
+        </div>
+      </details>
     </div>
   </div>
   <div class="news-ticker news-ticker-hidden" id="news-ticker">
@@ -121,6 +162,36 @@ const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
 const simBridgeBtn = requireElement<HTMLButtonElement>('#sim-bridge-btn');
 const newsTickerEl = requireElement<HTMLDivElement>('#news-ticker');
+
+// Ribbon dropdowns (<details>): only one open at a time, close on outside
+// click or Escape, and close the saves menu after an action is chosen.
+const ribbonMenus = [...document.querySelectorAll<HTMLDetailsElement>('details.ribbon-menu')];
+for (const menu of ribbonMenus) {
+  menu.addEventListener('toggle', () => {
+    if (!menu.open) return;
+    for (const other of ribbonMenus) {
+      if (other !== menu) other.open = false;
+    }
+  });
+}
+document.addEventListener('pointerdown', (e) => {
+  for (const menu of ribbonMenus) {
+    if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    for (const menu of ribbonMenus) menu.open = false;
+  }
+});
+// Save/Load/Download/Upload are one-shot actions — collapse after use. The
+// debug menu stays open because its buttons are stateful toggles.
+const savesMenu = ribbonMenus.find((m) => m.querySelector('#save-btn'));
+savesMenu?.querySelectorAll('button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    savesMenu.open = false;
+  });
+});
 
 const syncToolbarHeights = () => {
   const rect = toolbar.getBoundingClientRect();

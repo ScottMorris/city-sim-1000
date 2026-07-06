@@ -1,3 +1,8 @@
+// hud.ts — live top-bar ribbon values and the tool/tile info overlay.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { GameState, getTile } from '../game/gameState';
@@ -64,14 +69,19 @@ export function createHud(elements: HudElements) {
     elements.budgetNetEl.className = `budget-net ${netClass}`;
     elements.powerEl.textContent = `⚡ ${state.utilities.power.toFixed(1)} MW`;
     elements.waterEl.textContent = `💧 ${state.utilities.water.toFixed(1)} m³`;
-    elements.resBar.style.width = `${state.demand.residential}%`;
-    elements.comBar.style.width = `${state.demand.commercial}%`;
-    elements.indBar.style.width = `${state.demand.industrial}%`;
-    elements.popEl.textContent = `Population ${Math.floor(state.population)}`;
-    elements.jobsEl.textContent = `Jobs ${Math.floor(state.jobs)}`;
+    // Vertical RCI demand columns — fill rises from the bottom of the track.
+    elements.resBar.style.height = `${state.demand.residential}%`;
+    elements.comBar.style.height = `${state.demand.commercial}%`;
+    elements.indBar.style.height = `${state.demand.industrial}%`;
+    const population = Math.floor(state.population).toLocaleString();
+    const jobs = Math.floor(state.jobs).toLocaleString();
+    elements.popEl.textContent = `👥 ${population}`;
+    elements.popEl.title = `Population ${population}`;
+    elements.jobsEl.textContent = `💼 ${jobs}`;
+    elements.jobsEl.title = `Jobs ${jobs}`;
     const calendar = getCalendarPosition(state.day);
     elements.monthEl.textContent = `Month ${calendar.month}`;
-    elements.dayEl.textContent = `Day ${calendar.dayOfMonth} of ${DAYS_PER_MONTH}`;
+    elements.dayEl.textContent = `Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH}`;
   };
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
