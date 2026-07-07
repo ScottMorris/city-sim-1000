@@ -22,7 +22,7 @@ import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
 import { LocalSimBridge } from './game/localSimBridge';
 import type { SimBridge } from './game/simBridge';
-import { applyToolCmd } from './game/protocol/commands';
+import { applyToolCmd, setBudgetPolicyCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
 import { initMcpBridge } from './game/mcpBridge';
@@ -788,7 +788,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state,
     getNarrativeEnabled: () => state.settings.narrative.enabled,
     getBudgetInsights: () => narrativeManager.getBudgetInsights(),
-    refreshBudgetInsights: () => narrativeManager.refreshBudgetInsights(() => buildCitySnapshot(state))
+    refreshBudgetInsights: () => narrativeManager.refreshBudgetInsights(() => buildCitySnapshot(state)),
+    onPolicyChange: (policy) => {
+      state.budgetPolicy = policy;
+      bridge.send(setBudgetPolicyCmd(policy));
+    }
   });
   const bylawsModal = initBylawsModal({
     getState: () => state,

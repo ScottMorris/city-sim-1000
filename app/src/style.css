@@ -1191,6 +1191,272 @@ footer {
   padding: 14px 14px 16px;
   gap: 12px;
   background: linear-gradient(180deg, #0f1b2f 0%, #0b1526 100%);
+  width: min(94vw, 1100px);
+  height: min(90vh, 820px);
+}
+
+/* =========================================================================
+   City Ledger (budget modal redesign)
+   ========================================================================= */
+
+.ledger-body {
+  grid-template-columns: minmax(0, 1.8fr) minmax(220px, 1fr);
+}
+
+.ledger-main {
+  gap: 12px;
+}
+
+.ledger-flow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  color: #9fb2d1;
+  margin-bottom: 4px;
+}
+
+.ledger-flow-header strong {
+  color: #fff;
+}
+
+.ledger-flow-bar {
+  display: flex;
+  height: 14px;
+  background: #0c1425;
+  border: 1px solid #1f2c4b;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.ledger-flow-segment {
+  height: 100%;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.ledger-flow-segment + .ledger-flow-segment {
+  border-left: 1px solid #0c1425;
+}
+
+.ledger-flow-empty {
+  font-size: 10px;
+  color: #5b6c8f;
+  padding: 0 8px;
+  align-self: center;
+}
+
+.ledger-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ledger-list-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: #e8f1ff;
+  margin-bottom: 6px;
+}
+
+.ledger-row {
+  padding: 5px 0;
+  border-bottom: 1px solid #14203a;
+}
+
+.ledger-row-zero {
+  opacity: 0.45;
+}
+
+.ledger-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.ledger-row-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.ledger-row-label {
+  flex: 1;
+}
+
+.ledger-row-value {
+  color: #fff;
+  font-weight: 700;
+}
+
+.ledger-row-bar {
+  height: 4px;
+  margin: 4px 0 2px 14px;
+  background: #0c1425;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ledger-row-bar > div {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.ledger-subrow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #9fb2d1;
+  padding: 1px 0 1px 14px;
+}
+
+.ledger-subrow-value {
+  color: #c9d6ee;
+}
+
+/* City Hall policy column */
+.ledger-policy {
+  gap: 10px;
+}
+
+.ledger-policy-heading {
+  font-weight: 700;
+  font-size: 14px;
+  color: #e8f1ff;
+}
+
+.ledger-policy-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ledger-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ledger-slider-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.ledger-slider-value {
+  font-weight: 700;
+  color: #9fb2d1;
+}
+
+.ledger-slider-value.off-neutral {
+  color: var(--warning);
+}
+
+.ledger-slider {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.ledger-policy-footnote {
+  margin-top: auto;
+}
+
+/* Bottom strip: quarter trend + advisor */
+.ledger-strip {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr);
+  gap: 12px;
+}
+
+.ledger-strip > div {
+  background: #0a1224;
+  border: 1px solid #1f2c4b;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.ledger-strip:has(.ledger-quarter:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.ledger-strip-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.ledger-quarter {
+  display: flex;
+  flex-direction: column;
+}
+
+.ledger-months {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  min-height: 40px;
+}
+
+.ledger-month {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ledger-month-bar {
+  width: 16px;
+  border-radius: 3px 3px 0 0;
+}
+
+.ledger-month-bar.positive {
+  background: #7bffb7;
+}
+
+.ledger-month-bar.negative {
+  background: #ff8c8c;
+}
+
+.ledger-month-label {
+  font-size: 9px;
+  color: #9fb2d1;
+}
+
+.ledger-quarter-net {
+  font-size: 12px;
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.ledger-insights .ledger-insight {
+  font-size: 11px;
+  color: #c9d6ee;
+  margin-bottom: 4px;
+}
+
+.ledger-insight[data-severity='high'] strong {
+  color: #ff8c8c;
+}
+
+.ledger-recommendation {
+  color: #9dd9ff;
+}
+
+.ledger-quarter-net .positive {
+  color: #7bffb7;
+}
+
+.ledger-quarter-net .negative {
+  color: #ff8c8c;
 }
 
 .bylaws-modal {
@@ -1404,7 +1670,7 @@ footer {
 
 .budget-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
