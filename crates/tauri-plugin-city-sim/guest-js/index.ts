@@ -128,6 +128,24 @@ export async function setSpeed(multiplier: number): Promise<void> {
  * The `onTick` callback supplied to `start` will stop receiving events.
  * Safe to call even if no sim is running.
  */
+export async function setBudgetPolicy(policy: {
+  taxResidential: number
+  taxCommercial: number
+  taxIndustrial: number
+  fundTransport: number
+  fundPower: number
+  fundCivic: number
+}): Promise<void> {
+  await invoke('plugin:city-sim|set_budget_policy', {
+    taxResidential: policy.taxResidential,
+    taxCommercial: policy.taxCommercial,
+    taxIndustrial: policy.taxIndustrial,
+    fundTransport: policy.fundTransport,
+    fundPower: policy.fundPower,
+    fundCivic: policy.fundCivic,
+  })
+}
+
 export async function stop(): Promise<void> {
   await invoke('plugin:city-sim|stop', {})
 }

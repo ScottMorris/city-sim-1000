@@ -36,6 +36,65 @@ pub enum Tool {
     Bulldoze = 21,
 }
 
+/// SimCity-style fiscal policy: per-class tax rates and per-department
+/// funding levels, adjustable from the budget screen.
+///
+/// Tax rates are whole percentages (0–20). 9% is the neutral default — the
+/// revenue formulas scale by `rate / 9`, so the default reproduces the
+/// pre-policy economy exactly. Funding levels are whole percentages (0–100)
+/// with 100 as the fully-funded default; underfunding trims upkeep but has
+/// consequences (brownouts, crowded schools, commuter frustration).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BudgetPolicy {
+    pub tax_residential: u8,
+    pub tax_commercial: u8,
+    pub tax_industrial: u8,
+    pub fund_transport: u8,
+    pub fund_power: u8,
+    pub fund_civic: u8,
+}
+
+pub const NEUTRAL_TAX_RATE: u8 = 9;
+pub const MAX_TAX_RATE: u8 = 20;
+pub const MAX_FUNDING: u8 = 100;
+
+impl Default for BudgetPolicy {
+    fn default() -> Self {
+        Self {
+            tax_residential: NEUTRAL_TAX_RATE,
+            tax_commercial: NEUTRAL_TAX_RATE,
+            tax_industrial: NEUTRAL_TAX_RATE,
+            fund_transport: MAX_FUNDING,
+            fund_power: MAX_FUNDING,
+            fund_civic: MAX_FUNDING,
+        }
+    }
+}
+
+impl BudgetPolicy {
+    /// Clamp all fields into their legal ranges.
+    pub fn clamped(self) -> Self {
+        Self {
+            tax_residential: self.tax_residential.min(MAX_TAX_RATE),
+            tax_commercial: self.tax_commercial.min(MAX_TAX_RATE),
+            tax_industrial: self.tax_industrial.min(MAX_TAX_RATE),
+            fund_transport: self.fund_transport.min(MAX_FUNDING),
+            fund_power: self.fund_power.min(MAX_FUNDING),
+            fund_civic: self.fund_civic.min(MAX_FUNDING),
+        }
+    }
+
+    /// Revenue multiplier for a tax rate (`rate / 9`, so 9% → 1.0).
+    pub fn tax_multiplier(rate: u8) -> f32 {
+        rate as f32 / NEUTRAL_TAX_RATE as f32
+    }
+
+    /// Cost/effect multiplier for a funding level (`level / 100`).
+    pub fn funding_multiplier(level: u8) -> f32 {
+        level as f32 / MAX_FUNDING as f32
+    }
+}
+
 /// A command sent from the UI/bridge into the simulation.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
@@ -46,6 +105,8 @@ pub enum SimCommand {
     SetSpeed { multiplier: f32 },
     /// Load a complete new state (e.g. after save-file upload).
     LoadState { seed: u32 },
+    /// Set tax rates and department funding levels.
+    SetBudgetPolicy { policy: BudgetPolicy },
 }
 
 /// Result returned synchronously for `ApplyTool` commands.
@@ -140,6 +201,47 @@ mod tests {
                 y: 10
             }
         ));
+    }
+
+    #[test]
+    fn budget_policy_round_trips_postcard() {
+        let policy = BudgetPolicy {
+            tax_residential: 12,
+            tax_commercial: 7,
+            tax_industrial: 20,
+            fund_transport: 80,
+            fund_power: 50,
+            fund_civic: 100,
+        };
+        let bytes = to_allocvec(&SimCommand::SetBudgetPolicy { policy }).unwrap();
+        let back: SimCommand = from_bytes(&bytes).unwrap();
+        assert!(matches!(back, SimCommand::SetBudgetPolicy { policy: p } if p == policy));
+    }
+
+    #[test]
+    fn budget_policy_clamps_out_of_range() {
+        let policy = BudgetPolicy {
+            tax_residential: 99,
+            tax_commercial: 0,
+            tax_industrial: 21,
+            fund_transport: 255,
+            fund_power: 101,
+            fund_civic: 0,
+        }
+        .clamped();
+        assert_eq!(policy.tax_residential, MAX_TAX_RATE);
+        assert_eq!(policy.tax_commercial, 0);
+        assert_eq!(policy.tax_industrial, MAX_TAX_RATE);
+        assert_eq!(policy.fund_transport, MAX_FUNDING);
+        assert_eq!(policy.fund_power, MAX_FUNDING);
+        assert_eq!(policy.fund_civic, 0);
+    }
+
+    #[test]
+    fn default_policy_is_neutral() {
+        let p = BudgetPolicy::default();
+        assert_eq!(BudgetPolicy::tax_multiplier(p.tax_residential), 1.0);
+        assert_eq!(BudgetPolicy::funding_multiplier(p.fund_power), 1.0);
     }
 
     #[test]

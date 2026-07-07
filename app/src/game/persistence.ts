@@ -16,6 +16,7 @@ import {
   DEFAULT_SERVICE_DEFINITIONS
 } from './services';
 import { createEmptyEducationStats } from './education';
+import { clampBudgetPolicy, createDefaultBudgetPolicy } from './protocol/commands';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -135,6 +136,10 @@ export function deserialize(payload: string): GameState {
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
   parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
   parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
+  // Saves from before the fiscal-policy feature get the neutral defaults.
+  parsed.budgetPolicy = parsed.budgetPolicy
+    ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...parsed.budgetPolicy })
+    : createDefaultBudgetPolicy();
   // Old saves have no seed — assign 0 so they play deterministically going forward.
   if (parsed.seed === undefined) {
     parsed.seed = 0;

@@ -8,7 +8,9 @@ use crate::state::GameState;
 /// Four-byte magic number that identifies a city-sim snapshot.
 const MAGIC: &[u8; 4] = b"CSIM";
 /// Snapshot format version — bump when the binary layout changes incompatibly.
-const VERSION: u32 = 1;
+/// v2: `GameState` gained `policy: BudgetPolicy` and `BudgetStats` gained the
+/// per-type maintenance breakdown fields.
+const VERSION: u32 = 2;
 
 /// Serialise `state` to a compact postcard byte vector prefixed by a 8-byte
 /// header: magic `CSIM` (4 bytes) + version u32 (4 bytes, little-endian).
@@ -76,7 +78,7 @@ mod tests {
     fn header_magic_present() {
         let bytes = to_bytes(&GameState::new(4, 4, 0)).unwrap();
         assert_eq!(&bytes[..4], b"CSIM");
-        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), VERSION);
     }
 
     #[test]

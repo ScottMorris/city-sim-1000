@@ -367,6 +367,18 @@
           "markdownDescription": "Denies the load_snapshot command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_budget_policy command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-budget-policy",
+          "markdownDescription": "Enables the set_budget_policy command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_budget_policy command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-budget-policy",
+          "markdownDescription": "Denies the set_budget_policy command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_speed command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-speed",
@@ -415,10 +427,10 @@
           "markdownDescription": "Denies the undo_last_command command without any pre-configured scope."
         },
         {
-          "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-stop`",
+          "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-budget-policy`\n- `allow-stop`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-stop`"
+          "markdownDescription": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-budget-policy`\n- `allow-stop`"
         }
       ]
     }

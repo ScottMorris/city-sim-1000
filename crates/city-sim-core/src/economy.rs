@@ -5,6 +5,7 @@
 
 use crate::buildings::get_building_template;
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
+use city_sim_protocol::commands::BudgetPolicy;
 use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
@@ -71,10 +72,22 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         }
     }
 
-    // Building maintenance — all buildings in state.buildings
+    // Building maintenance — all buildings in state.buildings, accumulated
+    // per type so the budget screen can show coal vs wind vs hydro etc.
     let mut maint_power = 0.0_f32;
     let mut maint_civic = 0.0_f32;
     let mut maint_zones = 0.0_f32;
+    let mut maint_power_hydro = 0.0_f32;
+    let mut maint_power_coal = 0.0_f32;
+    let mut maint_power_wind = 0.0_f32;
+    let mut maint_power_solar = 0.0_f32;
+    let mut maint_civic_park = 0.0_f32;
+    let mut maint_civic_pump = 0.0_f32;
+    let mut maint_civic_tower = 0.0_f32;
+    let mut maint_civic_school = 0.0_f32;
+    let mut maint_zones_res = 0.0_f32;
+    let mut maint_zones_com = 0.0_f32;
+    let mut maint_zones_ind = 0.0_f32;
 
     for building in &state.buildings {
         let Some(tmpl) = get_building_template(building.kind) else {
@@ -92,18 +105,69 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         }
         if tmpl.is_power_plant {
             maint_power += maint;
+            match building.kind {
+                TileKind::HydroPlant => maint_power_hydro += maint,
+                TileKind::CoalPlant => maint_power_coal += maint,
+                TileKind::WindTurbine => maint_power_wind += maint,
+                TileKind::SolarFarm => maint_power_solar += maint,
+                _ => {}
+            }
         } else if tmpl.is_civic {
             maint_civic += maint;
+            match building.kind {
+                TileKind::Park => maint_civic_park += maint,
+                TileKind::WaterPump => maint_civic_pump += maint,
+                TileKind::WaterTower => maint_civic_tower += maint,
+                TileKind::ElementarySchool | TileKind::HighSchool => {
+                    maint_civic_school += maint
+                }
+                _ => {}
+            }
         } else if tmpl.is_zone {
             maint_zones += maint;
+            match building.kind {
+                TileKind::Residential => maint_zones_res += maint,
+                TileKind::Commercial => maint_zones_com += maint,
+                TileKind::Industrial => maint_zones_ind += maint,
+                _ => {}
+            }
         }
     }
 
+    // Fiscal policy — tax multipliers scale revenue, funding multipliers
+    // scale upkeep. Defaults (9% / 100%) are exactly 1.0, so a neutral
+    // policy reproduces the pre-policy numbers bit-for-bit.
+    let policy = state.policy;
+    let tax_res = BudgetPolicy::tax_multiplier(policy.tax_residential);
+    let tax_com = BudgetPolicy::tax_multiplier(policy.tax_commercial);
+    let tax_ind = BudgetPolicy::tax_multiplier(policy.tax_industrial);
+    let fund_transport = BudgetPolicy::funding_multiplier(policy.fund_transport);
+    let fund_power = BudgetPolicy::funding_multiplier(policy.fund_power);
+    let fund_civic = BudgetPolicy::funding_multiplier(policy.fund_civic);
+
+    // Funding scales upkeep: transport covers roads/rail, power covers lines
+    // and plants, civic covers civic buildings and water pipes. Zone upkeep
+    // is private-sector and never publicly funded.
+    maint_roads *= fund_transport;
+    maint_rail *= fund_transport;
+    maint_power_lines *= fund_power;
+    maint_pipes *= fund_civic;
+    maint_power *= fund_power;
+    maint_power_hydro *= fund_power;
+    maint_power_coal *= fund_power;
+    maint_power_wind *= fund_power;
+    maint_power_solar *= fund_power;
+    maint_civic *= fund_civic;
+    maint_civic_park *= fund_civic;
+    maint_civic_pump *= fund_civic;
+    maint_civic_tower *= fund_civic;
+    maint_civic_school *= fund_civic;
+
     // Revenue
     let revenue_base = BASE_INCOME;
-    let revenue_pop = state.population as f32 * 1.5;
-    let revenue_commercial = commercial_zones as f32 * 6.0;
-    let revenue_industrial = industrial_zones as f32 * 8.0;
+    let revenue_pop = state.population as f32 * 1.5 * tax_res;
+    let revenue_commercial = commercial_zones as f32 * 6.0 * tax_com;
+    let revenue_industrial = industrial_zones as f32 * 8.0 * tax_ind;
     let revenue = revenue_base + revenue_pop + revenue_commercial + revenue_industrial;
 
     // Expenses
@@ -135,6 +199,17 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         maint_rail,
         maint_power_lines,
         maint_pipes,
+        maint_power_hydro,
+        maint_power_coal,
+        maint_power_wind,
+        maint_power_solar,
+        maint_civic_park,
+        maint_civic_pump,
+        maint_civic_tower,
+        maint_civic_school,
+        maint_zones_res,
+        maint_zones_com,
+        maint_zones_ind,
     }
 }
 
@@ -379,6 +454,68 @@ mod tests {
         // at capacity — growth clamped to 0
         apply_population_growth(&mut s, 10, 0);
         assert_eq!(s.population, 10);
+    }
+
+    #[test]
+    fn residential_tax_scales_population_revenue() {
+        let mut s = gs(4, 4);
+        s.population = 100;
+        let neutral = compute_daily_budget(&s).revenue_pop;
+        s.policy.tax_residential = 18; // double the neutral 9%
+        let taxed = compute_daily_budget(&s).revenue_pop;
+        assert!((taxed - neutral * 2.0).abs() < 0.001, "18% tax should double residential revenue");
+        s.policy.tax_residential = 0;
+        assert_eq!(compute_daily_budget(&s).revenue_pop, 0.0, "0% tax → no residential revenue");
+    }
+
+    #[test]
+    fn transport_funding_scales_road_maintenance() {
+        let mut s = gs(3, 1);
+        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Road;
+        let full = compute_daily_budget(&s).maint_roads;
+        s.policy.fund_transport = 50;
+        let half = compute_daily_budget(&s).maint_roads;
+        assert!((half - full * 0.5).abs() < 0.0001, "50% funding should halve road upkeep");
+    }
+
+    #[test]
+    fn power_maintenance_breaks_down_by_plant_type() {
+        let mut s = gs(8, 8);
+        let mut hydro = BuildingInstance::new(1, TileKind::HydroPlant, (0, 0));
+        hydro.status = BuildingStatus::Active;
+        hydro.maintenance_per_day = 150.0;
+        s.buildings.push(hydro);
+        let mut coal = BuildingInstance::new(2, TileKind::CoalPlant, (2, 0));
+        coal.status = BuildingStatus::Active;
+        coal.maintenance_per_day = 300.0;
+        s.buildings.push(coal);
+        let mut wind = BuildingInstance::new(3, TileKind::WindTurbine, (4, 0));
+        wind.status = BuildingStatus::Active;
+        wind.maintenance_per_day = 30.0;
+        s.buildings.push(wind);
+        let b = compute_daily_budget(&s);
+        assert!((b.maint_power_hydro - 150.0).abs() < 0.001);
+        assert!((b.maint_power_coal - 300.0).abs() < 0.001);
+        assert!((b.maint_power_wind - 30.0).abs() < 0.001);
+        assert!((b.maint_power_solar).abs() < 0.001);
+        assert!(
+            (b.maint_power - (150.0 + 300.0 + 30.0)).abs() < 0.001,
+            "per-type rows must sum to the power total"
+        );
+    }
+
+    #[test]
+    fn neutral_policy_is_bit_exact_with_prepolicy_budget() {
+        let mut s = gs(4, 4);
+        s.population = 37;
+        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Commercial;
+        let b = compute_daily_budget(&s);
+        // Reproduce the pre-policy formulas literally.
+        assert_eq!(b.revenue_pop, 37.0_f32 * 1.5);
+        assert_eq!(b.revenue_commercial, 6.0);
+        assert_eq!(b.maint_roads, 0.1);
     }
 
     #[test]

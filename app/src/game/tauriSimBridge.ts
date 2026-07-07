@@ -28,6 +28,7 @@ import {
   start as pluginStart,
   applyTool as pluginApplyTool,
   setSpeed as pluginSetSpeed,
+  setBudgetPolicy as pluginSetBudgetPolicy,
   stop as pluginStop,
   undoLastCommand as pluginUndoLastCommand,
   TOOL_ID,
@@ -98,6 +99,10 @@ export class TauriSimBridge implements SimBridge {
       case 'LoadState':
         // Seed-only restart; full GameState load arrives in P5-1.
         void this.restartPlugin(this.state.width, this.state.height, cmd.seed);
+        return { success: true };
+      case 'SetBudgetPolicy':
+        this.state.budgetPolicy = cmd.policy;
+        void pluginSetBudgetPolicy(cmd.policy);
         return { success: true };
     }
   }

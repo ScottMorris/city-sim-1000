@@ -61,16 +61,49 @@ export interface SimStats {
   budgetMaintRail: number;
   budgetMaintPowerLines: number;
   budgetMaintPipes: number;
+  budgetMaintPowerHydro: number;
+  budgetMaintPowerCoal: number;
+  budgetMaintPowerWind: number;
+  budgetMaintPowerSolar: number;
+  budgetMaintCivicPark: number;
+  budgetMaintCivicPump: number;
+  budgetMaintCivicTower: number;
+  budgetMaintCivicSchool: number;
+  budgetMaintZonesRes: number;
+  budgetMaintZonesCom: number;
+  budgetMaintZonesInd: number;
+}
+
+/** Fiscal policy as a flat tuple-ish record (mirrors SimHost.set_budget_policy args). */
+export interface WorkerBudgetPolicy {
+  taxResidential: number;
+  taxCommercial: number;
+  taxIndustrial: number;
+  fundTransport: number;
+  fundPower: number;
+  fundCivic: number;
 }
 
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number } }
+  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } }
   | { type: 'step';       payload: { dt: number } }
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
+  | { type: 'set_policy'; payload: WorkerBudgetPolicy }
   | { type: 'undo' }
   | { type: 'reset';      payload: { width: number; height: number; seed: number } }
-  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number } };
+  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } };
+
+function applyPolicy(h: SimHost, p: WorkerBudgetPolicy) {
+  h.set_budget_policy(
+    p.taxResidential,
+    p.taxCommercial,
+    p.taxIndustrial,
+    p.fundTransport,
+    p.fundPower,
+    p.fundCivic,
+  );
+}
 
 let host: SimHost | null = null;
 
@@ -107,6 +140,17 @@ function gatherStats(h: SimHost): SimStats {
     budgetMaintRail:         h.budget_maint_rail(),
     budgetMaintPowerLines:   h.budget_maint_power_lines(),
     budgetMaintPipes:        h.budget_maint_pipes(),
+    budgetMaintPowerHydro:   h.budget_maint_power_hydro(),
+    budgetMaintPowerCoal:    h.budget_maint_power_coal(),
+    budgetMaintPowerWind:    h.budget_maint_power_wind(),
+    budgetMaintPowerSolar:   h.budget_maint_power_solar(),
+    budgetMaintCivicPark:    h.budget_maint_civic_park(),
+    budgetMaintCivicPump:    h.budget_maint_civic_pump(),
+    budgetMaintCivicTower:   h.budget_maint_civic_tower(),
+    budgetMaintCivicSchool:  h.budget_maint_civic_school(),
+    budgetMaintZonesRes:     h.budget_maint_zones_res(),
+    budgetMaintZonesCom:     h.budget_maint_zones_com(),
+    budgetMaintZonesInd:     h.budget_maint_zones_ind(),
   };
 }
 
@@ -116,6 +160,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'init': {
       await init();
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
       if (msg.payload.commands) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);
@@ -154,6 +199,11 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       host.set_speed(msg.payload.multiplier);
       break;
     }
+    case 'set_policy': {
+      if (!host) break;
+      applyPolicy(host, msg.payload);
+      break;
+    }
     case 'undo': {
       if (!host) break;
       const happened = host.undo_last();
@@ -176,6 +226,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'load': {
       if (!host) break;
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
       if (msg.payload.commands?.length) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);

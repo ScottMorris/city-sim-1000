@@ -1,4 +1,10 @@
+// education.ts — education coverage recompute over school service areas.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BuildingStatus } from './buildings/state';
+import { fundingMultiplier, MAX_FUNDING } from './protocol/commands';
 import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import type { GameState } from './gameState';
 import { getTile } from './gameState';
@@ -52,7 +58,11 @@ export function recomputeEducation(state: GameState): EducationStats {
     )
       continue;
     if (building.state.status !== BuildingStatus.Active) continue;
-    const capacity = template.service.capacity ?? 0;
+    // Underfunded civic departments crowd the schools (mirrors
+    // `recompute_education` in city-sim-core; 100% funding → exact).
+    const capacity =
+      (template.service.capacity ?? 0) *
+      fundingMultiplier(state.budgetPolicy?.fundCivic ?? MAX_FUNDING);
     if (capacity <= 0) continue;
 
     if (template.service.id === ServiceId.EducationElementary) elementaryCapacity += capacity;

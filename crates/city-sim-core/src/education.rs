@@ -271,7 +271,12 @@ pub fn recompute_education(state: &mut GameState) {
         let (ox, oy) = state.buildings[i].origin;
         let (fw, fh) = tmpl.footprint;
         let svc = tmpl.service;
-        let capacity = tmpl.service_capacity as f32;
+        // Underfunded civic departments crowd the schools: capacity scales
+        // with the civic funding level (100% → full capacity, exact).
+        let capacity = tmpl.service_capacity as f32
+            * city_sim_protocol::commands::BudgetPolicy::funding_multiplier(
+                state.policy.fund_civic,
+            );
         let radius = tmpl.service_coverage;
 
         if svc == ServiceKind::EducationElementary {

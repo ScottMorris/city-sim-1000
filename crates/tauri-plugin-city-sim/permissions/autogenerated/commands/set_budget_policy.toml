@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-set-budget-policy"
+description = "Enables the set_budget_policy command without any pre-configured scope."
+commands.allow = ["set_budget_policy"]
+
+[[permission]]
+identifier = "deny-set-budget-policy"
+description = "Denies the set_budget_policy command without any pre-configured scope."
+commands.deny = ["set_budget_policy"]

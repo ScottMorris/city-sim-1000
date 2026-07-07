@@ -184,7 +184,13 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
     // Update utility stats
     match kind {
         UtilityKind::Power => {
-            let produced = sum_output_power(state);
+            // Underfunded power departments brown out: plant output scales
+            // with the funding level (100% funding → full output, exact).
+            let raw = sum_output_power(state);
+            let fund = city_sim_protocol::commands::BudgetPolicy::funding_multiplier(
+                state.policy.fund_power,
+            );
+            let produced = (raw as f32 * fund).round() as i32;
             state.utilities.power_produced = produced;
             // power_used is updated by the economy tick; zero it here so
             // a fresh recompute starts clean.
@@ -356,6 +362,18 @@ mod tests {
         // Neighbours are Land (not carriers) — should not be powered
         assert!(!g.tile_at(1, 2).unwrap().is_powered());
         assert_eq!(g.utilities.power_produced, 60);
+    }
+
+    #[test]
+    fn underfunded_power_department_browns_out() {
+        let mut g = grid(5, 5);
+        g.tile_at_mut(2, 2).unwrap().power_plant_mw = 60;
+        g.policy.fund_power = 50;
+        recompute_utility_network(&mut g, UtilityKind::Power);
+        assert_eq!(
+            g.utilities.power_produced, 30,
+            "50% power funding should halve plant output"
+        );
     }
 
     #[test]

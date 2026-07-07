@@ -44,6 +44,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::start,
             commands::apply_tool,
             commands::set_speed,
+            commands::set_budget_policy,
             commands::stop,
             commands::get_snapshot,
             commands::load_snapshot,

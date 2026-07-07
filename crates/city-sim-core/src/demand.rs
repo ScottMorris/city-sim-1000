@@ -284,12 +284,27 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
     // default to true matching createDefaultSettings().
     let pending_penalty_enabled = true;
 
+    // Fiscal policy pressure — taxes above the 9% neutral rate suppress that
+    // zone class's demand (2 points per percentage point, and a matching
+    // boost below 9%); underfunded transport frustrates commuters and drags
+    // all three classes (up to 8 points at 0% funding). All terms are exactly
+    // 0.0 at the neutral defaults.
+    const NEUTRAL_TAX: f32 = 9.0;
+    const TAX_DEMAND_SLOPE: f32 = 2.0;
+    const TRANSPORT_DRAG_SLOPE: f32 = 0.08;
+    let tax_penalty_res = (state.policy.tax_residential as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
+    let tax_penalty_com = (state.policy.tax_commercial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
+    let tax_penalty_ind = (state.policy.tax_industrial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
+    let transport_drag = (100.0 - state.policy.fund_transport as f32) * TRANSPORT_DRAG_SLOPE;
+
     let residential = compute_demand(&DemandInput {
         base: 70.0,
         fill_fraction: fill_residential,
         workforce_term: 0.0,
         labour_term: labour.vacancy_rate * 60.0 - labour.unemployment_rate * 80.0
-            + education_demand_delta,
+            + education_demand_delta
+            - tax_penalty_res
+            - transport_drag,
         pending_zones: pending_residential,
         pending_slope: 0.45,
         utility_penalty,
@@ -303,7 +318,9 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
         base: 50.0,
         fill_fraction: fill_commercial,
         workforce_term: labour.unemployment_rate * 30.0 + (pop / pop_cap.max(1.0)).min(1.0) * 20.0
-            - workforce_penalty * 0.6,
+            - workforce_penalty * 0.6
+            - tax_penalty_com
+            - transport_drag,
         labour_term: 0.0,
         pending_zones: pending_commercial,
         pending_slope: 0.35,
@@ -319,7 +336,9 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
         fill_fraction: fill_industrial,
         workforce_term: labour.unemployment_rate * 80.0
             + (0.95_f32 - fill_industrial).max(0.0) * 20.0
-            - workforce_penalty,
+            - workforce_penalty
+            - tax_penalty_ind
+            - transport_drag,
         labour_term: labour.vacancy_rate * -5.0,
         pending_zones: pending_industrial,
         pending_slope: 0.35,

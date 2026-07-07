@@ -7,6 +7,7 @@ Grants access to all city-sim simulation commands.
 - `allow-start`
 - `allow-apply-tool`
 - `allow-set-speed`
+- `allow-set-budget-policy`
 - `allow-stop`
 
 ## Permission Table
@@ -170,6 +171,32 @@ Enables the load_snapshot command without any pre-configured scope.
 <td>
 
 Denies the load_snapshot command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-set-budget-policy`
+
+</td>
+<td>
+
+Enables the set_budget_policy command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-set-budget-policy`
+
+</td>
+<td>
+
+Denies the set_budget_policy command without any pre-configured scope.
 
 </td>
 </tr>
