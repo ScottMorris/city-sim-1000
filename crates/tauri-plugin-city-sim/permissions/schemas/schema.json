@@ -379,6 +379,18 @@
           "markdownDescription": "Denies the set_budget_policy command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_natural_terrain command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-natural-terrain",
+          "markdownDescription": "Enables the set_natural_terrain command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_natural_terrain command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-natural-terrain",
+          "markdownDescription": "Denies the set_natural_terrain command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_speed command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-speed",
@@ -389,6 +401,18 @@
           "type": "string",
           "const": "deny-set-speed",
           "markdownDescription": "Denies the set_speed command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_wilderness_policy command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-wilderness-policy",
+          "markdownDescription": "Enables the set_wilderness_policy command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_wilderness_policy command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-wilderness-policy",
+          "markdownDescription": "Denies the set_wilderness_policy command without any pre-configured scope."
         },
         {
           "description": "Enables the start command without any pre-configured scope.",
@@ -427,10 +451,10 @@
           "markdownDescription": "Denies the undo_last_command command without any pre-configured scope."
         },
         {
-          "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-budget-policy`\n- `allow-stop`",
+          "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-budget-policy`\n- `allow-set-wilderness-policy`\n- `allow-set-natural-terrain`\n- `allow-stop`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-budget-policy`\n- `allow-stop`"
+          "markdownDescription": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-budget-policy`\n- `allow-set-wilderness-policy`\n- `allow-set-natural-terrain`\n- `allow-stop`"
         }
       ]
     }

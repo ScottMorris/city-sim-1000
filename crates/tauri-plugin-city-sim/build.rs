@@ -3,6 +3,8 @@ const COMMANDS: &[&str] = &[
     "apply_tool",
     "set_speed",
     "set_budget_policy",
+    "set_wilderness_policy",
+    "set_natural_terrain",
     "stop",
     "get_snapshot",
     "load_snapshot",

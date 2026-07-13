@@ -12,7 +12,7 @@ use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
-use city_sim_protocol::commands::{BudgetPolicy, Tool};
+use city_sim_protocol::commands::{BudgetPolicy, Tool, WildernessPolicy};
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
 
@@ -38,6 +38,10 @@ pub struct TickEvent {
     pub demand_residential: f32,
     pub demand_commercial: f32,
     pub demand_industrial: f32,
+    /// Wilderness score 0–100 (see `city_sim_core::wilderness`).
+    pub wilderness_score: f32,
+    /// Fast EMA − slow EMA of the score; sign gives the HUD trend arrow.
+    pub wilderness_trend: f32,
     pub width: u32,
     pub height: u32,
     /// Tile kinds, one byte per tile, row-major. Values match `TileKind` u8 discriminants.
@@ -50,6 +54,8 @@ pub enum SimCmd {
     ApplyTool(Tool, u32, u32),
     SetSpeed(f32),
     SetBudgetPolicy(BudgetPolicy),
+    SetWildernessPolicy(WildernessPolicy),
+    SetNaturalTerrain(Vec<u8>),
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
     GetMapSeed(mpsc::SyncSender<MapSeed>),
@@ -117,6 +123,8 @@ fn build_tick_event(sim: &Simulation) -> TickEvent {
         demand_residential: s.demand.residential,
         demand_commercial: s.demand.commercial,
         demand_industrial: s.demand.industrial,
+        wilderness_score: s.wilderness.score,
+        wilderness_trend: s.wilderness.trend,
         width: s.width,
         height: s.height,
         tiles,
@@ -177,6 +185,15 @@ pub fn start(
                     Ok(SimCmd::SetBudgetPolicy(policy)) => {
                         sim.state.policy = policy.clamped();
                     }
+                    Ok(SimCmd::SetWildernessPolicy(policy)) => {
+                        sim.state.wilderness_policy = policy;
+                    }
+                    Ok(SimCmd::SetNaturalTerrain(kinds)) => {
+                        // Record in the log so replays (undo, loadCommandLog)
+                        // rebuild the same map, then apply to the live state.
+                        log.set_terrain(kinds.clone());
+                        sim.state.seed_natural_terrain(&kinds);
+                    }
                     Ok(SimCmd::GetSnapshot(tx)) => {
                         let result = snapshot::to_bytes(&sim.state).map_err(|e| e.to_string());
                         let _ = tx.send(result);
@@ -200,17 +217,27 @@ pub fn start(
                         let _ = tx.send(result);
                     }
                     Ok(SimCmd::LoadCommandLog(loaded_log)) => {
+                        // Policies are not part of the command log — carry them
+                        // across the replay (matches the WASM host's undo).
                         let prev_speed = sim.speed();
+                        let prev_policy = sim.state.policy;
+                        let prev_wilderness_policy = sim.state.wilderness_policy;
                         sim = loaded_log.replay();
                         sim.set_speed(prev_speed);
+                        sim.state.policy = prev_policy;
+                        sim.state.wilderness_policy = prev_wilderness_policy;
                         log = *loaded_log;
                     }
                     Ok(SimCmd::UndoLast(tx)) => {
                         let happened = log.pop();
                         if happened {
                             let prev_speed = sim.speed();
+                            let prev_policy = sim.state.policy;
+                            let prev_wilderness_policy = sim.state.wilderness_policy;
                             sim = log.replay();
                             sim.set_speed(prev_speed);
+                            sim.state.policy = prev_policy;
+                            sim.state.wilderness_policy = prev_wilderness_policy;
                         }
                         let _ = tx.send(happened);
                     }
@@ -269,6 +296,30 @@ pub fn set_budget_policy(
         fund_power,
         fund_civic,
     }))
+}
+
+/// Toggle the wilderness programmes (Nature Reserve, Green Industry).
+/// Applies from the next wilderness recompute (within ~10 ticks).
+#[tauri::command]
+pub fn set_wilderness_policy(
+    state: State<'_, SimState>,
+    nature_reserve: bool,
+    green_industry: bool,
+) -> Result<(), Error> {
+    state.send(SimCmd::SetWildernessPolicy(WildernessPolicy {
+        nature_reserve,
+        green_industry,
+    }))
+}
+
+/// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+///
+/// Only `Water`/`Tree` kinds are applied onto untouched `Land` tiles — see
+/// `GameState::seed_natural_terrain`. Recorded in the command log so undo
+/// replays rebuild the same map. Call once, right after `start`.
+#[tauri::command]
+pub fn set_natural_terrain(state: State<'_, SimState>, kinds: Vec<u8>) -> Result<(), Error> {
+    state.send(SimCmd::SetNaturalTerrain(kinds))
 }
 
 /// Stop the simulation thread. The `on_tick` channel will stop receiving events.

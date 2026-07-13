@@ -8,6 +8,8 @@ Grants access to all city-sim simulation commands.
 - `allow-apply-tool`
 - `allow-set-speed`
 - `allow-set-budget-policy`
+- `allow-set-wilderness-policy`
+- `allow-set-natural-terrain`
 - `allow-stop`
 
 ## Permission Table
@@ -204,6 +206,32 @@ Denies the set_budget_policy command without any pre-configured scope.
 <tr>
 <td>
 
+`city-sim:allow-set-natural-terrain`
+
+</td>
+<td>
+
+Enables the set_natural_terrain command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-set-natural-terrain`
+
+</td>
+<td>
+
+Denies the set_natural_terrain command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `city-sim:allow-set-speed`
 
 </td>
@@ -223,6 +251,32 @@ Enables the set_speed command without any pre-configured scope.
 <td>
 
 Denies the set_speed command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-set-wilderness-policy`
+
+</td>
+<td>
+
+Enables the set_wilderness_policy command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-set-wilderness-policy`
+
+</td>
+<td>
+
+Denies the set_wilderness_policy command without any pre-configured scope.
 
 </td>
 </tr>
