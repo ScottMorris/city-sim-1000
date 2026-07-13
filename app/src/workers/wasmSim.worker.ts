@@ -72,6 +72,20 @@ export interface SimStats {
   budgetMaintZonesRes: number;
   budgetMaintZonesCom: number;
   budgetMaintZonesInd: number;
+  budgetRevenueTourism: number;
+  wildernessScore: number;
+  wildernessTrend: number;
+  wildernessForests: number;
+  wildernessParks: number;
+  wildernessOpenLand: number;
+  wildernessWaterEdge: number;
+  wildernessPatch: number;
+  wildernessFragmentation: number;
+  wildernessZones: number;
+  wildernessIndustry: number;
+  wildernessTransport: number;
+  wildernessPower: number;
+  wildernessCivic: number;
 }
 
 /** Fiscal policy as a flat tuple-ish record (mirrors SimHost.set_budget_policy args). */
@@ -151,6 +165,20 @@ function gatherStats(h: SimHost): SimStats {
     budgetMaintZonesRes:     h.budget_maint_zones_res(),
     budgetMaintZonesCom:     h.budget_maint_zones_com(),
     budgetMaintZonesInd:     h.budget_maint_zones_ind(),
+    budgetRevenueTourism:    h.budget_revenue_tourism(),
+    wildernessScore:         h.wilderness_score(),
+    wildernessTrend:         h.wilderness_trend(),
+    wildernessForests:       h.wilderness_forests(),
+    wildernessParks:         h.wilderness_parks(),
+    wildernessOpenLand:      h.wilderness_open_land(),
+    wildernessWaterEdge:     h.wilderness_water_edge(),
+    wildernessPatch:         h.wilderness_patch(),
+    wildernessFragmentation: h.wilderness_fragmentation(),
+    wildernessZones:         h.wilderness_zones(),
+    wildernessIndustry:      h.wilderness_industry(),
+    wildernessTransport:     h.wilderness_transport(),
+    wildernessPower:         h.wilderness_power(),
+    wildernessCivic:         h.wilderness_civic(),
   };
 }
 

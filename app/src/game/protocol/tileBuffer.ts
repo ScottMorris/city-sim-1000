@@ -9,14 +9,15 @@
  *   elevation[N]        u8   — unsigned elevation (0–255)
  *   building_id[N]      u16  — building ID, little-endian (0 = none)
  *   underground_kind[N] u8   — TileKind u8 of buried tile (0xFF = none)
+ *   wilderness[N]       u8   — per-tile eco value, quantised (128 = neutral)
  *
- * Total: N × 7 bytes.
+ * Total: N × 8 bytes.
  *
  * On the web path the buffer is a SharedArrayBuffer owned by the Worker.
  * The main thread reads it via typed array views without copying.
  */
 
-export const BYTES_PER_TILE = 7;
+export const BYTES_PER_TILE = 8;
 
 export function tileBufferOffsets(n: number) {
   return {
@@ -26,6 +27,7 @@ export function tileBufferOffsets(n: number) {
     elevation:       n * 3,
     buildingId:      n * 4,   // u16le → occupies n*2 bytes starting here
     undergroundKind: n * 6,   // TileKind u8 (0xFF = none; 0 = TileKind::Land)
+    wilderness:      n * 7,   // quantised eco value (see decodeEco)
   } as const;
 }
 
@@ -49,4 +51,18 @@ export function decodeHappiness(u8: number): number {
  */
 export function encodeHappiness(h: number): number {
   return Math.floor(Math.min(Math.max(h, 0), 2) * 127.5);
+}
+
+/** Half-range of the per-tile eco value carried in the wilderness field. */
+export const ECO_RANGE = 10;
+
+/** Decode a u8 wilderness byte back to the eco float range (−10..+10). */
+export function decodeEco(v: number): number {
+  return ((v - 128) / 127) * ECO_RANGE;
+}
+
+/** Encode an eco float to u8, matching Rust's truncating cast (128 = neutral). */
+export function encodeEco(eco: number): number {
+  const clamped = Math.min(Math.max(eco, -ECO_RANGE), ECO_RANGE);
+  return Math.trunc((clamped / ECO_RANGE) * 127 + 128);
 }

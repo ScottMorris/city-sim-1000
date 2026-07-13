@@ -137,6 +137,10 @@ pub struct WildernessStats {
     /// True once the EMAs have been seeded by a first recompute.
     pub seeded: bool,
     pub breakdown: WildernessBreakdown,
+    /// Per-tile eco field quantised via `city_sim_protocol::tile_buffer::encode_eco`
+    /// (128 = neutral). Feeds the `wilderness[N]` tile-buffer array for the
+    /// overlay heatmap. Empty until the first recompute.
+    pub local_field: Vec<u8>,
 }
 
 /// Full result of one wilderness recompute.

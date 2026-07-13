@@ -334,6 +334,7 @@ export class WasmSimBridge implements SimBridge {
     b.breakdown.revenue.residents   = stats.budgetRevenuePop;
     b.breakdown.revenue.commercial  = stats.budgetRevenueCommercial;
     b.breakdown.revenue.industrial  = stats.budgetRevenueIndustrial;
+    b.breakdown.revenue.tourism     = stats.budgetRevenueTourism;
     b.breakdown.expenses.transport  = stats.budgetExpensesTransport;
     b.breakdown.expenses.buildings  = stats.budgetExpensesBuildings;
     b.breakdown.details.transport.roads      = stats.budgetMaintRoads;
@@ -360,6 +361,20 @@ export class WasmSimBridge implements SimBridge {
       commercial:  stats.budgetMaintZonesCom,
       industrial:  stats.budgetMaintZonesInd,
     };
+    const wild = this.state.wilderness;
+    wild.score = stats.wildernessScore;
+    wild.trend = stats.wildernessTrend;
+    wild.breakdown.forests       = stats.wildernessForests;
+    wild.breakdown.parks         = stats.wildernessParks;
+    wild.breakdown.openLand      = stats.wildernessOpenLand;
+    wild.breakdown.waterEdge     = stats.wildernessWaterEdge;
+    wild.breakdown.patch         = stats.wildernessPatch;
+    wild.breakdown.fragmentation = stats.wildernessFragmentation;
+    wild.breakdown.zones         = stats.wildernessZones;
+    wild.breakdown.industry      = stats.wildernessIndustry;
+    wild.breakdown.transport     = stats.wildernessTransport;
+    wild.breakdown.power         = stats.wildernessPower;
+    wild.breakdown.civic         = stats.wildernessCivic;
     // Record the daily budget history TS-side so the quarterly panel works
     // on the WASM path (the Rust sim keeps its own history internally but it
     // isn't carried over the stats wire).
@@ -415,6 +430,8 @@ export class WasmSimBridge implements SimBridge {
       tile.buildingId = bid === 0 ? undefined : bid;
       const ugByte = bytes[o.undergroundKind + i];
       tile.underground = ugByte === 0xFF ? undefined : tileKindFromU8(ugByte);
+      // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
+      tile.wilderness = bytes[o.wilderness + i] / 255;
     }
 
     // Rebuild state.buildings so multi-tile sprite rendering has correct origins.

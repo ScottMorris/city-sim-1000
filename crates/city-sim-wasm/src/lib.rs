@@ -167,6 +167,48 @@ impl SimHost {
     pub fn budget_maint_zones_ind(&self) -> f32 {
         self.sim.state.budget.maint_zones_ind
     }
+    pub fn budget_revenue_tourism(&self) -> f32 {
+        self.sim.state.budget.revenue_tourism
+    }
+    pub fn wilderness_score(&self) -> f32 {
+        self.sim.state.wilderness.score
+    }
+    pub fn wilderness_trend(&self) -> f32 {
+        self.sim.state.wilderness.trend
+    }
+    pub fn wilderness_forests(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.forests
+    }
+    pub fn wilderness_parks(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.parks
+    }
+    pub fn wilderness_open_land(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.open_land
+    }
+    pub fn wilderness_water_edge(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.water_edge
+    }
+    pub fn wilderness_patch(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.patch
+    }
+    pub fn wilderness_fragmentation(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.fragmentation
+    }
+    pub fn wilderness_zones(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.zones
+    }
+    pub fn wilderness_industry(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.industry
+    }
+    pub fn wilderness_transport(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.transport
+    }
+    pub fn wilderness_power(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.power
+    }
+    pub fn wilderness_civic(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.civic
+    }
     pub fn set_money(&mut self, amount: f64) {
         self.sim.state.money = amount as i64;
     }
@@ -276,6 +318,15 @@ impl SimHost {
             buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
             // 0xFF = no underground (0 = TileKind::Land, not a valid sentinel).
             buf[o.underground_kind + i] = tile.underground.map_or(0xFF, |k| k as u8);
+            // 128 = neutral until the first wilderness recompute fills the field.
+            buf[o.wilderness + i] = self
+                .sim
+                .state
+                .wilderness
+                .local_field
+                .get(i)
+                .copied()
+                .unwrap_or(128);
         }
         buf
     }

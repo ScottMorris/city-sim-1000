@@ -150,6 +150,11 @@ impl Simulation {
             let out = compute_wilderness(&self.state, &self.wilderness_tunables);
             update_trend(&mut self.state.wilderness, out.score, &self.wilderness_tunables);
             self.state.wilderness.breakdown = out.breakdown;
+            self.state.wilderness.local_field = out
+                .eco_field
+                .iter()
+                .map(|&e| city_sim_protocol::tile_buffer::encode_eco(e))
+                .collect();
             apply_happiness_drift(&mut self.state, out.score, &self.wilderness_tunables);
         }
 
