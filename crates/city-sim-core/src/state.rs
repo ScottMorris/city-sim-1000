@@ -5,6 +5,7 @@
 
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
+use crate::wilderness::WildernessStats;
 use city_sim_protocol::commands::BudgetPolicy;
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
@@ -230,6 +231,8 @@ pub struct BudgetStats {
     pub revenue_pop: f32,
     pub revenue_commercial: f32,
     pub revenue_industrial: f32,
+    /// Tourism dividend — paid when the wilderness score clears its threshold.
+    pub revenue_tourism: f32,
     // Expense breakdown
     pub expenses_transport: f32,
     pub expenses_buildings: f32,
@@ -345,6 +348,9 @@ pub struct GameState {
     /// screen. Defaults are neutral (9% taxes, 100% funding), which
     /// reproduces the pre-policy economy bit-for-bit.
     pub policy: BudgetPolicy,
+    /// Wilderness score, trend, and breakdown — recomputed every
+    /// `WildernessTunables::recompute_interval_ticks` by the tick loop.
+    pub wilderness: WildernessStats,
 }
 
 impl GameState {
@@ -376,6 +382,7 @@ impl GameState {
             budget: BudgetStats::default(),
             budget_history: VecDeque::new(),
             policy: BudgetPolicy::default(),
+            wilderness: WildernessStats::default(),
         }
     }
 

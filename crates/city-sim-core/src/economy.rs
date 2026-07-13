@@ -5,6 +5,7 @@
 
 use crate::buildings::get_building_template;
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
+use crate::wilderness::{tourism_dividend, WildernessTunables};
 use city_sim_protocol::commands::BudgetPolicy;
 use city_sim_protocol::tile_kind::TileKind;
 
@@ -166,7 +167,14 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     let revenue_pop = state.population as f32 * 1.5 * tax_res;
     let revenue_commercial = commercial_zones as f32 * 6.0 * tax_com;
     let revenue_industrial = industrial_zones as f32 * 8.0 * tax_ind;
-    let revenue = revenue_base + revenue_pop + revenue_commercial + revenue_industrial;
+    // Tourism dividend — high-wilderness cities draw visitors (#8).
+    let revenue_tourism = tourism_dividend(
+        state.wilderness.score,
+        state.population,
+        &WildernessTunables::default(),
+    );
+    let revenue =
+        revenue_base + revenue_pop + revenue_commercial + revenue_industrial + revenue_tourism;
 
     // Expenses
     let expenses_transport = maint_roads + maint_rail + maint_power_lines + maint_pipes;
@@ -188,6 +196,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         revenue_pop,
         revenue_commercial,
         revenue_industrial,
+        revenue_tourism,
         expenses_transport,
         expenses_buildings,
         maint_power,
