@@ -176,10 +176,21 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     let revenue =
         revenue_base + revenue_pop + revenue_commercial + revenue_industrial + revenue_tourism;
 
+    // Wilderness programme costs: a flat daily fee for the Nature Reserve
+    // and a per-industrial-zone subsidy for Green Industry (#9).
+    let wt = WildernessTunables::default();
+    let mut expenses_policies = 0.0_f32;
+    if state.wilderness_policy.nature_reserve {
+        expenses_policies += wt.reserve_cost_per_day;
+    }
+    if state.wilderness_policy.green_industry {
+        expenses_policies += industrial_zones as f32 * wt.green_industry_subsidy_per_zone;
+    }
+
     // Expenses
     let expenses_transport = maint_roads + maint_rail + maint_power_lines + maint_pipes;
     let expenses_buildings = maint_power + maint_civic + maint_zones;
-    let expenses = expenses_transport + expenses_buildings;
+    let expenses = expenses_transport + expenses_buildings + expenses_policies;
 
     let net = revenue - expenses;
     // net_per_day matches TS `net * 0.2 * 1.5`
@@ -199,6 +210,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         revenue_tourism,
         expenses_transport,
         expenses_buildings,
+        expenses_policies,
         maint_power,
         maint_civic,
         maint_zones,
@@ -533,6 +545,32 @@ mod tests {
         assert_eq!(b.revenue_pop, 37.0_f32 * 1.5);
         assert_eq!(b.revenue_commercial, 6.0);
         assert_eq!(b.maint_roads, 0.1);
+    }
+
+    #[test]
+    fn wilderness_programmes_cost_money() {
+        use city_sim_protocol::commands::WildernessPolicy;
+        use crate::wilderness::WildernessTunables;
+
+        let mut s = gs(4, 4);
+        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Industrial;
+        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Industrial;
+        let t = WildernessTunables::default();
+
+        let before = compute_daily_budget(&s);
+        assert_eq!(before.expenses_policies, 0.0);
+
+        s.wilderness_policy = WildernessPolicy {
+            nature_reserve: true,
+            green_industry: true,
+        };
+        let after = compute_daily_budget(&s);
+        let expected = t.reserve_cost_per_day + 2.0 * t.green_industry_subsidy_per_zone;
+        assert!((after.expenses_policies - expected).abs() < 0.001);
+        assert!(
+            (after.expenses - (before.expenses + expected)).abs() < 0.001,
+            "programme costs must flow into total expenses"
+        );
     }
 
     #[test]

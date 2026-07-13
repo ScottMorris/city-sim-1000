@@ -90,6 +90,10 @@ export class LocalSimBridge implements SimBridge {
         // The TS sim reads policy straight off the shared GameState each tick.
         this.state.budgetPolicy = cmd.policy;
         return { success: true };
+      case 'SetWildernessPolicy':
+        // Wilderness is excluded from the TS oracle; store for display only.
+        this.state.wildernessPolicy = cmd.policy;
+        return { success: true };
     }
   }
 

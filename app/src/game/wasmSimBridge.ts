@@ -121,6 +121,7 @@ export class WasmSimBridge implements SimBridge {
         money: preloadCommands ? state.money : undefined,
         targetTick: preloadCommands ? state.tick : undefined,
         policy: state.budgetPolicy,
+        wildernessPolicy: state.wildernessPolicy,
       },
     });
   }
@@ -174,6 +175,12 @@ export class WasmSimBridge implements SimBridge {
           this.worker.postMessage({ type: 'set_policy', payload: cmd.policy });
         }
         break;
+      case 'SetWildernessPolicy':
+        this.state.wildernessPolicy = cmd.policy;
+        if (this.ready) {
+          this.worker.postMessage({ type: 'set_wilderness_policy', payload: cmd.policy });
+        }
+        break;
     }
     return { success: true };
   }
@@ -207,6 +214,7 @@ export class WasmSimBridge implements SimBridge {
           money: state.money,
           targetTick: state.tick,
           policy: state.budgetPolicy,
+          wildernessPolicy: state.wildernessPolicy,
         },
       });
     } else {
@@ -275,8 +283,9 @@ export class WasmSimBridge implements SimBridge {
         if (this.speedMult !== 1) {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
         }
-        // Policy may have changed while the worker was still booting.
+        // Policies may have changed while the worker was still booting.
         this.worker.postMessage({ type: 'set_policy', payload: this.state.budgetPolicy });
+        this.worker.postMessage({ type: 'set_wilderness_policy', payload: this.state.wildernessPolicy });
         this.handler?.({ type: 'Ready' });
         break;
       case 'step_result':
@@ -337,6 +346,7 @@ export class WasmSimBridge implements SimBridge {
     b.breakdown.revenue.tourism     = stats.budgetRevenueTourism;
     b.breakdown.expenses.transport  = stats.budgetExpensesTransport;
     b.breakdown.expenses.buildings  = stats.budgetExpensesBuildings;
+    b.breakdown.expenses.policies   = stats.budgetExpensesPolicies;
     b.breakdown.details.transport.roads      = stats.budgetMaintRoads;
     b.breakdown.details.transport.rail       = stats.budgetMaintRail;
     b.breakdown.details.transport.powerLines = stats.budgetMaintPowerLines;

@@ -137,7 +137,15 @@ function expenseRows(state: GameState): LedgerRow[] {
         { label: 'Commercial', value: toNumber(zonesBy.commercial) },
         { label: 'Industrial', value: toNumber(zonesBy.industrial) }
       ]
-    }
+    },
+    // Only present while a wilderness programme is active (Bylaws screen).
+    ...(toNumber(state.budget.breakdown.expenses.policies) > 0
+      ? [{
+          label: '🌿 Wilderness programmes',
+          value: toNumber(state.budget.breakdown.expenses.policies),
+          colour: '#8ee08e'
+        }]
+      : [])
   ];
 }
 

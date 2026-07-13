@@ -523,7 +523,9 @@ export class Simulation {
         },
         expenses: {
           transport: expensesTransport,
-          buildings: expensesBuildings
+          buildings: expensesBuildings,
+          // Wilderness programmes are excluded from the TS parity oracle.
+          policies: 0
         },
         details: {
           transport: {

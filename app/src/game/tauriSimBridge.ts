@@ -104,6 +104,11 @@ export class TauriSimBridge implements SimBridge {
         this.state.budgetPolicy = cmd.policy;
         void pluginSetBudgetPolicy(cmd.policy);
         return { success: true };
+      case 'SetWildernessPolicy':
+        // Tracked TS-side only for now; the native plugin command lands with
+        // the next tauri-plugin-city-sim update.
+        this.state.wildernessPolicy = cmd.policy;
+        return { success: true };
     }
   }
 

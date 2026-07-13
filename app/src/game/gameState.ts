@@ -5,7 +5,12 @@
 
 import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
-import { createDefaultBudgetPolicy, type BudgetPolicy } from './protocol/commands';
+import {
+  createDefaultBudgetPolicy,
+  createDefaultWildernessPolicy,
+  type BudgetPolicy,
+  type WildernessPolicy
+} from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
@@ -172,6 +177,8 @@ export interface BudgetStats {
     expenses: {
       transport: number;
       buildings: number;
+      /** Daily cost of active wilderness programmes. */
+      policies: number;
     };
     details: {
       transport: {
@@ -219,6 +226,8 @@ export interface GameState {
   budgetPolicy: BudgetPolicy;
   /** Wilderness score, trend, and breakdown — computed by the Rust sim. */
   wilderness: WildernessStats;
+  /** Active wilderness programmes (Nature Reserve, Green Industry). */
+  wildernessPolicy: WildernessPolicy;
   settings: GameSettings;
 }
 
@@ -350,7 +359,7 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       netPerMonth: 0,
       breakdown: {
         revenue: { base: 0, residents: 0, commercial: 0, industrial: 0, tourism: 0 },
-        expenses: { transport: 0, buildings: 0 },
+        expenses: { transport: 0, buildings: 0, policies: 0 },
         details: {
           transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
           buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
@@ -376,6 +385,7 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     bylaws: { ...DEFAULT_BYLAWS },
     budgetPolicy: createDefaultBudgetPolicy(),
     wilderness: createDefaultWildernessStats(),
+    wildernessPolicy: createDefaultWildernessPolicy(),
     settings: createDefaultSettings()
   };
 }

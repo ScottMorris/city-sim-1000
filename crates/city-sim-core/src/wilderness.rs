@@ -17,6 +17,7 @@
 //! excluded from the TS parity oracle (`simulation.ts`).
 
 use crate::state::GameState;
+use city_sim_protocol::commands::WildernessPolicy;
 use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,34 @@ pub struct WildernessTunables {
     pub dividend_threshold: f32,
     /// …and pays this many dollars per citizen per day at score 100.
     pub dividend_per_capita: f32,
+    // --- Wilderness programmes (#9) ---
+    /// Score required before the Nature Reserve programme can be enabled.
+    pub reserve_unlock_score: f32,
+    /// Patch bonus cap while Nature Reserve is active (replaces `patch_bonus_cap`).
+    pub reserve_patch_bonus_cap: f32,
+    /// Fragmentation penalty while Nature Reserve is active.
+    pub reserve_fragmentation_penalty: f32,
+    /// Flat daily cost of the Nature Reserve programme.
+    pub reserve_cost_per_day: f32,
+    /// Industrial base eco while Green Industry is active (replaces −5).
+    pub green_industry_eco: f32,
+    /// Daily subsidy per industrial zone tile while Green Industry is active.
+    pub green_industry_subsidy_per_zone: f32,
+}
+
+impl WildernessTunables {
+    /// Tunables with the active wilderness programmes applied.
+    pub fn effective(&self, policy: &WildernessPolicy) -> Self {
+        let mut t = self.clone();
+        if policy.nature_reserve {
+            t.patch_bonus_cap = self.reserve_patch_bonus_cap;
+            t.fragmentation_penalty = self.reserve_fragmentation_penalty;
+        }
+        if policy.green_industry {
+            t.base_eco[TileKind::Industrial as usize] = self.green_industry_eco;
+        }
+        t
+    }
 }
 
 impl Default for WildernessTunables {
@@ -99,6 +128,12 @@ impl Default for WildernessTunables {
             happiness_drift_rate: 0.02,
             dividend_threshold: 60.0,
             dividend_per_capita: 0.4,
+            reserve_unlock_score: 60.0,
+            reserve_patch_bonus_cap: 3.0,
+            reserve_fragmentation_penalty: 1.0,
+            reserve_cost_per_day: 100.0,
+            green_industry_eco: -2.0,
+            green_industry_subsidy_per_zone: 2.0,
         }
     }
 }
@@ -660,6 +695,62 @@ mod tests {
         assert!(mid > 0.0 && max > mid);
         assert!((max - 1000.0 * t.dividend_per_capita).abs() < 0.001);
         assert_eq!(tourism_dividend(100.0, 0, &t), 0.0, "no citizens, no tourism");
+    }
+
+    // --- wilderness programmes (#9) ---
+
+    #[test]
+    fn nature_reserve_raises_score_of_fragmented_nature() {
+        let mut s = grid(16, 16);
+        // Scattered trees: heavy fragmentation, small clusters.
+        for y in (0..16).step_by(3) {
+            for x in (0..16).step_by(3) {
+                set(&mut s, x, y, TileKind::Tree);
+            }
+        }
+        let base = WildernessTunables::default();
+        let reserve = base.effective(&WildernessPolicy {
+            nature_reserve: true,
+            green_industry: false,
+        });
+        let without = compute_wilderness(&s, &base).score;
+        let with = compute_wilderness(&s, &reserve).score;
+        assert!(
+            with > without,
+            "nature reserve must raise a fragmented map's score ({with} vs {without})"
+        );
+    }
+
+    #[test]
+    fn green_industry_softens_industrial_pressure() {
+        let mut s = grid(16, 16);
+        for x in 0..8 {
+            set(&mut s, x, 0, TileKind::Industrial);
+        }
+        let base = WildernessTunables::default();
+        let green = base.effective(&WildernessPolicy {
+            nature_reserve: false,
+            green_industry: true,
+        });
+        let without = compute_wilderness(&s, &base);
+        let with = compute_wilderness(&s, &green);
+        assert!(with.score > without.score);
+        assert!(
+            with.breakdown.industry > without.breakdown.industry,
+            "industry pressure must shrink (less negative) under green industry"
+        );
+    }
+
+    #[test]
+    fn effective_tunables_are_identity_when_all_programmes_off() {
+        let base = WildernessTunables::default();
+        let same = base.effective(&WildernessPolicy::default());
+        assert_eq!(same.patch_bonus_cap, base.patch_bonus_cap);
+        assert_eq!(same.fragmentation_penalty, base.fragmentation_penalty);
+        assert_eq!(
+            same.base_eco[TileKind::Industrial as usize],
+            base.base_eco[TileKind::Industrial as usize]
+        );
     }
 
     #[test]

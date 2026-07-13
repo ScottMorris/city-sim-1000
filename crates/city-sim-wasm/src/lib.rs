@@ -5,7 +5,7 @@
 
 use city_sim_core::{command_log::CommandLog, commands::apply_tool, sim::Simulation};
 use city_sim_protocol::{
-    commands::{BudgetPolicy, Tool},
+    commands::{BudgetPolicy, Tool, WildernessPolicy},
     tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE},
 };
 use wasm_bindgen::prelude::*;
@@ -170,6 +170,9 @@ impl SimHost {
     pub fn budget_revenue_tourism(&self) -> f32 {
         self.sim.state.budget.revenue_tourism
     }
+    pub fn budget_expenses_policies(&self) -> f32 {
+        self.sim.state.budget.expenses_policies
+    }
     pub fn wilderness_score(&self) -> f32 {
         self.sim.state.wilderness.score
     }
@@ -236,6 +239,15 @@ impl SimHost {
         .clamped();
     }
 
+    /// Toggle the wilderness programmes (Nature Reserve, Green Industry).
+    /// Applies from the next wilderness recompute.
+    pub fn set_wilderness_policy(&mut self, nature_reserve: bool, green_industry: bool) {
+        self.sim.state.wilderness_policy = WildernessPolicy {
+            nature_reserve,
+            green_industry,
+        };
+    }
+
     /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
     ///
     /// Only `Water`/`Tree` kinds are applied — see
@@ -285,12 +297,14 @@ impl SimHost {
             return false;
         }
         let prev_speed = self.sim.speed();
-        // Policy is not part of the command log — carry it across the replay
-        // so undoing a tool doesn't also reset taxes/funding.
+        // Policies are not part of the command log — carry them across the
+        // replay so undoing a tool doesn't also reset taxes or programmes.
         let prev_policy = self.sim.state.policy;
+        let prev_wilderness_policy = self.sim.state.wilderness_policy;
         self.sim = self.log.replay();
         self.sim.set_speed(prev_speed);
         self.sim.state.policy = prev_policy;
+        self.sim.state.wilderness_policy = prev_wilderness_policy;
         true
     }
 

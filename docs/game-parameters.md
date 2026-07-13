@@ -127,6 +127,13 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
   own City Ledger revenue line.
 - **HUD**: 🌲 ribbon chip with trend arrow (fast vs slow EMA of the score); tooltip lists
   the six biggest breakdown contributors.
+- **Programmes** (Bylaws screen, `GameState.wildernessPolicy`,
+  `SimCommand::SetWildernessPolicy`):
+  - *Nature Reserve* — unlocks at score 60 (UI-gated; stays available once enabled).
+    Patch bonus cap 2 → 3, fragmentation penalty 2 → 1. Costs **$100/day** flat.
+  - *Green Industry* — always available. Industrial base eco −5 → −2. Costs
+    **$2/day per industrial zone tile** as a subsidy.
+  - Costs appear as a "Wilderness programmes" expense line in the City Ledger.
 
 ## Radio widget (toolbar)
 - Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) plus a playlist-icon button that opens the station dropdown.

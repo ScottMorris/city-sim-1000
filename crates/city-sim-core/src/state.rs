@@ -6,7 +6,7 @@
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
-use city_sim_protocol::commands::BudgetPolicy;
+use city_sim_protocol::commands::{BudgetPolicy, WildernessPolicy};
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
 
@@ -236,6 +236,8 @@ pub struct BudgetStats {
     // Expense breakdown
     pub expenses_transport: f32,
     pub expenses_buildings: f32,
+    /// Daily cost of active wilderness programmes (Nature Reserve, Green Industry).
+    pub expenses_policies: f32,
     // Building expense sub-breakdown
     pub maint_power: f32,
     pub maint_civic: f32,
@@ -351,6 +353,9 @@ pub struct GameState {
     /// Wilderness score, trend, and breakdown — recomputed every
     /// `WildernessTunables::recompute_interval_ticks` by the tick loop.
     pub wilderness: WildernessStats,
+    /// Active wilderness programmes (Nature Reserve, Green Industry) set
+    /// from the Bylaws screen.
+    pub wilderness_policy: WildernessPolicy,
 }
 
 impl GameState {
@@ -383,6 +388,7 @@ impl GameState {
             budget_history: VecDeque::new(),
             policy: BudgetPolicy::default(),
             wilderness: WildernessStats::default(),
+            wilderness_policy: WildernessPolicy::default(),
         }
     }
 

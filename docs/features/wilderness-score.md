@@ -167,9 +167,21 @@ A ring buffer of recent daily scores lives in `GameState` (so it serializes). Th
 * **Tourism dividend**: when `score ≥ dividend_threshold` (starter: 60), a monthly income line scaled by population and by how far the score clears the threshold. Appears as its own line in the City Ledger.
 * No penalty path in the MVP (see locked decision 2).
 
-### 3) Unlocks, Restrictions, Soft Events
+### 3) Programmes (#9 — shipped alongside the MVP)
 
-Deferred — see follow-up issues #9 (policies/unlocks) and #10 (soft events).
+Two wilderness programmes on the Bylaws screen (`WildernessPolicy` in the protocol):
+
+* **Nature Reserve** — unlocks at wilderness ≥ 60 (UI-gated). Patch bonus cap 2 → 3,
+  fragmentation penalty 2 → 1, for a flat $100/day.
+* **Green Industry** — always available. Industrial base eco −5 → −2, subsidized at
+  $2/day per industrial zone tile.
+
+Costs surface as a "Wilderness programmes" expense line in the City Ledger.
+Environmental Crisis events remain deferred to soft events (#10).
+
+### 4) Soft Events
+
+Deferred — see follow-up issue #10.
 
 ---
 

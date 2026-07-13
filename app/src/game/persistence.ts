@@ -17,7 +17,11 @@ import {
   DEFAULT_SERVICE_DEFINITIONS
 } from './services';
 import { createEmptyEducationStats } from './education';
-import { clampBudgetPolicy, createDefaultBudgetPolicy } from './protocol/commands';
+import {
+  clampBudgetPolicy,
+  createDefaultBudgetPolicy,
+  createDefaultWildernessPolicy
+} from './protocol/commands';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -114,7 +118,8 @@ export function deserialize(payload: string): GameState {
     };
     parsed.budget.breakdown.expenses = {
       transport: parsed.budget.breakdown.expenses?.transport ?? 0,
-      buildings: parsed.budget.breakdown.expenses?.buildings ?? 0
+      buildings: parsed.budget.breakdown.expenses?.buildings ?? 0,
+      policies: parsed.budget.breakdown.expenses?.policies ?? 0
     };
     parsed.budget.breakdown.details = parsed.budget.breakdown.details ?? {
       transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
@@ -159,6 +164,10 @@ export function deserialize(payload: string): GameState {
       ...createDefaultWildernessStats().breakdown,
       ...(parsed.wilderness?.breakdown ?? {})
     }
+  };
+  parsed.wildernessPolicy = {
+    ...createDefaultWildernessPolicy(),
+    ...(parsed.wildernessPolicy ?? {})
   };
   parsed.bylaws = parsed.bylaws ?? { ...DEFAULT_BYLAWS };
   if (!parsed.bylaws.lighting) {

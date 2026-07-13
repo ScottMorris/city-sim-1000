@@ -147,7 +147,10 @@ impl Simulation {
         // 8.5. Wilderness — recomputed on a coarser cadence than the tick
         // rate; demand (9) and economy (10) read the stored score.
         if self.state.tick % self.wilderness_tunables.recompute_interval_ticks == 0 {
-            let out = compute_wilderness(&self.state, &self.wilderness_tunables);
+            let tunables = self
+                .wilderness_tunables
+                .effective(&self.state.wilderness_policy);
+            let out = compute_wilderness(&self.state, &tunables);
             update_trend(&mut self.state.wilderness, out.score, &self.wilderness_tunables);
             self.state.wilderness.breakdown = out.breakdown;
             self.state.wilderness.local_field = out

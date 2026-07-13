@@ -22,7 +22,7 @@ import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
 import { LocalSimBridge } from './game/localSimBridge';
 import type { SimBridge } from './game/simBridge';
-import { applyToolCmd, setBudgetPolicyCmd } from './game/protocol/commands';
+import { applyToolCmd, setBudgetPolicyCmd, setWildernessPolicyCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
 import { initMcpBridge } from './game/mcpBridge';
@@ -807,6 +807,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     onSelectLighting: (lighting) => {
       state.bylaws = state.bylaws ?? { ...DEFAULT_BYLAWS };
       state.bylaws.lighting = lighting;
+    },
+    onWildernessPolicyChange: (policy) => {
+      state.wildernessPolicy = policy;
+      bridge.send(setWildernessPolicyCmd(policy));
     }
   });
 

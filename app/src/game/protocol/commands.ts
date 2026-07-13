@@ -64,11 +64,28 @@ export function fundingMultiplier(level: number): number {
   return level / MAX_FUNDING;
 }
 
+/**
+ * Wilderness programmes — TS mirror of `WildernessPolicy` in
+ * `crates/city-sim-protocol/src/commands.rs`. Toggled from the Bylaws screen.
+ */
+export interface WildernessPolicy {
+  natureReserve: boolean;
+  greenIndustry: boolean;
+}
+
+/** Wilderness score required before Nature Reserve can be enabled. */
+export const NATURE_RESERVE_UNLOCK_SCORE = 60;
+
+export function createDefaultWildernessPolicy(): WildernessPolicy {
+  return { natureReserve: false, greenIndustry: false };
+}
+
 export type SimCommand =
   | { type: 'ApplyTool'; tool: Tool; x: number; y: number }
   | { type: 'SetSpeed'; multiplier: number }
   | { type: 'LoadState'; seed: number }
-  | { type: 'SetBudgetPolicy'; policy: BudgetPolicy };
+  | { type: 'SetBudgetPolicy'; policy: BudgetPolicy }
+  | { type: 'SetWildernessPolicy'; policy: WildernessPolicy };
 
 export interface CommandResult {
   success: boolean;
@@ -81,4 +98,8 @@ export function applyToolCmd(tool: Tool, x: number, y: number): SimCommand {
 
 export function setBudgetPolicyCmd(policy: BudgetPolicy): SimCommand {
   return { type: 'SetBudgetPolicy', policy: clampBudgetPolicy(policy) };
+}
+
+export function setWildernessPolicyCmd(policy: WildernessPolicy): SimCommand {
+  return { type: 'SetWildernessPolicy', policy };
 }
