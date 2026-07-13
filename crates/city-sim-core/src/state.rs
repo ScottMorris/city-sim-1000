@@ -403,6 +403,26 @@ impl GameState {
     pub fn tile_at_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
         self.tile_index(x, y).map(|i| &mut self.tiles[i])
     }
+
+    /// Overwrite untouched `Land` tiles with natural `Water`/`Tree` terrain
+    /// from a row-major kind byte array (one `TileKind` u8 per tile).
+    ///
+    /// Only `Water` and `Tree` are accepted — anything else in the array is
+    /// ignored so player-built kinds present in a display snapshot can never
+    /// leak into the engine as free construction. Tiles that are no longer
+    /// `Land` (already built on) are left alone.
+    pub fn seed_natural_terrain(&mut self, kinds: &[u8]) {
+        let n = self.tiles.len().min(kinds.len());
+        for i in 0..n {
+            if self.tiles[i].kind != TileKind::Land {
+                continue;
+            }
+            if let Some(k @ (TileKind::Water | TileKind::Tree)) = TileKind::from_u8(kinds[i]) {
+                self.tiles[i].kind = k;
+            }
+        }
+        self.tile_revision += 1;
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -85,14 +85,14 @@ export interface WorkerBudgetPolicy {
 }
 
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } }
+  | { type: 'init';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } }
   | { type: 'step';       payload: { dt: number } }
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
   | { type: 'set_policy'; payload: WorkerBudgetPolicy }
   | { type: 'undo' }
-  | { type: 'reset';      payload: { width: number; height: number; seed: number } }
-  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } };
+  | { type: 'reset';      payload: { width: number; height: number; seed: number; terrain?: Uint8Array } }
+  | { type: 'load';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } };
 
 function applyPolicy(h: SimHost, p: WorkerBudgetPolicy) {
   h.set_budget_policy(
@@ -160,6 +160,9 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'init': {
       await init();
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      // Terrain must land before commands so placement validation sees the
+      // real water/tree map, and before the first step so wilderness does.
+      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
       if (msg.payload.commands) {
         for (const cmd of msg.payload.commands) {
@@ -221,11 +224,13 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     }
     case 'reset': {
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       break;
     }
     case 'load': {
       if (!host) break;
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
       if (msg.payload.commands?.length) {
         for (const cmd of msg.payload.commands) {

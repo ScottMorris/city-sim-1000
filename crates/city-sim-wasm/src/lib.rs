@@ -194,6 +194,17 @@ impl SimHost {
         .clamped();
     }
 
+    /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+    ///
+    /// Only `Water`/`Tree` kinds are applied — see
+    /// `GameState::seed_natural_terrain`. Recorded in the command log so
+    /// undo replays and future bridge swaps rebuild the same map. Call once,
+    /// after construction and before any commands.
+    pub fn set_natural_terrain(&mut self, kinds: &[u8]) {
+        self.log.set_terrain(kinds.to_vec());
+        self.sim.state.seed_natural_terrain(kinds);
+    }
+
     /// Advance the simulation by `dt` seconds (real time). The speed
     /// multiplier is applied internally by `Simulation::tick`.
     pub fn step(&mut self, dt: f64) {
