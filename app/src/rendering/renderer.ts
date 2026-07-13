@@ -379,6 +379,16 @@ export class MapRenderer {
         return { color: 0xff7b7b, alpha: 0.33 };
       }
 
+      if (overlayMode === 'wilderness') {
+        if (tile.kind === TileKind.Water) return null;
+        // 0–1 with 0.5 neutral (see tileBuffer decodeEco); tint strength
+        // scales with distance from neutral — lush green up, urban grey down.
+        const delta = (tile.wilderness ?? 0.5) - 0.5;
+        if (delta > 0.02) return { color: 0x5ee6a0, alpha: Math.min(0.12 + delta * 0.7, 0.45) };
+        if (delta < -0.02) return { color: 0x9aa0a8, alpha: Math.min(0.15 + -delta * 0.8, 0.5) };
+        return null;
+      }
+
       if (overlayMode === 'education') {
         if (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) {
           return { color: 0x8f7bff, alpha: 0.4 };

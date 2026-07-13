@@ -51,9 +51,13 @@ const MODE_COPY: Record<MinimapMode, { subtitle: string; hint: string }> = {
     subtitle: 'Education overlay',
     hint: 'Schools in purple; served zones glow green, underserved zones amber.'
   },
+  wilderness: {
+    subtitle: 'Wilderness overlay',
+    hint: 'Heatmap of the eco field: lush green for thriving nature, grey for urban pressure.'
+  },
   underground: { subtitle: 'Underground', hint: 'View pipes and subsurface infrastructure.' }
 };
-const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts', 'education', 'underground'];
+const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts', 'education', 'wilderness', 'underground'];
 
 interface LayoutInfo {
   sizePx: number;
@@ -119,6 +123,10 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   educationModeBtn.className = 'chip-button';
   educationModeBtn.textContent = 'Education';
   educationModeBtn.addEventListener('click', () => setMode('education'));
+  const wildernessModeBtn = document.createElement('button');
+  wildernessModeBtn.className = 'chip-button';
+  wildernessModeBtn.textContent = 'Wilderness';
+  wildernessModeBtn.addEventListener('click', () => setMode('wilderness'));
   const undergroundModeBtn = document.createElement('button');
   undergroundModeBtn.className = 'chip-button';
   undergroundModeBtn.textContent = 'Underground';
@@ -146,7 +154,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   const actions = document.createElement('div');
   actions.className = 'minimap-actions';
-  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, undergroundModeBtn, sizeBtn].forEach((btn) => {
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, wildernessModeBtn, undergroundModeBtn, sizeBtn].forEach((btn) => {
     if (btn === sizeBtn) {
       btn.classList.add('minimap-span');
     }
@@ -242,6 +250,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     waterModeBtn.classList.toggle('active', settings.mode === 'water');
     alertsModeBtn.classList.toggle('active', settings.mode === 'alerts');
     educationModeBtn.classList.toggle('active', settings.mode === 'education');
+    wildernessModeBtn.classList.toggle('active', settings.mode === 'wilderness');
     undergroundModeBtn.classList.toggle('active', settings.mode === 'underground');
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
@@ -338,6 +347,14 @@ export function initMinimap(options: MinimapOptions): MinimapController {
           tile.services.served[ServiceId.EducationHigh];
         return served ? 'rgba(123, 255, 183, 0.75)' : 'rgba(255, 204, 112, 0.95)';
       }
+      return 'rgba(16, 26, 42, 0.9)';
+    }
+
+    if (settings.mode === 'wilderness') {
+      if (tile.kind === TileKind.Water) return '#1f68d6';
+      const delta = (tile.wilderness ?? 0.5) - 0.5;
+      if (delta > 0.02) return `rgba(94, 230, 160, ${Math.min(0.3 + delta * 1.4, 0.95).toFixed(2)})`;
+      if (delta < -0.02) return `rgba(154, 160, 168, ${Math.min(0.3 + -delta * 1.4, 0.95).toFixed(2)})`;
       return 'rgba(16, 26, 42, 0.9)';
     }
 
