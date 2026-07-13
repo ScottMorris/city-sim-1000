@@ -83,6 +83,10 @@ appRoot.innerHTML = `
         <div class="ribbon-line"><span id="population">👥 0</span></div>
         <div class="ribbon-line"><span id="jobs">💼 0</span></div>
       </div>
+      <div class="ribbon-chip" id="wilderness-chip" title="Wilderness score — how much of the map is thriving nature">
+        <div class="ribbon-line"><span id="wilderness" class="ribbon-strong">🌲 —</span></div>
+        <div class="ribbon-line"><span class="ribbon-dim">Wilderness</span></div>
+      </div>
     </div>
     <div class="ribbon-controls">
       <details class="ribbon-menu">
@@ -155,6 +159,8 @@ const comBar = requireElement<HTMLDivElement>('#com-bar');
 const indBar = requireElement<HTMLDivElement>('#ind-bar');
 const popEl = requireElement<HTMLDivElement>('#population');
 const jobsEl = requireElement<HTMLDivElement>('#jobs');
+const wildernessEl = requireElement<HTMLSpanElement>('#wilderness');
+const wildernessChip = requireElement<HTMLDivElement>('#wilderness-chip');
 const monthEl = requireElement<HTMLDivElement>('#month');
 const dayEl = requireElement<HTMLDivElement>('#day');
 const speedSlowBtn = requireElement<HTMLButtonElement>('#speed-slow');
@@ -776,6 +782,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     jobsEl,
     monthEl,
     dayEl,
+    wildernessEl,
+    wildernessChip,
     overlayRoot: wrapper
   });
   newsTicker = initNewsTicker({

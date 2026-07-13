@@ -68,12 +68,18 @@ interface LedgerRow {
 
 function revenueRows(state: GameState): LedgerRow[] {
   const r = state.budget.breakdown.revenue;
-  return [
+  const rows: LedgerRow[] = [
     { label: 'Base stipend', value: toNumber(r.base), colour: '#7bffb7' },
     { label: 'Residential taxes', value: toNumber(r.residents), colour: '#5ee6a0' },
     { label: 'Commercial taxes', value: toNumber(r.commercial), colour: '#5bc0eb' },
     { label: 'Industrial taxes', value: toNumber(r.industrial), colour: '#f0a860' }
   ];
+  // Only shown once the wilderness score has earned it — keeps the ledger
+  // clean for players who ignore the mechanic.
+  if (toNumber(r.tourism) > 0) {
+    rows.push({ label: '🌲 Tourism dividend', value: toNumber(r.tourism), colour: '#8ee08e' });
+  }
+  return rows;
 }
 
 function expenseRows(state: GameState): LedgerRow[] {

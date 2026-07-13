@@ -108,6 +108,26 @@ and mirrored into the Rust sim via `SimCommand::SetBudgetPolicy`.
   - Civic: crowded schools — service capacity scales with funding (`capacity × funding%`).
 - Old saves back-fill the neutral policy; out-of-range values clamp on load.
 
+## Wilderness Score
+
+Computed in Rust (`crates/city-sim-core/src/wilderness.rs`) every 10 ticks; all constants
+live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
+
+- **Score**: `100 · P / (P + U + k)` where P sums positive per-tile eco values, U sums
+  negative magnitudes, and `k = 0.5 × buildable tiles`. An untouched map lands ≈ 67.
+- **Base eco weights**: Tree +6, Park +4, Land +1, Water 0 (edge-bonus donor);
+  Residential/schools/pumps/towers/power lines/wind/solar −1, Commercial/roads/rail/hydro −2,
+  Industrial −5, Coal −8. Underground water pipes are excluded.
+- **Ecosystem adjustments** (Tree/Park only): patch bonus up to +2 on a saturating curve
+  (reference cluster size 32), water-edge bonus +2, fragmentation penalty −2 when a nature
+  tile has fewer than 3 nature 8-neighbours.
+- **Consequences**: Residential demand ±6 points at the score extremes (0 at 50);
+  zone-tile happiness drifts toward `1.0 ± 0.2` (2% of the gap per recompute);
+  tourism dividend above score 60, up to **$0.40/citizen/day** at score 100, shown as its
+  own City Ledger revenue line.
+- **HUD**: 🌲 ribbon chip with trend arrow (fast vs slow EMA of the score); tooltip lists
+  the six biggest breakdown contributors.
+
 ## Radio widget (toolbar)
 - Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) plus a playlist-icon button that opens the station dropdown.
 - The dropdown lists entries from `public/audio/radio/stations.json`, each pointing at a subfolder and its `playlist.json`. Switching stations reloads the playlist/cover metadata without touching the rest of the UI.
