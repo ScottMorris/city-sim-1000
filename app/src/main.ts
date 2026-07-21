@@ -183,6 +183,9 @@ let lastPainted: Position | null = null;
 // a midpoint from both fingers' latest positions rather than just whichever
 // finger's pointermove happened to fire last.
 const activeTouchPointers = new Map<number, { x: number; y: number }>();
+let isPinching = false;
+let lastPinchMidpoint: { x: number; y: number } | null = null;
+let lastPinchDistance: number | null = null;
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
@@ -410,7 +413,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     });
   };
 
-  // Only ever called once at least two touch pointers are active.
+  // Both only ever called once at least two touch pointers are active.
   const touchMidpoint = () => {
     let x = 0;
     let y = 0;
@@ -420,6 +423,15 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     }
     return { x: x / activeTouchPointers.size, y: y / activeTouchPointers.size };
   };
+  // Average distance from the midpoint, doubled so it equals the finger-to-finger
+  // distance in the common two-finger case (distance-from-centroid is half of that).
+  const touchSpread = (mid: { x: number; y: number }) => {
+    let total = 0;
+    for (const p of activeTouchPointers.values()) {
+      total += Math.hypot(p.x - mid.x, p.y - mid.y);
+    }
+    return (total / activeTouchPointers.size) * 2;
+  };
 
   wrapper.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -428,14 +440,15 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (activeTouchPointers.size >= 2) {
         // A second finger always means camera control: cancel any in-progress
-        // paint before it can commit another tile, and start a pan gesture
-        // from the two fingers' midpoint. Pinch-zoom lands in a later ticket.
+        // paint before it can commit another tile, and start a pinch-pan
+        // gesture from the fingers' midpoint/spread. Re-priming on a third
+        // finger joining (rather than requiring exactly two) avoids a jump.
         isPainting = false;
         lastPainted = null;
         hovered = null;
-        isPanning = true;
-        panStart = touchMidpoint();
-        cameraStart = { ...camera };
+        isPinching = true;
+        lastPinchMidpoint = touchMidpoint();
+        lastPinchDistance = touchSpread(lastPinchMidpoint);
         return;
       }
     }
@@ -470,17 +483,29 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     }
     pointerActive = e.buttons !== 0;
-    if (isPanning) {
-      if (activeTouchPointers.size >= 2) {
-        const midpoint = touchMidpoint();
-        camera.x = cameraStart.x + (midpoint.x - panStart.x);
-        camera.y = cameraStart.y + (midpoint.y - panStart.y);
-      } else {
-        const dx = e.clientX - panStart.x;
-        const dy = e.clientY - panStart.y;
-        camera.x = cameraStart.x + dx;
-        camera.y = cameraStart.y + dy;
+    if (isPinching && lastPinchMidpoint && lastPinchDistance !== null) {
+      const midpoint = touchMidpoint();
+      camera.x += midpoint.x - lastPinchMidpoint.x;
+      camera.y += midpoint.y - lastPinchMidpoint.y;
+      const distance = touchSpread(midpoint);
+      if (lastPinchDistance > 0 && distance > 0) {
+        const inputSettings = state.settings.input;
+        const sensitivity = (ZOOM_STEPS[inputSettings.zoomSensitivity] ?? ZOOM_STEPS.normal) / ZOOM_STEPS.normal;
+        const factor = Math.pow(distance / lastPinchDistance, sensitivity);
+        const rect = canvas.getBoundingClientRect();
+        zoomAt(camera, midpoint.x - rect.left, midpoint.y - rect.top, factor);
       }
+      lastPinchMidpoint = midpoint;
+      if (distance > 0) {
+        lastPinchDistance = distance;
+      }
+      return;
+    }
+    if (isPanning) {
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      camera.x = cameraStart.x + dx;
+      camera.y = cameraStart.y + dy;
       return;
     }
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
@@ -513,6 +538,9 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       activeTouchPointers.delete(e.pointerId);
     }
     isPanning = false;
+    isPinching = false;
+    lastPinchMidpoint = null;
+    lastPinchDistance = null;
     isPainting = false;
     lastPainted = null;
     pointerActive = false;
