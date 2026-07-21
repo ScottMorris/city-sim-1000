@@ -55,6 +55,11 @@ select {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 0;
+  /* Safety net for any width: if the HUD ever grows taller than the
+     viewport, it scrolls within the topbar instead of relying on #app's
+     overflow: hidden to silently clip it with no way back in. */
+  overflow-y: auto;
   background: #0d1731;
   border-bottom: 2px solid #1f2c4b;
   padding: 10px 16px;
@@ -1713,8 +1718,6 @@ footer {
     grid-template-rows: minmax(0, 40dvh) auto minmax(0, 1fr) auto;
   }
   .topbar {
-    min-height: 0;
-    overflow-y: auto;
     /* A centered flex item that overflows its box can leave the start-side
        content unreachable by scroll — align to the top instead so nothing
        above the fold gets stranded. */
