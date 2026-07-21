@@ -280,17 +280,6 @@ select {
   box-shadow: 0 4px 0 #0a1020, 0 0 10px rgba(123, 255, 183, 0.25);
 }
 
-/* Speed buttons live inside one chip as a segmented control. */
-.ribbon-btn-group {
-  flex-direction: row;
-  align-items: stretch;
-  padding: 0;
-  background: none;
-  border: none;
-  box-shadow: none;
-  gap: 4px;
-}
-
 /* Dropdowns for Saves and Debug. */
 .ribbon-menu {
   position: relative;

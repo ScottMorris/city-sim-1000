@@ -105,6 +105,7 @@
 - Zoning & Amenities: Residential `Z`, Commercial `X`, Industrial `C`, Park `K`.
 - Bulldoze: `B`.
 - Simulation Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x).
+- Pause: `Space` toggles pause/resume; resumes at the last-selected speed.
 
 ### Settings Backlog (Input)
 - A settings modal now exists (gear button in the toolbar) with the over-zoning penalty toggle, minimap controls, pan inversion/pan speed presets, Shift+scroll-to-pan, zoom sensitivity, radio volume, and a Gemini sprite toggle (off by default). Edge scroll, hotkey remapping UX, higher-contrast/reduced-motion, and SFX are stubbed but not wired yet.

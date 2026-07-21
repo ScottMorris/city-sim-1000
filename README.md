@@ -76,7 +76,7 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.
 - Quick bulldoze: right-click to bulldoze the tile under your cursor, or hold and drag to clear a path. Middle-click or Alt-drag still pans. The Inspect tool does not bulldoze on right-click.
 - Tools: click toolbar buttons or hotkeys — Inspect (`I`), Raise (`E`), Lower (`Q`), Water paint (`F`), Trees (`T`), Road (`R`), Rail (`L`), Power Lines (`P`), Hydro (`H`), Pump (`U`), Tower (`Y`), Elementary School (`J`), High School (`N`), Residential (`Z`), Commercial (`X`), Industrial (`C`), Park (`K`), Bulldoze (`B`).
-- Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x).
+- Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x); `Space` toggles pause (resumes at the last-selected speed).
 - Inspector: select Inspect, click a tile to see utilities, status, and capacity; pin the tool info card to keep build stats visible.
 
 ## Offline & PWA
