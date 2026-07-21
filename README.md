@@ -19,6 +19,18 @@ npm run dev
 
 Then open the provided local URL. The service worker caches assets after first load so the game keeps running offline. Use `npm run build` for a production bundle.
 
+### Testing on a phone (LAN dev loop)
+
+```bash
+npm run dev -- --host   # or: bun run dev --host
+```
+
+Vite prints an extra `Network:` URL — open it in the phone's browser (phone and desktop must be on the same network). Changes hot-reload on the phone just like on desktop.
+
+To inspect the phone's tab from the desktop: enable **Developer options → USB debugging** on an Android phone, connect it over USB, and open `chrome://inspect` in desktop Chrome — the tab appears with full DevTools (console, profiler, remote screencast).
+
+Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointer', '1')` in the console to log the pointer→tile mapping for every input event.
+
 ## Deployment
 - GitHub Pages publishes to `https://scottmorris.github.io/city-sim-1000` via the `Deploy to GitHub Pages` workflow (runs on `main` pushes or manually).
 - The Pages build sets `VITE_BASE=/city-sim-1000/` so assets resolve under the project path; local builds default to `/`. To preview locally with the Pages base, run `VITE_BASE=/city-sim-1000/ npm run build` then `npm run preview`.

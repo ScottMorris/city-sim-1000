@@ -183,7 +183,7 @@ hardware.*
 ## Phase M5 — Testing + dev loop
 *Goal: the mobile experience can't silently regress.*
 
-- [ ] **M5-1 · LAN dev loop documented.** `bun run dev -- --host` + phone-on-LAN, and
+- [x] **M5-1 · LAN dev loop documented.** `bun run dev -- --host` + phone-on-LAN, and
   `chrome://inspect` USB debugging, documented in the README dev section (note the
   existing `debug-pointer` localStorage flag). `deps:` none.
   **DoD:** a fresh contributor can iterate on a phone against the dev server from
