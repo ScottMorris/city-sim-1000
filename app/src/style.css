@@ -2252,10 +2252,11 @@ footer {
     flex: 1 1 200px;
   }
   .ribbon-controls {
-    justify-content: flex-end;
     /* Deliberately no flex-basis: 100% here — let flex-wrap decide: share
        line one with the ribbon when there's room (phone landscape), only
-       drop to its own second line when there truly isn't (phone portrait). */
+       drop to its own second line when there truly isn't (phone portrait).
+       Sized to its own content (not stretched), so it naturally sits at the
+       start of that line rather than needing an explicit left-align. */
     flex: 0 0 auto;
     /* Safety net if the controls still don't fit their own full-width line. */
     overflow-x: auto;
