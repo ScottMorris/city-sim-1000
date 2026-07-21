@@ -203,9 +203,15 @@ export function initToolbar(
   const positionStationMenu = () => {
     const rect = stationButton.getBoundingClientRect();
     const margin = 8;
-    stationMenu.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    const menuWidth = Math.max(rect.width, 220);
+    // Anchor to the button's left edge, but never let the menu run past the
+    // right edge of the viewport — the radio widget sits at the trailing end
+    // of the toolbar, close enough to the edge that it otherwise would.
+    const maxLeft = window.innerWidth - menuWidth - margin;
+    const left = Math.min(rect.left, Math.max(margin, maxLeft));
+    stationMenu.style.left = `${Math.round(left + window.scrollX)}px`;
     stationMenu.style.top = `${Math.round(rect.bottom + margin + window.scrollY)}px`;
-    stationMenu.style.minWidth = `${Math.max(rect.width, 220)}px`;
+    stationMenu.style.minWidth = `${menuWidth}px`;
   };
 
   const openStationMenu = () => {
