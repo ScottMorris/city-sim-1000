@@ -186,6 +186,11 @@ const activeTouchPointers = new Map<number, { x: number; y: number }>();
 let isPinching = false;
 let lastPinchMidpoint: { x: number; y: number } | null = null;
 let lastPinchDistance: number | null = null;
+// A single touch's down position and whether it's moved past tap slop yet —
+// keeps a slightly-trembling tap from registering as a one-tile drag-paint.
+const TOUCH_TAP_SLOP_PX = 10;
+let touchDownPos: { x: number; y: number } | null = null;
+let touchSlopExceeded = false;
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
@@ -274,6 +279,9 @@ const ZOOM_STEPS = {
   normal: 0.1,
   fast: 0.18
 } as const;
+// Default camera scale on a compact layout, vs. the desktop default of 1 —
+// makes each tile a comfortable touch target instead of finger-tip-sized.
+const COMPACT_DEFAULT_ZOOM = 1.75;
 const simSpeeds = {
   slow: 0.5,
   fast: 1,
@@ -451,6 +459,8 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         lastPinchDistance = touchSpread(lastPinchMidpoint);
         return;
       }
+      touchDownPos = { x: e.clientX, y: e.clientY };
+      touchSlopExceeded = false;
     }
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     logPointerToTile('pointerdown', e, tilePos);
@@ -514,6 +524,14 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     if (activeTool === Tool.Inspect) {
       selected = hovered;
     }
+    if (e.pointerType === 'touch' && touchDownPos && !touchSlopExceeded) {
+      const dx = e.clientX - touchDownPos.x;
+      const dy = e.clientY - touchDownPos.y;
+      if (Math.hypot(dx, dy) < TOUCH_TAP_SLOP_PX) {
+        return;
+      }
+      touchSlopExceeded = true;
+    }
     const primaryDown = (e.buttons & 1) !== 0;
     const secondaryDown = (e.buttons & 2) !== 0;
     const isPaintingWithSecondary = secondaryDown && activeTool === Tool.Bulldoze;
@@ -541,6 +559,8 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPinching = false;
     lastPinchMidpoint = null;
     lastPinchDistance = null;
+    touchDownPos = null;
+    touchSlopExceeded = false;
     isPainting = false;
     lastPainted = null;
     pointerActive = false;
@@ -626,6 +646,15 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette, tileTextures);
   await renderer.init(wrapper);
+  // `resize` alone can lag or coalesce oddly around a mobile browser's own
+  // chrome/toolbar animation during rotation — layoutMode's matchMedia-driven
+  // change event is a more direct signal for the breakpoint actually flipping.
+  const deviceMode = initDeviceMode({ onChange: syncToolbarHeights });
+  if (deviceMode.getMode().layoutMode === 'compact') {
+    // Deeper default zoom so tiles are a comfortable touch target on a small
+    // screen, rather than starting at the same density as a full desktop view.
+    camera.scale = COMPACT_DEFAULT_ZOOM;
+  }
   centerCamera(state, wrapper, TILE_SIZE, camera);
 
   const hud = createHud({
@@ -848,10 +877,6 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   syncToolbarHeights();
   window.addEventListener('resize', syncToolbarHeights);
   requestAnimationFrame(syncToolbarHeights);
-  // `resize` alone can lag or coalesce oddly around a mobile browser's own
-  // chrome/toolbar animation during rotation — layoutMode's matchMedia-driven
-  // change event is a more direct signal for the breakpoint actually flipping.
-  initDeviceMode({ onChange: syncToolbarHeights });
 
   bindPersistenceControls({
     saveBtn,
