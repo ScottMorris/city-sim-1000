@@ -100,7 +100,10 @@ Each station lives under `app/public/audio/radio/<station>/` with audio files + 
 
 - **Canadian English** in code comments, docs, and identifiers where not constrained by a web standard: *colour, centre, licence (noun), organise, behaviour, favour*. CSS/DOM properties (`color`, `center`) keep their standard spelling.
 - **Commits**: Conventional Commits, imperative mood, atomic. Backtick all code references in commit bodies. Use a single-quoted heredoc + `git commit -F` when the body contains backticks or special characters to avoid shell interpolation. Update `README.md`, `docs/game-parameters.md`, `app/public/manual.html`, and `SPEC.md` alongside any behaviour change they describe, in the same commit.
-- **PR titles**: Human-readable, no Conventional Commit prefix. Start with a capital letter. Example: `TauriSimBridge — native Rust simulation via Tauri IPC Channel`, not `feat(p4-2): TauriSimBridge`.
+- **PR titles**: Human-readable, no Conventional Commit prefix. Start with a capital letter. Example: `TauriSimBridge — native Rust simulation via Tauri IPC Channel`, not `feat(p4-2): TauriSimBridge`. Do not mention internal planning docs or milestone shorthand (e.g. `M0-3`) in the title.
+- **PR descriptions**: `## Summary` (flat bullets, bold lead-ins) + optional `###` subsections (`User-facing changes`, `Maintainer-facing changes`, `Packaging`, `Workflow and infrastructure`, `Documentation`, `Known limitations`) + `## Test plan` (checklist bullets, concrete commands, explicit gaps if verification is incomplete).
 - **PR merge**: Always `--no-ff`. Never squash. Merge commit format: `PR title (#N)\n\nPR body` — matches GitHub's "Pull request title and description" setting.
 - **Pull request labels**: Apply at least one label when opening a PR. Available labels: `bug`, `enhancement`, `documentation`, `infrastructure` (CI/CD/tooling), `chore` (maintenance/housekeeping), `refactor`. Use `gh pr edit <number> --add-label "<label>"` after creation.
+- **Git workflow**: Do not push or force-push, and do not commit local planning/scratch files, unless explicitly requested by the user.
+- **Markdown formatting**: Do not manually hard-wrap prose — write each paragraph as one line and let the renderer/editor soft-wrap.
 - The in-game manual is `app/public/manual.html`, opened via a modal iframe — keep it in sync with UI/behaviour changes.

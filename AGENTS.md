@@ -43,6 +43,7 @@ Never pass markdown-heavy bodies via `git commit -m "..."` — backticks trigger
 - Do not start with `feat:`, `fix:`, `chore:`, etc.
 - Describe the outcome or behaviour change.
 - Keep title style consistent across every open PR in the same stack.
+- Do not mention internal planning documents, local worksheet names, or internal-only process artefacts (e.g. milestone codes like `M0-3`) in PR titles.
 
 Examples:
 - ✅ `TauriSimBridge — native Rust simulation via Tauri IPC Channel`
@@ -80,6 +81,17 @@ Write the message to a temp file (single-quoted heredoc) before amending to avoi
 - `## Test plan` section with checklist bullets (`- [x]` / `- [ ]`) and concrete commands
 - Keep the summary focused on outcomes and behaviour, not commit history
 
+When a PR spans multiple kinds of change, use this fixed vocabulary for `###` sub-sections instead of ad hoc headings:
+
+- `### User-facing changes`
+- `### Maintainer-facing changes`
+- `### Packaging`
+- `### Workflow and infrastructure`
+- `### Documentation`
+- `### Known limitations`
+
+If verification is incomplete, say so plainly under `## Test plan` rather than folding it into prose elsewhere.
+
 ## Pull Request Labels
 
 Every PR must have at least one label. Primary categories:
@@ -87,6 +99,15 @@ Every PR must have at least one label. Primary categories:
 `enhancement`, `bug`, `documentation`, `infrastructure`, `chore`, `refactor`
 
 Use `gh pr edit <number> --add-label "<label>"` immediately after `gh pr create`.
+
+## Git Workflow
+
+- Do not push or force-push unless explicitly requested by the user.
+- Do not commit local planning or scratch files unless the user explicitly asks for them to become part of the repository.
+
+## Markdown Formatting
+
+- Do not manually hard-wrap prose in markdown files (no inserting line breaks mid-paragraph to keep lines under some width). Let paragraphs run as single long lines and rely on the renderer/editor to soft-wrap.
 
 ## Licence and Copyright
 
