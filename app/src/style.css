@@ -44,6 +44,11 @@ select {
   height: 100vh;
   height: 100dvh;
   min-height: 0;
+  /* The app shell is a fixed one-screen layout — overflowing content must
+     scroll within its own region (e.g. the topbar HUD), never push the
+     document taller than the viewport, or toggling the mobile address bar
+     leaves dead space behind. */
+  overflow: hidden;
 }
 
 .topbar {
@@ -1700,6 +1705,25 @@ footer {
 @media (max-width: 900px) {
   body {
     font-size: 12px;
+  }
+  #app {
+    /* The stacked HUD panels can outgrow one screen on phone widths — cap
+       the topbar's row and let it scroll internally instead of overflowing
+       the fixed-height app shell. */
+    grid-template-rows: minmax(0, 40dvh) auto minmax(0, 1fr) auto;
+  }
+  .topbar {
+    min-height: 0;
+    overflow-y: auto;
+    /* A centered flex item that overflows its box can leave the start-side
+       content unreachable by scroll — align to the top instead so nothing
+       above the fold gets stranded. */
+    align-items: flex-start;
+  }
+  .logo {
+    /* Re-centre just the logo against the (tall) HUD next to it — only the
+       HUD needs flex-start, for scroll reachability. */
+    align-self: center;
   }
   .hud {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
