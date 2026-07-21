@@ -179,6 +179,10 @@ let pointerActive = false;
 let panStart = { x: 0, y: 0 };
 let cameraStart = { x: 0, y: 0 };
 let lastPainted: Position | null = null;
+// Live touch pointers keyed by pointerId, so a two-finger gesture can compute
+// a midpoint from both fingers' latest positions rather than just whichever
+// finger's pointermove happened to fire last.
+const activeTouchPointers = new Map<number, { x: number; y: number }>();
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
@@ -406,9 +410,35 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     });
   };
 
+  // Only ever called once at least two touch pointers are active.
+  const touchMidpoint = () => {
+    let x = 0;
+    let y = 0;
+    for (const p of activeTouchPointers.values()) {
+      x += p.x;
+      y += p.y;
+    }
+    return { x: x / activeTouchPointers.size, y: y / activeTouchPointers.size };
+  };
+
   wrapper.addEventListener('contextmenu', (e) => e.preventDefault());
 
   wrapper.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') {
+      activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activeTouchPointers.size >= 2) {
+        // A second finger always means camera control: cancel any in-progress
+        // paint before it can commit another tile, and start a pan gesture
+        // from the two fingers' midpoint. Pinch-zoom lands in a later ticket.
+        isPainting = false;
+        lastPainted = null;
+        hovered = null;
+        isPanning = true;
+        panStart = touchMidpoint();
+        cameraStart = { ...camera };
+        return;
+      }
+    }
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
     logPointerToTile('pointerdown', e, tilePos);
     hovered = isInBounds(tilePos) ? tilePos : null;
@@ -436,12 +466,21 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
   });
 
   wrapper.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'touch' && activeTouchPointers.has(e.pointerId)) {
+      activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
     pointerActive = e.buttons !== 0;
     if (isPanning) {
-      const dx = e.clientX - panStart.x;
-      const dy = e.clientY - panStart.y;
-      camera.x = cameraStart.x + dx;
-      camera.y = cameraStart.y + dy;
+      if (activeTouchPointers.size >= 2) {
+        const midpoint = touchMidpoint();
+        camera.x = cameraStart.x + (midpoint.x - panStart.x);
+        camera.y = cameraStart.y + (midpoint.y - panStart.y);
+      } else {
+        const dx = e.clientX - panStart.x;
+        const dy = e.clientY - panStart.y;
+        camera.x = cameraStart.x + dx;
+        camera.y = cameraStart.y + dy;
+      }
       return;
     }
     const tilePos = screenToTile(camera, TILE_SIZE, canvas, e.clientX, e.clientY);
@@ -469,7 +508,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     }
   });
 
-  const stopPainting = () => {
+  const stopPainting = (e?: PointerEvent) => {
+    if (e?.pointerType === 'touch') {
+      activeTouchPointers.delete(e.pointerId);
+    }
     isPanning = false;
     isPainting = false;
     lastPainted = null;
