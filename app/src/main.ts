@@ -12,6 +12,7 @@ import {
   createDefaultInputSettings,
   createDefaultMinimapSettings,
   createDefaultNarrativeSettings,
+  createDefaultUiSettings,
   createInitialState,
   GameState,
   getTile
@@ -149,6 +150,11 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
   const audioDefaults = createDefaultAudioSettings();
   const cosmeticDefaults = createDefaultCosmeticSettings();
   const narrativeDefaults = createDefaultNarrativeSettings();
+  const uiDefaults = createDefaultUiSettings();
+  const uiSettings = { ...uiDefaults, ...(settings?.ui ?? {}) };
+  if (!['auto', 'desktop', 'mobile'].includes(uiSettings.mode)) {
+    uiSettings.mode = 'auto';
+  }
   return {
     pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
     minimap: minimapSettings,
@@ -157,7 +163,8 @@ function ensureSettingsShape(settings?: GameState['settings']): GameState['setti
     audio: { ...audioDefaults, ...(settings?.audio ?? {}) },
     hotkeys: { ...defaultHotkeys, ...(settings?.hotkeys ?? {}) },
     cosmetics: { ...cosmeticDefaults, ...(settings?.cosmetics ?? {}) },
-    narrative: { ...narrativeDefaults, ...(settings?.narrative ?? {}) }
+    narrative: { ...narrativeDefaults, ...(settings?.narrative ?? {}) },
+    ui: uiSettings
   };
 }
 
@@ -176,6 +183,12 @@ let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 state.settings = ensureSettingsShape(state.settings);
+// Dev override, same pattern as `?bridge=`: forces `desktop`/`mobile` for this
+// session only — never written back to the persisted setting.
+const uiParam = new URLSearchParams(window.location.search).get('ui');
+if (uiParam === 'desktop' || uiParam === 'mobile') {
+  state.settings.ui.mode = uiParam;
+}
 const notifications = createNotificationCenter();
 const narrativeManager = new NarrativeManager({
   enabled: state.settings.narrative.enabled,

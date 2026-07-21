@@ -94,6 +94,12 @@ export interface NarrativeSettings {
   tickerEnabled: boolean;
 }
 
+export type UiMode = 'auto' | 'desktop' | 'mobile';
+
+export interface UiSettings {
+  mode: UiMode;
+}
+
 export interface GameSettings {
   pendingPenaltyEnabled: boolean;
   minimap: MinimapSettings;
@@ -103,6 +109,7 @@ export interface GameSettings {
   hotkeys: HotkeyBindings;
   cosmetics: CosmeticSettings;
   narrative: NarrativeSettings;
+  ui: UiSettings;
 }
 
 export interface UtilityStats {
@@ -225,6 +232,12 @@ export function createDefaultNarrativeSettings(): NarrativeSettings {
   };
 }
 
+export function createDefaultUiSettings(): UiSettings {
+  return {
+    mode: 'auto'
+  };
+}
+
 export function createDefaultSettings(): GameSettings {
   return {
     pendingPenaltyEnabled: true,
@@ -234,7 +247,8 @@ export function createDefaultSettings(): GameSettings {
     audio: createDefaultAudioSettings(),
     hotkeys: { ...defaultHotkeys },
     cosmetics: createDefaultCosmeticSettings(),
-    narrative: createDefaultNarrativeSettings()
+    narrative: createDefaultNarrativeSettings(),
+    ui: createDefaultUiSettings()
   };
 }
 
