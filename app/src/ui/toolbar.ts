@@ -7,6 +7,7 @@ import { Tool } from '../game/toolTypes';
 import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
 import { initRadioWidget, type RadioWidget } from './radio';
 import { fetchRadioStations, type RadioStation } from './radioStations';
+import type { LayoutMode } from './deviceMode';
 
 const powerOptions: Tool[] = [
   Tool.PowerLine,
@@ -19,15 +20,35 @@ const powerOptions: Tool[] = [
 const waterOptions: Tool[] = [Tool.WaterPipe, Tool.WaterPump, Tool.WaterTower];
 const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 
+// Maps a group's "representative" tool — the one shown collapsed on the full
+// desktop shell, with the rest revealed via its anchored popup submenu — to
+// the full set of tools in that submenu. The compact shell has no anchored
+// popups (everything scrolls in one sheet), so it flattens these in place of
+// the representative tool instead. Single source of truth: add a tool to
+// groupedTools or one of these arrays and both shells pick it up.
+const submenuSources: Partial<Record<Tool, Tool[]>> = {
+  [Tool.PowerLine]: powerOptions,
+  [Tool.WaterPipe]: waterOptions,
+  [Tool.ElementarySchool]: educationOptions
+};
+
 interface ToolbarOptions {
+  layoutMode?: LayoutMode;
   radioVolume?: number;
   radioStationId?: string;
   onRadioStationChange?: (stationId: string) => void;
 }
 
+// initToolbar can now be called more than once per page load (a live
+// layoutMode flip re-runs it to rebuild the shell) — it always adds its
+// document/window-level listeners fresh, so without this they'd accumulate
+// one extra (harmless but leaked) copy per flip for the life of the page.
+const toolbarCleanups = new WeakMap<HTMLElement, () => void>();
+
 export interface ToolbarControllers {
   radio: RadioWidget;
   setRadioStation: (stationId?: string, opts?: { triggerChange?: boolean }) => void;
+  getActiveStationId: () => string | undefined;
 }
 
 export function initToolbar(
@@ -36,24 +57,10 @@ export function initToolbar(
   initial: Tool,
   options: ToolbarOptions = {}
 ): ToolbarControllers {
+  toolbarCleanups.get(toolbar)?.();
   toolbar.innerHTML = '';
-  const { radioVolume, radioStationId, onRadioStationChange } = options;
-
-  const primaryRow = document.createElement('div');
-  primaryRow.className = 'toolbar-row';
-  const powerRow = document.createElement('div');
-  powerRow.className = 'toolbar-sub';
-  powerRow.dataset.submenu = 'power';
-  const waterRow = document.createElement('div');
-  waterRow.className = 'toolbar-sub';
-  waterRow.dataset.submenu = 'water';
-  const educationRow = document.createElement('div');
-  educationRow.className = 'toolbar-sub';
-  educationRow.dataset.submenu = 'education';
-  toolbar.appendChild(primaryRow);
-  toolbar.appendChild(powerRow);
-  toolbar.appendChild(waterRow);
-  toolbar.appendChild(educationRow);
+  const { layoutMode = 'full', radioVolume, radioStationId, onRadioStationChange } = options;
+  toolbar.dataset.layoutMode = layoutMode;
 
   const groupedTools: Tool[][] = [
     [Tool.Inspect, Tool.TerraformRaise, Tool.TerraformLower, Tool.Water, Tool.Tree],
@@ -65,9 +72,9 @@ export function initToolbar(
     [Tool.Bulldoze]
   ];
 
-  const createPrimaryButton = (key: Tool) => {
+  const createToolButton = (key: Tool, className: string) => {
     const button = document.createElement('button');
-    button.className = 'tool-button';
+    button.className = className;
     button.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
     const hotkey = getToolHotkey(key);
     button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
@@ -79,53 +86,141 @@ export function initToolbar(
     return button;
   };
 
-  groupedTools.forEach((group) => {
-    const groupEl = document.createElement('div');
-    groupEl.className = 'toolbar-group';
-    group.forEach((key) => {
-      const button = createPrimaryButton(key);
-      groupEl.appendChild(button);
+  let radioHost: HTMLElement;
+  let radioStationHost: HTMLElement;
+  let closeSheetOnEscape: ((e: KeyboardEvent) => void) | null = null;
+
+  if (layoutMode === 'compact') {
+    // --- Compact shell: a thumb-zone current-tool button that opens a
+    // bottom sheet listing every group, flattened (no anchored popups). ---
+    const shell = document.createElement('div');
+    shell.className = 'toolbar-compact';
+
+    const sheetBackdrop = document.createElement('div');
+    sheetBackdrop.className = 'tool-sheet-backdrop';
+
+    const toolSheet = document.createElement('div');
+    toolSheet.className = 'tool-sheet';
+    toolSheet.setAttribute('role', 'dialog');
+    toolSheet.setAttribute('aria-label', 'Tools');
+
+    groupedTools.forEach((group) => {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'tool-sheet-group';
+      group.forEach((key) => {
+        const expanded = submenuSources[key];
+        if (expanded) {
+          expanded.forEach((subKey) => groupEl.appendChild(createToolButton(subKey, 'tool-sheet-button')));
+        } else {
+          groupEl.appendChild(createToolButton(key, 'tool-sheet-button'));
+        }
+      });
+      toolSheet.appendChild(groupEl);
     });
-    primaryRow.appendChild(groupEl);
-  });
 
-  const spacer = document.createElement('div');
-  spacer.className = 'toolbar-spacer';
-  primaryRow.appendChild(spacer);
+    const dock = document.createElement('div');
+    dock.className = 'toolbar-compact-dock';
 
-  const trailingCluster = document.createElement('div');
-  trailingCluster.className = 'toolbar-cluster';
-  primaryRow.appendChild(trailingCluster);
+    const radioGroup = document.createElement('div');
+    radioGroup.className = 'toolbar-group toolbar-group-radio';
+    radioHost = document.createElement('div');
+    radioHost.className = 'toolbar-radio-slot';
+    radioStationHost = document.createElement('div');
+    radioStationHost.className = 'toolbar-radio-station';
+    radioGroup.append(radioHost, radioStationHost);
 
-  const radioGroup = document.createElement('div');
-  radioGroup.className = 'toolbar-group toolbar-group-radio';
-  const radioHost = document.createElement('div');
-  radioHost.className = 'toolbar-radio-slot';
-  const radioStationHost = document.createElement('div');
-  radioStationHost.className = 'toolbar-radio-station';
-  radioGroup.appendChild(radioHost);
-  radioGroup.appendChild(radioStationHost);
-  trailingCluster.appendChild(radioGroup);
+    const currentToolBtn = document.createElement('button');
+    currentToolBtn.type = 'button';
+    currentToolBtn.className = 'toolbar-current-tool-btn';
+    currentToolBtn.setAttribute('aria-haspopup', 'true');
+    currentToolBtn.setAttribute('aria-expanded', 'false');
 
-  const createSubButton = (row: HTMLElement, key: Tool, labelOverride?: string) => {
-    const button = document.createElement('button');
-    button.className = 'tool-sub-button';
-    button.textContent = labelOverride ?? toolLabels[key];
-    const hotkey = getToolHotkey(key);
-    button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
-    button.dataset.tool = key;
-    button.addEventListener('click', () => {
-      onSelect(key);
-      updateToolbar(toolbar, key);
+    dock.append(radioGroup, currentToolBtn);
+    shell.append(sheetBackdrop, toolSheet, dock);
+    toolbar.appendChild(shell);
+
+    const closeSheet = () => {
+      toolSheet.classList.remove('open');
+      sheetBackdrop.classList.remove('open');
+      currentToolBtn.setAttribute('aria-expanded', 'false');
+    };
+    const openSheet = () => {
+      toolSheet.classList.add('open');
+      sheetBackdrop.classList.add('open');
+      currentToolBtn.setAttribute('aria-expanded', 'true');
+    };
+    currentToolBtn.addEventListener('click', () => {
+      if (toolSheet.classList.contains('open')) closeSheet();
+      else openSheet();
     });
-    row.appendChild(button);
-  };
+    sheetBackdrop.addEventListener('click', closeSheet);
+    closeSheetOnEscape = (e) => {
+      if (e.key === 'Escape') closeSheet();
+    };
+    document.addEventListener('keydown', closeSheetOnEscape);
+  } else {
+    // --- Full desktop shell: unchanged from before the compact shell. ---
+    const primaryRow = document.createElement('div');
+    primaryRow.className = 'toolbar-row';
+    const powerRow = document.createElement('div');
+    powerRow.className = 'toolbar-sub';
+    powerRow.dataset.submenu = 'power';
+    const waterRow = document.createElement('div');
+    waterRow.className = 'toolbar-sub';
+    waterRow.dataset.submenu = 'water';
+    const educationRow = document.createElement('div');
+    educationRow.className = 'toolbar-sub';
+    educationRow.dataset.submenu = 'education';
+    toolbar.appendChild(primaryRow);
+    toolbar.appendChild(powerRow);
+    toolbar.appendChild(waterRow);
+    toolbar.appendChild(educationRow);
 
-  powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? '⚡ Lines' : undefined));
-  waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? '🚰 Pump' : undefined));
-  educationOptions.forEach((key) =>
-    createSubButton(educationRow, key, key === Tool.ElementarySchool ? '🎓 Elementary' : '🏢 High')
-  );
+    groupedTools.forEach((group) => {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'toolbar-group';
+      group.forEach((key) => groupEl.appendChild(createToolButton(key, 'tool-button')));
+      primaryRow.appendChild(groupEl);
+    });
+
+    const spacer = document.createElement('div');
+    spacer.className = 'toolbar-spacer';
+    primaryRow.appendChild(spacer);
+
+    const trailingCluster = document.createElement('div');
+    trailingCluster.className = 'toolbar-cluster';
+    primaryRow.appendChild(trailingCluster);
+
+    const radioGroup = document.createElement('div');
+    radioGroup.className = 'toolbar-group toolbar-group-radio';
+    radioHost = document.createElement('div');
+    radioHost.className = 'toolbar-radio-slot';
+    radioStationHost = document.createElement('div');
+    radioStationHost.className = 'toolbar-radio-station';
+    radioGroup.appendChild(radioHost);
+    radioGroup.appendChild(radioStationHost);
+    trailingCluster.appendChild(radioGroup);
+
+    const createSubButton = (row: HTMLElement, key: Tool, labelOverride?: string) => {
+      const button = document.createElement('button');
+      button.className = 'tool-sub-button';
+      button.textContent = labelOverride ?? toolLabels[key];
+      const hotkey = getToolHotkey(key);
+      button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
+      button.dataset.tool = key;
+      button.addEventListener('click', () => {
+        onSelect(key);
+        updateToolbar(toolbar, key);
+      });
+      row.appendChild(button);
+    };
+
+    powerOptions.forEach((key) => createSubButton(powerRow, key, key === Tool.PowerLine ? '⚡ Lines' : undefined));
+    waterOptions.forEach((key) => createSubButton(waterRow, key, key === Tool.WaterPump ? '🚰 Pump' : undefined));
+    educationOptions.forEach((key) =>
+      createSubButton(educationRow, key, key === Tool.ElementarySchool ? '🎓 Elementary' : '🏢 High')
+    );
+  }
 
   const radio = initRadioWidget(radioHost, { initialVolume: radioVolume });
 
@@ -197,7 +292,7 @@ export function initToolbar(
   const closeStationMenu = () => {
     stationMenu.classList.remove('open');
     stationButton.setAttribute('aria-expanded', 'false');
-    radioGroup.classList.remove('toolbar-group-radio-open');
+    radioStationHost.closest('.toolbar-group-radio')?.classList.remove('toolbar-group-radio-open');
   };
 
   const positionStationMenu = () => {
@@ -219,7 +314,7 @@ export function initToolbar(
     positionStationMenu();
     stationMenu.classList.add('open');
     stationButton.setAttribute('aria-expanded', 'true');
-    radioGroup.classList.add('toolbar-group-radio-open');
+    radioStationHost.closest('.toolbar-group-radio')?.classList.add('toolbar-group-radio-open');
   };
 
   const toggleStationMenu = () => {
@@ -307,11 +402,36 @@ export function initToolbar(
   toolbar.addEventListener('scroll', restyleSubmenus);
   window.addEventListener('resize', restyleSubmenus);
 
-  return { radio, setRadioStation };
+  toolbarCleanups.set(toolbar, () => {
+    if (closeSheetOnEscape) document.removeEventListener('keydown', closeSheetOnEscape);
+    document.removeEventListener('click', handleDocumentClick);
+    document.removeEventListener('keydown', handleDocumentKeydown);
+    window.removeEventListener('resize', positionStationMenu);
+    toolbar.removeEventListener('scroll', restyleSubmenus);
+    window.removeEventListener('resize', restyleSubmenus);
+  });
+
+  return { radio, setRadioStation, getActiveStationId: () => activeStationId ?? undefined };
 }
 
 export function updateToolbar(toolbar: HTMLElement, active: Tool) {
   toolbar.dataset.activeTool = active;
+
+  if (toolbar.dataset.layoutMode === 'compact') {
+    const currentToolBtn = toolbar.querySelector<HTMLButtonElement>('.toolbar-current-tool-btn');
+    if (currentToolBtn) {
+      currentToolBtn.textContent = primaryLabelOverrides[active] ?? toolLabels[active];
+    }
+    toolbar.querySelectorAll('.tool-sheet-button').forEach((btn) => {
+      const key = btn.getAttribute('data-tool');
+      btn.classList.toggle('active', key === active);
+    });
+    toolbar.querySelector('.tool-sheet')?.classList.remove('open');
+    toolbar.querySelector('.tool-sheet-backdrop')?.classList.remove('open');
+    currentToolBtn?.setAttribute('aria-expanded', 'false');
+    return;
+  }
+
   toolbar.querySelectorAll('.tool-button').forEach((btn) => {
     const key = btn.getAttribute('data-tool');
     if (!key) return;

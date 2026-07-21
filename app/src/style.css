@@ -361,6 +361,134 @@ select {
   flex: 1;
 }
 
+/* Compact toolbar shell (layoutMode: 'compact') — a thumb-zone current-tool
+   button that opens a bottom sheet, instead of the full desktop row. All of
+   it is position: fixed against the viewport, not `.toolbar`'s own
+   top-anchored box, since it belongs at the bottom of the screen. */
+.toolbar-compact-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  z-index: 3000;
+  /* Let clicks in the empty middle area pass through to the canvas. */
+  pointer-events: none;
+}
+
+.toolbar-compact-dock > * {
+  pointer-events: auto;
+}
+
+.toolbar-current-tool-btn {
+  background: #132644;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 14px 22px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020, 0 0 12px rgba(123, 255, 183, 0.25);
+}
+
+.tool-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 8, 16, 0.6);
+  z-index: 3500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.tool-sheet-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tool-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 60vh;
+  max-height: 60dvh;
+  overflow-y: auto;
+  background: #0d1a2f;
+  border-top: 2px solid #1f2c4b;
+  border-radius: 16px 16px 0 0;
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 3501;
+  transform: translateY(100%);
+  transition: transform 0.25s ease;
+}
+
+.tool-sheet.open {
+  transform: translateY(0);
+}
+
+.tool-sheet-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1f2c4b;
+}
+
+.tool-sheet-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tool-sheet-button {
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 12px;
+  color: var(--text);
+  padding: 10px 14px;
+  min-width: 64px;
+  min-height: 48px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* The full radio widget (flex-basis 360px, marquee + cover art) is sized for
+   the spacious desktop trailing cluster and alone would overflow the whole
+   compact dock. Collapse it to just its icon buttons + station picker here;
+   hover/focus's existing popover still surfaces the track/cover details. */
+.toolbar-compact-dock .radio-widget {
+  flex: 0 0 auto;
+}
+
+.toolbar-compact-dock .radio-marquee-viewport,
+.toolbar-compact-dock .radio-cover {
+  display: none;
+}
+
+.tool-sheet-button.active {
+  border-color: var(--accent);
+}
+
+}
+
 .toolbar-sub {
   position: fixed;
   left: 0;
@@ -2083,7 +2211,13 @@ footer {
   }
 }
 
-@media (max-width: 900px) {
+/* Matches deviceMode.ts's DEFAULT_COMPACT_BREAKPOINT_PX/
+   DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX — keep the two in sync, or CSS layout
+   and the JS-derived layoutMode can disagree. Comma = OR: a phone in
+   landscape is comfortably wider than 900px but short enough that a full
+   desktop shell leaves little to no canvas, so compact triggers on either
+   dimension being small, not just width. */
+@media (max-width: 900px), (max-height: 500px) {
   body {
     font-size: 12px;
   }
@@ -2105,11 +2239,27 @@ footer {
        if the HUD ever does grow past 40dvh. */
     max-height: 40dvh;
   }
+  .logo {
+    /* The ribbon chips it shares a line with are much taller (two stacked
+       lines of text); flex-start alignment above otherwise leaves the logo
+       stranded at the top of that row instead of centred against it. */
+    align-self: center;
+  }
+  .ribbon {
+    /* A real basis (rather than the base rule's flex: 1, i.e. basis 0%) so
+       flex-wrap below has an actual size to compare against the controls'
+       width — with basis 0% the ribbon always claims 100% of line one first,
+       forcing the controls to wrap even when a wide-but-short viewport
+       (phone landscape) has plenty of room for both on one line. */
+    flex: 1 1 200px;
+  }
   .ribbon-controls {
-    /* flex-basis: 100% forces this onto its own line in the wrapping topbar
-       above, regardless of how much room is left on the first line. */
-    flex-basis: 100%;
-    justify-content: flex-end;
+    /* Deliberately no flex-basis: 100% here — let flex-wrap decide: share
+       line one with the ribbon when there's room (phone landscape), only
+       drop to its own second line when there truly isn't (phone portrait).
+       Sized to its own content (not stretched), so it naturally sits at the
+       start of that line rather than needing an explicit left-align. */
+    flex: 0 0 auto;
     /* Safety net if the controls still don't fit their own full-width line. */
     overflow-x: auto;
   }

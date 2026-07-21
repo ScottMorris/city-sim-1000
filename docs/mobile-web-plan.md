@@ -40,59 +40,59 @@ chrome. No visible UI changes on desktop.*
   `deps:` none.
   **DoD:** a save predating a known settings field deserializes with the default
   applied; camera round-trip and zoom-anchor invariants covered; both suites green.
-- [ ] **M0-1 · Input/layout mode detection module.** `src/ui/deviceMode.ts` (or
+- [x] **M0-1 · Input/layout mode detection module.** `src/ui/deviceMode.ts` (or
   similar): derives `inputMode: 'touch' | 'mouse'` from `(pointer: coarse)` +
   `maxTouchPoints`, and `layoutMode: 'compact' | 'full'` from viewport dimensions
   (media query / `ResizeObserver`); emits change events (rotation, window resize,
   mouse plugged into a tablet). `deps:` none.
   **DoD:** unit tests cover the derivation matrix; modes re-evaluate live on viewport
-  and pointer-capability changes.
-- [ ] **M0-2 · Settings override + dev param.** `ui: 'auto' | 'desktop' | 'mobile'`
+  and pointer-capability changes. (#92)
+- [x] **M0-2 · Settings override + dev param.** `ui: 'auto' | 'desktop' | 'mobile'`
   setting (auto = M0-1 detection) with a `createDefault*` factory in `gameState.ts`,
   back-fill in `persistence.deserialize`, and a control in the settings modal.
   `?ui=mobile|desktop` query param forces a mode for dev testing (same pattern as
   `?bridge=tauri`). `deps:` M0-1.
   **DoD:** old saves load with the field defaulted; the query param wins over the
-  setting; `bun run lint` clean.
-- [ ] **M0-3 · Viewport meta + safe areas.** Add `viewport-fit=cover` to the viewport
+  setting; `bun run lint` clean. (#93)
+- [x] **M0-3 · Viewport meta + safe areas.** Add `viewport-fit=cover` to the viewport
   meta in `index.html`; pad HUD/toolbar with `env(safe-area-inset-*)`; replace any
   `100vh`-style sizing with `dvh`/`svh` or `visualViewport` so the layout survives
   the mobile address bar showing/hiding. `deps:` none.
   **DoD:** in standalone PWA mode on a notched phone, no controls sit under the
-  notch/home bar; toggling browser chrome doesn't leave dead space or clipped UI.
-- [ ] **M0-4 · Suppress competing browser gestures.** `touch-action: none` on the
+  notch/home bar; toggling browser chrome doesn't leave dead space or clipped UI. (#89)
+- [x] **M0-4 · Suppress competing browser gestures.** `touch-action: none` on the
   canvas wrapper, `overscroll-behavior: none` (kills pull-to-refresh mid-pan),
   `user-select: none` + context-menu suppression on HUD chrome, and an edge inset so
   painting near screen edges doesn't fight Android's back-swipe gesture. `deps:` none.
   **DoD:** on-device: pull-to-refresh, double-tap zoom, long-press text selection,
-  and accidental back-navigation no longer trigger during play.
-- [ ] **M0-5 · Resize contract hardening.** Pixi already uses `resizeTo`; make the
+  and accidental back-navigation no longer trigger during play. (#89)
+- [x] **M0-5 · Resize contract hardening.** Pixi already uses `resizeTo`; make the
   toolbar-height CSS variables (`--toolbar-base-height` etc., measured in `main.ts`)
   re-measure on viewport resize and layout-mode changes, including rotation.
   `deps:` M0-1. **DoD:** rotating portrait↔landscape mid-game leaves camera, HUD,
-  and toolbar layout correct in both orientations with no reload.
+  and toolbar layout correct in both orientations with no reload. (#94)
 
 ## Phase M1 — Touch input
 *Goal: the game is fully playable with fingers. Desktop mouse behaviour unchanged;
 desktop touchscreens get these gestures for free (input handling is already
 PointerEvents in `main.ts`).*
 
-- [ ] **M1-1 · Gesture disambiguation: one finger = tool, two fingers = pan/zoom.**
+- [x] **M1-1 · Gesture disambiguation: one finger = tool, two fingers = pan/zoom.**
   In touch input mode, single-pointer tap/drag drives the active tool (as drag-paint
   does today); a second pointer cancels any in-progress paint and switches to
   camera control. `deps:` M0-1.
   **DoD:** starting a two-finger gesture mid-paint never leaves stray tiles (the
-  in-flight paint is undone or never committed); mouse path untouched.
-- [ ] **M1-2 · Pinch-zoom + two-finger pan.** Track two active pointers; scale the
+  in-flight paint is undone or never committed); mouse path untouched. (#67, #96)
+- [x] **M1-2 · Pinch-zoom + two-finger pan.** Track two active pointers; scale the
   camera around the gesture midpoint, pan with the midpoint delta. Respect the
   existing `zoomSensitivity` setting. `deps:` M1-1.
   **DoD:** pinch keeps the point under the fingers stationary (no drift); wheel zoom
-  on desktop unchanged.
-- [ ] **M1-3 · Tap slop + touch-appropriate defaults.** A small movement tolerance so
+  on desktop unchanged. (#68, #97)
+- [x] **M1-3 · Tap slop + touch-appropriate defaults.** A small movement tolerance so
   a slightly-moving finger registers as a tap, not a one-tile drag-paint; deeper
   default camera zoom on compact layouts so tiles are finger-sized. `deps:` M1-1.
   **DoD:** on-device, single-tile placement is reliable at default zoom; slop does
-  not affect mouse input.
+  not affect mouse input. (#69, #98)
 - [ ] **M1-4 · Hover replacement.** Hovered-tile preview, tooltips, and `toolInfo`
   hover details don't exist on touch — surface the equivalent via tap feedback
   (e.g. tile inspect on tap with an inspect tool, tool details shown in the picker,
@@ -105,12 +105,12 @@ PointerEvents in `main.ts`).*
 shell around the same `toolbar.ts` tool groups and callbacks — not a fork that drifts
 when tools are added.*
 
-- [ ] **M2-1 · Compact toolbar shell.** Bottom-anchored current-tool button (thumb
+- [x] **M2-1 · Compact toolbar shell.** Bottom-anchored current-tool button (thumb
   zone) that opens a bottom sheet/drawer rendering the existing `groupedTools`
   groups; picking a tool closes the sheet. Admin/overlay/radio groups collapse
   behind the sheet or a secondary button. Hit targets ≥ ~44px. `deps:` M0-1, M0-3.
   **DoD:** every tool and admin action reachable in compact mode; adding a tool to
-  `groupedTools` appears in both shells with no extra wiring; full layout unchanged.
+  `groupedTools` appears in both shells with no extra wiring; full layout unchanged. (#103)
 - [ ] **M2-2 · Tool info in the picker.** `toolInfo.ts` content (cost, description)
   shown for the highlighted tool inside the sheet, replacing hover. `deps:` M2-1.
   **DoD:** cost is visible before placing in compact mode.
