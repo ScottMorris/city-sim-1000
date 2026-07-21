@@ -5,6 +5,8 @@
 
 **Context:** The Rust sim is intended to fully replace the TS sim once it is in a good place. This audit therefore separates (A) **behavioural drift** between the Rust core and the TS oracle, (B) **feature gaps in the WASM transport surface** relative to what the Tauri path and the `SimBridge` contract already promise, (C) **bridge/mirror integrity issues**, and (D) **verification and documentation gaps**.
 
+**Update (2026-07-21):** B3 (no natural terrain in the Rust sim) has been resolved by the Wilderness Score work (#101) — `GameState::seed_natural_terrain` / `SimHost::set_natural_terrain`, wired end-to-end via `wasmSim.worker.ts`. Left the rest of this audit as originally written; the other four P0s (A4, B1, B2, B4) were spot-checked against current `main` and remain accurate.
+
 ---
 
 ## Executive summary
@@ -73,7 +75,7 @@ TS `BudgetStats.breakdown.details.buildings` includes `powerByType`, `civicByTyp
 ### B2. Sim events never emitted (P0)
 `FromSim` (`crates/city-sim-protocol/src/events.rs`) defines `Alert`, `Narrative`, `CommandResult`, `TickStats`, but no Rust code constructs `Alert`/`Narrative`/`CommandResult` anywhere (wasm crate, core, or Tauri plugin). The TS oracle emits power/water deficit alerts and narrative events (`simulation.ts:715–787`); `main.ts` has handlers wired for them (`main.ts:199–209`) that can never fire in WASM mode. The narrative layer in WASM mode is reduced to player-action events and month-end snapshots generated TS-side.
 
-### B3. Natural terrain not seeded into the Rust sim (P0)
+### B3. Natural terrain not seeded into the Rust sim (P0) — ✅ resolved 2026-07-21 (#101)
 - TS `createInitialState` generates a water border and centre speckle (`gameState.ts:241–257`); Rust `GameState::new` is all-Land (`state.rs:336–341`).
 - `WasmSimBridge` compensates with a display-only mask (`naturalTileKinds` + `modifiedTiles`, `wasmSimBridge.ts:80–104, 326–347`), so the *renderer* shows water the *sim* doesn't know about. Consequences:
   - Players can build roads/zones "on water" (sim sees Land) — placement cost and rules ignore the water entirely.
@@ -130,7 +132,7 @@ Rust computes education for demand/decay (`education.rs`, wired in `sim.rs:133`)
 | P0 | Money truncated every tick (frozen income below 30/day) | A4 |
 | P0 | No WASM snapshot API; loads capped at 120-tick replay | B1 |
 | P0 | `FromSim` alerts/narrative never emitted | B2 |
-| P0 | Natural terrain absent from Rust sim; display-only mask | B3 |
+| ~~P0~~ | ~~Natural terrain absent from Rust sim; display-only mask~~ — resolved (#101) | B3 |
 | P0 | TS/Rust command-log desync on rejected commands | B4 |
 | P1 | Power line destroys zones | A1 |
 | P1 | Bulldoze precedence + missing underground-mode context | A2 |
