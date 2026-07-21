@@ -39,6 +39,12 @@ interface ToolbarOptions {
   onRadioStationChange?: (stationId: string) => void;
 }
 
+// initToolbar can now be called more than once per page load (a live
+// layoutMode flip re-runs it to rebuild the shell) — it always adds its
+// document/window-level listeners fresh, so without this they'd accumulate
+// one extra (harmless but leaked) copy per flip for the life of the page.
+const toolbarCleanups = new WeakMap<HTMLElement, () => void>();
+
 export interface ToolbarControllers {
   radio: RadioWidget;
   setRadioStation: (stationId?: string, opts?: { triggerChange?: boolean }) => void;
@@ -51,6 +57,7 @@ export function initToolbar(
   initial: Tool,
   options: ToolbarOptions = {}
 ): ToolbarControllers {
+  toolbarCleanups.get(toolbar)?.();
   toolbar.innerHTML = '';
   const { layoutMode = 'full', radioVolume, radioStationId, onRadioStationChange } = options;
   toolbar.dataset.layoutMode = layoutMode;
@@ -81,6 +88,7 @@ export function initToolbar(
 
   let radioHost: HTMLElement;
   let radioStationHost: HTMLElement;
+  let closeSheetOnEscape: ((e: KeyboardEvent) => void) | null = null;
 
   if (layoutMode === 'compact') {
     // --- Compact shell: a thumb-zone current-tool button that opens a
@@ -146,9 +154,10 @@ export function initToolbar(
       else openSheet();
     });
     sheetBackdrop.addEventListener('click', closeSheet);
-    document.addEventListener('keydown', (e) => {
+    closeSheetOnEscape = (e) => {
       if (e.key === 'Escape') closeSheet();
-    });
+    };
+    document.addEventListener('keydown', closeSheetOnEscape);
   } else {
     // --- Full desktop shell: unchanged from before the compact shell. ---
     const primaryRow = document.createElement('div');
@@ -392,6 +401,15 @@ export function initToolbar(
   };
   toolbar.addEventListener('scroll', restyleSubmenus);
   window.addEventListener('resize', restyleSubmenus);
+
+  toolbarCleanups.set(toolbar, () => {
+    if (closeSheetOnEscape) document.removeEventListener('keydown', closeSheetOnEscape);
+    document.removeEventListener('click', handleDocumentClick);
+    document.removeEventListener('keydown', handleDocumentKeydown);
+    window.removeEventListener('resize', positionStationMenu);
+    toolbar.removeEventListener('scroll', restyleSubmenus);
+    window.removeEventListener('resize', restyleSubmenus);
+  });
 
   return { radio, setRadioStation, getActiveStationId: () => activeStationId ?? undefined };
 }

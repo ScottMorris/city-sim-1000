@@ -105,12 +105,12 @@ PointerEvents in `main.ts`).*
 shell around the same `toolbar.ts` tool groups and callbacks — not a fork that drifts
 when tools are added.*
 
-- [ ] **M2-1 · Compact toolbar shell.** Bottom-anchored current-tool button (thumb
+- [x] **M2-1 · Compact toolbar shell.** Bottom-anchored current-tool button (thumb
   zone) that opens a bottom sheet/drawer rendering the existing `groupedTools`
   groups; picking a tool closes the sheet. Admin/overlay/radio groups collapse
   behind the sheet or a secondary button. Hit targets ≥ ~44px. `deps:` M0-1, M0-3.
   **DoD:** every tool and admin action reachable in compact mode; adding a tool to
-  `groupedTools` appears in both shells with no extra wiring; full layout unchanged.
+  `groupedTools` appears in both shells with no extra wiring; full layout unchanged. (#103)
 - [ ] **M2-2 · Tool info in the picker.** `toolInfo.ts` content (cost, description)
   shown for the highlighted tool inside the sheet, replacing hover. `deps:` M2-1.
   **DoD:** cost is visible before placing in compact mode.
