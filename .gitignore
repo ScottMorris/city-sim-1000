@@ -17,3 +17,6 @@ crates/*/target
 # wasm-pack output (generated — run `bun run build:wasm` to regenerate)
 pkg/
 app/src/wasm/
+
+# Playwright MCP session artifacts (screenshots, console logs, page snapshots)
+.playwright-mcp/

@@ -4,6 +4,10 @@
       "command": "bun",
       "args": ["run", "mcp"],
       "cwd": "/home/scott/source/city-sim-1000"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
