@@ -5,7 +5,7 @@
 
 use city_sim_core::{command_log::CommandLog, commands::apply_tool, sim::Simulation};
 use city_sim_protocol::{
-    commands::Tool,
+    commands::{BudgetPolicy, Tool},
     tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE},
 };
 use wasm_bindgen::prelude::*;
@@ -134,8 +134,64 @@ impl SimHost {
     pub fn budget_maint_pipes(&self) -> f32 {
         self.sim.state.budget.maint_pipes
     }
+    pub fn budget_maint_power_hydro(&self) -> f32 {
+        self.sim.state.budget.maint_power_hydro
+    }
+    pub fn budget_maint_power_coal(&self) -> f32 {
+        self.sim.state.budget.maint_power_coal
+    }
+    pub fn budget_maint_power_wind(&self) -> f32 {
+        self.sim.state.budget.maint_power_wind
+    }
+    pub fn budget_maint_power_solar(&self) -> f32 {
+        self.sim.state.budget.maint_power_solar
+    }
+    pub fn budget_maint_civic_park(&self) -> f32 {
+        self.sim.state.budget.maint_civic_park
+    }
+    pub fn budget_maint_civic_pump(&self) -> f32 {
+        self.sim.state.budget.maint_civic_pump
+    }
+    pub fn budget_maint_civic_tower(&self) -> f32 {
+        self.sim.state.budget.maint_civic_tower
+    }
+    pub fn budget_maint_civic_school(&self) -> f32 {
+        self.sim.state.budget.maint_civic_school
+    }
+    pub fn budget_maint_zones_res(&self) -> f32 {
+        self.sim.state.budget.maint_zones_res
+    }
+    pub fn budget_maint_zones_com(&self) -> f32 {
+        self.sim.state.budget.maint_zones_com
+    }
+    pub fn budget_maint_zones_ind(&self) -> f32 {
+        self.sim.state.budget.maint_zones_ind
+    }
     pub fn set_money(&mut self, amount: f64) {
         self.sim.state.money = amount as i64;
+    }
+
+    /// Set the fiscal policy (tax rates 0–20, funding levels 0–100).
+    /// Out-of-range values are clamped. Applies from the next tick.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_budget_policy(
+        &mut self,
+        tax_residential: u8,
+        tax_commercial: u8,
+        tax_industrial: u8,
+        fund_transport: u8,
+        fund_power: u8,
+        fund_civic: u8,
+    ) {
+        self.sim.state.policy = BudgetPolicy {
+            tax_residential,
+            tax_commercial,
+            tax_industrial,
+            fund_transport,
+            fund_power,
+            fund_civic,
+        }
+        .clamped();
     }
 
     /// Advance the simulation by `dt` seconds (real time). The speed
@@ -176,8 +232,12 @@ impl SimHost {
             return false;
         }
         let prev_speed = self.sim.speed();
+        // Policy is not part of the command log — carry it across the replay
+        // so undoing a tool doesn't also reset taxes/funding.
+        let prev_policy = self.sim.state.policy;
         self.sim = self.log.replay();
         self.sim.set_speed(prev_speed);
+        self.sim.state.policy = prev_policy;
         true
     }
 

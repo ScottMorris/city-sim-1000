@@ -5,6 +5,7 @@
 
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
+use city_sim_protocol::commands::BudgetPolicy;
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
 
@@ -241,6 +242,20 @@ pub struct BudgetStats {
     pub maint_rail: f32,
     pub maint_power_lines: f32,
     pub maint_pipes: f32,
+    // Power plant maintenance by plant type
+    pub maint_power_hydro: f32,
+    pub maint_power_coal: f32,
+    pub maint_power_wind: f32,
+    pub maint_power_solar: f32,
+    // Civic maintenance by building type
+    pub maint_civic_park: f32,
+    pub maint_civic_pump: f32,
+    pub maint_civic_tower: f32,
+    pub maint_civic_school: f32,
+    // Zone maintenance by zone class
+    pub maint_zones_res: f32,
+    pub maint_zones_com: f32,
+    pub maint_zones_ind: f32,
 }
 
 /// One day's budget record, stored in the rolling history ring buffer.
@@ -326,6 +341,10 @@ pub struct GameState {
     pub budget: BudgetStats,
     /// Rolling 200-day budget history for the finance panel.
     pub budget_history: VecDeque<BudgetHistoryEntry>,
+    /// Fiscal policy — tax rates and department funding set from the budget
+    /// screen. Defaults are neutral (9% taxes, 100% funding), which
+    /// reproduces the pre-policy economy bit-for-bit.
+    pub policy: BudgetPolicy,
 }
 
 impl GameState {
@@ -356,6 +375,7 @@ impl GameState {
             education: EducationStats::default(),
             budget: BudgetStats::default(),
             budget_history: VecDeque::new(),
+            policy: BudgetPolicy::default(),
         }
     }
 

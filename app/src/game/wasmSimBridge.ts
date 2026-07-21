@@ -15,7 +15,8 @@ import { BuildingStatus, createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
 import { recomputeEducation } from './education';
 import type { SimBridge } from './simBridge';
-import type { SimCommand, CommandResult } from './protocol/commands';
+import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
+import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
 import { tileBufferOffsets, decodeHappiness, FLAGS } from './protocol/tileBuffer';
@@ -118,6 +119,7 @@ export class WasmSimBridge implements SimBridge {
         commands: preloadCommands?.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
         money: preloadCommands ? state.money : undefined,
         targetTick: preloadCommands ? state.tick : undefined,
+        policy: state.budgetPolicy,
       },
     });
   }
@@ -160,6 +162,12 @@ export class WasmSimBridge implements SimBridge {
           });
         }
         break;
+      case 'SetBudgetPolicy':
+        this.state.budgetPolicy = cmd.policy;
+        if (this.ready) {
+          this.worker.postMessage({ type: 'set_policy', payload: cmd.policy });
+        }
+        break;
     }
     return { success: true };
   }
@@ -191,6 +199,7 @@ export class WasmSimBridge implements SimBridge {
           commands: cmdLog.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
           money: state.money,
           targetTick: state.tick,
+          policy: state.budgetPolicy,
         },
       });
     } else {
@@ -201,6 +210,7 @@ export class WasmSimBridge implements SimBridge {
           type: 'reset',
           payload: { width: state.width, height: state.height, seed: state.seed },
         });
+        this.worker.postMessage({ type: 'set_policy', payload: state.budgetPolicy });
       }
     }
   }
@@ -243,6 +253,8 @@ export class WasmSimBridge implements SimBridge {
         if (this.speedMult !== 1) {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
         }
+        // Policy may have changed while the worker was still booting.
+        this.worker.postMessage({ type: 'set_policy', payload: this.state.budgetPolicy });
         this.handler?.({ type: 'Ready' });
         break;
       case 'step_result':
@@ -309,6 +321,27 @@ export class WasmSimBridge implements SimBridge {
     b.breakdown.details.buildings.power      = stats.budgetMaintPower;
     b.breakdown.details.buildings.civic      = stats.budgetMaintCivic;
     b.breakdown.details.buildings.zones      = stats.budgetMaintZones;
+    b.breakdown.details.buildings.powerByType = {
+      hydro: stats.budgetMaintPowerHydro,
+      coal:  stats.budgetMaintPowerCoal,
+      wind:  stats.budgetMaintPowerWind,
+      solar: stats.budgetMaintPowerSolar,
+    };
+    b.breakdown.details.buildings.civicByType = {
+      park:        stats.budgetMaintCivicPark,
+      pump:        stats.budgetMaintCivicPump,
+      water_tower: stats.budgetMaintCivicTower,
+      school:      stats.budgetMaintCivicSchool,
+    };
+    b.breakdown.details.buildings.zonesByType = {
+      residential: stats.budgetMaintZonesRes,
+      commercial:  stats.budgetMaintZonesCom,
+      industrial:  stats.budgetMaintZonesInd,
+    };
+    // Record the daily budget history TS-side so the quarterly panel works
+    // on the WASM path (the Rust sim keeps its own history internally but it
+    // isn't carried over the stats wire).
+    recordDailyBudget(this.state);
     this.handler?.({
       type: 'TickStats',
       data: {

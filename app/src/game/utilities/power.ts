@@ -1,5 +1,11 @@
+// power.ts — power network BFS and production accounting.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BuildingStatus } from '../buildings/state';
 import { listPowerPlants } from '../buildings/manager';
+import { fundingMultiplier, MAX_FUNDING } from '../protocol/commands';
 import { GameState } from '../gameState';
 import { POWER_PLANT_CONFIGS } from '../constants';
 import { getOrthogonalNeighbourCoords, isPowerCarrier } from '../adjacency';
@@ -53,7 +59,10 @@ export function recomputePowerNetwork(state: GameState) {
     }
   }
 
-  state.utilities.powerProduced = produced;
+  // Underfunded power departments brown out: output scales with funding
+  // (mirrors `recompute_utility_network` in city-sim-core; 100% → exact).
+  const fundPower = fundingMultiplier(state.budgetPolicy?.fundPower ?? MAX_FUNDING);
+  state.utilities.powerProduced = Math.round(produced * fundPower);
   state.utilities.powerUsed = 0;
   state.utilities.power = state.utilities.powerProduced - state.utilities.powerUsed;
 }

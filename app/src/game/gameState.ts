@@ -5,6 +5,7 @@
 
 import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
+import { createDefaultBudgetPolicy, type BudgetPolicy } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
@@ -186,6 +187,8 @@ export interface GameState {
   services: ServiceSystemState;
   education: EducationStats;
   bylaws: BylawState;
+  /** Fiscal policy — tax rates and department funding from the budget screen. */
+  budgetPolicy: BudgetPolicy;
   settings: GameSettings;
 }
 
@@ -321,6 +324,7 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       highCoverage: 0
     },
     bylaws: { ...DEFAULT_BYLAWS },
+    budgetPolicy: createDefaultBudgetPolicy(),
     settings: createDefaultSettings()
   };
 }

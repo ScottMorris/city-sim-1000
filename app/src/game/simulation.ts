@@ -29,6 +29,12 @@ import { computeLabourStats } from './computeLabourStats';
 import { recomputeEducation } from './education';
 import { ServiceId } from './services';
 import { applyLightingPolicy, DEFAULT_BYLAWS, LIGHTING_POLICIES } from './bylaws';
+import {
+  createDefaultBudgetPolicy,
+  fundingMultiplier,
+  NEUTRAL_TAX_RATE,
+  taxMultiplier
+} from './protocol/commands';
 
 export interface SimulationConfig {
   ticksPerSecond: number;
@@ -402,11 +408,25 @@ export class Simulation {
     const educationDemandDelta = educationScore * 4 - (1 - educationScore) * 12;
     const workforcePenalty = (1 - (education?.highCoverage ?? 0)) * 20;
 
+    // Fiscal policy pressure — mirrors compute_city_demand in city-sim-core:
+    // taxes above the neutral 9% suppress that class's demand, and
+    // underfunded transport drags all three. Zero at the neutral defaults.
+    const policy = this.state.budgetPolicy ?? createDefaultBudgetPolicy();
+    const taxPenaltyRes = (policy.taxResidential - NEUTRAL_TAX_RATE) * 2.0;
+    const taxPenaltyCom = (policy.taxCommercial - NEUTRAL_TAX_RATE) * 2.0;
+    const taxPenaltyInd = (policy.taxIndustrial - NEUTRAL_TAX_RATE) * 2.0;
+    const transportDrag = (100 - policy.fundTransport) * 0.08;
+
     const residentialDemand = computeDemand({
       base: 70, // fill coefficient for residential slots
       fillFraction: fillResidential,
       workforceTerm: 0,
-      labourTerm: labourStats.vacancyRate * 60 - labourStats.unemploymentRate * 80 + educationDemandDelta,
+      labourTerm:
+        labourStats.vacancyRate * 60 -
+        labourStats.unemploymentRate * 80 +
+        educationDemandDelta -
+        taxPenaltyRes -
+        transportDrag,
       pendingZones: pendingResidentialZones,
       pendingSlope: 0.45,
       utilityPenalty,
@@ -420,7 +440,9 @@ export class Simulation {
       workforceTerm:
         labourStats.unemploymentRate * 30 +
         Math.min(1, this.state.population / Math.max(populationCapacity, 1)) * 20 -
-        workforcePenalty * 0.6,
+        workforcePenalty * 0.6 -
+        taxPenaltyCom -
+        transportDrag,
       labourTerm: 0,
       pendingZones: pendingCommercialZones,
       pendingSlope: 0.35,
@@ -436,7 +458,9 @@ export class Simulation {
       workforceTerm:
         labourStats.unemploymentRate * 80 +
         Math.max(0, 0.95 - fillIndustrial) * 20 -
-        workforcePenalty,
+        workforcePenalty -
+        taxPenaltyInd -
+        transportDrag,
       labourTerm: labourStats.vacancyRate * -5,
       pendingZones: pendingIndustrialZones,
       pendingSlope: 0.35,
@@ -451,10 +475,29 @@ export class Simulation {
     this.state.demand.commercial = commercialDemand.value;
     this.state.demand.industrial = industrialDemand.value;
 
+    // Fiscal policy — tax multipliers scale revenue, funding multipliers
+    // scale upkeep (mirrors compute_daily_budget in city-sim-core). Transport
+    // funds roads/rail, power funds lines and plants, civic funds civic
+    // buildings and water pipes; zone upkeep is private-sector.
+    const fundTransport = fundingMultiplier(policy.fundTransport);
+    const fundPower = fundingMultiplier(policy.fundPower);
+    const fundCivic = fundingMultiplier(policy.fundCivic);
+    maintenanceRoads *= fundTransport;
+    maintenanceRail *= fundTransport;
+    maintenancePowerLines *= fundPower;
+    maintenancePipes *= fundCivic;
+    maintenance = maintenanceRoads + maintenanceRail + maintenancePowerLines + maintenancePipes;
+    buildingMaintenancePower *= fundPower;
+    buildingMaintenanceCivic *= fundCivic;
+    for (const key of Object.keys(powerMaintenanceByType)) powerMaintenanceByType[key] *= fundPower;
+    for (const key of Object.keys(civicMaintenanceByType)) civicMaintenanceByType[key] *= fundCivic;
+    buildingMaintenance =
+      buildingMaintenancePower + buildingMaintenanceCivic + buildingMaintenanceZones;
+
     const revenueBase = BASE_INCOME;
-    const revenuePopulation = this.state.population * 1.5;
-    const revenueCommercial = commercialZones * 6;
-    const revenueIndustrial = industrialZones * 8;
+    const revenuePopulation = this.state.population * 1.5 * taxMultiplier(policy.taxResidential);
+    const revenueCommercial = commercialZones * 6 * taxMultiplier(policy.taxCommercial);
+    const revenueIndustrial = industrialZones * 8 * taxMultiplier(policy.taxIndustrial);
     const revenue = revenueBase + revenuePopulation + revenueCommercial + revenueIndustrial;
     const expensesTransport = maintenance;
     const expensesBuildings = buildingMaintenance;

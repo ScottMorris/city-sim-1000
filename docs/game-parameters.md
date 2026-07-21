@@ -88,6 +88,26 @@
 - **Performance/Testing**: Deterministic utility network tests; profiling for large maps; consider web worker for sim step if needed.
 - **UI/Navigation**: Minimap anchored to the bottom-right HUD for quick orientation on large maps. Base view is live (terrain/zones/roads/rail/power lines/buildings) with click-to-jump camera controls and a viewport rectangle; power, water, and alerts overlay modes are available and also tint the main map for quick at-a-glance feedback. Limit canvas size and coarsen sampling on huge maps to stay performant.
 
+## Fiscal Policy (Tax Rates & Department Funding)
+
+Adjustable from the City Ledger (budget screen) sliders; stored in `GameState.budgetPolicy`
+and mirrored into the Rust sim via `SimCommand::SetBudgetPolicy`.
+
+- **Tax rates** per zone class (residential/commercial/industrial): whole percentages, 0–20%,
+  neutral default **9%**. Revenue for a class scales by `rate / 9`, so 9% reproduces the
+  pre-policy economy exactly. Each point above 9% costs that class **2 demand points**
+  (and adds 2 per point below 9%).
+- **Department funding** (transport/power/civic): whole percentages, 0–100%, default **100%**.
+  Upkeep scales linearly with funding. Coverage: transport funds roads + rail; power funds
+  power lines + plants; civic funds civic buildings + water pipes. Zone upkeep is
+  private-sector and unaffected.
+- **Consequences of underfunding**:
+  - Transport: commuter frustration — up to **8 demand points** of drag on all three classes
+    at 0% funding (`(100 − funding) × 0.08`).
+  - Power: brownouts — plant output scales with funding (`output × funding%`).
+  - Civic: crowded schools — service capacity scales with funding (`capacity × funding%`).
+- Old saves back-fill the neutral policy; out-of-range values clamp on load.
+
 ## Radio widget (toolbar)
 - Sits on the toolbar to the left of the Budget button with emoji controls (⏮️/▶️/⏸️/⏭️) plus a playlist-icon button that opens the station dropdown.
 - The dropdown lists entries from `public/audio/radio/stations.json`, each pointing at a subfolder and its `playlist.json`. Switching stations reloads the playlist/cover metadata without touching the rest of the UI.

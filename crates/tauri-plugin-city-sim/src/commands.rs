@@ -12,7 +12,7 @@ use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
-use city_sim_protocol::commands::Tool;
+use city_sim_protocol::commands::{BudgetPolicy, Tool};
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
 
@@ -49,6 +49,7 @@ pub struct TickEvent {
 pub enum SimCmd {
     ApplyTool(Tool, u32, u32),
     SetSpeed(f32),
+    SetBudgetPolicy(BudgetPolicy),
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
     GetMapSeed(mpsc::SyncSender<MapSeed>),
@@ -173,6 +174,9 @@ pub fn start(
                     Ok(SimCmd::SetSpeed(m)) => {
                         sim.set_speed(m);
                     }
+                    Ok(SimCmd::SetBudgetPolicy(policy)) => {
+                        sim.state.policy = policy.clamped();
+                    }
                     Ok(SimCmd::GetSnapshot(tx)) => {
                         let result = snapshot::to_bytes(&sim.state).map_err(|e| e.to_string());
                         let _ = tx.send(result);
@@ -242,6 +246,29 @@ pub fn apply_tool(state: State<'_, SimState>, tool: u8, x: u32, y: u32) -> Resul
 #[tauri::command]
 pub fn set_speed(state: State<'_, SimState>, multiplier: f32) -> Result<(), Error> {
     state.send(SimCmd::SetSpeed(multiplier))
+}
+
+/// Set the fiscal policy (tax rates 0–20, funding levels 0–100). Values are
+/// clamped on the sim thread; applies from the next tick.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn set_budget_policy(
+    state: State<'_, SimState>,
+    tax_residential: u8,
+    tax_commercial: u8,
+    tax_industrial: u8,
+    fund_transport: u8,
+    fund_power: u8,
+    fund_civic: u8,
+) -> Result<(), Error> {
+    state.send(SimCmd::SetBudgetPolicy(BudgetPolicy {
+        tax_residential,
+        tax_commercial,
+        tax_industrial,
+        fund_transport,
+        fund_power,
+        fund_civic,
+    }))
 }
 
 /// Stop the simulation thread. The `on_tick` channel will stop receiving events.
