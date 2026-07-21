@@ -30,3 +30,23 @@ export function screenToTile(
   const y = ((clientY - rect.top) * scaleY - camera.y) / (tileSize * camera.scale);
   return { x: Math.floor(x), y: Math.floor(y) };
 }
+
+export const MIN_SCALE = 0.5;
+export const MAX_SCALE = 3;
+
+// Scales by `factor` (clamped to [minScale, maxScale]) while keeping the world
+// point under (focusX, focusY) stationary — focus coordinates are in the same
+// space as `camera.x`/`camera.y`.
+export function zoomAt(
+  camera: Camera,
+  focusX: number,
+  focusY: number,
+  factor: number,
+  minScale = MIN_SCALE,
+  maxScale = MAX_SCALE
+) {
+  const prevScale = camera.scale;
+  camera.scale = Math.min(maxScale, Math.max(minScale, camera.scale * factor));
+  camera.x = focusX - ((focusX - camera.x) / prevScale) * camera.scale;
+  camera.y = focusY - ((focusY - camera.y) / prevScale) * camera.scale;
+}
