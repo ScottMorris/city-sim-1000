@@ -59,14 +59,64 @@ if (!appRoot) {
 appRoot.innerHTML = `
   <div class="topbar">
     <div class="logo">🏙️ <span>City Sim 1000</span></div>
-    <div class="hud">
-      <div class="panel"><h4>Budget</h4><div id="money">$0</div><div id="budget-net" class="budget-net">+$0 / month</div><div id="power">⚡ 0 MW</div><div id="water">💧 0 m³</div></div>
-      <div class="panel"><h4>Demands</h4><div class="demand-rows"><div class="demand-row"><span class="demand-label">R</span><div class="demand-bar"><div id="res-bar" class="demand-fill" style="background:#7bffb7;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">C</span><div class="demand-bar"><div id="com-bar" class="demand-fill" style="background:#5bc0eb;width:30%"></div></div></div><div class="demand-row"><span class="demand-label">I</span><div class="demand-bar"><div id="ind-bar" class="demand-fill" style="background:#f08c42;width:30%"></div></div></div></div></div>
-      <div class="panel"><h4>City</h4><div id="month">Month 1</div><div id="day">Day 1 of 30</div><div id="population">Population 0</div><div id="jobs">Jobs 0</div></div>
-      <div class="panel"><h4>Speed</h4><div class="controls-row"><button id="speed-slow" class="secondary">Slow</button><button id="speed-fast" class="secondary">Fast</button><button id="speed-ludicrous" class="secondary">Ludicrous</button></div><div class="panel-hint">Hotkeys: 1/2/3</div></div>
-      <div class="panel"><h4>Saves</h4><div class="controls-row"><button id="save-btn" class="secondary">Save</button><button id="load-btn" class="secondary">Load</button></div><div class="controls-row"><button id="download-btn" class="primary">Download</button><button id="upload-btn" class="secondary">Upload</button><input type="file" id="file-input" accept="application/json" style="display:none" /></div></div>
-      <div class="panel"><h4>Manual</h4><div class="controls-row"><button id="manual-btn" class="secondary">Open manual</button></div><div class="panel-hint">Opens the in-game guide in a popup.</div></div>
-      <div class="panel panel-right"><h4>Debug</h4><div class="controls-row"><button id="debug-overlay-btn" class="secondary">Show overlay</button><button id="debug-copy-btn" class="secondary">Copy state</button><button id="pending-penalty-btn" class="secondary">Penalties: On</button><button id="sim-bridge-btn" class="secondary">Sim: WASM</button></div><div class="panel-hint">Live stats and a clipboard snapshot.</div></div>
+    <div class="ribbon">
+      <button type="button" id="treasury-chip" class="ribbon-chip ribbon-chip-button" title="City treasury and utilities — click to open the budget screen">
+        <div class="ribbon-line">
+          <span id="money" class="ribbon-strong">$0</span>
+          <span id="budget-net" class="budget-net">+$0 / month</span>
+        </div>
+        <div class="ribbon-line">
+          <span id="power">⚡ 0 MW</span>
+          <span id="water">💧 0 m³</span>
+        </div>
+      </button>
+      <div class="ribbon-chip ribbon-rci" title="Zone demand — Residential / Commercial / Industrial">
+        <span class="rci-row"><span class="rci-label">R</span><span class="rci-track"><span id="res-bar" class="rci-fill" style="background:#7bffb7;width:30%"></span></span></span>
+        <span class="rci-row"><span class="rci-label">C</span><span class="rci-track"><span id="com-bar" class="rci-fill" style="background:#5bc0eb;width:30%"></span></span></span>
+        <span class="rci-row"><span class="rci-label">I</span><span class="rci-track"><span id="ind-bar" class="rci-fill" style="background:#f08c42;width:30%"></span></span></span>
+      </div>
+      <div class="ribbon-chip" title="Calendar">
+        <div class="ribbon-line"><span id="month">Month 1</span></div>
+        <div class="ribbon-line"><span id="day" class="ribbon-dim">Day 1/30</span></div>
+      </div>
+      <div class="ribbon-chip" title="Population and jobs">
+        <div class="ribbon-line"><span id="population">👥 0</span></div>
+        <div class="ribbon-line"><span id="jobs">💼 0</span></div>
+      </div>
+    </div>
+    <div class="ribbon-controls">
+      <details class="ribbon-menu">
+        <summary id="speed-summary" class="ribbon-btn" title="Simulation speed" aria-label="Speed menu">🐇</summary>
+        <div class="ribbon-menu-panel">
+          <button id="speed-slow" class="secondary" title="Slow — 0.5x (hotkey 1)">🐢 Slow (0.5x)</button>
+          <button id="speed-fast" class="secondary" title="Fast — 1x (hotkey 2)">🐇 Fast (1x)</button>
+          <button id="speed-ludicrous" class="secondary" title="Ludicrous — 3x (hotkey 3)">⚡ Ludicrous (3x)</button>
+        </div>
+      </details>
+      <button id="pause-btn" class="ribbon-btn" title="Pause (hotkey Space)" aria-label="Pause">⏸</button>
+      <button id="budget-modal-btn" class="ribbon-btn" title="Open the budget screen" aria-label="Open budget">📊</button>
+      <button id="bylaws-modal-btn" class="ribbon-btn" title="Open city bylaws" aria-label="Open bylaws">📜</button>
+      <details class="ribbon-menu">
+        <summary class="ribbon-btn" title="Saves — save, load, download, upload" aria-label="Saves menu">💾</summary>
+        <div class="ribbon-menu-panel">
+          <button id="save-btn" class="secondary">Save</button>
+          <button id="load-btn" class="secondary">Load</button>
+          <button id="download-btn" class="primary">Download</button>
+          <button id="upload-btn" class="secondary">Upload</button>
+          <input type="file" id="file-input" accept="application/json" style="display:none" />
+        </div>
+      </details>
+      <button id="manual-btn" class="ribbon-btn" title="Open the in-game manual" aria-label="Open manual">📖</button>
+      <button id="settings-btn" class="ribbon-btn" title="Open settings" aria-label="Open settings">⚙️</button>
+      <details class="ribbon-menu">
+        <summary class="ribbon-btn" title="Debug — overlay, state snapshot, penalties, sim engine" aria-label="Debug menu">🛠️</summary>
+        <div class="ribbon-menu-panel">
+          <button id="debug-overlay-btn" class="secondary">Show overlay</button>
+          <button id="debug-copy-btn" class="secondary">Copy state</button>
+          <button id="pending-penalty-btn" class="secondary">Penalties: On</button>
+          <button id="sim-bridge-btn" class="secondary">Sim: WASM</button>
+        </div>
+      </details>
     </div>
   </div>
   <div class="news-ticker news-ticker-hidden" id="news-ticker">
@@ -110,17 +160,68 @@ const dayEl = requireElement<HTMLDivElement>('#day');
 const speedSlowBtn = requireElement<HTMLButtonElement>('#speed-slow');
 const speedFastBtn = requireElement<HTMLButtonElement>('#speed-fast');
 const speedLudicrousBtn = requireElement<HTMLButtonElement>('#speed-ludicrous');
+const speedSummaryEl = requireElement<HTMLElement>('#speed-summary');
+const pauseBtn = requireElement<HTMLButtonElement>('#pause-btn');
 const saveBtn = requireElement<HTMLButtonElement>('#save-btn');
 const loadBtn = requireElement<HTMLButtonElement>('#load-btn');
 const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
 const uploadBtn = requireElement<HTMLButtonElement>('#upload-btn');
 const fileInput = requireElement<HTMLInputElement>('#file-input');
 const manualBtn = requireElement<HTMLButtonElement>('#manual-btn');
+const treasuryChip = requireElement<HTMLButtonElement>('#treasury-chip');
+const budgetModalBtn = requireElement<HTMLButtonElement>('#budget-modal-btn');
+const bylawsModalBtn = requireElement<HTMLButtonElement>('#bylaws-modal-btn');
+const settingsBtn = requireElement<HTMLButtonElement>('#settings-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
 const simBridgeBtn = requireElement<HTMLButtonElement>('#sim-bridge-btn');
 const newsTickerEl = requireElement<HTMLDivElement>('#news-ticker');
+
+// Ribbon dropdowns (<details>): only one open at a time, close on outside
+// click or Escape, and close the saves menu after an action is chosen.
+const ribbonMenus = [...document.querySelectorAll<HTMLDetailsElement>('details.ribbon-menu')];
+for (const menu of ribbonMenus) {
+  menu.addEventListener('toggle', () => {
+    if (!menu.open) return;
+    for (const other of ribbonMenus) {
+      if (other !== menu) other.open = false;
+    }
+    // The panel is position: fixed (see style.css), so it isn't placed by
+    // the normal flow — anchor it under this menu's own button each time.
+    const panel = menu.querySelector<HTMLElement>('.ribbon-menu-panel');
+    if (panel) {
+      const rect = menu.getBoundingClientRect();
+      panel.style.top = `${rect.bottom + 6}px`;
+      panel.style.right = `${window.innerWidth - rect.right}px`;
+    }
+  });
+}
+document.addEventListener('pointerdown', (e) => {
+  for (const menu of ribbonMenus) {
+    if (menu.open && !menu.contains(e.target as Node)) menu.open = false;
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    for (const menu of ribbonMenus) menu.open = false;
+  }
+});
+// Save/Load/Download/Upload are one-shot actions — collapse after use. The
+// debug menu stays open because its buttons are stateful toggles.
+const savesMenu = ribbonMenus.find((m) => m.querySelector('#save-btn'));
+savesMenu?.querySelectorAll('button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    savesMenu.open = false;
+  });
+});
+// Picking a speed tier is a one-shot choice too — collapse after use.
+const speedMenu = ribbonMenus.find((m) => m.querySelector('#speed-slow'));
+speedMenu?.querySelectorAll('button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    speedMenu.open = false;
+  });
+});
 
 const syncToolbarHeights = () => {
   const rect = toolbar.getBoundingClientRect();
@@ -287,8 +388,14 @@ const simSpeeds = {
   fast: 1,
   ludicrous: 3
 } as const;
+const SPEED_ICONS: Record<SimSpeedKey, string> = {
+  slow: '🐢',
+  fast: '🐇',
+  ludicrous: '⚡'
+};
 type SimSpeedKey = keyof typeof simSpeeds;
 let simSpeed: SimSpeedKey = 'fast';
+let isPaused = false;
 let lastNarrativeMonth = getCalendarPosition(state.day).month;
 let lastNarrativeGc = Date.now();
 let lastPlayerEventAt = 0;
@@ -714,15 +821,31 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
     simSpeed = speed;
+    isPaused = false;
     bridge.setSpeed(simSpeeds[speed]);
     speedSlowBtn.classList.toggle('active', speed === 'slow');
     speedFastBtn.classList.toggle('active', speed === 'fast');
     speedLudicrousBtn.classList.toggle('active', speed === 'ludicrous');
+    speedSummaryEl.textContent = SPEED_ICONS[speed];
+    pauseBtn.textContent = '⏸';
+    pauseBtn.title = 'Pause (hotkey Space)';
+    pauseBtn.setAttribute('aria-label', 'Pause');
+    pauseBtn.classList.remove('active');
     if (!opts.silent) {
       showToast(
         `Speed: ${speed === 'slow' ? 'Slow (0.5x)' : speed === 'fast' ? 'Fast (1x)' : 'Ludicrous (3x)'}`
       );
     }
+  };
+
+  const togglePause = () => {
+    isPaused = !isPaused;
+    bridge.setSpeed(isPaused ? 0 : simSpeeds[simSpeed]);
+    pauseBtn.textContent = isPaused ? '▶' : '⏸';
+    pauseBtn.title = isPaused ? 'Resume (hotkey Space)' : 'Pause (hotkey Space)';
+    pauseBtn.setAttribute('aria-label', isPaused ? 'Resume' : 'Pause');
+    pauseBtn.classList.toggle('active', isPaused);
+    showToast(isPaused ? 'Paused' : 'Resumed');
   };
 
   const updatePendingPenaltyBtn = () => {
@@ -796,6 +919,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       case 'speedLudicrous':
         setSimSpeed('ludicrous');
         return;
+      case 'togglePause':
+        togglePause();
+        return;
       case 'toggleMinimap':
         minimap?.toggleOpen();
         minimap?.markDirty();
@@ -859,6 +985,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     onApply: (next) => applySettings(next)
   });
 
+  treasuryChip.addEventListener('click', () => budgetModal.open());
+  budgetModalBtn.addEventListener('click', () => budgetModal.open());
+  bylawsModalBtn.addEventListener('click', () => bylawsModal.open());
+  settingsBtn.addEventListener('click', () => settingsModal?.open());
+
   const toolbarControllers = initToolbar(
     toolbar,
     (nextTool) => {
@@ -866,9 +997,6 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     },
     activeTool,
     {
-      onOpenBudget: () => budgetModal.open(),
-      onOpenBylaws: () => bylawsModal.open(),
-      onOpenSettings: () => settingsModal?.open(),
       radioVolume: state.settings.audio.radioVolume
     }
   );
@@ -922,6 +1050,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));
   speedFastBtn.addEventListener('click', () => setSimSpeed('fast'));
   speedLudicrousBtn.addEventListener('click', () => setSimSpeed('ludicrous'));
+  pauseBtn.addEventListener('click', () => togglePause());
   setSimSpeed(simSpeed, { silent: true });
   updatePendingPenaltyBtn();
 

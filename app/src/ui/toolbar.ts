@@ -1,3 +1,8 @@
+// toolbar.ts — tool palette, submenus, and the radio widget.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { Tool } from '../game/toolTypes';
 import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
 import { initRadioWidget, type RadioWidget } from './radio';
@@ -15,9 +20,6 @@ const waterOptions: Tool[] = [Tool.WaterPipe, Tool.WaterPump, Tool.WaterTower];
 const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 
 interface ToolbarOptions {
-  onOpenBudget?: () => void;
-  onOpenBylaws?: () => void;
-  onOpenSettings?: () => void;
   radioVolume?: number;
   radioStationId?: string;
   onRadioStationChange?: (stationId: string) => void;
@@ -35,7 +37,7 @@ export function initToolbar(
   options: ToolbarOptions = {}
 ): ToolbarControllers {
   toolbar.innerHTML = '';
-  const { onOpenBudget, onOpenBylaws, onOpenSettings, radioVolume, radioStationId, onRadioStationChange } = options;
+  const { radioVolume, radioStationId, onRadioStationChange } = options;
 
   const primaryRow = document.createElement('div');
   primaryRow.className = 'toolbar-row';
@@ -104,51 +106,6 @@ export function initToolbar(
   radioGroup.appendChild(radioHost);
   radioGroup.appendChild(radioStationHost);
   trailingCluster.appendChild(radioGroup);
-
-  const adminGroup = document.createElement('div');
-  adminGroup.className = 'toolbar-group toolbar-group-admin';
-  let hasAdminButtons = false;
-
-  if (onOpenSettings) {
-    const settingsBtn = document.createElement('button');
-    settingsBtn.type = 'button';
-    settingsBtn.className = 'tool-button';
-    settingsBtn.textContent = '⚙️ Settings';
-    settingsBtn.title = 'Open settings';
-    settingsBtn.addEventListener('click', () => onOpenSettings());
-    adminGroup.appendChild(settingsBtn);
-    hasAdminButtons = true;
-  }
-
-  if (onOpenBylaws) {
-    const bylawsBtn = document.createElement('button');
-    bylawsBtn.type = 'button';
-    bylawsBtn.id = 'bylaws-modal-btn';
-    bylawsBtn.className = 'tool-button';
-    bylawsBtn.textContent = '📜 Bylaws';
-    bylawsBtn.title = 'Open bylaws screen';
-    bylawsBtn.addEventListener('click', () => onOpenBylaws());
-    adminGroup.appendChild(bylawsBtn);
-    hasAdminButtons = true;
-  }
-
-  if (onOpenBudget) {
-    const budgetBtn = document.createElement('button');
-    budgetBtn.type = 'button';
-    budgetBtn.id = 'budget-modal-btn';
-    budgetBtn.className = 'tool-button budget-button';
-    budgetBtn.textContent = '📊 Budget';
-    budgetBtn.title = 'Open budget screen';
-    budgetBtn.addEventListener('click', () => onOpenBudget());
-    adminGroup.appendChild(budgetBtn);
-    hasAdminButtons = true;
-  }
-
-  if (hasAdminButtons) {
-    adminGroup.setAttribute('role', 'group');
-    adminGroup.setAttribute('aria-label', 'City admin tools');
-    trailingCluster.appendChild(adminGroup);
-  }
 
   const createSubButton = (row: HTMLElement, key: Tool, labelOverride?: string) => {
     const button = document.createElement('button');
@@ -246,9 +203,15 @@ export function initToolbar(
   const positionStationMenu = () => {
     const rect = stationButton.getBoundingClientRect();
     const margin = 8;
-    stationMenu.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    const menuWidth = Math.max(rect.width, 220);
+    // Anchor to the button's left edge, but never let the menu run past the
+    // right edge of the viewport — the radio widget sits at the trailing end
+    // of the toolbar, close enough to the edge that it otherwise would.
+    const maxLeft = window.innerWidth - menuWidth - margin;
+    const left = Math.min(rect.left, Math.max(margin, maxLeft));
+    stationMenu.style.left = `${Math.round(left + window.scrollX)}px`;
     stationMenu.style.top = `${Math.round(rect.bottom + margin + window.scrollY)}px`;
-    stationMenu.style.minWidth = `${Math.max(rect.width, 220)}px`;
+    stationMenu.style.minWidth = `${menuWidth}px`;
   };
 
   const openStationMenu = () => {

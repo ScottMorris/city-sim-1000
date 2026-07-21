@@ -40,6 +40,10 @@ select {
 
 #app {
   display: grid;
+  /* minmax(0, 1fr) column: an auto column would size to the topbar's
+     max-content (all HUD cards in a row) and push the whole page wider
+     than the window instead of letting the HUD strip scroll. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100vh;
   height: 100dvh;
@@ -53,7 +57,8 @@ select {
 
 .topbar {
   display: flex;
-  align-items: center;
+  /* Stretch so the controls cluster matches the stat chips' height. */
+  align-items: stretch;
   gap: 12px;
   min-height: 0;
   /* Safety net for any width: if the HUD ever grows taller than the
@@ -145,40 +150,173 @@ select {
   gap: 8px;
   align-items: center;
   font-weight: bold;
+  white-space: nowrap;
 }
 
-.hud {
+/* Status ribbon: one slim line of stat chips. The stats section scrolls
+   horizontally if it ever runs out of room; the controls cluster on the
+   right never scrolls, so speed/saves/manual/debug stay reachable. */
+.ribbon {
   flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  /* Keep the chips' drop shadow inside the scroll clip. */
+  padding-bottom: 4px;
 }
 
-.panel {
+.ribbon-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
+/* Two-line chips: related stats stack (money over power/water, month over
+   day) so the ribbon stays one chip tall but carries more per chip. */
+.ribbon-chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
   background: var(--panel);
   border: 2px solid #223557;
   border-radius: 10px;
-  padding: 10px;
-  box-shadow: 0 6px 0 #0a1020;
-}
-
-.panel.panel-right {
-  justify-self: end;
-}
-
-.panel h4 {
-  margin: 0 0 8px 0;
+  padding: 7px 10px;
+  box-shadow: 0 4px 0 #0a1020;
   font-size: 12px;
-  letter-spacing: 0.5px;
-  color: var(--accent);
 }
 
-.panel strong {
+.ribbon-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* A chip that doubles as a button (treasury → budget screen). */
+.ribbon-chip-button {
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+}
+
+.ribbon-chip-button:hover {
+  border-color: var(--accent);
+}
+
+.ribbon-strong {
   color: #fff;
+  font-weight: bold;
+}
+
+.ribbon-dim {
+  color: #9fb2d1;
+}
+
+/* Compact horizontal RCI demand meters. */
+.ribbon-rci {
+  gap: 4px;
+  justify-content: center;
+}
+
+.rci-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rci-track {
+  width: 88px;
+  height: 8px;
+  background: #0c1425;
+  border: 1px solid #1f2c4b;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.rci-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.rci-label {
+  font-size: 9px;
+  color: #9fb2d1;
+  width: 8px;
+}
+
+/* Icon buttons (speed segmented control, manual, menu summaries). */
+.ribbon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 6px 8px;
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020;
+  list-style: none;
+}
+
+.ribbon-btn:hover {
+  border-color: var(--accent);
+}
+
+.ribbon-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 4px 0 #0a1020, 0 0 10px rgba(123, 255, 183, 0.25);
+}
+
+/* Dropdowns for Saves and Debug. */
+.ribbon-menu {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.ribbon-menu > summary {
+  display: flex;
+}
+
+.ribbon-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ribbon-menu[open] > summary {
+  border-color: var(--accent);
+}
+
+.ribbon-menu-panel {
+  /* Fixed, not absolute: the topbar clips overflowing descendants (its own
+     overflow-y: auto safety net), so an absolutely-positioned panel would be
+     clipped the instant it extends past the topbar's own box. Fixed escapes
+     that entirely; JS sets top/right to track the trigger button on open. */
+  position: fixed;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: #0f1d34;
+  border: 2px solid #223557;
+  border-radius: 12px;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55);
+  min-width: max-content;
+  z-index: 3000;
 }
 
 .budget-net {
-  margin-top: 4px;
   font-weight: bold;
 }
 
@@ -221,10 +359,6 @@ select {
 
 .toolbar-spacer {
   flex: 1;
-}
-
-.budget-button {
-  margin-left: auto;
 }
 
 .toolbar-sub {
@@ -676,6 +810,9 @@ select {
   position: absolute;
   right: calc(12px + env(safe-area-inset-right, 0px));
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  /* Never grow past the canvas area up beneath the toolbar. */
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   background: rgba(12, 20, 40, 0.9);
   border: 2px solid #223557;
   border-radius: 12px;
@@ -797,33 +934,9 @@ select {
   font-size: 12px;
 }
 
-.demand-bar {
-  height: 12px;
-  background: #0c1425;
-  border: 1px solid #1f2c4b;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.demand-fill {
-  height: 100%;
-  transition: width 0.2s ease;
-}
-
 .map-stats {
   font-size: 11px;
   color: #9fb2d1;
-}
-
-.panel-hint {
-  margin-top: 6px;
-  color: #9fb2d1;
-  font-size: 11px;
-}
-
-.controls-row {
-  display: flex;
-  gap: 8px;
 }
 
 button.primary {
@@ -957,24 +1070,6 @@ button.secondary.active {
 
 .tool-hints.subtle {
   opacity: 0.9;
-}
-
-.demand-rows {
-  display: grid;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.demand-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 6px;
-}
-
-.demand-label {
-  font-size: 11px;
-  color: #9fb2d1;
 }
 
 footer {
@@ -1707,29 +1802,50 @@ footer {
   font-size: 12px;
 }
 
+@media (max-width: 1180px) {
+  .ribbon-chip {
+    font-size: 10px;
+    gap: 6px;
+    padding: 5px 8px;
+  }
+  .ribbon,
+  .ribbon-controls {
+    gap: 6px;
+  }
+  .logo span {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   body {
     font-size: 12px;
-  }
-  #app {
-    /* The stacked HUD panels can outgrow one screen on phone widths — cap
-       the topbar's row and let it scroll internally instead of overflowing
-       the fixed-height app shell. */
-    grid-template-rows: minmax(0, 40dvh) auto minmax(0, 1fr) auto;
   }
   .topbar {
     /* A centered flex item that overflows its box can leave the start-side
        content unreachable by scroll — align to the top instead so nothing
        above the fold gets stranded. */
     align-items: flex-start;
+    /* Stats and controls no longer fit on one line at phone widths — wrap
+       into two: logo + ribbon on the first, controls on their own second
+       line, instead of squeezing/scrolling everything into a single row. */
+    flex-wrap: wrap;
+    /* Capped on the element itself, not the #app grid row: a grid track's
+       minmax(0, <length>) gets inflated to fill leftover space during grid
+       track sizing even when content is much shorter (unlike an auto track),
+       which left a large dead gap below the ribbon's own two lines. Capping
+       height here instead means the row sizes to actual content, while this
+       still scrolls internally (overflow-y: auto, from the base rule above)
+       if the HUD ever does grow past 40dvh. */
+    max-height: 40dvh;
   }
-  .logo {
-    /* Re-centre just the logo against the (tall) HUD next to it — only the
-       HUD needs flex-start, for scroll reachability. */
-    align-self: center;
-  }
-  .hud {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  .ribbon-controls {
+    /* flex-basis: 100% forces this onto its own line in the wrapping topbar
+       above, regardless of how much room is left on the first line. */
+    flex-basis: 100%;
+    justify-content: flex-end;
+    /* Safety net if the controls still don't fit their own full-width line. */
+    overflow-x: auto;
   }
   .canvas-wrapper {
     height: 60vh;

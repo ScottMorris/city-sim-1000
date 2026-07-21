@@ -50,6 +50,7 @@ const HOTKEY_LABELS: Record<HotkeyAction, string> = {
   speedSlow: 'Speed: Slow',
   speedFast: 'Speed: Fast',
   speedLudicrous: 'Speed: Ludicrous',
+  togglePause: 'Pause / resume',
   toggleMinimap: 'Toggle minimap'
 };
 
