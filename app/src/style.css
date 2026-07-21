@@ -2237,11 +2237,26 @@ footer {
        if the HUD ever does grow past 40dvh. */
     max-height: 40dvh;
   }
+  .logo {
+    /* The ribbon chips it shares a line with are much taller (two stacked
+       lines of text); flex-start alignment above otherwise leaves the logo
+       stranded at the top of that row instead of centred against it. */
+    align-self: center;
+  }
+  .ribbon {
+    /* A real basis (rather than the base rule's flex: 1, i.e. basis 0%) so
+       flex-wrap below has an actual size to compare against the controls'
+       width — with basis 0% the ribbon always claims 100% of line one first,
+       forcing the controls to wrap even when a wide-but-short viewport
+       (phone landscape) has plenty of room for both on one line. */
+    flex: 1 1 200px;
+  }
   .ribbon-controls {
-    /* flex-basis: 100% forces this onto its own line in the wrapping topbar
-       above, regardless of how much room is left on the first line. */
-    flex-basis: 100%;
     justify-content: flex-end;
+    /* Deliberately no flex-basis: 100% here — let flex-wrap decide: share
+       line one with the ribbon when there's room (phone landscape), only
+       drop to its own second line when there truly isn't (phone portrait). */
+    flex: 0 0 auto;
     /* Safety net if the controls still don't fit their own full-width line. */
     overflow-x: auto;
   }
