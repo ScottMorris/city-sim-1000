@@ -7,7 +7,7 @@ on:
   pull_request:
   push:
     branches:
-      - rust-migration/phase-1-bridge-seam
+      - main
   workflow_dispatch:
 
 concurrency:
