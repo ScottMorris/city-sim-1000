@@ -35,6 +35,7 @@ import { createHud } from './ui/hud';
 import { bindPersistenceControls, showManualModal, showToast } from './ui/dialogs';
 import { initDebugOverlay } from './ui/debugOverlay';
 import { initHotkeys, defaultHotkeys, type HotkeyAction, type HotkeyController } from './ui/hotkeys';
+import { initDeviceMode } from './ui/deviceMode';
 import { initToolbar, updateToolbar } from './ui/toolbar';
 import { createNotificationCenter } from './ui/notifications';
 import { initMinimap } from './ui/minimap';
@@ -777,6 +778,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   syncToolbarHeights();
   window.addEventListener('resize', syncToolbarHeights);
   requestAnimationFrame(syncToolbarHeights);
+  // `resize` alone can lag or coalesce oddly around a mobile browser's own
+  // chrome/toolbar animation during rotation — layoutMode's matchMedia-driven
+  // change event is a more direct signal for the breakpoint actually flipping.
+  initDeviceMode({ onChange: syncToolbarHeights });
 
   bindPersistenceControls({
     saveBtn,
