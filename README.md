@@ -60,6 +60,7 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 - Money updates every in-game day; the HUD shows the current month/day on a 30-day calendar and the ticker shows a projected net per month (green surplus, red deficit, neutral when flat). The Budget screen (from the HUD) shows quarterly totals, per-month net, cash runway, revenue/expense details, and narrative Insights when enabled.
 - Revenue: a flat base stipend plus income from residents, commercial, and industrial zones.
 - Expenses: transport upkeep (roads/rail/lines/pipes) plus buildings (power plants, civic services, zone buildings). Budget history and breakdowns are saved with your city.
+- City Ledger (the Budget screen) has live policy sliders: per-class tax rates (residential/commercial/industrial, 0–20%, neutral default 9%) and per-department funding levels (transport/power/civic, 0–100%, default 100%). Changes apply immediately — taxes above neutral raise revenue but cool demand, underfunded departments save upkeep but drag demand or brown out power.
 - Revenue: base income plus per-population and per-zone contributions (commercial + industrial).
 - Expenses: upkeep from transport tiles, power lines, and all buildings (plants, zones, parks, pumps/towers, future services).
 - A power deficit halts new growth until restored; water is stubbed high until pipes ship.
