@@ -31,6 +31,10 @@ function deriveInputMode(win: Window, pointerQuery: MediaQueryList | undefined):
   if (pointerQuery) {
     return pointerQuery.matches ? 'touch' : 'mouse';
   }
+  // Last-resort fallback only: any browser with `matchMedia` at all returns a
+  // (truthy) MediaQueryList even for an unrecognized feature, so this only
+  // runs when `matchMedia` itself is missing entirely (a non-browser test
+  // harness, or an environment far below this app's existing `dvh` floor).
   return (win.navigator?.maxTouchPoints ?? 0) > 0 ? 'touch' : 'mouse';
 }
 
