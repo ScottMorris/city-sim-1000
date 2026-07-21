@@ -36,7 +36,7 @@ import { bindPersistenceControls, showManualModal, showToast } from './ui/dialog
 import { initDebugOverlay } from './ui/debugOverlay';
 import { initHotkeys, defaultHotkeys, type HotkeyAction, type HotkeyController } from './ui/hotkeys';
 import { initDeviceMode } from './ui/deviceMode';
-import { initToolbar, updateToolbar } from './ui/toolbar';
+import { initToolbar, updateToolbar, type ToolbarControllers } from './ui/toolbar';
 import { createNotificationCenter } from './ui/notifications';
 import { initMinimap } from './ui/minimap';
 import { initBudgetModal } from './ui/budgetModal';
@@ -230,6 +230,14 @@ speedMenu?.querySelectorAll('button').forEach((btn) => {
 });
 
 const syncToolbarHeights = () => {
+  // The compact shell has no top-anchored row at all — everything lives in a
+  // position: fixed dock/sheet at the bottom — so #viewport shouldn't reserve
+  // any top padding for it the way it does for the full desktop toolbar row.
+  if (toolbar.dataset.layoutMode === 'compact') {
+    viewport.style.setProperty('--toolbar-base-height', '0px');
+    viewport.style.setProperty('--toolbar-visible-height', '0px');
+    return;
+  }
   const rect = toolbar.getBoundingClientRect();
   const styles = getComputedStyle(toolbar);
   const paddingTop = parseFloat(styles.paddingTop) || 0;
@@ -757,17 +765,32 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   ]);
   console.log('Palette texture loaded', paletteTexture);
 
-  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette, tileTextures);
-  await renderer.init(wrapper);
   // `resize` alone can lag or coalesce oddly around a mobile browser's own
   // chrome/toolbar animation during rotation — layoutMode's matchMedia-driven
   // change event is a more direct signal for the breakpoint actually flipping.
-  const deviceMode = initDeviceMode({ onChange: syncToolbarHeights });
+  // Reassigned once the toolbar is set up below, so a live layoutMode flip
+  // (rotation across the compact/full breakpoint) can rebuild its shell too.
+  let handleDeviceModeChange = () => syncToolbarHeights();
+  const deviceMode = initDeviceMode({ onChange: () => handleDeviceModeChange() });
   if (deviceMode.getMode().layoutMode === 'compact') {
     // Deeper default zoom so tiles are a comfortable touch target on a small
     // screen, rather than starting at the same density as a full desktop view.
     camera.scale = COMPACT_DEFAULT_ZOOM;
+    // Set this before the renderer first measures canvas-wrapper below,
+    // rather than leaving it to syncToolbarHeights() afterward — Pixi's
+    // resizeTo does resize its internal screen/canvas dimensions correctly
+    // in response to a later CSS-only size change (confirmed), but the
+    // canvas doesn't actually draw into the newly-available area regardless,
+    // for reasons that didn't resolve with a manual app.resize() call either.
+    // Simplest fix: never let the size change out from under it in the first
+    // place. The compact shell has no top-anchored content, so this is 0
+    // unconditionally, unlike the full shell's real .toolbar-row height.
+    viewport.style.setProperty('--toolbar-base-height', '0px');
+    viewport.style.setProperty('--toolbar-visible-height', '0px');
   }
+
+  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette, tileTextures);
+  await renderer.init(wrapper);
   centerCamera(state, wrapper, TILE_SIZE, camera);
 
   const hud = createHud({
@@ -1006,21 +1029,51 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   bylawsModalBtn.addEventListener('click', () => bylawsModal.open());
   settingsBtn.addEventListener('click', () => settingsModal?.open());
 
-  const toolbarControllers = initToolbar(
-    toolbar,
-    (nextTool) => {
-      setTool(nextTool);
-    },
-    activeTool,
-    {
-      radioVolume: state.settings.audio.radioVolume
+  let toolbarControllers: ToolbarControllers;
+  const setupToolbar = () => {
+    const previousStationId = toolbarControllers?.getActiveStationId();
+    toolbarControllers = initToolbar(
+      toolbar,
+      (nextTool) => {
+        setTool(nextTool);
+      },
+      activeTool,
+      {
+        layoutMode: deviceMode.getMode().layoutMode,
+        radioVolume: state.settings.audio.radioVolume,
+        radioStationId: previousStationId
+      }
+    );
+    radioController = toolbarControllers.radio;
+  };
+  setupToolbar();
+  handleDeviceModeChange = () => {
+    // Rebuild the toolbar shell first (if the mode actually flipped) so
+    // syncToolbarHeights below reads the freshly-updated layoutMode instead
+    // of the stale one — otherwise --toolbar-base-height stays wrong until
+    // some unrelated resize/rAF happens to recompute it.
+    if (toolbar.dataset.layoutMode !== deviceMode.getMode().layoutMode) {
+      setupToolbar();
     }
-  );
-  radioController = toolbarControllers.radio;
+    syncToolbarHeights();
+    // See the matching comment below: force Pixi to pick up canvas-wrapper's
+    // new size, since `resizeTo`'s own auto-resize doesn't reliably do so
+    // within the same tick as the CSS change that caused it.
+    renderer.app.resize();
+  };
   applySettings(state.settings);
   syncToolbarHeights();
   window.addEventListener('resize', syncToolbarHeights);
   requestAnimationFrame(syncToolbarHeights);
+  // syncToolbarHeights() may have just changed --toolbar-base-height from
+  // its CSS fallback to the real computed full-shell .toolbar-row height.
+  // Pixi's `resizeTo` is known not to reliably respond to a layout-only
+  // resize like this (https://github.com/pixijs/pixijs/issues/11427) — only
+  // to an actual window resize event — so nudge it explicitly. (Compact mode
+  // avoids ever needing this for the initial load by setting the height
+  // before the renderer first initializes, above; this remains a best-effort
+  // catch-all for the full shell and any other future case.)
+  renderer.app.resize();
 
   bindPersistenceControls({
     saveBtn,
