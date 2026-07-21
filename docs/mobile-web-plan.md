@@ -207,7 +207,7 @@ for saves/replays moving between phone and desktop).
   manual save slot or gets its own. *Needed by M3-1.*
 - **Reference mid-tier device** for the M4-3 pass. *Needed by M4-3.*
 
-## If/when we promote to a GitHub epic
-Same recipe as the Rust migration doc: one epic issue linking here, one sub-issue per
-task (`M0-1`…), title = task line, body = DoD + deps + anchor link. `mobile-web`
-label + a milestone per phase.
+## GitHub epic
+Promoted: epic [#61](https://github.com/ScottMorris/city-sim-1000/issues/61), one
+sub-issue per task (`M0-1` = #62 … `M5-3` = #85), all under the `mobile-web` label.
+Check tasks off here **and** close the matching issue; rationale stays in this doc.
