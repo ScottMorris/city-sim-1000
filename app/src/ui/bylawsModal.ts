@@ -1,11 +1,16 @@
 import { projectLightingPolicy } from '../game/bylawAnalytics';
 import { DEFAULT_BYLAWS, LIGHTING_POLICIES, type LightingBylaw } from '../game/bylaws';
-import type { GameState } from '../game/gameState';
+import { TileKind, type GameState } from '../game/gameState';
+import {
+  NATURE_RESERVE_UNLOCK_SCORE,
+  type WildernessPolicy
+} from '../game/protocol/commands';
 import { showToast } from './dialogs';
 
 type BylawsModalOptions = {
   getState: () => GameState;
   onSelectLighting: (lighting: LightingBylaw) => void;
+  onWildernessPolicyChange?: (policy: WildernessPolicy) => void;
   onClose?: () => void;
 };
 
@@ -43,7 +48,7 @@ function createDeltaPill(
 }
 
 export function initBylawsModal(options: BylawsModalOptions) {
-  const { getState, onSelectLighting, onClose } = options;
+  const { getState, onSelectLighting, onWildernessPolicyChange, onClose } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((event: KeyboardEvent) => void) | null = null;
 
@@ -128,6 +133,100 @@ export function initBylawsModal(options: BylawsModalOptions) {
     `;
     lightingSection.append(lightingTitle, lightingHint, lightingOptions, deltaHint, lightingNotes);
 
+    // --- Wilderness programmes (#9) ---
+    const wildernessSection = document.createElement('div');
+    wildernessSection.className = 'bylaws-section';
+    const wildernessTitle = document.createElement('div');
+    wildernessTitle.className = 'bylaws-section-title';
+    wildernessTitle.textContent = 'Wilderness programmes';
+    const wildernessHint = document.createElement('div');
+    wildernessHint.className = 'bylaws-section-hint';
+    wildernessHint.textContent =
+      'Programmes that trade treasury money for a greener city. Effects apply within a few sim ticks.';
+    const wildernessOptions = document.createElement('div');
+    wildernessOptions.className = 'bylaws-options';
+    wildernessSection.append(wildernessTitle, wildernessHint, wildernessOptions);
+
+    const renderWildernessOptions = () => {
+      const state = getState();
+      const policy = state.wildernessPolicy;
+      const score = state.wilderness.score;
+      const industrialZones = state.tiles.filter((t) => t.kind === TileKind.Industrial).length;
+      const reserveUnlocked = policy.natureReserve || score >= NATURE_RESERVE_UNLOCK_SCORE;
+      wildernessOptions.innerHTML = '';
+
+      const programmes: {
+        key: keyof WildernessPolicy;
+        label: string;
+        lede: string;
+        costLabel: string;
+        cost: number;
+        enabled: boolean;
+        locked: boolean;
+        lockHint?: string;
+      }[] = [
+        {
+          key: 'natureReserve',
+          label: '🌿 Nature Reserve',
+          lede: 'Rangers connect and protect green space: bigger patch bonuses, gentler fragmentation penalties.',
+          costLabel: 'Programme cost',
+          cost: 100 * MONTHLY_EXPENSE_FACTOR,
+          enabled: policy.natureReserve,
+          locked: !reserveUnlocked,
+          lockHint: `Unlocks at Wilderness ${NATURE_RESERVE_UNLOCK_SCORE} (currently ${Math.round(score)}).`
+        },
+        {
+          key: 'greenIndustry',
+          label: '♻️ Green Industry',
+          lede: 'Subsidize scrubbers and clean processes so industrial tiles weigh far less on the wilderness score.',
+          costLabel: 'Subsidy',
+          cost: industrialZones * 2 * MONTHLY_EXPENSE_FACTOR,
+          enabled: policy.greenIndustry,
+          locked: false
+        }
+      ];
+
+      for (const programme of programmes) {
+        const option = document.createElement('label');
+        option.className = 'bylaws-option';
+        option.dataset.active = String(programme.enabled);
+        if (programme.locked) option.style.opacity = '0.55';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = programme.enabled;
+        checkbox.disabled = programme.locked;
+        checkbox.addEventListener('change', () => {
+          const next: WildernessPolicy = { ...getState().wildernessPolicy, [programme.key]: checkbox.checked };
+          onWildernessPolicyChange?.(next);
+          renderWildernessOptions();
+          showToast(
+            `${programme.label} ${checkbox.checked ? 'enabled' : 'disabled'}.`,
+            { severity: 'info', durationMs: 2400, id: 'bylaws-wilderness' }
+          );
+        });
+
+        const optionBody = document.createElement('div');
+        optionBody.className = 'bylaws-option-body';
+        const title = document.createElement('div');
+        title.className = 'bylaws-option-title';
+        title.textContent = programme.label;
+        const optionLede = document.createElement('div');
+        optionLede.className = 'bylaws-option-lede';
+        optionLede.textContent = programme.locked && programme.lockHint ? programme.lockHint : programme.lede;
+        const deltas = document.createElement('div');
+        deltas.className = 'bylaws-option-deltas';
+        deltas.append(
+          createDeltaPill(programme.costLabel, -programme.cost, { currency: true, unit: '/mo', precision: 0 })
+        );
+        optionBody.append(title, optionLede, deltas);
+        option.append(checkbox, optionBody);
+        wildernessOptions.appendChild(option);
+      }
+    };
+
+    renderWildernessOptions();
+
     const districtSection = document.createElement('div');
     districtSection.className = 'bylaws-section';
     districtSection.innerHTML = `
@@ -196,7 +295,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
 
     renderLightingOptions();
 
-    body.append(lightingSection, districtSection);
+    body.append(lightingSection, wildernessSection, districtSection);
     modal.append(header, lede, body, footer);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);

@@ -24,8 +24,25 @@ export interface HudElements {
   jobsEl: HTMLElement;
   monthEl: HTMLElement;
   dayEl: HTMLElement;
+  wildernessEl: HTMLElement;
+  wildernessChip: HTMLElement;
   overlayRoot: HTMLElement;
 }
+
+/** Human labels for the wilderness breakdown categories, tooltip order. */
+const WILDERNESS_LABELS: [keyof import('../game/gameState').WildernessBreakdown, string][] = [
+  ['forests', 'Forests'],
+  ['parks', 'Parks'],
+  ['openLand', 'Open land'],
+  ['waterEdge', 'Water edge'],
+  ['patch', 'Patch bonus'],
+  ['fragmentation', 'Fragmentation'],
+  ['zones', 'Zoning'],
+  ['industry', 'Industry'],
+  ['transport', 'Roads & rail'],
+  ['power', 'Power'],
+  ['civic', 'Civic']
+];
 
 export function createHud(elements: HudElements) {
   let overlayContainer: HTMLDivElement | null = null;
@@ -81,6 +98,21 @@ export function createHud(elements: HudElements) {
     const calendar = getCalendarPosition(state.day);
     elements.monthEl.textContent = `Month ${calendar.month}`;
     elements.dayEl.textContent = `Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH}`;
+
+    const wild = state.wilderness;
+    const arrow = wild.trend > 0.5 ? '↑' : wild.trend < -0.5 ? '↓' : '→';
+    elements.wildernessEl.textContent = `🌲 ${Math.round(wild.score)} ${arrow}`;
+    // Tooltip: the strongest contributors, positive or negative, largest first.
+    const contributors = WILDERNESS_LABELS
+      .map(([key, label]) => ({ label, value: wild.breakdown[key] }))
+      .filter((c) => Math.abs(c.value) >= 0.5)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, 6)
+      .map((c) => `${c.label} ${c.value > 0 ? '+' : '−'}${Math.abs(Math.round(c.value))}`)
+      .join(' · ');
+    elements.wildernessChip.title = contributors
+      ? `Wilderness ${Math.round(wild.score)}/100 — ${contributors}`
+      : 'Wilderness score — how much of the map is thriving nature';
   };
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {

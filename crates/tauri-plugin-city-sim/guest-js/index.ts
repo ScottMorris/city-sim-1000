@@ -34,6 +34,8 @@ export interface TickEvent {
   demandResidential:  number   // f32 [0, 100]
   demandCommercial:   number   // f32 [0, 100]
   demandIndustrial:   number   // f32 [0, 100]
+  wildernessScore:    number   // f32 [0, 100]
+  wildernessTrend:    number   // f32 — fast EMA − slow EMA; sign gives the arrow
   width:              number   // u32 — grid width in tiles
   height:             number   // u32 — grid height in tiles
   /** One byte per tile, row-major. Values are `TileKind` u8 discriminants. */
@@ -144,6 +146,35 @@ export async function setBudgetPolicy(policy: {
     fundPower: policy.fundPower,
     fundCivic: policy.fundCivic,
   })
+}
+
+/**
+ * Toggle the wilderness programmes (Nature Reserve, Green Industry).
+ *
+ * Applies from the next wilderness recompute (~10 sim ticks). Nature Reserve
+ * boosts patch bonuses and softens fragmentation penalties for a flat daily
+ * cost; Green Industry reduces industrial eco damage for a per-zone subsidy.
+ */
+export async function setWildernessPolicy(policy: {
+  natureReserve: boolean
+  greenIndustry: boolean
+}): Promise<void> {
+  await invoke('plugin:city-sim|set_wilderness_policy', {
+    natureReserve: policy.natureReserve,
+    greenIndustry: policy.greenIndustry,
+  })
+}
+
+/**
+ * Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+ *
+ * Only Water/Tree kinds are applied onto untouched Land tiles, so player-built
+ * kinds present in a display snapshot can never leak into the engine. Recorded
+ * in the command log so undo replays rebuild the same map. Call once, right
+ * after `start()`.
+ */
+export async function setNaturalTerrain(kinds: Uint8Array): Promise<void> {
+  await invoke('plugin:city-sim|set_natural_terrain', { kinds: Array.from(kinds) })
 }
 
 export async function stop(): Promise<void> {

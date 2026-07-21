@@ -5,6 +5,7 @@
 
 use crate::buildings::{get_building_template, BuildingStatus};
 use crate::state::{DemandStats, GameState};
+use crate::wilderness::{demand_delta, WildernessTunables};
 use city_sim_protocol::tile_kind::TileKind;
 
 /// Population and job capacity totals — extracted from the city count so
@@ -297,12 +298,17 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
     let tax_penalty_ind = (state.policy.tax_industrial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
     let transport_drag = (100.0 - state.policy.fund_transport as f32) * TRANSPORT_DRAG_SLOPE;
 
+    // Wilderness pull — a green city attracts residents, a paved one repels
+    // them (±demand_weight at the score extremes, 0 at the neutral 50).
+    let wilderness_pull = demand_delta(state.wilderness.score, &WildernessTunables::default());
+
     let residential = compute_demand(&DemandInput {
         base: 70.0,
         fill_fraction: fill_residential,
         workforce_term: 0.0,
         labour_term: labour.vacancy_rate * 60.0 - labour.unemployment_rate * 80.0
             + education_demand_delta
+            + wilderness_pull
             - tax_penalty_res
             - transport_drag,
         pending_zones: pending_residential,

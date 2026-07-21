@@ -10,7 +10,9 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// Snapshot format version — bump when the binary layout changes incompatibly.
 /// v2: `GameState` gained `policy: BudgetPolicy` and `BudgetStats` gained the
 /// per-type maintenance breakdown fields.
-const VERSION: u32 = 2;
+/// v3: `GameState` gained `wilderness: WildernessStats` and `BudgetStats`
+/// gained `revenue_tourism`.
+const VERSION: u32 = 3;
 
 /// Serialise `state` to a compact postcard byte vector prefixed by a 8-byte
 /// header: magic `CSIM` (4 bytes) + version u32 (4 bytes, little-endian).

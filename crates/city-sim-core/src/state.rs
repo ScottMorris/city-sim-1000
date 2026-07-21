@@ -5,7 +5,8 @@
 
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
-use city_sim_protocol::commands::BudgetPolicy;
+use crate::wilderness::WildernessStats;
+use city_sim_protocol::commands::{BudgetPolicy, WildernessPolicy};
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
 
@@ -230,9 +231,13 @@ pub struct BudgetStats {
     pub revenue_pop: f32,
     pub revenue_commercial: f32,
     pub revenue_industrial: f32,
+    /// Tourism dividend — paid when the wilderness score clears its threshold.
+    pub revenue_tourism: f32,
     // Expense breakdown
     pub expenses_transport: f32,
     pub expenses_buildings: f32,
+    /// Daily cost of active wilderness programmes (Nature Reserve, Green Industry).
+    pub expenses_policies: f32,
     // Building expense sub-breakdown
     pub maint_power: f32,
     pub maint_civic: f32,
@@ -345,6 +350,12 @@ pub struct GameState {
     /// screen. Defaults are neutral (9% taxes, 100% funding), which
     /// reproduces the pre-policy economy bit-for-bit.
     pub policy: BudgetPolicy,
+    /// Wilderness score, trend, and breakdown — recomputed every
+    /// `WildernessTunables::recompute_interval_ticks` by the tick loop.
+    pub wilderness: WildernessStats,
+    /// Active wilderness programmes (Nature Reserve, Green Industry) set
+    /// from the Bylaws screen.
+    pub wilderness_policy: WildernessPolicy,
 }
 
 impl GameState {
@@ -376,6 +387,8 @@ impl GameState {
             budget: BudgetStats::default(),
             budget_history: VecDeque::new(),
             policy: BudgetPolicy::default(),
+            wilderness: WildernessStats::default(),
+            wilderness_policy: WildernessPolicy::default(),
         }
     }
 
@@ -402,6 +415,26 @@ impl GameState {
 
     pub fn tile_at_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
         self.tile_index(x, y).map(|i| &mut self.tiles[i])
+    }
+
+    /// Overwrite untouched `Land` tiles with natural `Water`/`Tree` terrain
+    /// from a row-major kind byte array (one `TileKind` u8 per tile).
+    ///
+    /// Only `Water` and `Tree` are accepted — anything else in the array is
+    /// ignored so player-built kinds present in a display snapshot can never
+    /// leak into the engine as free construction. Tiles that are no longer
+    /// `Land` (already built on) are left alone.
+    pub fn seed_natural_terrain(&mut self, kinds: &[u8]) {
+        let n = self.tiles.len().min(kinds.len());
+        for (tile, &kind_byte) in self.tiles.iter_mut().zip(kinds.iter()).take(n) {
+            if tile.kind != TileKind::Land {
+                continue;
+            }
+            if let Some(k @ (TileKind::Water | TileKind::Tree)) = TileKind::from_u8(kind_byte) {
+                tile.kind = k;
+            }
+        }
+        self.tile_revision += 1;
     }
 }
 

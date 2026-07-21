@@ -516,11 +516,16 @@ export class Simulation {
           base: revenueBase,
           residents: revenuePopulation,
           commercial: revenueCommercial,
-          industrial: revenueIndustrial
+          industrial: revenueIndustrial,
+          // Wilderness is excluded from the TS parity oracle by design —
+          // the oracle never pays a tourism dividend.
+          tourism: 0
         },
         expenses: {
           transport: expensesTransport,
-          buildings: expensesBuildings
+          buildings: expensesBuildings,
+          // Wilderness programmes are excluded from the TS parity oracle.
+          policies: 0
         },
         details: {
           transport: {

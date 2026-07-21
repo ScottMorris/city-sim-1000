@@ -95,6 +95,18 @@ impl BudgetPolicy {
     }
 }
 
+/// Wilderness programmes toggled from the Bylaws screen (#9).
+///
+/// `nature_reserve` (unlocks at wilderness ≥ 60): boosts the patch bonus and
+/// softens the fragmentation penalty for a flat daily cost.
+/// `green_industry`: industrial tiles do reduced wilderness damage in return
+/// for a per-zone daily subsidy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub struct WildernessPolicy {
+    pub nature_reserve: bool,
+    pub green_industry: bool,
+}
+
 /// A command sent from the UI/bridge into the simulation.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
@@ -107,6 +119,8 @@ pub enum SimCommand {
     LoadState { seed: u32 },
     /// Set tax rates and department funding levels.
     SetBudgetPolicy { policy: BudgetPolicy },
+    /// Toggle wilderness programmes (Nature Reserve, Green Industry).
+    SetWildernessPolicy { policy: WildernessPolicy },
 }
 
 /// Result returned synchronously for `ApplyTool` commands.
@@ -235,6 +249,24 @@ mod tests {
         assert_eq!(policy.fund_transport, MAX_FUNDING);
         assert_eq!(policy.fund_power, MAX_FUNDING);
         assert_eq!(policy.fund_civic, 0);
+    }
+
+    #[test]
+    fn wilderness_policy_round_trips_postcard() {
+        let policy = WildernessPolicy {
+            nature_reserve: true,
+            green_industry: false,
+        };
+        let bytes = to_allocvec(&SimCommand::SetWildernessPolicy { policy }).unwrap();
+        let back: SimCommand = from_bytes(&bytes).unwrap();
+        assert!(matches!(back, SimCommand::SetWildernessPolicy { policy: p } if p == policy));
+    }
+
+    #[test]
+    fn default_wilderness_policy_is_all_off() {
+        let p = WildernessPolicy::default();
+        assert!(!p.nature_reserve);
+        assert!(!p.green_industry);
     }
 
     #[test]

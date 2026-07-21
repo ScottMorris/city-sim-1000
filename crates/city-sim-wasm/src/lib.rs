@@ -5,7 +5,7 @@
 
 use city_sim_core::{command_log::CommandLog, commands::apply_tool, sim::Simulation};
 use city_sim_protocol::{
-    commands::{BudgetPolicy, Tool},
+    commands::{BudgetPolicy, Tool, WildernessPolicy},
     tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE},
 };
 use wasm_bindgen::prelude::*;
@@ -167,6 +167,51 @@ impl SimHost {
     pub fn budget_maint_zones_ind(&self) -> f32 {
         self.sim.state.budget.maint_zones_ind
     }
+    pub fn budget_revenue_tourism(&self) -> f32 {
+        self.sim.state.budget.revenue_tourism
+    }
+    pub fn budget_expenses_policies(&self) -> f32 {
+        self.sim.state.budget.expenses_policies
+    }
+    pub fn wilderness_score(&self) -> f32 {
+        self.sim.state.wilderness.score
+    }
+    pub fn wilderness_trend(&self) -> f32 {
+        self.sim.state.wilderness.trend
+    }
+    pub fn wilderness_forests(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.forests
+    }
+    pub fn wilderness_parks(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.parks
+    }
+    pub fn wilderness_open_land(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.open_land
+    }
+    pub fn wilderness_water_edge(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.water_edge
+    }
+    pub fn wilderness_patch(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.patch
+    }
+    pub fn wilderness_fragmentation(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.fragmentation
+    }
+    pub fn wilderness_zones(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.zones
+    }
+    pub fn wilderness_industry(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.industry
+    }
+    pub fn wilderness_transport(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.transport
+    }
+    pub fn wilderness_power(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.power
+    }
+    pub fn wilderness_civic(&self) -> f32 {
+        self.sim.state.wilderness.breakdown.civic
+    }
     pub fn set_money(&mut self, amount: f64) {
         self.sim.state.money = amount as i64;
     }
@@ -192,6 +237,26 @@ impl SimHost {
             fund_civic,
         }
         .clamped();
+    }
+
+    /// Toggle the wilderness programmes (Nature Reserve, Green Industry).
+    /// Applies from the next wilderness recompute.
+    pub fn set_wilderness_policy(&mut self, nature_reserve: bool, green_industry: bool) {
+        self.sim.state.wilderness_policy = WildernessPolicy {
+            nature_reserve,
+            green_industry,
+        };
+    }
+
+    /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+    ///
+    /// Only `Water`/`Tree` kinds are applied — see
+    /// `GameState::seed_natural_terrain`. Recorded in the command log so
+    /// undo replays and future bridge swaps rebuild the same map. Call once,
+    /// after construction and before any commands.
+    pub fn set_natural_terrain(&mut self, kinds: &[u8]) {
+        self.log.set_terrain(kinds.to_vec());
+        self.sim.state.seed_natural_terrain(kinds);
     }
 
     /// Advance the simulation by `dt` seconds (real time). The speed
@@ -232,12 +297,14 @@ impl SimHost {
             return false;
         }
         let prev_speed = self.sim.speed();
-        // Policy is not part of the command log — carry it across the replay
-        // so undoing a tool doesn't also reset taxes/funding.
+        // Policies are not part of the command log — carry them across the
+        // replay so undoing a tool doesn't also reset taxes or programmes.
         let prev_policy = self.sim.state.policy;
+        let prev_wilderness_policy = self.sim.state.wilderness_policy;
         self.sim = self.log.replay();
         self.sim.set_speed(prev_speed);
         self.sim.state.policy = prev_policy;
+        self.sim.state.wilderness_policy = prev_wilderness_policy;
         true
     }
 
@@ -265,6 +332,15 @@ impl SimHost {
             buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
             // 0xFF = no underground (0 = TileKind::Land, not a valid sentinel).
             buf[o.underground_kind + i] = tile.underground.map_or(0xFF, |k| k as u8);
+            // 128 = neutral until the first wilderness recompute fills the field.
+            buf[o.wilderness + i] = self
+                .sim
+                .state
+                .wilderness
+                .local_field
+                .get(i)
+                .copied()
+                .unwrap_or(128);
         }
         buf
     }

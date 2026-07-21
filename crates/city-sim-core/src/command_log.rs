@@ -9,7 +9,9 @@ use crate::commands::apply_tool;
 use crate::sim::Simulation;
 
 const MAGIC: &[u8; 4] = b"CLOG";
-const VERSION: u32 = 1;
+/// v2: added the optional `terrain` natural-terrain baseline. v1 logs are
+/// still readable — they decode with no terrain layer.
+const VERSION: u32 = 2;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +39,20 @@ pub struct CommandLog {
     pub height: u32,
     pub seed: u32,
     pub entries: Vec<CommandLogEntry>,
+    /// Natural terrain baseline: one `TileKind` u8 per tile, row-major.
+    /// Applied via `GameState::seed_natural_terrain` before replaying
+    /// commands, so replays (including undo) start from the generated
+    /// water/tree map rather than all-Land.
+    pub terrain: Option<Vec<u8>>,
+}
+
+/// v1 wire layout — no terrain field. Kept so old logs stay readable.
+#[derive(serde::Deserialize)]
+struct CommandLogV1 {
+    width: u32,
+    height: u32,
+    seed: u32,
+    entries: Vec<CommandLogEntry>,
 }
 
 impl CommandLog {
@@ -47,7 +63,13 @@ impl CommandLog {
             height,
             seed,
             entries: Vec::new(),
+            terrain: None,
         }
+    }
+
+    /// Set the natural terrain baseline applied at the start of every replay.
+    pub fn set_terrain(&mut self, kinds: Vec<u8>) {
+        self.terrain = Some(kinds);
     }
 
     /// Append a tool action at the current sim tick.
@@ -79,10 +101,21 @@ impl CommandLog {
             return Err(CommandLogError::BadMagic);
         }
         let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-        if version != VERSION {
-            return Err(CommandLogError::UnsupportedVersion(version));
+        match version {
+            1 => {
+                let v1: CommandLogV1 =
+                    postcard::from_bytes(&bytes[8..]).map_err(CommandLogError::Postcard)?;
+                Ok(Self {
+                    width: v1.width,
+                    height: v1.height,
+                    seed: v1.seed,
+                    entries: v1.entries,
+                    terrain: None,
+                })
+            }
+            VERSION => postcard::from_bytes(&bytes[8..]).map_err(CommandLogError::Postcard),
+            other => Err(CommandLogError::UnsupportedVersion(other)),
         }
-        postcard::from_bytes(&bytes[8..]).map_err(CommandLogError::Postcard)
     }
 
     /// Remove the most-recently recorded entry and return `true`, or return
@@ -110,6 +143,9 @@ impl CommandLog {
     /// session may take several seconds on a slow machine.
     pub fn replay(&self) -> Simulation {
         let mut sim = Simulation::new(self.width, self.height, self.seed);
+        if let Some(terrain) = &self.terrain {
+            sim.state.seed_natural_terrain(terrain);
+        }
         for entry in &self.entries {
             while sim.state.tick < entry.tick {
                 sim.step(1.0 / 20.0);
@@ -174,7 +210,65 @@ mod tests {
     fn header_magic_and_version() {
         let bytes = CommandLog::new(4, 4, 0).to_bytes().unwrap();
         assert_eq!(&bytes[..4], b"CLOG");
-        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(bytes[4..8].try_into().unwrap()), 2);
+    }
+
+    #[test]
+    fn v1_log_decodes_with_no_terrain() {
+        // Hand-build a v1 payload: same fields minus `terrain`.
+        #[derive(serde::Serialize)]
+        struct V1 {
+            width: u32,
+            height: u32,
+            seed: u32,
+            entries: Vec<CommandLogEntry>,
+        }
+        let payload = postcard::to_allocvec(&V1 {
+            width: 8,
+            height: 8,
+            seed: 42,
+            entries: vec![CommandLogEntry {
+                tick: 0,
+                tool: Tool::Road as u8,
+                x: 3,
+                y: 0,
+            }],
+        })
+        .unwrap();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"CLOG");
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend_from_slice(&payload);
+
+        let log = CommandLog::from_bytes(&bytes).expect("v1 log must decode");
+        assert_eq!(log.seed, 42);
+        assert_eq!(log.entries.len(), 1);
+        assert!(log.terrain.is_none());
+    }
+
+    #[test]
+    fn replay_applies_terrain_baseline() {
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut log = CommandLog::new(4, 4, 7);
+        // Tile 0 water, tile 1 tree, rest land.
+        let mut terrain = vec![TileKind::Land as u8; 16];
+        terrain[0] = TileKind::Water as u8;
+        terrain[1] = TileKind::Tree as u8;
+        log.set_terrain(terrain);
+
+        let sim = log.replay();
+        assert_eq!(sim.state.tiles[0].kind, TileKind::Water);
+        assert_eq!(sim.state.tiles[1].kind, TileKind::Tree);
+        assert_eq!(sim.state.tiles[2].kind, TileKind::Land);
+    }
+
+    #[test]
+    fn terrain_round_trips_through_bytes() {
+        let mut log = CommandLog::new(2, 2, 0);
+        log.set_terrain(vec![1, 2, 0, 0]);
+        let restored = CommandLog::from_bytes(&log.to_bytes().unwrap()).unwrap();
+        assert_eq!(restored.terrain.as_deref(), Some(&[1u8, 2, 0, 0][..]));
     }
 
     #[test]

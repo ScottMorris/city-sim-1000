@@ -4,7 +4,8 @@ import {
   GameState,
   TileKind,
   createDefaultMinimapSettings,
-  createDefaultSettings
+  createDefaultSettings,
+  createDefaultWildernessStats
 } from './gameState';
 import { SeededRng } from './rng';
 import { createBuildingState } from './buildings/state';
@@ -16,7 +17,11 @@ import {
   DEFAULT_SERVICE_DEFINITIONS
 } from './services';
 import { createEmptyEducationStats } from './education';
-import { clampBudgetPolicy, createDefaultBudgetPolicy } from './protocol/commands';
+import {
+  clampBudgetPolicy,
+  createDefaultBudgetPolicy,
+  createDefaultWildernessPolicy
+} from './protocol/commands';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -108,11 +113,13 @@ export function deserialize(payload: string): GameState {
       base: parsed.budget.breakdown.revenue?.base ?? 0,
       residents: parsed.budget.breakdown.revenue?.residents ?? parsed.budget.breakdown.revenue?.population ?? 0,
       commercial: parsed.budget.breakdown.revenue?.commercial ?? 0,
-      industrial: parsed.budget.breakdown.revenue?.industrial ?? 0
+      industrial: parsed.budget.breakdown.revenue?.industrial ?? 0,
+      tourism: parsed.budget.breakdown.revenue?.tourism ?? 0
     };
     parsed.budget.breakdown.expenses = {
       transport: parsed.budget.breakdown.expenses?.transport ?? 0,
-      buildings: parsed.budget.breakdown.expenses?.buildings ?? 0
+      buildings: parsed.budget.breakdown.expenses?.buildings ?? 0,
+      policies: parsed.budget.breakdown.expenses?.policies ?? 0
     };
     parsed.budget.breakdown.details = parsed.budget.breakdown.details ?? {
       transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
@@ -148,6 +155,20 @@ export function deserialize(payload: string): GameState {
     parsed.rngState = new SeededRng(parsed.seed).toJSON();
   }
   parsed.education = parsed.education ?? createEmptyEducationStats();
+  // Saves from before the wilderness score get zeroed stats; the sim
+  // recomputes real values within the first recompute interval after load.
+  parsed.wilderness = {
+    ...createDefaultWildernessStats(),
+    ...(parsed.wilderness ?? {}),
+    breakdown: {
+      ...createDefaultWildernessStats().breakdown,
+      ...(parsed.wilderness?.breakdown ?? {})
+    }
+  };
+  parsed.wildernessPolicy = {
+    ...createDefaultWildernessPolicy(),
+    ...(parsed.wildernessPolicy ?? {})
+  };
   parsed.bylaws = parsed.bylaws ?? { ...DEFAULT_BYLAWS };
   if (!parsed.bylaws.lighting) {
     parsed.bylaws.lighting = DEFAULT_BYLAWS.lighting;

@@ -22,13 +22,15 @@ import type { GameState, Tile } from './gameState';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileKindFromU8 } from './protocol/tileKind';
+import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Tool } from './toolTypes';
 import {
   start as pluginStart,
   applyTool as pluginApplyTool,
   setSpeed as pluginSetSpeed,
   setBudgetPolicy as pluginSetBudgetPolicy,
+  setWildernessPolicy as pluginSetWildernessPolicy,
+  setNaturalTerrain as pluginSetNaturalTerrain,
   stop as pluginStop,
   undoLastCommand as pluginUndoLastCommand,
   TOOL_ID,
@@ -104,6 +106,10 @@ export class TauriSimBridge implements SimBridge {
         this.state.budgetPolicy = cmd.policy;
         void pluginSetBudgetPolicy(cmd.policy);
         return { success: true };
+      case 'SetWildernessPolicy':
+        this.state.wildernessPolicy = cmd.policy;
+        void pluginSetWildernessPolicy(cmd.policy);
+        return { success: true };
     }
   }
 
@@ -146,11 +152,24 @@ export class TauriSimBridge implements SimBridge {
     await pluginStart(state.width, state.height, state.seed, (event) =>
       this.onTick(event),
     );
+    await this.seedEngine(state);
     this.handler?.({ type: 'Ready' });
   }
 
   private async restartPlugin(width: number, height: number, seed: number): Promise<void> {
     await pluginStart(width, height, seed, (event) => this.onTick(event));
+    await this.seedEngine(this.state);
+  }
+
+  /** Push natural terrain and both policies into a freshly started engine. */
+  private async seedEngine(state: GameState): Promise<void> {
+    const terrain = new Uint8Array(state.tiles.length);
+    for (let i = 0; i < terrain.length; i++) {
+      terrain[i] = tileKindToU8(state.tiles[i].kind);
+    }
+    await pluginSetNaturalTerrain(terrain);
+    await pluginSetBudgetPolicy(state.budgetPolicy);
+    await pluginSetWildernessPolicy(state.wildernessPolicy);
   }
 
   private onTick(event: TickEvent): void {
@@ -176,6 +195,11 @@ export class TauriSimBridge implements SimBridge {
     s.demand.residential = event.demandResidential;
     s.demand.commercial  = event.demandCommercial;
     s.demand.industrial  = event.demandIndustrial;
+
+    // Wilderness (breakdown stays zeroed on desktop until TickEvent carries it,
+    // matching the budget breakdown limitation above)
+    s.wilderness.score = event.wildernessScore;
+    s.wilderness.trend = event.wildernessTrend;
 
     // Tile kinds — resize the tiles array if dimensions changed
     const n = event.width * event.height;

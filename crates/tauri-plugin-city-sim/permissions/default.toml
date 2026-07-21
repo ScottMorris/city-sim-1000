@@ -2,4 +2,4 @@
 
 [default]
 description = "Grants access to all city-sim simulation commands."
-permissions = ["allow-start", "allow-apply-tool", "allow-set-speed", "allow-set-budget-policy", "allow-stop"]
+permissions = ["allow-start", "allow-apply-tool", "allow-set-speed", "allow-set-budget-policy", "allow-set-wilderness-policy", "allow-set-natural-terrain", "allow-stop"]

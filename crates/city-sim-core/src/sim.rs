@@ -14,6 +14,9 @@ use crate::economy::{
 use crate::education::recompute_education;
 use crate::state::GameState;
 use crate::utilities::{recompute_utility_network, UtilityKind};
+use crate::wilderness::{
+    apply_happiness_drift, compute_wilderness, update_trend, WildernessTunables,
+};
 use crate::zones::ZoneGrowthSim;
 
 // ---------------------------------------------------------------------------
@@ -36,6 +39,7 @@ pub struct Simulation {
     pub state: GameState,
     zone_growth: ZoneGrowthSim,
     decay_config: DecayConfig,
+    wilderness_tunables: WildernessTunables,
     water_enabled: bool,
     /// Ticks per real second at 1× speed; matches TS `ticksPerSecond = 20`.
     ticks_per_second: u32,
@@ -54,6 +58,7 @@ impl Simulation {
             state: GameState::new(width, height, seed),
             zone_growth: ZoneGrowthSim::new(),
             decay_config: DecayConfig::default(),
+            wilderness_tunables: WildernessTunables::default(),
             water_enabled: true,
             ticks_per_second: 20,
             speed: 1.0,
@@ -138,6 +143,31 @@ impl Simulation {
         // 8. Population + job growth (needs capacity from active buildings)
         let cap = count_city_capacity(&self.state);
         apply_population_growth(&mut self.state, cap.population, cap.jobs);
+
+        // 8.5. Wilderness — recomputed on a coarser cadence than the tick
+        // rate; demand (9) and economy (10) read the stored score.
+        if self
+            .state
+            .tick
+            .is_multiple_of(self.wilderness_tunables.recompute_interval_ticks)
+        {
+            let tunables = self
+                .wilderness_tunables
+                .effective(&self.state.wilderness_policy);
+            let out = compute_wilderness(&self.state, &tunables);
+            update_trend(
+                &mut self.state.wilderness,
+                out.score,
+                &self.wilderness_tunables,
+            );
+            self.state.wilderness.breakdown = out.breakdown;
+            self.state.wilderness.local_field = out
+                .eco_field
+                .iter()
+                .map(|&e| city_sim_protocol::tile_buffer::encode_eco(e))
+                .collect();
+            apply_happiness_drift(&mut self.state, out.score, &self.wilderness_tunables);
+        }
 
         // 9. Demand
         let demand = compute_city_demand(&self.state);
@@ -366,6 +396,53 @@ mod tests {
         assert!(
             fast.state.day >= slow.state.day,
             "faster speed should advance the day further"
+        );
+    }
+
+    #[test]
+    fn tick_populates_wilderness_score() {
+        let mut sim = Simulation::new(8, 8, 0);
+        assert!(!sim.state.wilderness.seeded, "fresh state starts unseeded");
+        sim.step(1.0 / 20.0); // first tick recomputes (tick 0 % interval == 0)
+        assert!(sim.state.wilderness.seeded);
+        // All-Land map → P/(P+k) = 1/1.5 ≈ 66.7
+        assert!(
+            (60.0..75.0).contains(&sim.state.wilderness.score),
+            "blank map score should be mid-high, got {}",
+            sim.state.wilderness.score
+        );
+        assert!(sim.state.wilderness.breakdown.open_land > 0.0);
+    }
+
+    #[test]
+    fn wilderness_raises_residential_demand_and_pays_tourism() {
+        use crate::demand::compute_city_demand;
+        use crate::economy::compute_daily_budget;
+
+        let mut sim = make_city_sim(42);
+        sim.step(1.0 / 20.0); // seed wilderness
+        sim.state.population = 500;
+
+        sim.state.wilderness.score = 20.0;
+        let low_demand = compute_city_demand(&sim.state).residential;
+        let low_budget = compute_daily_budget(&sim.state);
+        assert_eq!(low_budget.revenue_tourism, 0.0, "no dividend at low score");
+
+        sim.state.wilderness.score = 90.0;
+        let high_demand = compute_city_demand(&sim.state).residential;
+        let high_budget = compute_daily_budget(&sim.state);
+        assert!(
+            high_demand > low_demand,
+            "greener city must attract more residents ({high_demand} vs {low_demand})"
+        );
+        assert!(
+            high_budget.revenue_tourism > 0.0,
+            "score 90 must pay a tourism dividend"
+        );
+        assert!(
+            (high_budget.revenue - (low_budget.revenue + high_budget.revenue_tourism)).abs()
+                < 0.001,
+            "tourism must be the only revenue difference"
         );
     }
 

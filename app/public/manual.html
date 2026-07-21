@@ -43,7 +43,7 @@
 
     <h2>Radio</h2>
     <ul>
-      <li>A compact radio widget sits on the toolbar to the left of the Budget button. Emoji buttons control playback: ⏮️ previous, ▶️/⏸️ play or pause, ⏭️ next.</li>
+      <li>A compact radio widget sits at the trailing end of the toolbar (Budget/Bylaws/Settings live in the status ribbon instead). Emoji buttons control playback: ⏮️ previous, ▶️/⏸️ play or pause, ⏭️ next.</li>
       <li>The current track scrolls in a short marquee with “Artist — Title”; pausing also pauses the scroll and changing tracks resets it.</li>
       <li>Hover or focus the radio to reveal a small popover above the toolbar with full track details and a larger cover preview when available. If no cover is provided, the thumbnail stays hidden.</li>
       <li>If no playlist ships with the build yet, the radio reads “Radio offline” and controls are disabled until audio is added.</li>
@@ -54,7 +54,7 @@
       <li>The minimap lives in the bottom-right of the HUD with a base view showing terrain, zones, roads/rail, power lines, and buildings.</li>
       <li>Click or drag on the minimap to jump or slide the main camera; the current viewport stays outlined so you always know where you are.</li>
       <li>Use the toggle button or hotkey <code>M</code> to collapse or expand the panel; size presets keep it readable without crowding the HUD.</li>
-      <li>Overlay modes: <em>Base</em> (everything), <em>Power</em> (powered green, unpowered red, generation/lines teal), <em>Water</em> (water tiles, pumps, towers, pipes in blue), <em>Education</em> (schools purple, served zones green, underserved amber), <em>Underground</em> (ghosts surface buildings to show pipe network and subsurface infrastructure), and <em>Alerts</em> (abandoned/unpowered/unhappy zones glow warm). The same mode tints the main map so you can spot issues without relying on the minimap alone.</li>
+      <li>Overlay modes: <em>Base</em> (everything), <em>Power</em> (powered green, unpowered red, generation/lines teal), <em>Water</em> (water tiles, pumps, towers, pipes in blue), <em>Education</em> (schools purple, served zones green, underserved amber), <em>Wilderness</em> (eco heatmap — lush green to urban grey), <em>Underground</em> (ghosts surface buildings to show pipe network and subsurface infrastructure), and <em>Alerts</em> (abandoned/unpowered/unhappy zones glow warm). The same mode tints the main map so you can spot issues without relying on the minimap alone.</li>
     </ul>
 
     <h2>Tools</h2>
@@ -73,9 +73,10 @@
 
     <h2>Bylaws</h2>
     <ul>
-      <li>Open the <strong>Bylaws</strong> modal from the toolbar’s city admin cluster (next to Budget/Settings) to set a city-wide lighting standard.</li>
+      <li>Open the <strong>Bylaws</strong> modal from the status ribbon (next to Budget/Settings) to set a city-wide lighting standard.</li>
       <li><em>Mixed corridors</em> are the neutral baseline. <em>Energy-efficient</em> lighting trims civic/zone power draw and upkeep with a slight mood dip. <em>Carbon-arc lamps</em> boost ambience with higher power use and upkeep.</li>
       <li>The modal shows projected power demand and monthly upkeep deltas compared to your current policy; toggles apply immediately and save with your city.</li>
+      <li><strong>Wilderness programmes</strong> live here too: <em>Nature Reserve</em> (unlocks at Wilderness 60) strengthens patch bonuses and softens fragmentation penalties for a flat monthly cost, and <em>Green Industry</em> subsidizes clean industry so industrial tiles weigh far less on the wilderness score, priced per industrial zone.</li>
       <li>District overlays are planned; today the chosen lighting bylaw applies everywhere.</li>
     </ul>
 
@@ -95,6 +96,17 @@
       <li>Zones can abandon if demand stays very low, power is missing, or tiles are unhappy. Abandoned lots auto-clear back to zoned tiles and will regrow when demand recovers.</li>
       <li>Over-zoning is soft: pending zones gently trim demand with caps and a small floor so big paint jobs trickle-build instead of stalling. Strong demand will still punch through, but power deficits can drive it to zero.</li>
       <li>Demand bars show where citizens want you to grow next.</li>
+    </ul>
+
+    <h2>Wilderness</h2>
+    <ul>
+      <li>The 🌲 <strong>Wilderness</strong> chip in the status ribbon scores how much of your map is thriving nature, 0–100, with a trend arrow. Hover it for the biggest contributors, positive and negative.</li>
+      <li>Nature is worth more as an <em>ecosystem</em>: contiguous forest and park patches beat scattered trees, waterfront greenery earns a wetland bonus, and isolated nature tiles are penalized for fragmentation.</li>
+      <li>The minimap's <strong>Wilderness</strong> overlay paints the eco field on the map: lush green where nature thrives, grey where urban pressure dominates.</li>
+      <li>Industry, roads, rail, and power infrastructure push the score down — coal plants hardest of all; wind and solar tread far more lightly, and hydro sits in between.</li>
+      <li>A green city attracts residents (higher Residential demand) and keeps zones happier; a paved one does the opposite.</li>
+      <li>Keep the score above 60 and a <strong>Tourism dividend</strong> appears in the City Ledger, scaling with your population and how far the score climbs.</li>
+      <li>Hitting 60 also unlocks the <strong>Nature Reserve</strong> programme in Bylaws; <strong>Green Industry</strong> is available any time. Both cost money and show up as a Wilderness programmes line in the Ledger.</li>
     </ul>
 
     <h2>News ticker</h2>
@@ -120,7 +132,7 @@
 
     <h2>The status ribbon</h2>
     <ul>
-      <li>The bar across the top shows treasury and monthly net, power and water balances, R/C/I demand columns, the calendar, and population/jobs.</li>
+      <li>The bar across the top shows treasury and monthly net, power and water balances, R/C/I demand columns, the calendar, population/jobs, and the 🌲 Wilderness score.</li>
       <li>Hover any chip for details; the R/C/I columns rise with zone demand, SimCity-style.</li>
       <li>Right side: a speed menu (icon shows the active tier — 🐢 Slow, 🐇 Fast, ⚡ Ludicrous — hotkeys <code>1</code>/<code>2</code>/<code>3</code>), a ⏸ pause toggle (hotkey <code>Space</code>; picking a speed while paused resumes at that speed), 📊 budget, 📜 bylaws, the 💾 saves menu, 📖 this manual, ⚙️ settings, and 🛠️ debug tools.</li>
     </ul>

@@ -72,6 +72,21 @@ export interface SimStats {
   budgetMaintZonesRes: number;
   budgetMaintZonesCom: number;
   budgetMaintZonesInd: number;
+  budgetRevenueTourism: number;
+  budgetExpensesPolicies: number;
+  wildernessScore: number;
+  wildernessTrend: number;
+  wildernessForests: number;
+  wildernessParks: number;
+  wildernessOpenLand: number;
+  wildernessWaterEdge: number;
+  wildernessPatch: number;
+  wildernessFragmentation: number;
+  wildernessZones: number;
+  wildernessIndustry: number;
+  wildernessTransport: number;
+  wildernessPower: number;
+  wildernessCivic: number;
 }
 
 /** Fiscal policy as a flat tuple-ish record (mirrors SimHost.set_budget_policy args). */
@@ -84,15 +99,22 @@ export interface WorkerBudgetPolicy {
   fundCivic: number;
 }
 
+/** Wilderness programmes (mirrors SimHost.set_wilderness_policy args). */
+export interface WorkerWildernessPolicy {
+  natureReserve: boolean;
+  greenIndustry: boolean;
+}
+
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } }
+  | { type: 'init';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy; wildernessPolicy?: WorkerWildernessPolicy } }
   | { type: 'step';       payload: { dt: number } }
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
   | { type: 'set_policy'; payload: WorkerBudgetPolicy }
+  | { type: 'set_wilderness_policy'; payload: WorkerWildernessPolicy }
   | { type: 'undo' }
-  | { type: 'reset';      payload: { width: number; height: number; seed: number } }
-  | { type: 'load';       payload: { width: number; height: number; seed: number; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy } };
+  | { type: 'reset';      payload: { width: number; height: number; seed: number; terrain?: Uint8Array } }
+  | { type: 'load';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy; wildernessPolicy?: WorkerWildernessPolicy } };
 
 function applyPolicy(h: SimHost, p: WorkerBudgetPolicy) {
   h.set_budget_policy(
@@ -103,6 +125,10 @@ function applyPolicy(h: SimHost, p: WorkerBudgetPolicy) {
     p.fundPower,
     p.fundCivic,
   );
+}
+
+function applyWildernessPolicy(h: SimHost, p: WorkerWildernessPolicy) {
+  h.set_wilderness_policy(p.natureReserve, p.greenIndustry);
 }
 
 let host: SimHost | null = null;
@@ -151,6 +177,21 @@ function gatherStats(h: SimHost): SimStats {
     budgetMaintZonesRes:     h.budget_maint_zones_res(),
     budgetMaintZonesCom:     h.budget_maint_zones_com(),
     budgetMaintZonesInd:     h.budget_maint_zones_ind(),
+    budgetRevenueTourism:    h.budget_revenue_tourism(),
+    budgetExpensesPolicies:  h.budget_expenses_policies(),
+    wildernessScore:         h.wilderness_score(),
+    wildernessTrend:         h.wilderness_trend(),
+    wildernessForests:       h.wilderness_forests(),
+    wildernessParks:         h.wilderness_parks(),
+    wildernessOpenLand:      h.wilderness_open_land(),
+    wildernessWaterEdge:     h.wilderness_water_edge(),
+    wildernessPatch:         h.wilderness_patch(),
+    wildernessFragmentation: h.wilderness_fragmentation(),
+    wildernessZones:         h.wilderness_zones(),
+    wildernessIndustry:      h.wilderness_industry(),
+    wildernessTransport:     h.wilderness_transport(),
+    wildernessPower:         h.wilderness_power(),
+    wildernessCivic:         h.wilderness_civic(),
   };
 }
 
@@ -160,7 +201,11 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'init': {
       await init();
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      // Terrain must land before commands so placement validation sees the
+      // real water/tree map, and before the first step so wilderness does.
+      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
+      if (msg.payload.wildernessPolicy) applyWildernessPolicy(host, msg.payload.wildernessPolicy);
       if (msg.payload.commands) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);
@@ -204,6 +249,11 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       applyPolicy(host, msg.payload);
       break;
     }
+    case 'set_wilderness_policy': {
+      if (!host) break;
+      applyWildernessPolicy(host, msg.payload);
+      break;
+    }
     case 'undo': {
       if (!host) break;
       const happened = host.undo_last();
@@ -221,12 +271,15 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     }
     case 'reset': {
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       break;
     }
     case 'load': {
       if (!host) break;
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
+      if (msg.payload.wildernessPolicy) applyWildernessPolicy(host, msg.payload.wildernessPolicy);
       if (msg.payload.commands?.length) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);

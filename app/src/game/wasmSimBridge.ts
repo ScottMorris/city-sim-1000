@@ -20,7 +20,7 @@ import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
 import { tileBufferOffsets, decodeHappiness, FLAGS } from './protocol/tileBuffer';
-import { tileKindFromU8 } from './protocol/tileKind';
+import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Tool } from './toolTypes';
 
 // Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
@@ -116,10 +116,12 @@ export class WasmSimBridge implements SimBridge {
         width: state.width,
         height: state.height,
         seed: state.seed,
+        terrain: this.terrainBytes(),
         commands: preloadCommands?.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
         money: preloadCommands ? state.money : undefined,
         targetTick: preloadCommands ? state.tick : undefined,
         policy: state.budgetPolicy,
+        wildernessPolicy: state.wildernessPolicy,
       },
     });
   }
@@ -158,7 +160,12 @@ export class WasmSimBridge implements SimBridge {
         if (this.ready) {
           this.worker.postMessage({
             type: 'reset',
-            payload: { width: this.state.width, height: this.state.height, seed: cmd.seed },
+            payload: {
+              width: this.state.width,
+              height: this.state.height,
+              seed: cmd.seed,
+              terrain: this.terrainBytes(),
+            },
           });
         }
         break;
@@ -166,6 +173,12 @@ export class WasmSimBridge implements SimBridge {
         this.state.budgetPolicy = cmd.policy;
         if (this.ready) {
           this.worker.postMessage({ type: 'set_policy', payload: cmd.policy });
+        }
+        break;
+      case 'SetWildernessPolicy':
+        this.state.wildernessPolicy = cmd.policy;
+        if (this.ready) {
+          this.worker.postMessage({ type: 'set_wilderness_policy', payload: cmd.policy });
         }
         break;
     }
@@ -196,10 +209,12 @@ export class WasmSimBridge implements SimBridge {
           width: state.width,
           height: state.height,
           seed: state.seed,
+          terrain: this.terrainBytes(),
           commands: cmdLog.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
           money: state.money,
           targetTick: state.tick,
           policy: state.budgetPolicy,
+          wildernessPolicy: state.wildernessPolicy,
         },
       });
     } else {
@@ -208,7 +223,12 @@ export class WasmSimBridge implements SimBridge {
       if (this.ready) {
         this.worker.postMessage({
           type: 'reset',
-          payload: { width: state.width, height: state.height, seed: state.seed },
+          payload: {
+            width: state.width,
+            height: state.height,
+            seed: state.seed,
+            terrain: this.terrainBytes(),
+          },
         });
         this.worker.postMessage({ type: 'set_policy', payload: state.budgetPolicy });
       }
@@ -246,6 +266,16 @@ export class WasmSimBridge implements SimBridge {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
+  /** Natural terrain baseline as TileKind u8 bytes for the worker payloads. */
+  private terrainBytes(): Uint8Array | undefined {
+    if (this.naturalTileKinds === null) return undefined;
+    const bytes = new Uint8Array(this.naturalTileKinds.length);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = tileKindToU8(this.naturalTileKinds[i]);
+    }
+    return bytes;
+  }
+
   private handleWorkerMsg(msg: WorkerToMain): void {
     switch (msg.type) {
       case 'ready':
@@ -253,8 +283,9 @@ export class WasmSimBridge implements SimBridge {
         if (this.speedMult !== 1) {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
         }
-        // Policy may have changed while the worker was still booting.
+        // Policies may have changed while the worker was still booting.
         this.worker.postMessage({ type: 'set_policy', payload: this.state.budgetPolicy });
+        this.worker.postMessage({ type: 'set_wilderness_policy', payload: this.state.wildernessPolicy });
         this.handler?.({ type: 'Ready' });
         break;
       case 'step_result':
@@ -312,8 +343,10 @@ export class WasmSimBridge implements SimBridge {
     b.breakdown.revenue.residents   = stats.budgetRevenuePop;
     b.breakdown.revenue.commercial  = stats.budgetRevenueCommercial;
     b.breakdown.revenue.industrial  = stats.budgetRevenueIndustrial;
+    b.breakdown.revenue.tourism     = stats.budgetRevenueTourism;
     b.breakdown.expenses.transport  = stats.budgetExpensesTransport;
     b.breakdown.expenses.buildings  = stats.budgetExpensesBuildings;
+    b.breakdown.expenses.policies   = stats.budgetExpensesPolicies;
     b.breakdown.details.transport.roads      = stats.budgetMaintRoads;
     b.breakdown.details.transport.rail       = stats.budgetMaintRail;
     b.breakdown.details.transport.powerLines = stats.budgetMaintPowerLines;
@@ -338,6 +371,20 @@ export class WasmSimBridge implements SimBridge {
       commercial:  stats.budgetMaintZonesCom,
       industrial:  stats.budgetMaintZonesInd,
     };
+    const wild = this.state.wilderness;
+    wild.score = stats.wildernessScore;
+    wild.trend = stats.wildernessTrend;
+    wild.breakdown.forests       = stats.wildernessForests;
+    wild.breakdown.parks         = stats.wildernessParks;
+    wild.breakdown.openLand      = stats.wildernessOpenLand;
+    wild.breakdown.waterEdge     = stats.wildernessWaterEdge;
+    wild.breakdown.patch         = stats.wildernessPatch;
+    wild.breakdown.fragmentation = stats.wildernessFragmentation;
+    wild.breakdown.zones         = stats.wildernessZones;
+    wild.breakdown.industry      = stats.wildernessIndustry;
+    wild.breakdown.transport     = stats.wildernessTransport;
+    wild.breakdown.power         = stats.wildernessPower;
+    wild.breakdown.civic         = stats.wildernessCivic;
     // Record the daily budget history TS-side so the quarterly panel works
     // on the WASM path (the Rust sim keeps its own history internally but it
     // isn't carried over the stats wire).
@@ -363,8 +410,9 @@ export class WasmSimBridge implements SimBridge {
       const tile = this.state.tiles[i];
       const rustKind = tileKindFromU8(bytes[o.kind + i]);
       if (rustKind !== undefined) {
-        // Rust GameState::new starts with all-land; restore natural Water/Tree
-        // for tiles the player never explicitly placed on.
+        // The engine is seeded with natural terrain at init, so Rust normally
+        // reports Water/Tree itself now. This override remains as a fallback
+        // for any path where terrain seeding was missed.
         if (
           rustKind === TileKind.Land &&
           this.naturalTileKinds !== null &&
@@ -392,6 +440,8 @@ export class WasmSimBridge implements SimBridge {
       tile.buildingId = bid === 0 ? undefined : bid;
       const ugByte = bytes[o.undergroundKind + i];
       tile.underground = ugByte === 0xFF ? undefined : tileKindFromU8(ugByte);
+      // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
+      tile.wilderness = bytes[o.wilderness + i] / 255;
     }
 
     // Rebuild state.buildings so multi-tile sprite rendering has correct origins.

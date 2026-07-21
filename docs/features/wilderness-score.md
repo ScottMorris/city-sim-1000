@@ -19,22 +19,33 @@ Non-goals:
 
 ---
 
+## Design Decisions (locked 2026-07-13)
+
+These four decisions supersede the corresponding open questions in earlier drafts:
+
+1. **Scoring**: natural capital (P) and urban pressure (U) are summed **separately** and combined as `score = 100 · P / (P + U + k)`. No clamp-and-scale against a theoretical all-nature maximum — that formula pinned built-up cities at 0 and scored an untouched map ~17, both dead zones where player action stops moving the number. The ratio form always responds to marginal change, an untouched map lands naturally mid-high, and the P/U split falls straight out as the top-level tooltip breakdown.
+2. **Budget consequence (MVP)**: **tourism dividend only** — a monthly income line in the City Ledger when the score clears a threshold. Cleanup costs / environmental penalties are deferred to the Environmental Crisis follow-up (#9).
+3. **Happiness consequence (MVP)**: **global-only** — one citywide happiness modifier derived from the global score. The per-tile local field is used for the overlay heatmap only; local neighbourhood happiness effects are a later phase.
+4. **Parity**: wilderness is **excluded from the TS parity oracle** (`simulation.ts`). The oracle exists to verify ported pre-Rust behaviour; wilderness is Rust-first and its Rust unit/scenario tests are the spec. Wilderness-derived stats are carved out of parity assertions.
+
+---
+
 ## Player Fantasy
 
 “Carve out ecosystems for nature and balance it with industry/pollutants/hard surfaces.”
 
 Examples:
 
-* Plant forests, build parks, place a duck pond → **more wilderness**.
-* Add industry, roads/rail/power corridors → **less wilderness**.
+* Plant forests, build parks, keep green riverbanks → **more wilderness**.
+* Add industry, roads/rail/power corridors, coal plants → **less wilderness**.
 
 ---
 
 ## Core Output
 
 * **Global Wilderness Score**: `0–100`.
-* **Local Wilderness Field** (per-tile or per-chunk): a heatmap value used for overlays and neighbourhood effects.
-* **Trend Indicator**: short moving average (e.g., last 30–90 in-game days) used to show ↑/↓.
+* **Local Wilderness Field** (per-tile): a heatmap value used for the overlay (and, later, neighbourhood effects).
+* **Trend Indicator**: short moving average over recent in-game days, shown as ↑/→/↓ beside the score.
 
 ---
 
@@ -42,158 +53,135 @@ Examples:
 
 ### Concept: two blended forces
 
-Think of Wilderness as two things blended into one score:
+Wilderness is two sums blended into one score:
 
-1. Natural capital (forests, parks, water edges, wetlands, open land)
-2. Urban pressure (industry, roads/rail, power infrastructure, dense zoning, future pollution)
+1. **Natural capital (P)** — forests, parks, water edges, open land, contiguity.
+2. **Urban pressure (U)** — industry, roads/rail, power infrastructure, zoning, future pollution.
 
 ### Tile Contributions
 
-Each tile contributes a base “eco value” (positive or negative), then receives neighbourhood adjustments.
+Each tile contributes a base “eco value” (positive or negative), then receives neighbourhood adjustments. Positive results accumulate into P, negative into U (as a positive magnitude).
 
-**Base Eco Value** is derived from the tile type and (later) building properties.
+**Base eco weights**, mapped to the real `TileKind` enum (starter values — tune in play):
 
-Suggested starter weights (tune later):
-
-| Category         |          Tile/Building | Base Eco |
-| ---------------- | ---------------------: | -------: |
-| Strong positive  |         Forest / Trees |       +6 |
-| Medium positive  |                   Park |       +4 |
-| Small positive   |           Natural land |       +1 |
-| Special positive | Duck pond (park+water) |       +5 |
-| Neutral          | Water (see edge bonus) |  0 to +2 |
-| Mild negative    |            Residential |       -1 |
-| Negative         |             Commercial |       -2 |
-| Strong negative  |             Industrial |       -5 |
-| Negative         |                   Road |       -2 |
-| Negative         |                   Rail |       -2 |
-| Mild negative    |             Power line |       -1 |
+| `TileKind`         | Base Eco | Rationale |
+| ------------------ | -------: | --------- |
+| `Tree`             |       +6 | Strongest natural capital. |
+| `Park`             |       +4 | Managed green space. |
+| `Land`             |       +1 | Open natural land — small but citywide. |
+| `Water`            |        0 | Neutral base; contributes via the water-edge bonus instead. |
+| `Residential`      |       −1 | Mild footprint. |
+| `Commercial`       |       −2 | |
+| `Industrial`       |       −5 | Strong urban pressure. |
+| `Road`             |       −2 | Hard surface + fragmentation vector. |
+| `Rail`             |       −2 | |
+| `PowerLine`        |       −1 | Corridor, but light footprint. |
+| `CoalPlant`        |       −8 | Worst offender — creates the “pay more for cleaner power” pressure. |
+| `HydroPlant`       |       −2 | Clean but disruptive (reservoir/dam footprint). |
+| `WindTurbine`      |       −1 | Clean; land take only. |
+| `SolarFarm`        |       −1 | Clean; land take only. |
+| `WaterPump`        |       −1 | Small utility footprint. |
+| `WaterTower`       |       −1 | |
+| `ElementarySchool` |       −1 | Counts like residential footprint. |
+| `HighSchool`       |       −1 | |
+| `WaterPipe`        |        0 | **Underground layer — excluded.** Nature above a buried pipe is still nature. |
 
 Notes:
 
-* Keep these values in a central tunables object so you can iterate fast.
-* If zoning/buildings are not tile types yet, map them to per-tile footprint contributions.
+* All weights live in a central `WildernessTunables` struct so iteration is fast.
+* Only the surface `kind` is scored; the underground layer never contributes.
 
 ### Neighbourhood Adjustments
 
-To encourage *ecosystems* (not “spam trees”), apply bonuses/penalties:
+To encourage *ecosystems* (not “spam trees”), nature tiles (`Tree`, `Park`, `Land`) receive:
 
 1. **Patch Bonus (Contiguity)**
 
-* Contiguous clusters of nature tiles (forest/park/pond) become more valuable.
-* Implementation: flood-fill or union-find to compute cluster size and a bonus curve.
+* Contiguous clusters of nature tiles become more valuable per tile.
+* Implementation: single flood-fill pass labels clusters and records size; per-tile bonus follows a saturating curve (grows with cluster size, capped) so one big forest beats many small woods but returns diminish past a reference size.
 
 2. **Water Edge Bonus**
 
-* Nature tiles adjacent to water gain extra value (wetland vibe).
-* Encourages riverfront parks / ponds.
+* Nature tiles 4-adjacent to `Water` gain a flat bump (wetland/riverfront vibe).
 
 3. **Fragmentation Penalty**
 
-* Small isolated nature islands are less effective.
-* Implementation: if a nature tile has fewer than `k` nature neighbours (4- or 8-neighbourhood), subtract a penalty.
+* Nature tiles with fewer than `k` nature neighbours (8-neighbourhood) lose value — one tree surrounded by road is nearly worthless.
 
 ---
 
 ## Score Definition
 
-### Step 1: Compute per-tile eco contribution
+### Step 1: Per-tile eco contribution
 
-For each tile:
+For each surface tile:
 
-* `eco = baseEco(tileKind)`
+* `eco = baseEco(kind)`
 * `eco += patchBonus(clusterSize)` (nature tiles only)
-* `eco += edgeBonus(if nature and adjacent to water)`
-* `eco -= fragmentationPenalty(if nature and too few nature neighbours)`
+* `eco += edgeBonus` (nature tile 4-adjacent to water)
+* `eco −= fragmentationPenalty` (nature tile with too few nature neighbours)
 
-Store result in `ecoField[tileIndex]`.
+Store in `eco_field[tile]`.
 
 ### Step 2: Aggregate
 
-* `ecoTotal = sum(ecoField)`
+* `P = Σ max(eco, 0)`
+* `U = Σ max(−eco, 0)`
 
-### Step 3: Normalization to 0–100
+### Step 3: Score
 
-Normalize against a theoretical maximum for the current map:
+```
+score = 100 · P / (P + U + k)
+```
 
-* `ecoMax = (countBuildableTiles * baseEcoBestNature)`
-* `score = clamp01(ecoTotal / ecoMax) * 100`
+where `k = k_per_tile × buildable_tiles` (starter: `k_per_tile = 0.5`). The constant:
 
-Notes:
+* stops a two-tree hamlet from scoring 100,
+* scales with map size so the formula is map-agnostic,
+* keeps an untouched map (mostly `Land` at +1, plus generated tree patches) in the mid-to-high band.
 
-* Use **countBuildableTiles** to avoid water-heavy maps skewing the score.
-* If `ecoTotal` can go negative, decide whether:
+No clamping is needed — the ratio is inherently 0–100 and responds to every marginal change.
 
-  * clamp at 0 before normalizing, or
-  * allow negative totals but clamp after normalization.
+### Trend
 
-Recommendation (simple): clamp `ecoTotal` to `[0, ecoMax]` before scaling.
+A ring buffer of recent daily scores lives in `GameState` (so it serializes). The indicator compares the recent-window mean against the prior-window mean: ↑ / → / ↓.
 
 ---
 
 ## Update Frequency
 
-MVP:
-
-* Recompute wilderness every `N` simulation ticks (e.g., every 10 ticks) to keep it simple.
-
-Later optimisation:
-
-* Incremental updates using dirty rectangles / changed tiles.
-* Maintain cluster IDs to avoid full flood-fill each update.
+* Recompute fully every `N` simulation ticks (starter: `N = 10`) from the Rust tick loop.
+* The compute is a couple of O(tiles) passes over byte arrays in Rust — microseconds at current map sizes. Incremental cluster maintenance (#11) stays deferred indefinitely.
 
 ---
 
-## Consequences
-
-Wilderness must affect at least **two** core loops.
+## Consequences (MVP)
 
 ### 1) Happiness & Growth
 
-* Add a **local happiness modifier** based on the local wilderness field.
+* **Global happiness modifier**: small additive citywide adjustment derived from the score (roughly −2..+2 on the internal scale, zero near the neutral band). Tunable.
+* **Residential demand term**: additive term in the demand model, `(score − 50) / 50 × demand_weight` (tunable weight). High wilderness pulls people in; low wilderness suppresses residential demand. Commercial/industrial stay neutral in the MVP.
 
-  * Example: `happiness += f(localWilderness)` where `f` is small (e.g., -2..+2).
-* Add a **global demand modifier**:
+### 2) Budget
 
-  * Residential demand increases with wilderness.
-  * Optionally: industrial productivity slightly increases when wilderness is low (cheaper land / fewer regs), or keep industry neutral.
+* **Tourism dividend**: when `score ≥ dividend_threshold` (starter: 60), a monthly income line scaled by population and by how far the score clears the threshold. Appears as its own line in the City Ledger.
+* No penalty path in the MVP (see locked decision 2).
 
-Design intent:
+### 3) Programmes (#9 — shipped alongside the MVP)
 
-* Players feel wilderness in everyday city behaviour (not just a number).
+Two wilderness programmes on the Bylaws screen (`WildernessPolicy` in the protocol):
 
-### 2) Budget & Upkeep
+* **Nature Reserve** — unlocks at wilderness ≥ 60 (UI-gated). Patch bonus cap 2 → 3,
+  fragmentation penalty 2 → 1, for a flat $100/day.
+* **Green Industry** — always available. Industrial base eco −5 → −2, subsidized at
+  $2/day per industrial zone tile.
 
-Pick one or more of these (recommended: start with 1):
-
-**A. Tourism/Grant Dividend (High wilderness reward)**
-
-* If Wilderness ≥ threshold, add monthly income (“tourism”, “provincial grant”).
-
-**B. Healthcare/Cleanup Cost (Low wilderness penalty)**
-
-* If Wilderness ≤ threshold, add a monthly expense multiplier.
-
-**C. Maintenance Scaling**
-
-* Parks/forests have upkeep, but reduce other costs when abundant.
-
-### 3) Unlocks & Restrictions (Milestones)
-
-Optional for MVP; good for a later patch.
-
-Examples:
-
-* Wilderness ≥ 60: unlock “Nature Reserve” policy (boosts patch bonus, reduces fragmentation penalty).
-* Wilderness ≤ 20: unlock “Environmental Crisis” events (soft debuffs, not game-over).
-* “Green Industry” upgrade: reduced wilderness damage at higher cost.
+Costs surface as a "Wilderness programmes" expense line in the City Ledger.
+Environmental Crisis events remain deferred to soft events (#10).
 
 ### 4) Soft Events
 
-Optional, low-effort flavour that reinforces consequence:
-
-* “Smog day” (low wilderness) → temporary happiness debuff.
-* “Spring festival” (high wilderness) → temporary income bump.
+Deferred — see follow-up issue #10.
 
 ---
 
@@ -201,114 +189,105 @@ Optional, low-effort flavour that reinforces consequence:
 
 ### HUD
 
-* Display `Wilderness: 72 (↑)` with a trend arrow.
-* Hover/tooltip: show top contributors:
+* Status-ribbon chip: `Wilderness: 72 ↑`.
+* Tooltip: top contributors from the breakdown, e.g. “Forests +18 · Parks +9 · Industry −22 · Roads −11 · Fragmentation −6”.
 
-  * “Forests +18”, “Parks +9”, “Industry -22”, “Roads -11”, “Fragmentation -6”.
+### Overlay
 
-### Overlays
-
-Add a Wilderness overlay mode:
-
-* Heatmap from high (lush) to low (grey).
-* Optional: toggle to show fragmentation hotspots.
+* New `wilderness` overlay mode (minimap + main map tint, same pattern as power/water/education overlays): heatmap from lush (green) to depleted (grey), driven by the per-tile field in the tile buffer.
 
 ### Tile Inspector
 
-When selecting a tile:
-
-* Show “Local wilderness” score for the surrounding area.
-* If the tile is nature: show cluster size + bonuses.
+* Deferred alongside local effects.
 
 ---
 
-## LLM Storytelling Hook (Optional)
+## LLM Storytelling Hook (Deferred — #12)
 
-Use Wilderness as a **storytelling signal** for in-game news/ticker.
-
-Constraints:
-
-* The LLM must only narrate **facts the sim already knows**.
-* Output is non-authoritative flavour, toggleable.
-
-Example prompts/outputs:
-
-* High wilderness and rising: “Ducks return to Maple Pond; locals report clearer water.”
-* Low wilderness and falling: “Squirrels petition City Hall about the new rail spur through Oldwood.”
-
-Suggested format:
-
-* 3–5 headlines + 1 “Mayor’s recommendation” derived from wilderness + recent building changes.
+Wilderness score + trend + breakdown become narrative signals for the ticker via the existing event/snapshot pipeline. The LLM only narrates facts the sim already knows; output is non-authoritative flavour, toggleable.
 
 ---
 
 ## Engineering Plan
 
-### Public API
+Production simulation is Rust (`crates/city-sim-core`) — the compute lives there, not in TS.
 
-Add a module/service that computes wilderness:
+### Module
 
-* `computeWilderness(mapState, tunables) -> { score, ecoField, localField, breakdown }`
+`crates/city-sim-core/src/wilderness.rs`:
 
-Where:
+```rust
+pub struct WildernessTunables {
+    pub base_eco: [f32; TileKind::COUNT],
+    pub patch_bonus_cap: f32,
+    pub patch_reference_size: f32,
+    pub edge_bonus: f32,
+    pub fragmentation_penalty: f32,
+    pub min_nature_neighbours: u8,
+    pub k_per_tile: f32,
+    pub recompute_interval_ticks: u32,
+    pub dividend_threshold: f32,
+    // consequence weights…
+}
 
-* `score: number (0–100)`
-* `ecoField: Float32Array` per tile
-* `localField: Uint8Array` (optional) per tile/local neighbourhood score 0–100
-* `breakdown: { [category: string]: number }` for UI tooltips
+pub struct WildernessOutput {
+    pub score: f32,             // 0–100
+    pub eco_field: Vec<f32>,    // per tile
+    pub breakdown: WildernessBreakdown, // fixed struct, not a string map
+}
+```
 
-### Tunables
+`WildernessBreakdown` is a fixed struct (forests, parks, open land, water edge, patch bonus, fragmentation, industry, transport, power, zoning) — wire-friendly and matches the tooltip design.
 
-Centralize constants:
+### Wiring
 
-* Base eco weights
-* Patch bonus curve
-* Fragmentation thresholds
-* Edge bonus value
-* Consequence thresholds
+* `sim.rs` calls the recompute every `N` ticks; score/trend/breakdown stored in `GameState` (serde defaults for save compatibility; TS `persistence.ts` back-fills on deserialize).
+* Consequences applied where they belong: demand term in `demand.rs`, dividend line in `economy.rs::compute_daily_budget`, global happiness modifier in the happiness pass.
+* Score/trend/breakdown ride the existing stats snapshot to the UI (TS protocol mirror updated in step).
 
-### Performance Notes
+### Tile buffer (overlay phase)
 
-* Flood-fill clusters is O(tiles) per update; fine for MVP.
-* If it becomes hot, switch to:
+The per-tile field ships to the renderer as a new `wilderness[N]` u8 array in the SoA tile buffer (quantised 0–255, same pattern as `happiness[N]`): `BYTES_PER_TILE` 7 → 8, offsets struct + TS mirror (`tileBuffer.ts`) + parity fixtures updated together. WASM and TS ship together, so no cross-version concern.
 
-  * chunk-based cluster estimation, or
-  * maintain union-find incrementally.
+### Phasing
+
+1. `wilderness.rs` + tunables + unit/scenario tests (pure Rust, no protocol changes).
+2. State + tick wiring + consequences (demand, happiness, dividend) + persistence back-fill.
+3. Stats snapshot → HUD chip with trend + tooltip; City Ledger dividend line.
+4. Tile-buffer field + overlay heatmap.
+5. Deferred: policies (#9), soft events (#10), incremental clustering (#11), LLM headlines (#12), tile inspector, local happiness.
 
 ---
 
 ## Testing
 
-* Unit tests for:
+Rust unit tests (`wilderness.rs` — these are the spec; no TS oracle mirror):
 
-  * base eco weights
-  * edge bonus detection
-  * fragmentation penalty
-  * cluster bonus curve
-  * normalization/clamping
+* base eco weights (including `WaterPipe`/underground exclusion)
+* edge bonus detection
+* fragmentation penalty
+* cluster/patch bonus curve
+* `P/(P+U+k)` scoring bounds and monotonicity
 
-* Scenario tests:
+Scenario tests on hand-built grids:
 
-  1. Empty natural land → mid score
-  2. Large forest patch → higher than scattered trees
-  3. Add industrial strip through forest → score drops + fragmentation penalty increases
-  4. Add pond next to park → score increases with edge bonus
+1. Untouched natural map → mid-to-high score.
+2. Large forest patch → scores higher than the same tree count scattered.
+3. Industrial strip / road cut through forest → score drops by more than the converted tiles alone (fragmentation).
+4. Pond beside park → higher than pond far from park (edge bonus).
+
+Integration: demand/dividend/happiness hooks covered by existing module tests extended with wilderness inputs.
 
 ---
 
 ## MVP Scope
 
-Ship the following first:
+Ship first (this epic, #8):
 
-* Base weights + basic bonuses (edge bonus, fragmentation penalty)
-* Full recompute every N ticks
-* Global score in HUD with simple breakdown tooltip
-* Wilderness overlay heatmap
-* One consequence path (recommended: happiness + small monthly budget modifier)
+* Base weights + patch/edge/fragmentation adjustments, full recompute every N ticks.
+* `P/(P+U+k)` score + trend + breakdown in `GameState` and the stats snapshot.
+* HUD ribbon chip with trend + breakdown tooltip.
+* Wilderness overlay heatmap (tile-buffer field).
+* Consequences: global happiness modifier, residential demand term, tourism dividend ledger line.
 
-Defer:
-
-* Unlocks/policies
-* Soft events
-* Incremental cluster maintenance
-* LLM headlines (keep it as a planned hook)
+Defer: unlocks/policies (#9), soft events (#10), incremental clustering (#11), LLM headlines (#12), tile inspector, local happiness effects.

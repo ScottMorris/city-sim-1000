@@ -5,7 +5,12 @@
 
 import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
-import { createDefaultBudgetPolicy, type BudgetPolicy } from './protocol/commands';
+import {
+  createDefaultBudgetPolicy,
+  createDefaultWildernessPolicy,
+  type BudgetPolicy,
+  type WildernessPolicy
+} from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
@@ -50,10 +55,12 @@ export interface Tile {
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
   buildingId?: number;
+  /** Per-tile wilderness intensity, 0–1 (0.5 = neutral). From the sim's eco field. */
+  wilderness?: number;
   services: TileServiceState;
 }
 
-export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'underground';
+export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'wilderness' | 'underground';
 
 export type MinimapSize = 'small' | 'medium';
 
@@ -128,6 +135,31 @@ export interface DemandStats {
   industrial: number;
 }
 
+/** Per-category eco totals for the wilderness tooltip — mirrors
+ *  `WildernessBreakdown` in `crates/city-sim-core/src/wilderness.rs`. */
+export interface WildernessBreakdown {
+  forests: number;
+  parks: number;
+  openLand: number;
+  waterEdge: number;
+  patch: number;
+  fragmentation: number;
+  zones: number;
+  industry: number;
+  transport: number;
+  power: number;
+  civic: number;
+}
+
+/** Wilderness score display state — mirrors the Rust `WildernessStats`. */
+export interface WildernessStats {
+  /** Global score, 0–100. */
+  score: number;
+  /** Fast EMA − slow EMA; sign gives the trend arrow. */
+  trend: number;
+  breakdown: WildernessBreakdown;
+}
+
 export interface BudgetStats {
   revenue: number;
   expenses: number;
@@ -140,10 +172,13 @@ export interface BudgetStats {
       residents: number;
       commercial: number;
       industrial: number;
+      tourism: number;
     };
     expenses: {
       transport: number;
       buildings: number;
+      /** Daily cost of active wilderness programmes. */
+      policies: number;
     };
     details: {
       transport: {
@@ -189,6 +224,10 @@ export interface GameState {
   bylaws: BylawState;
   /** Fiscal policy — tax rates and department funding from the budget screen. */
   budgetPolicy: BudgetPolicy;
+  /** Wilderness score, trend, and breakdown — computed by the Rust sim. */
+  wilderness: WildernessStats;
+  /** Active wilderness programmes (Nature Reserve, Green Industry). */
+  wildernessPolicy: WildernessPolicy;
   settings: GameSettings;
 }
 
@@ -238,6 +277,26 @@ export function createDefaultNarrativeSettings(): NarrativeSettings {
 export function createDefaultUiSettings(): UiSettings {
   return {
     mode: 'auto'
+  };
+}
+
+export function createDefaultWildernessStats(): WildernessStats {
+  return {
+    score: 0,
+    trend: 0,
+    breakdown: {
+      forests: 0,
+      parks: 0,
+      openLand: 0,
+      waterEdge: 0,
+      patch: 0,
+      fragmentation: 0,
+      zones: 0,
+      industry: 0,
+      transport: 0,
+      power: 0,
+      civic: 0
+    }
   };
 }
 
@@ -299,8 +358,8 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       netPerDay: 0,
       netPerMonth: 0,
       breakdown: {
-        revenue: { base: 0, residents: 0, commercial: 0, industrial: 0 },
-        expenses: { transport: 0, buildings: 0 },
+        revenue: { base: 0, residents: 0, commercial: 0, industrial: 0, tourism: 0 },
+        expenses: { transport: 0, buildings: 0, policies: 0 },
         details: {
           transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
           buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
@@ -325,6 +384,8 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     },
     bylaws: { ...DEFAULT_BYLAWS },
     budgetPolicy: createDefaultBudgetPolicy(),
+    wilderness: createDefaultWildernessStats(),
+    wildernessPolicy: createDefaultWildernessPolicy(),
     settings: createDefaultSettings()
   };
 }

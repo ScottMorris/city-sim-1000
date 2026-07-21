@@ -10,6 +10,9 @@
 //   start(width, height, seed, onTick: Channel<TickEvent>)
 //   apply_tool(tool: u8, x: u32, y: u32)
 //   set_speed(multiplier: f32)
+//   set_budget_policy(taxResidential, …, fundCivic)
+//   set_wilderness_policy(natureReserve: bool, greenIndustry: bool)
+//   set_natural_terrain(kinds: Vec<u8>)
 //   stop()
 //   get_snapshot() -> Vec<u8>
 //   load_snapshot(bytes: Vec<u8>)
@@ -45,6 +48,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             commands::apply_tool,
             commands::set_speed,
             commands::set_budget_policy,
+            commands::set_wilderness_policy,
+            commands::set_natural_terrain,
             commands::stop,
             commands::get_snapshot,
             commands::load_snapshot,

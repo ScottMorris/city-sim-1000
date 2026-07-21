@@ -17,7 +17,7 @@ import {
   tileKindFromU8,
   tileKindToU8,
 } from './tileKind';
-import { BYTES_PER_TILE, FLAGS, tileBufferOffsets, decodeHappiness, encodeHappiness } from './tileBuffer';
+import { BYTES_PER_TILE, FLAGS, tileBufferOffsets, decodeHappiness, encodeHappiness, decodeEco, encodeEco, ECO_RANGE } from './tileBuffer';
 import parityFixture from './tileKindParity.json';
 
 // ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ describe('protocol: TileKind ↔ u8 parity with Rust', () => {
 // ---------------------------------------------------------------------------
 
 describe('protocol: tile buffer layout', () => {
-  it('BYTES_PER_TILE is 7', () => expect(BYTES_PER_TILE).toBe(7));
+  it('BYTES_PER_TILE is 8', () => expect(BYTES_PER_TILE).toBe(8));
 
   it('offsets for 64×64 map', () => {
     const n = 64 * 64;
@@ -79,6 +79,7 @@ describe('protocol: tile buffer layout', () => {
     expect(off.elevation).toBe(12288);
     expect(off.buildingId).toBe(16384);
     expect(off.undergroundKind).toBe(24576);
+    expect(off.wilderness).toBe(28672);
   });
 
   it('FLAGS bitmask values are unique powers of 2', () => {
@@ -94,5 +95,14 @@ describe('protocol: tile buffer layout', () => {
     for (const h of [0, 0.5, 1.0, 1.5, 2.0]) {
       expect(Math.abs(decodeHappiness(encodeHappiness(h)) - h)).toBeLessThan(0.01);
     }
+  });
+
+  it('eco encode/decode round-trips and matches the Rust neutral centre', () => {
+    for (const e of [-10, -5, -1, 0, 1, 5, 10]) {
+      expect(Math.abs(decodeEco(encodeEco(e)) - e)).toBeLessThan(0.1);
+    }
+    expect(encodeEco(0)).toBe(128);
+    expect(encodeEco(999)).toBe(encodeEco(ECO_RANGE));
+    expect(encodeEco(-999)).toBe(encodeEco(-ECO_RANGE));
   });
 });
