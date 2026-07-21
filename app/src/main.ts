@@ -25,7 +25,7 @@ import { applyToolCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
 import { initMcpBridge } from './game/mcpBridge';
-import { createCamera, centerCamera, screenToTile } from './rendering/camera';
+import { createCamera, centerCamera, screenToTile, zoomAt } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
 import { palette, TILE_SIZE } from './rendering/sprites';
 import { loadPaletteTexture, loadTileTextures } from './rendering/tileAtlas';
@@ -485,15 +485,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         camera.y -= e.deltaY * scale;
         return;
       }
-      const prevScale = camera.scale;
       const zoomStep = ZOOM_STEPS[inputSettings.zoomSensitivity] ?? ZOOM_STEPS.normal;
       const factor = e.deltaY > 0 ? 1 - zoomStep : 1 + zoomStep;
-      camera.scale = Math.min(3, Math.max(0.5, camera.scale * factor));
       const rect = canvas.getBoundingClientRect();
-      const focusX = e.clientX - rect.left;
-      const focusY = e.clientY - rect.top;
-      camera.x = focusX - ((focusX - camera.x) / prevScale) * camera.scale;
-      camera.y = focusY - ((focusY - camera.y) / prevScale) * camera.scale;
+      zoomAt(camera, e.clientX - rect.left, e.clientY - rect.top, factor);
     },
     { passive: false }
   );
