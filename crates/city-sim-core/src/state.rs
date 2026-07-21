@@ -426,12 +426,12 @@ impl GameState {
     /// `Land` (already built on) are left alone.
     pub fn seed_natural_terrain(&mut self, kinds: &[u8]) {
         let n = self.tiles.len().min(kinds.len());
-        for i in 0..n {
-            if self.tiles[i].kind != TileKind::Land {
+        for (tile, &kind_byte) in self.tiles.iter_mut().zip(kinds.iter()).take(n) {
+            if tile.kind != TileKind::Land {
                 continue;
             }
-            if let Some(k @ (TileKind::Water | TileKind::Tree)) = TileKind::from_u8(kinds[i]) {
-                self.tiles[i].kind = k;
+            if let Some(k @ (TileKind::Water | TileKind::Tree)) = TileKind::from_u8(kind_byte) {
+                tile.kind = k;
             }
         }
         self.tile_revision += 1;

@@ -549,8 +549,8 @@ mod tests {
 
     #[test]
     fn wilderness_programmes_cost_money() {
-        use city_sim_protocol::commands::WildernessPolicy;
         use crate::wilderness::WildernessTunables;
+        use city_sim_protocol::commands::WildernessPolicy;
 
         let mut s = gs(4, 4);
         s.tile_at_mut(0, 0).unwrap().kind = TileKind::Industrial;

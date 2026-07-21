@@ -146,12 +146,20 @@ impl Simulation {
 
         // 8.5. Wilderness — recomputed on a coarser cadence than the tick
         // rate; demand (9) and economy (10) read the stored score.
-        if self.state.tick % self.wilderness_tunables.recompute_interval_ticks == 0 {
+        if self
+            .state
+            .tick
+            .is_multiple_of(self.wilderness_tunables.recompute_interval_ticks)
+        {
             let tunables = self
                 .wilderness_tunables
                 .effective(&self.state.wilderness_policy);
             let out = compute_wilderness(&self.state, &tunables);
-            update_trend(&mut self.state.wilderness, out.score, &self.wilderness_tunables);
+            update_trend(
+                &mut self.state.wilderness,
+                out.score,
+                &self.wilderness_tunables,
+            );
             self.state.wilderness.breakdown = out.breakdown;
             self.state.wilderness.local_field = out
                 .eco_field
@@ -432,9 +440,7 @@ mod tests {
             "score 90 must pay a tourism dividend"
         );
         assert!(
-            (high_budget.revenue
-                - (low_budget.revenue + high_budget.revenue_tourism))
-                .abs()
+            (high_budget.revenue - (low_budget.revenue + high_budget.revenue_tourism)).abs()
                 < 0.001,
             "tourism must be the only revenue difference"
         );

@@ -483,8 +483,12 @@ mod tests {
     #[test]
     fn coal_is_worse_than_wind_and_solar() {
         let t = WildernessTunables::default();
-        assert!(t.base_eco[TileKind::CoalPlant as usize] < t.base_eco[TileKind::HydroPlant as usize]);
-        assert!(t.base_eco[TileKind::HydroPlant as usize] < t.base_eco[TileKind::WindTurbine as usize]);
+        assert!(
+            t.base_eco[TileKind::CoalPlant as usize] < t.base_eco[TileKind::HydroPlant as usize]
+        );
+        assert!(
+            t.base_eco[TileKind::HydroPlant as usize] < t.base_eco[TileKind::WindTurbine as usize]
+        );
         assert_eq!(
             t.base_eco[TileKind::WindTurbine as usize],
             t.base_eco[TileKind::SolarFarm as usize]
@@ -694,7 +698,11 @@ mod tests {
         let max = tourism_dividend(100.0, 1000, &t);
         assert!(mid > 0.0 && max > mid);
         assert!((max - 1000.0 * t.dividend_per_capita).abs() < 0.001);
-        assert_eq!(tourism_dividend(100.0, 0, &t), 0.0, "no citizens, no tourism");
+        assert_eq!(
+            tourism_dividend(100.0, 0, &t),
+            0.0,
+            "no citizens, no tourism"
+        );
     }
 
     // --- wilderness programmes (#9) ---
