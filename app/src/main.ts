@@ -85,11 +85,15 @@ appRoot.innerHTML = `
       </div>
     </div>
     <div class="ribbon-controls">
-      <div class="ribbon-chip ribbon-btn-group" role="group" aria-label="Simulation speed">
-        <button id="speed-slow" class="ribbon-btn" title="Slow (hotkey 1)" aria-label="Slow speed">▶</button>
-        <button id="speed-fast" class="ribbon-btn" title="Fast (hotkey 2)" aria-label="Fast speed">⏩</button>
-        <button id="speed-ludicrous" class="ribbon-btn" title="Ludicrous (hotkey 3)" aria-label="Ludicrous speed">⚡</button>
-      </div>
+      <details class="ribbon-menu">
+        <summary id="speed-summary" class="ribbon-btn" title="Simulation speed" aria-label="Speed menu">🐇</summary>
+        <div class="ribbon-menu-panel">
+          <button id="speed-slow" class="secondary" title="Slow — 0.5x (hotkey 1)">🐢 Slow (0.5x)</button>
+          <button id="speed-fast" class="secondary" title="Fast — 1x (hotkey 2)">🐇 Fast (1x)</button>
+          <button id="speed-ludicrous" class="secondary" title="Ludicrous — 3x (hotkey 3)">⚡ Ludicrous (3x)</button>
+        </div>
+      </details>
+      <button id="pause-btn" class="ribbon-btn" title="Pause (hotkey Space)" aria-label="Pause">⏸</button>
       <button id="budget-modal-btn" class="ribbon-btn" title="Open the budget screen" aria-label="Open budget">📊</button>
       <button id="bylaws-modal-btn" class="ribbon-btn" title="Open city bylaws" aria-label="Open bylaws">📜</button>
       <details class="ribbon-menu">
@@ -156,6 +160,8 @@ const dayEl = requireElement<HTMLDivElement>('#day');
 const speedSlowBtn = requireElement<HTMLButtonElement>('#speed-slow');
 const speedFastBtn = requireElement<HTMLButtonElement>('#speed-fast');
 const speedLudicrousBtn = requireElement<HTMLButtonElement>('#speed-ludicrous');
+const speedSummaryEl = requireElement<HTMLElement>('#speed-summary');
+const pauseBtn = requireElement<HTMLButtonElement>('#pause-btn');
 const saveBtn = requireElement<HTMLButtonElement>('#save-btn');
 const loadBtn = requireElement<HTMLButtonElement>('#load-btn');
 const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
@@ -207,6 +213,13 @@ const savesMenu = ribbonMenus.find((m) => m.querySelector('#save-btn'));
 savesMenu?.querySelectorAll('button').forEach((btn) => {
   btn.addEventListener('click', () => {
     savesMenu.open = false;
+  });
+});
+// Picking a speed tier is a one-shot choice too — collapse after use.
+const speedMenu = ribbonMenus.find((m) => m.querySelector('#speed-slow'));
+speedMenu?.querySelectorAll('button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    speedMenu.open = false;
   });
 });
 
@@ -375,8 +388,14 @@ const simSpeeds = {
   fast: 1,
   ludicrous: 3
 } as const;
+const SPEED_ICONS: Record<SimSpeedKey, string> = {
+  slow: '🐢',
+  fast: '🐇',
+  ludicrous: '⚡'
+};
 type SimSpeedKey = keyof typeof simSpeeds;
 let simSpeed: SimSpeedKey = 'fast';
+let isPaused = false;
 let lastNarrativeMonth = getCalendarPosition(state.day).month;
 let lastNarrativeGc = Date.now();
 let lastPlayerEventAt = 0;
@@ -802,15 +821,31 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
     simSpeed = speed;
+    isPaused = false;
     bridge.setSpeed(simSpeeds[speed]);
     speedSlowBtn.classList.toggle('active', speed === 'slow');
     speedFastBtn.classList.toggle('active', speed === 'fast');
     speedLudicrousBtn.classList.toggle('active', speed === 'ludicrous');
+    speedSummaryEl.textContent = SPEED_ICONS[speed];
+    pauseBtn.textContent = '⏸';
+    pauseBtn.title = 'Pause (hotkey Space)';
+    pauseBtn.setAttribute('aria-label', 'Pause');
+    pauseBtn.classList.remove('active');
     if (!opts.silent) {
       showToast(
         `Speed: ${speed === 'slow' ? 'Slow (0.5x)' : speed === 'fast' ? 'Fast (1x)' : 'Ludicrous (3x)'}`
       );
     }
+  };
+
+  const togglePause = () => {
+    isPaused = !isPaused;
+    bridge.setSpeed(isPaused ? 0 : simSpeeds[simSpeed]);
+    pauseBtn.textContent = isPaused ? '▶' : '⏸';
+    pauseBtn.title = isPaused ? 'Resume (hotkey Space)' : 'Pause (hotkey Space)';
+    pauseBtn.setAttribute('aria-label', isPaused ? 'Resume' : 'Pause');
+    pauseBtn.classList.toggle('active', isPaused);
+    showToast(isPaused ? 'Paused' : 'Resumed');
   };
 
   const updatePendingPenaltyBtn = () => {
@@ -883,6 +918,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
         return;
       case 'speedLudicrous':
         setSimSpeed('ludicrous');
+        return;
+      case 'togglePause':
+        togglePause();
         return;
       case 'toggleMinimap':
         minimap?.toggleOpen();
@@ -1012,6 +1050,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));
   speedFastBtn.addEventListener('click', () => setSimSpeed('fast'));
   speedLudicrousBtn.addEventListener('click', () => setSimSpeed('ludicrous'));
+  pauseBtn.addEventListener('click', () => togglePause());
   setSimSpeed(simSpeed, { silent: true });
   updatePendingPenaltyBtn();
 
