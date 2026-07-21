@@ -413,7 +413,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     });
   };
 
-  // Both only ever called once at least two touch pointers are active.
+  // Both only ever called while at least two touch pointers are active.
   const touchMidpoint = () => {
     let x = 0;
     let y = 0;
