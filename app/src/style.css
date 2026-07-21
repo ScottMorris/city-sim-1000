@@ -1832,17 +1832,31 @@ footer {
   body {
     font-size: 12px;
   }
-  #app {
-    /* The stacked HUD panels can outgrow one screen on phone widths — cap
-       the topbar's row and let it scroll internally instead of overflowing
-       the fixed-height app shell. */
-    grid-template-rows: minmax(0, 40dvh) auto minmax(0, 1fr) auto;
-  }
   .topbar {
     /* A centered flex item that overflows its box can leave the start-side
        content unreachable by scroll — align to the top instead so nothing
        above the fold gets stranded. */
     align-items: flex-start;
+    /* Stats and controls no longer fit on one line at phone widths — wrap
+       into two: logo + ribbon on the first, controls on their own second
+       line, instead of squeezing/scrolling everything into a single row. */
+    flex-wrap: wrap;
+    /* Capped on the element itself, not the #app grid row: a grid track's
+       minmax(0, <length>) gets inflated to fill leftover space during grid
+       track sizing even when content is much shorter (unlike an auto track),
+       which left a large dead gap below the ribbon's own two lines. Capping
+       height here instead means the row sizes to actual content, while this
+       still scrolls internally (overflow-y: auto, from the base rule above)
+       if the HUD ever does grow past 40dvh. */
+    max-height: 40dvh;
+  }
+  .ribbon-controls {
+    /* flex-basis: 100% forces this onto its own line in the wrapping topbar
+       above, regardless of how much room is left on the first line. */
+    flex-basis: 100%;
+    justify-content: flex-end;
+    /* Safety net if the controls still don't fit their own full-width line. */
+    overflow-x: auto;
   }
   .canvas-wrapper {
     height: 60vh;
