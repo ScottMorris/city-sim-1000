@@ -32,7 +32,7 @@ out of scope for now; Tauri supports it, so it can be added later once Android w
 *Goal: the app knows what it's running on and renders correctly inside mobile browser
 chrome. No visible UI changes on desktop.*
 
-- [ ] **M0-0 · Test prep: persistence back-fill + camera math unit tests.** The mobile
+- [x] **M0-0 · Test prep: persistence back-fill + camera math unit tests.** The mobile
   work refactors exactly the untested areas. Before touching them: `persistence.test.ts`
   covering `deserialize` back-fill behaviour (old saves gain new settings fields with
   defaults — M0-2 relies on this), and `camera.ts` unit tests for screen↔tile
