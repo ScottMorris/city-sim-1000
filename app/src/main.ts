@@ -181,6 +181,14 @@ for (const menu of ribbonMenus) {
     for (const other of ribbonMenus) {
       if (other !== menu) other.open = false;
     }
+    // The panel is position: fixed (see style.css), so it isn't placed by
+    // the normal flow — anchor it under this menu's own button each time.
+    const panel = menu.querySelector<HTMLElement>('.ribbon-menu-panel');
+    if (panel) {
+      const rect = menu.getBoundingClientRect();
+      panel.style.top = `${rect.bottom + 6}px`;
+      panel.style.right = `${window.innerWidth - rect.right}px`;
+    }
   });
 }
 document.addEventListener('pointerdown', (e) => {

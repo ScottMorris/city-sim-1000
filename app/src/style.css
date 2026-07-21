@@ -311,9 +311,11 @@ select {
 }
 
 .ribbon-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
+  /* Fixed, not absolute: the topbar clips overflowing descendants (its own
+     overflow-y: auto safety net), so an absolutely-positioned panel would be
+     clipped the instant it extends past the topbar's own box. Fixed escapes
+     that entirely; JS sets top/right to track the trigger button on open. */
+  position: fixed;
   display: grid;
   gap: 6px;
   padding: 10px;
@@ -1841,14 +1843,6 @@ footer {
        content unreachable by scroll — align to the top instead so nothing
        above the fold gets stranded. */
     align-items: flex-start;
-  }
-  .logo {
-    /* Re-centre just the logo against the (tall) HUD next to it — only the
-       HUD needs flex-start, for scroll reachability. */
-    align-self: center;
-  }
-  .hud {
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
   .canvas-wrapper {
     height: 60vh;
