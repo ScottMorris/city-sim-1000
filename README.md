@@ -48,7 +48,7 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 - Hydro generation, water pumping, and global utility balance that affects growth.
 - Tool info card beside the tile inspector that surfaces cost, upkeep, and stats for the active tool with a pin toggle when you want it always-on.
 - Budget ticker with a colour-coded monthly net projection, calendar month/day readout, population and jobs tracking, and happiness per tile. Open the Budget screen for a quarterly breakdown, detailed revenue/expense shares, runway, and narrative Insights (when enabled).
-- Bylaws button in the toolbar’s city admin cluster next to Budget/Settings to set a city-wide lighting standard that nudges power demand, upkeep, and happiness (district overrides are on the way).
+- Bylaws button in the status ribbon (next to Budget/Settings) to set a city-wide lighting standard that nudges power demand, upkeep, and happiness (district overrides are on the way).
 - Wilderness score (0–100) in the status ribbon with a trend arrow and breakdown tooltip: contiguous forests/parks, waterfront greenery, and open land versus industry, transport, and power infrastructure. High scores attract residents and pay a tourism dividend; Bylaws offers Nature Reserve and Green Industry programmes, and the minimap gains a wilderness heatmap overlay.
 - Narrative layer: a news ticker bar in the HUD plus Budget Insights commentary, both toggleable from Settings.
 - LocalStorage save/load plus downloadable JSON exports and uploads for backups.
