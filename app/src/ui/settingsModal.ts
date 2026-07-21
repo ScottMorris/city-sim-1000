@@ -1,4 +1,4 @@
-import { GameSettings, MinimapSize, PanSpeedPreset, ZoomSensitivityPreset } from '../game/gameState';
+import { GameSettings, MinimapSize, PanSpeedPreset, UiMode, ZoomSensitivityPreset } from '../game/gameState';
 import { defaultHotkeys, HotkeyAction } from './hotkeys';
 
 interface SettingsModalOptions {
@@ -16,6 +16,12 @@ const ZOOM_SPEED_LABELS: Record<ZoomSensitivityPreset, string> = {
   gentle: 'Gentle',
   normal: 'Normal',
   fast: 'Fast'
+};
+
+const UI_MODE_LABELS: Record<UiMode, string> = {
+  auto: 'Auto-detect',
+  desktop: 'Desktop',
+  mobile: 'Mobile'
 };
 
 const HOTKEY_LABELS: Record<HotkeyAction, string> = {
@@ -138,6 +144,30 @@ export function initSettingsModal(options: SettingsModalOptions) {
 
     const body = document.createElement('div');
     body.className = 'settings-body';
+
+    const interfaceSection = createSection('Interface', 'Force a layout/input mode for testing; auto-detect is recommended.');
+    const uiModeRow = document.createElement('div');
+    uiModeRow.className = 'settings-row';
+    const uiModeLabel = document.createElement('div');
+    uiModeLabel.className = 'settings-label';
+    uiModeLabel.textContent = 'Display mode';
+    const uiModeDesc = document.createElement('div');
+    uiModeDesc.className = 'settings-description';
+    uiModeDesc.textContent = 'Auto-detect picks touch/mouse input and compact/full layout from the device.';
+    const uiModeSelect = document.createElement('select');
+    (['auto', 'desktop', 'mobile'] as UiMode[]).forEach((mode) => {
+      const opt = document.createElement('option');
+      opt.value = mode;
+      opt.textContent = UI_MODE_LABELS[mode];
+      opt.selected = draft.ui.mode === mode;
+      uiModeSelect.appendChild(opt);
+    });
+    uiModeSelect.addEventListener('change', () => {
+      draft.ui.mode = uiModeSelect.value as UiMode;
+      onApply(draft);
+    });
+    uiModeRow.append(uiModeLabel, uiModeDesc, uiModeSelect);
+    interfaceSection.append(uiModeRow);
 
     const general = createSection('Gameplay', 'Toggles that affect growth feedback.');
     const penaltiesRow = createToggleRow({
@@ -454,7 +484,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
 
     hotkeys.append(hotkeyHint, resetHotkeys, hotkeyTable, conflictLabel);
 
-    body.append(audio, general, narrative, minimap, input, accessibility, cosmetics, hotkeys);
+    body.append(interfaceSection, audio, general, narrative, minimap, input, accessibility, cosmetics, hotkeys);
     modal.append(headerRow, body);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);

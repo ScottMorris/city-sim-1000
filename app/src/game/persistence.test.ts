@@ -83,6 +83,20 @@ describe('settings back-fill', () => {
     expect(state.settings.narrative.tickerEnabled).toBe(defaults.narrative.tickerEnabled);
     expect(state.settings.pendingPenaltyEnabled).toBe(defaults.pendingPenaltyEnabled);
   });
+
+  it('defaults ui.mode to auto on a save that predates the setting', () => {
+    const state = degrade((parsed) => {
+      delete parsed.settings.ui;
+    });
+    expect(state.settings.ui).toEqual(createDefaultSettings().ui);
+  });
+
+  it('preserves an explicit ui.mode choice', () => {
+    const state = degrade((parsed) => {
+      parsed.settings.ui = { mode: 'mobile' };
+    });
+    expect(state.settings.ui.mode).toBe('mobile');
+  });
 });
 
 describe('seed and RNG back-fill', () => {

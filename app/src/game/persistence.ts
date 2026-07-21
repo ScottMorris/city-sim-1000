@@ -206,7 +206,8 @@ export function deserialize(payload: string): GameState {
     narrative: {
       ...defaultSettings.narrative,
       ...(incomingSettings.narrative ?? {})
-    }
+    },
+    ui: { ...defaultSettings.ui, ...(incomingSettings.ui ?? {}) }
   };
   return parsed as GameState;
 }
