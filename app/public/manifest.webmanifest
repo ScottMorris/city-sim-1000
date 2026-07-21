@@ -1,6 +1,6 @@
 {
   "name": "City Sim 1000",
-  "short_name": "CitySim",
+  "short_name": "City Sim",
   "display": "standalone",
   "start_url": ".",
   "background_color": "#1a1a2e",
