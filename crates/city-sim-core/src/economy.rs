@@ -118,9 +118,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
                 TileKind::Park => maint_civic_park += maint,
                 TileKind::WaterPump => maint_civic_pump += maint,
                 TileKind::WaterTower => maint_civic_tower += maint,
-                TileKind::ElementarySchool | TileKind::HighSchool => {
-                    maint_civic_school += maint
-                }
+                TileKind::ElementarySchool | TileKind::HighSchool => maint_civic_school += maint,
                 _ => {}
             }
         } else if tmpl.is_zone {
@@ -463,9 +461,16 @@ mod tests {
         let neutral = compute_daily_budget(&s).revenue_pop;
         s.policy.tax_residential = 18; // double the neutral 9%
         let taxed = compute_daily_budget(&s).revenue_pop;
-        assert!((taxed - neutral * 2.0).abs() < 0.001, "18% tax should double residential revenue");
+        assert!(
+            (taxed - neutral * 2.0).abs() < 0.001,
+            "18% tax should double residential revenue"
+        );
         s.policy.tax_residential = 0;
-        assert_eq!(compute_daily_budget(&s).revenue_pop, 0.0, "0% tax → no residential revenue");
+        assert_eq!(
+            compute_daily_budget(&s).revenue_pop,
+            0.0,
+            "0% tax → no residential revenue"
+        );
     }
 
     #[test]
@@ -476,7 +481,10 @@ mod tests {
         let full = compute_daily_budget(&s).maint_roads;
         s.policy.fund_transport = 50;
         let half = compute_daily_budget(&s).maint_roads;
-        assert!((half - full * 0.5).abs() < 0.0001, "50% funding should halve road upkeep");
+        assert!(
+            (half - full * 0.5).abs() < 0.0001,
+            "50% funding should halve road upkeep"
+        );
     }
 
     #[test]
