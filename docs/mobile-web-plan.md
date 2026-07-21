@@ -32,6 +32,14 @@ out of scope for now; Tauri supports it, so it can be added later once Android w
 *Goal: the app knows what it's running on and renders correctly inside mobile browser
 chrome. No visible UI changes on desktop.*
 
+- [ ] **M0-0 · Test prep: persistence back-fill + camera math unit tests.** The mobile
+  work refactors exactly the untested areas. Before touching them: `persistence.test.ts`
+  covering `deserialize` back-fill behaviour (old saves gain new settings fields with
+  defaults — M0-2 relies on this), and `camera.ts` unit tests for screen↔tile
+  conversion and zoom-about-a-point (the maths M1-2's pinch-zoom builds on).
+  `deps:` none.
+  **DoD:** a save predating a known settings field deserializes with the default
+  applied; camera round-trip and zoom-anchor invariants covered; both suites green.
 - [ ] **M0-1 · Input/layout mode detection module.** `src/ui/deviceMode.ts` (or
   similar): derives `inputMode: 'touch' | 'mouse'` from `(pointer: coarse)` +
   `maxTouchPoints`, and `layoutMode: 'compact' | 'full'` from viewport dimensions
