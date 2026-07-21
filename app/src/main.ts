@@ -183,8 +183,10 @@ let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
 let state: GameState = loadFromBrowser() ?? createInitialState();
 state.settings = ensureSettingsShape(state.settings);
-// Dev override, same pattern as `?bridge=`: forces `desktop`/`mobile` for this
-// session only — never written back to the persisted setting.
+// Dev override, same pattern as `?bridge=`: forces `desktop`/`mobile` for
+// this load. Unlike the bridge param, this mutates `state.settings` (the
+// persisted shape), so — same as any other in-session settings change — an
+// explicit Save while the override is active will persist it too.
 const uiParam = new URLSearchParams(window.location.search).get('ui');
 if (uiParam === 'desktop' || uiParam === 'mobile') {
   state.settings.ui.mode = uiParam;
