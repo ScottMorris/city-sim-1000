@@ -12,28 +12,61 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  /* Keep rubber-banding and pull-to-refresh from hijacking canvas pans. */
+  overscroll-behavior: none;
+}
+
 body {
   margin: 0;
   background: linear-gradient(180deg, #0b1424 0%, #0f1c33 50%, #0b1424 100%);
   color: var(--text);
   font-family: "Press Start 2P", "Lucida Console", Monaco, monospace;
+  /* dvh tracks the visible viewport as mobile browser chrome shows/hides. */
   min-height: 100vh;
+  min-height: 100dvh;
+  /* Game chrome is not prose — stop long-presses from starting text selection. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input,
+textarea,
+select {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 #app {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100vh;
+  height: 100dvh;
   min-height: 0;
+  /* The app shell is a fixed one-screen layout — overflowing content must
+     scroll within its own region (e.g. the topbar HUD), never push the
+     document taller than the viewport, or toggling the mobile address bar
+     leaves dead space behind. */
+  overflow: hidden;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 0;
+  /* Safety net for any width: if the HUD ever grows taller than the
+     viewport, it scrolls within the topbar instead of relying on #app's
+     overflow: hidden to silently clip it with no way back in. */
+  overflow-y: auto;
   background: #0d1731;
   border-bottom: 2px solid #1f2c4b;
   padding: 10px 16px;
+  /* Keep controls clear of notches and rounded corners in viewport-fit=cover. */
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
   box-shadow: inset 0 -4px 0 #0a0f1b;
 }
 
@@ -164,6 +197,8 @@ body {
   flex-direction: column;
   gap: 8px;
   padding: 10px 16px;
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
   background: #0d1a2f;
   border-top: 2px solid #1f2c4b;
   border-bottom: 2px solid #1f2c4b;
@@ -612,6 +647,9 @@ body {
   min-height: 0;
   overflow: hidden;
   z-index: 0;
+  /* All touch gestures on the map belong to the game, not the browser. */
+  touch-action: none;
+  -webkit-touch-callout: none;
 }
 
 .canvas-wrapper canvas {
@@ -636,8 +674,8 @@ body {
 
 .minimap-panel {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   background: rgba(12, 20, 40, 0.9);
   border: 2px solid #223557;
   border-radius: 12px;
@@ -947,6 +985,9 @@ footer {
   flex-wrap: wrap;
   background: #0c1324;
   padding: 12px 16px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
   border-top: 2px solid #1f2c4b;
   color: #7bffb7;
 }
@@ -1034,6 +1075,7 @@ footer {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   width: min(90vw, 960px);
   height: min(80vh, 720px);
+  height: min(80dvh, 720px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1669,16 +1711,34 @@ footer {
   body {
     font-size: 12px;
   }
+  #app {
+    /* The stacked HUD panels can outgrow one screen on phone widths — cap
+       the topbar's row and let it scroll internally instead of overflowing
+       the fixed-height app shell. */
+    grid-template-rows: minmax(0, 40dvh) auto minmax(0, 1fr) auto;
+  }
+  .topbar {
+    /* A centered flex item that overflows its box can leave the start-side
+       content unreachable by scroll — align to the top instead so nothing
+       above the fold gets stranded. */
+    align-items: flex-start;
+  }
+  .logo {
+    /* Re-centre just the logo against the (tall) HUD next to it — only the
+       HUD needs flex-start, for scroll reachability. */
+    align-self: center;
+  }
   .hud {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
   .canvas-wrapper {
     height: 60vh;
+    height: 60dvh;
   }
   .minimap-panel {
     width: min(100%, 280px);
-    right: 8px;
-    bottom: 8px;
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
 }
 
