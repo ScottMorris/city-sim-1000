@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { DEFAULT_COMPACT_BREAKPOINT_PX, initDeviceMode } from './deviceMode';
+import { DEFAULT_COMPACT_BREAKPOINT_PX, DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX, initDeviceMode } from './deviceMode';
 
 // A minimal MediaQueryList stand-in with a `set` helper to fire the same
 // 'change' event a real browser fires when the query's match state flips
@@ -31,6 +31,7 @@ interface FakeWindowOptions {
   compact: boolean;
   maxTouchPoints?: number;
   innerWidth?: number;
+  innerHeight?: number;
   matchMediaSupported?: boolean;
 }
 
@@ -46,6 +47,7 @@ function fakeWindow(options: FakeWindowOptions) {
   const win = {
     navigator: { maxTouchPoints: options.maxTouchPoints ?? 0 },
     innerWidth: options.innerWidth ?? 1200,
+    innerHeight: options.innerHeight ?? 800,
     matchMedia,
     addEventListener: (type: string, listener: () => void) => {
       if (type === 'resize') resizeListeners.add(listener);
@@ -146,6 +148,28 @@ describe('initDeviceMode — fallback without matchMedia', () => {
     expect(initDeviceMode({ window: win }).getMode().layoutMode).toBe('compact');
   });
 
+  it('derives layoutMode from innerHeight against the height breakpoint, even when wide', () => {
+    const { win } = fakeWindow({
+      pointerCoarse: false,
+      compact: false,
+      matchMediaSupported: false,
+      innerWidth: 1200,
+      innerHeight: DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX
+    });
+    expect(initDeviceMode({ window: win }).getMode().layoutMode).toBe('compact');
+  });
+
+  it('treats a phone in landscape (wide but short) as compact', () => {
+    const { win } = fakeWindow({
+      pointerCoarse: true,
+      compact: false,
+      matchMediaSupported: false,
+      innerWidth: 926,
+      innerHeight: 428
+    });
+    expect(initDeviceMode({ window: win }).getMode().layoutMode).toBe('compact');
+  });
+
   it('re-evaluates layoutMode on resize', () => {
     const { win, fireResize } = fakeWindow({
       pointerCoarse: false,
@@ -167,5 +191,16 @@ describe('initDeviceMode — custom breakpoint', () => {
   it('honours a caller-supplied compactBreakpointPx', () => {
     const { win } = fakeWindow({ pointerCoarse: false, compact: false, matchMediaSupported: false, innerWidth: 500 });
     expect(initDeviceMode({ window: win, compactBreakpointPx: 400 }).getMode().layoutMode).toBe('full');
+  });
+
+  it('honours a caller-supplied compactHeightBreakpointPx', () => {
+    const { win } = fakeWindow({
+      pointerCoarse: false,
+      compact: false,
+      matchMediaSupported: false,
+      innerWidth: 1200,
+      innerHeight: 450
+    });
+    expect(initDeviceMode({ window: win, compactHeightBreakpointPx: 400 }).getMode().layoutMode).toBe('full');
   });
 });

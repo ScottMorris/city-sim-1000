@@ -2209,7 +2209,13 @@ footer {
   }
 }
 
-@media (max-width: 900px) {
+/* Matches deviceMode.ts's DEFAULT_COMPACT_BREAKPOINT_PX/
+   DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX — keep the two in sync, or CSS layout
+   and the JS-derived layoutMode can disagree. Comma = OR: a phone in
+   landscape is comfortably wider than 900px but short enough that a full
+   desktop shell leaves little to no canvas, so compact triggers on either
+   dimension being small, not just width. */
+@media (max-width: 900px), (max-height: 500px) {
   body {
     font-size: 12px;
   }
