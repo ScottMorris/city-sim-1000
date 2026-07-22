@@ -318,6 +318,9 @@ jobs:
       - name: Build WASM target
         run: bun run build:wasm
 
+      - name: Build Tauri plugin JS
+        run: bun run build:plugin-js
+
       - name: Install Playwright browsers
         run: cd app && bunx playwright install --with-deps chromium
 
