@@ -1,0 +1,342 @@
+/* Page shell: topbar/ribbon HUD, viewport/canvas-wrapper, footer. */
+
+.topbar {
+  display: flex;
+  /* Stretch so the controls cluster matches the stat chips' height. */
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+  /* Safety net for any width: if the HUD ever grows taller than the
+     viewport, it scrolls within the topbar instead of relying on #app's
+     overflow: hidden to silently clip it with no way back in. */
+  overflow-y: auto;
+  background: #0d1731;
+  border-bottom: 2px solid #1f2c4b;
+  padding: 10px 16px;
+  /* Keep controls clear of notches and rounded corners in viewport-fit=cover. */
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  box-shadow: inset 0 -4px 0 #0a0f1b;
+}
+
+.logo {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+/* Status ribbon: one slim line of stat chips. The stats section scrolls
+   horizontally if it ever runs out of room; the controls cluster on the
+   right never scrolls, so speed/saves/manual/debug stay reachable. */
+.ribbon {
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  /* Keep the chips' drop shadow inside the scroll clip. */
+  padding-bottom: 4px;
+}
+
+.ribbon-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 4px;
+}
+
+/* Two-line chips: related stats stack (money over power/water, month over
+   day) so the ribbon stays one chip tall but carries more per chip. */
+.ribbon-chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+  background: var(--panel);
+  border: 2px solid #223557;
+  border-radius: 10px;
+  padding: 7px 10px;
+  box-shadow: 0 4px 0 #0a1020;
+  font-size: 12px;
+}
+
+.ribbon-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* A chip that doubles as a button (treasury → budget screen). */
+.ribbon-chip-button {
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+}
+
+.ribbon-chip-button:hover {
+  border-color: var(--accent);
+}
+
+.ribbon-strong {
+  color: #fff;
+  font-weight: bold;
+}
+
+.ribbon-dim {
+  color: #9fb2d1;
+}
+
+/* Compact horizontal RCI demand meters. */
+.ribbon-rci {
+  gap: 4px;
+  justify-content: center;
+}
+
+.rci-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rci-track {
+  width: 88px;
+  height: 8px;
+  background: #0c1425;
+  border: 1px solid #1f2c4b;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.rci-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.rci-label {
+  font-size: 9px;
+  color: #9fb2d1;
+  width: 8px;
+}
+
+/* Icon buttons (speed segmented control, manual, menu summaries). */
+.ribbon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 6px 8px;
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020;
+  list-style: none;
+}
+
+.ribbon-btn:hover {
+  border-color: var(--accent);
+}
+
+.ribbon-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 4px 0 #0a1020, 0 0 10px rgba(123, 255, 183, 0.25);
+}
+
+/* Dropdowns for Saves and Debug. */
+.ribbon-menu {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.ribbon-menu > summary {
+  display: flex;
+}
+
+.ribbon-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ribbon-menu[open] > summary {
+  border-color: var(--accent);
+}
+
+.ribbon-menu-panel {
+  /* Fixed, not absolute: the topbar clips overflowing descendants (its own
+     overflow-y: auto safety net), so an absolutely-positioned panel would be
+     clipped the instant it extends past the topbar's own box. Fixed escapes
+     that entirely; JS sets top/right to track the trigger button on open. */
+  position: fixed;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  background: #0f1d34;
+  border: 2px solid #223557;
+  border-radius: 12px;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55);
+  min-width: max-content;
+  z-index: 3000;
+}
+
+.budget-net {
+  font-weight: bold;
+}
+
+.budget-net.positive {
+  color: #7bffb7;
+}
+.budget-net.negative {
+  color: #ff8c8c;
+}
+.budget-net.neutral {
+  color: var(--text);
+}
+
+#viewport {
+  position: relative;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--toolbar-base-height, 72px);
+}
+
+.canvas-wrapper {
+  position: relative;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  z-index: 0;
+  /* All touch gestures on the map belong to the game, not the browser. */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+
+.canvas-wrapper canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 0;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #0c1324;
+  padding: 12px 16px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(16px + env(safe-area-inset-left, 0px));
+  padding-right: calc(16px + env(safe-area-inset-right, 0px));
+  border-top: 2px solid #1f2c4b;
+  color: #7bffb7;
+}
+
+.footer-link {
+  color: #96d9ff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.footer-link:hover {
+  color: #7bffb7;
+  text-decoration: underline;
+}
+
+@media (max-width: 1180px) {
+  .ribbon-chip {
+    font-size: 10px;
+    gap: 6px;
+    padding: 5px 8px;
+  }
+  .ribbon,
+  .ribbon-controls {
+    gap: 6px;
+  }
+  .logo span {
+    display: none;
+  }
+}
+
+/* Matches deviceMode.ts's DEFAULT_COMPACT_BREAKPOINT_PX/
+   DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX — keep the two in sync, or CSS layout
+   and the JS-derived layoutMode can disagree. Comma = OR: a phone in
+   landscape is comfortably wider than 900px but short enough that a full
+   desktop shell leaves little to no canvas, so compact triggers on either
+   dimension being small, not just width. */
+@media (max-width: 900px), (max-height: 500px) {
+  body {
+    font-size: 12px;
+  }
+  .topbar {
+    /* A centered flex item that overflows its box can leave the start-side
+       content unreachable by scroll — align to the top instead so nothing
+       above the fold gets stranded. */
+    align-items: flex-start;
+    /* Stats and controls no longer fit on one line at phone widths — wrap
+       into two: logo + ribbon on the first, controls on their own second
+       line, instead of squeezing/scrolling everything into a single row. */
+    flex-wrap: wrap;
+    /* Capped on the element itself, not the #app grid row: a grid track's
+       minmax(0, <length>) gets inflated to fill leftover space during grid
+       track sizing even when content is much shorter (unlike an auto track),
+       which left a large dead gap below the ribbon's own two lines. Capping
+       height here instead means the row sizes to actual content, while this
+       still scrolls internally (overflow-y: auto, from the base rule above)
+       if the HUD ever does grow past 40dvh. */
+    max-height: 40dvh;
+  }
+  .logo {
+    /* The ribbon chips it shares a line with are much taller (two stacked
+       lines of text); flex-start alignment above otherwise leaves the logo
+       stranded at the top of that row instead of centred against it. */
+    align-self: center;
+  }
+  .ribbon {
+    /* A real basis (rather than the base rule's flex: 1, i.e. basis 0%) so
+       flex-wrap below has an actual size to compare against the controls'
+       width — with basis 0% the ribbon always claims 100% of line one first,
+       forcing the controls to wrap even when a wide-but-short viewport
+       (phone landscape) has plenty of room for both on one line. */
+    flex: 1 1 200px;
+  }
+  .ribbon-controls {
+    /* Deliberately no flex-basis: 100% here — let flex-wrap decide: share
+       line one with the ribbon when there's room (phone landscape), only
+       drop to its own second line when there truly isn't (phone portrait).
+       Sized to its own content (not stretched), so it naturally sits at the
+       start of that line rather than needing an explicit left-align. */
+    flex: 0 0 auto;
+    /* Safety net if the controls still don't fit their own full-width line. */
+    overflow-x: auto;
+  }
+  .canvas-wrapper {
+    height: 60vh;
+    height: 60dvh;
+  }
+  /* Purely cosmetic (tagline + GitHub link) and gets visually buried under
+     the fixed-position compact toolbar dock anyway — drop it to reclaim
+     real flow height for the canvas instead of leaving it fought-over. */
+  footer {
+    display: none;
+  }
+}

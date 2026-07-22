@@ -1,0 +1,135 @@
+/* =========================================================================
+   Loading screen
+   ========================================================================= */
+
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ls-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  width: 420px;
+  max-width: 92vw;
+}
+
+.ls-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  text-transform: uppercase;
+}
+
+.ls-title-accent {
+  color: var(--accent);
+}
+
+/* Skyline */
+.ls-skyline-wrap {
+  width: 100%;
+  position: relative;
+  height: 100px;
+}
+
+.ls-skyline {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.ls-bld {
+  position: absolute;
+  bottom: 0;
+  background: #162236;
+  border-top: 2px solid #2a3f5f;
+  border-left: 1px solid #1e3050;
+  border-right: 1px solid #1e3050;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: ls-rise 0.35s ease-out forwards;
+}
+
+@keyframes ls-rise {
+  to { transform: scaleY(1); }
+}
+
+.ls-win {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #7bffb7;
+  opacity: 0.55;
+  image-rendering: pixelated;
+  animation: ls-blink 2.8s infinite;
+}
+
+/* Each window gets a slightly staggered blink via nth-child cycles */
+.ls-win:nth-child(3n)   { animation-delay: 0.9s; }
+.ls-win:nth-child(3n+1) { animation-delay: 1.7s; }
+
+@keyframes ls-blink {
+  0%, 90%, 100% { opacity: 0.55; }
+  94%            { opacity: 0.1;  }
+}
+
+.ls-horizon {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #2a3f5f;
+}
+
+/* Progress bar */
+.ls-bar-wrap {
+  width: 100%;
+}
+
+.ls-bar {
+  width: 100%;
+  height: 14px;
+  border: 2px solid #2a3f5f;
+  background: #0b1424;
+  position: relative;
+  image-rendering: pixelated;
+}
+
+.ls-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  /* Chunky pixel fill — repeating stripes */
+  background: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0,
+    var(--accent) 8px,
+    #5ddfa0 8px,
+    #5ddfa0 10px
+  );
+  animation: ls-progress 3s steps(30) forwards;
+}
+
+@keyframes ls-progress {
+  to { width: 83%; }
+}
+
+/* Stage label */
+.ls-stage {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: #7baacc;
+  text-transform: uppercase;
+  min-height: 1.2em;
+}
