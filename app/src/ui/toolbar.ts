@@ -4,10 +4,19 @@
 // SPDX-License-Identifier: MIT
 
 import { Tool } from '../game/toolTypes';
-import { getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
+import { getToolDetails, getToolHotkey, primaryLabelOverrides, toolLabels } from './toolInfo';
 import { initRadioWidget, type RadioWidget } from './radio';
 import { fetchRadioStations, type RadioStation } from './radioStations';
 import type { LayoutMode } from './deviceMode';
+
+// There's no hover on touch, so unlike the desktop shell's hover-driven
+// .overlay card, the compact sheet can't rely on a highlight/focus state to
+// reveal cost — every button just shows its own, and the current-tool dock
+// button (which stays visible after the sheet closes) carries it forward
+// right up to the moment of tapping the canvas.
+function getToolCostLabel(tool: Tool): string | undefined {
+  return getToolDetails(tool).rows.find((row) => row.label === 'Cost')?.value;
+}
 
 const powerOptions: Tool[] = [
   Tool.PowerLine,
@@ -75,10 +84,24 @@ export function initToolbar(
   const createToolButton = (key: Tool, className: string) => {
     const button = document.createElement('button');
     button.className = className;
-    button.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
     const hotkey = getToolHotkey(key);
     button.title = hotkey ? `${toolLabels[key]} (${hotkey})` : toolLabels[key];
     button.dataset.tool = key;
+    if (className === 'tool-sheet-button') {
+      const label = document.createElement('span');
+      label.className = 'tool-sheet-button-label';
+      label.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
+      button.append(label);
+      const costLabel = getToolCostLabel(key);
+      if (costLabel) {
+        const cost = document.createElement('span');
+        cost.className = 'tool-sheet-button-cost';
+        cost.textContent = costLabel;
+        button.append(cost);
+      }
+    } else {
+      button.textContent = primaryLabelOverrides[key] ?? toolLabels[key];
+    }
     button.addEventListener('click', () => {
       onSelect(key);
       updateToolbar(toolbar, key);
@@ -420,7 +443,9 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
   if (toolbar.dataset.layoutMode === 'compact') {
     const currentToolBtn = toolbar.querySelector<HTMLButtonElement>('.toolbar-current-tool-btn');
     if (currentToolBtn) {
-      currentToolBtn.textContent = primaryLabelOverrides[active] ?? toolLabels[active];
+      const label = primaryLabelOverrides[active] ?? toolLabels[active];
+      const costLabel = getToolCostLabel(active);
+      currentToolBtn.textContent = costLabel ? `${label} · ${costLabel}` : label;
     }
     toolbar.querySelectorAll('.tool-sheet-button').forEach((btn) => {
       const key = btn.getAttribute('data-tool');

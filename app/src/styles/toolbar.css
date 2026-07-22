@@ -136,9 +136,17 @@
   cursor: pointer;
   box-shadow: 0 4px 0 var(--shadow-colour);
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 2px;
+}
+
+/* No hover on touch, so cost lives on the button itself (see toolbar.ts's
+   createToolButton) rather than behind a highlight/focus state. */
+.tool-sheet-button-cost {
+  font-size: 10px;
+  color: var(--text-dim);
 }
 
 /* The full radio widget (flex-basis 360px, marquee + cover art) is sized for

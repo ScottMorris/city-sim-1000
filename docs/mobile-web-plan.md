@@ -111,12 +111,16 @@ when tools are added.*
   behind the sheet or a secondary button. Hit targets ≥ ~44px. `deps:` M0-1, M0-3.
   **DoD:** every tool and admin action reachable in compact mode; adding a tool to
   `groupedTools` appears in both shells with no extra wiring; full layout unchanged. (#103)
-- [ ] **M2-2 · Tool info in the picker.** `toolInfo.ts` content (cost, description)
-  shown for the highlighted tool inside the sheet, replacing hover. `deps:` M2-1.
-  **DoD:** cost is visible before placing in compact mode. More load-bearing than it
-  was: M2-4 suppresses the old always-on tool-info card in compact mode entirely
-  (it was eating the same footprint the minimap/inspector needed), so tool cost has
-  no compact-mode home at all until this ships.
+- [x] **M2-2 · Tool info in the picker.** No hover on touch, so instead of a
+  highlight-driven reveal, every button in the compact sheet shows its own cost
+  directly (`toolbar.ts`'s `createToolButton`, sourced from the same
+  `toolInfo.ts` `getToolDetails` the desktop hover card uses) — free tools like
+  Inspect just show no badge. The current-tool dock button carries the cost
+  forward too (e.g. "Road · $5.00"), so it stays visible after the sheet closes,
+  right up to tapping the canvas. Full description/hints text intentionally left
+  out of the tiny grid buttons; cost was the DoD and what M2-4 actually left with
+  no compact-mode home. `deps:` M2-1.
+  **DoD:** cost is visible before placing in compact mode. (#108)
 - [ ] **M2-3 · Prominent undo.** Surface the existing undo (P5-5) as a visible button
   in the compact HUD — mis-taps cost money and undo is the cheap fix. `deps:` M2-1.
   **DoD:** undo reachable in one tap; shows the same "Undone" notification.
