@@ -428,11 +428,23 @@ function wireBridge(b: SimBridge): void {
 // themselves out when nothing is undoable/redoable.
 let onHistoryChanged: ((flags: { canUndo: boolean; canRedo: boolean }) => void) | null = null;
 
-/** Undo the last stroke and confirm with the shared "Undone" toast. */
+/** "3 days" / "1 day" — for the undo/redo time-travel toasts. */
+function formatDaySpan(days: number): string {
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+/**
+ * Undo the last stroke and confirm with the shared "Undone" toast. Undo
+ * rewinds the clock to the pre-stroke moment, so when that skips a day or
+ * more the toast says how far — time travel should never be silent.
+ */
 function performUndo(): void {
+  const dayBefore = state.day;
   void bridge.undo().then((happened) => {
     if (happened) {
-      notifications.publish({ id: 'undo', message: 'Undone', sticky: false });
+      const daysRewound = Math.floor(dayBefore - state.day);
+      const message = daysRewound >= 1 ? `Undone — rewound ${formatDaySpan(daysRewound)}` : 'Undone';
+      notifications.publish({ id: 'undo', message, sticky: false });
       minimap?.markDirty();
     }
   });
@@ -440,9 +452,12 @@ function performUndo(): void {
 
 /** Redo the most recently undone stroke, mirroring `performUndo`. */
 function performRedo(): void {
+  const dayBefore = state.day;
   void bridge.redo().then((happened) => {
     if (happened) {
-      notifications.publish({ id: 'redo', message: 'Redone', sticky: false });
+      const daysForward = Math.floor(state.day - dayBefore);
+      const message = daysForward >= 1 ? `Redone — jumped forward ${formatDaySpan(daysForward)}` : 'Redone';
+      notifications.publish({ id: 'redo', message, sticky: false });
       minimap?.markDirty();
     }
   });
@@ -1275,7 +1290,10 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
       e.preventDefault();
-      performUndo();
+      // One undo per physical keypress: with full-rewind semantics, letting
+      // the key auto-repeat can silently unwind a whole session (a held
+      // Ctrl+Z fires ~30 undos/second, and each one may rewind days).
+      if (!e.repeat) performUndo();
       return;
     }
     // Redo: Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y.
@@ -1284,7 +1302,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       ((e.shiftKey && (e.key === 'z' || e.key === 'Z')) || e.key === 'y' || e.key === 'Y')
     ) {
       e.preventDefault();
-      performRedo();
+      if (!e.repeat) performRedo();
       return;
     }
     if (e.key === 'Escape') {
