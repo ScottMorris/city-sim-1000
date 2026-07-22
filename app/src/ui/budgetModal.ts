@@ -490,11 +490,17 @@ export function initBudgetModal(options: BudgetModalOptions) {
     footer.textContent =
       'Tip: taxes above 9% raise cash but cool demand; funding below 100% saves upkeep but has consequences.';
 
+    // Everything except the header scrolls as one region — on a small
+    // viewport (M2-5) the summary cards + ledger + quarterly strip + footer
+    // together are taller than the modal, and without a single shared scroll
+    // container each of those non-shrinking flex siblings just squeezed
+    // `body`'s `flex: 1` down to nothing rather than yielding space.
+    const scrollArea = document.createElement('div');
+    scrollArea.className = 'budget-scroll';
+    scrollArea.append(summary, body, strip, footer);
+
     modal.appendChild(header);
-    modal.appendChild(summary);
-    modal.appendChild(body);
-    modal.appendChild(strip);
-    modal.appendChild(footer);
+    modal.appendChild(scrollArea);
     backdrop.appendChild(modal);
     document.body.appendChild(backdrop);
 
