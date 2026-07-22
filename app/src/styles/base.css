@@ -5,9 +5,17 @@
   color-scheme: dark;
   --bg: #0e1525;
   --panel: #162236;
+  --panel-alt: #0f1d34;
   --accent: #7bffb7;
   --text: #e8f1ff;
+  --text-dim: #9fb2d1;
   --warning: #ffcc70;
+  --negative: #f08c42;
+  --alert: #ff8c8c;
+  --border: #223557;
+  --border-subtle: #1f2c4b;
+  --border-hover: #96d9ff;
+  --shadow-color: #0a1020;
   --grid: #0f1b2f;
 }
 
@@ -70,8 +78,8 @@ button.primary {
 }
 
 button.secondary {
-  background: #162236;
-  border: 2px solid #223557;
+  background: var(--panel);
+  border: 2px solid var(--border);
   color: #d9e6ff;
   border-radius: 10px;
   padding: 8px 12px;
@@ -83,13 +91,13 @@ button.secondary.active {
   background: #1f3354;
   border-color: var(--accent);
   color: var(--text);
-  box-shadow: 0 4px 0 #0a1020;
+  box-shadow: 0 4px 0 var(--shadow-color);
 }
 
 button.primary:hover,
 button.secondary:hover {
-  border-color: #96d9ff;
-  box-shadow: 0 4px 0 #0a1020;
+  border-color: var(--border-hover);
+  box-shadow: 0 4px 0 var(--shadow-color);
 }
 
 button.primary:active,
@@ -102,8 +110,8 @@ button.secondary.active {
 }
 
 .chip-button {
-  background: #162236;
-  border: 1px solid #223557;
+  background: var(--panel);
+  border: 1px solid var(--border);
   color: #d9e6ff;
   border-radius: 8px;
   padding: 6px 10px;

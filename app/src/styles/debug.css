@@ -23,7 +23,7 @@
 }
 
 .debug-section {
-  border-bottom: 1px solid #1f2c4b;
+  border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 8px;
   margin-bottom: 8px;
 }
@@ -47,7 +47,7 @@
 }
 
 .debug-hint {
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 11px;
   margin-top: 2px;
 }

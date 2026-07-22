@@ -21,13 +21,13 @@
 
 .map-stats {
   font-size: 11px;
-  color: #9fb2d1;
+  color: var(--text-dim);
 }
 
 .info-box {
   background: rgba(10, 16, 32, 0.8);
   padding: 10px;
-  border: 1px solid #1f2c4b;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
 }
 
@@ -44,7 +44,7 @@
 
 .info-label {
   font-size: 11px;
-  color: #9fb2d1;
+  color: var(--text-dim);
 }
 
 .info-name {
@@ -54,7 +54,7 @@
 
 .info-meta {
   font-size: 11px;
-  color: #9fb2d1;
+  color: var(--text-dim);
   margin-top: 2px;
 }
 
@@ -76,19 +76,19 @@
 
 .info-subtitle {
   font-size: 11px;
-  color: #9fb2d1;
+  color: var(--text-dim);
   margin-top: 2px;
 }
 
 .tool-hints {
   margin-top: 8px;
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 11px;
   line-height: 1.4;
 }
 
 .tool-hints.warning {
-  color: #f08c42;
+  color: var(--negative);
 }
 
 .tool-hints.subtle {
@@ -116,7 +116,7 @@
 
 .compact-info-tab {
   background: #132644;
-  border: 2px solid #223557;
+  border: 2px solid var(--border);
   border-radius: 10px;
   color: var(--text);
   padding: 8px 12px;
@@ -124,7 +124,7 @@
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 4px 0 #0a1020;
+  box-shadow: 0 4px 0 var(--shadow-color);
 }
 
 .compact-info-tab.active {
