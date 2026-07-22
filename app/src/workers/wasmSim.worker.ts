@@ -116,7 +116,6 @@ export interface LegacyEngineImport {
 
 type MainToWorker =
   | { type: 'init';          payload: { width: number; height: number; seed: number; terrain?: Uint8Array; policies?: WorkerPolicies } }
-  | { type: 'step';          payload: { dt: number } }
   | { type: 'apply_tool';    payload: { tool: number; x: number; y: number; strokeId: number } }
   | { type: 'set_speed';     payload: { multiplier: number } }
   | { type: 'set_policies';  payload: WorkerPolicies }
@@ -142,6 +141,40 @@ function historyFlags(h: SimHost): HistoryFlags {
 }
 
 let host: SimHost | null = null;
+
+// ---------------------------------------------------------------------------
+// Worker-driven step clock
+// ---------------------------------------------------------------------------
+//
+// The worker owns the simulation clock (mirroring the Tauri plugin's native
+// 20 Hz thread) instead of being stepped from the main thread's rAF loop.
+// Worker timers are not throttled in hidden tabs, so the city keeps running
+// in the background — and returning to the tab never triggers a fast-forward
+// "catch-up rush", because there is nothing to catch up on.
+
+const STEP_INTERVAL_MS = 50;
+// Longest real-time gap fed into one step. Timer delays beyond this (OS
+// sleep, mobile tab suspension) are dropped rather than fast-forwarded —
+// the sim simply loses that wall-clock time.
+const MAX_STEP_DT_S = 2;
+
+let stepTimer: ReturnType<typeof setInterval> | null = null;
+let lastStepAt = 0;
+
+function startStepLoop(): void {
+  if (stepTimer !== null) return;
+  lastStepAt = performance.now();
+  stepTimer = setInterval(() => {
+    if (!host) return;
+    const now = performance.now();
+    const dt = Math.min((now - lastStepAt) / 1000, MAX_STEP_DT_S);
+    lastStepAt = now;
+    host.step(dt);
+    const bytes = host.tile_buffer();
+    const stats = gatherStats(host);
+    self.postMessage({ type: 'step_result', bytes, stats }, { transfer: [bytes.buffer as ArrayBuffer] });
+  }, STEP_INTERVAL_MS);
+}
 
 function gatherStats(h: SimHost): SimStats {
   return {
@@ -217,14 +250,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
       self.postMessage({ type: 'ready', history: historyFlags(host) });
-      break;
-    }
-    case 'step': {
-      if (!host) break;
-      host.step(msg.payload.dt);
-      const bytes = host.tile_buffer();
-      const stats = gatherStats(host);
-      self.postMessage({ type: 'step_result', bytes, stats }, { transfer: [bytes.buffer as ArrayBuffer] });
+      startStepLoop();
       break;
     }
     case 'apply_tool': {
