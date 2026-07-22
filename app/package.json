@@ -21,6 +21,7 @@
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.83",
     "@types/node": "^24.10.1",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^27.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.4.5",

@@ -262,7 +262,7 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
 
         case 'reset': {
           const seed = (params.seed as number | undefined) ?? (Math.random() * 0xffff_ffff | 0);
-          bridge.loadState(createInitialState(state.width, state.height, seed));
+          await bridge.newCity(createInitialState(state.width, state.height, seed));
           await waitMs(150);
           reply(id, { seed, state: simState() });
           break;

@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: MIT
 pub mod adjacency;
 pub mod buildings;
-pub mod command_log;
 pub mod commands;
 pub mod demand;
 pub mod economy;
 pub mod education;
 pub mod history;
+pub mod import;
 pub mod rng;
 pub mod sim;
 pub mod snapshot;

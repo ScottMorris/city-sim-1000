@@ -7,6 +7,8 @@
 
 **Update (2026-07-21):** B3 (no natural terrain in the Rust sim) has been resolved by the Wilderness Score work (#101) — `GameState::seed_natural_terrain` / `SimHost::set_natural_terrain`, wired end-to-end via `wasmSim.worker.ts`. Left the rest of this audit as originally written; the other four P0s (A4, B1, B2, B4) were spot-checked against current `main` and remain accurate.
 
+**Update (2026-07-22):** the undo/save rework (#109) resolved four more items. **A4** — `money_frac` accumulator added to `GameState` (golden hash regenerated). **B1** — `SimHost` gained `get_snapshot`/`load_snapshot`/`import_legacy`; saves are CSAV containers carrying the engine snapshot, and the 120-tick replay cap is gone along with the whole command-log replay path (`CommandLog` deleted). **B4** — resolved structurally: there is no TS-side command-log mirror any more. **B7** — ratified as intentional full-rewind semantics (snapshot-stack `History`; documented in the manual). Also fixed while there: `day_frac` moved into `GameState` so restores keep sub-day progress, and D4's `LocalSimBridge` contradiction is gone (the file is actually deleted now).
+
 ---
 
 ## Executive summary

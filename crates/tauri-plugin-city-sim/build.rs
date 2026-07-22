@@ -7,9 +7,8 @@ const COMMANDS: &[&str] = &[
     "stop",
     "get_snapshot",
     "load_snapshot",
+    "import_legacy",
     "get_map_seed",
-    "get_command_log",
-    "load_command_log",
     "undo",
     "redo",
 ];

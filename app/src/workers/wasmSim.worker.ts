@@ -97,16 +97,35 @@ export interface WorkerPolicies {
   };
 }
 
+/** One-time legacy JSON-save import — see `city_sim_core::import`. */
+export interface LegacyEngineImport {
+  width: number;
+  height: number;
+  seed: number;
+  /** xoshiro128** state words from the save's `rngState`. */
+  rngState: [number, number, number, number];
+  /** Wire-layout SoA tile buffer re-encoded from the saved TS tiles. */
+  tiles: Uint8Array;
+  money: number;
+  day: number;
+  tick: number;
+  population: number;
+  jobs: number;
+  policies: WorkerPolicies;
+}
+
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policies?: WorkerPolicies } }
-  | { type: 'step';       payload: { dt: number } }
-  | { type: 'apply_tool'; payload: { tool: number; x: number; y: number; strokeId: number } }
-  | { type: 'set_speed';  payload: { multiplier: number } }
-  | { type: 'set_policies'; payload: WorkerPolicies }
+  | { type: 'init';          payload: { width: number; height: number; seed: number; terrain?: Uint8Array; policies?: WorkerPolicies } }
+  | { type: 'step';          payload: { dt: number } }
+  | { type: 'apply_tool';    payload: { tool: number; x: number; y: number; strokeId: number } }
+  | { type: 'set_speed';     payload: { multiplier: number } }
+  | { type: 'set_policies';  payload: WorkerPolicies }
   | { type: 'undo' }
   | { type: 'redo' }
-  | { type: 'reset';      payload: { width: number; height: number; seed: number; terrain?: Uint8Array } }
-  | { type: 'load';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policies?: WorkerPolicies } };
+  | { type: 'new_city';      payload: { requestId: number; width: number; height: number; seed: number; terrain?: Uint8Array } }
+  | { type: 'get_snapshot';  payload: { requestId: number } }
+  | { type: 'load_snapshot'; payload: { requestId: number; bytes: Uint8Array } }
+  | { type: 'import_legacy'; payload: { requestId: number } & LegacyEngineImport };
 
 function applyPolicies(h: SimHost, p: WorkerPolicies) {
   h.set_policies(JSON.stringify(p));
@@ -192,29 +211,11 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'init': {
       await init();
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
-      // Terrain must land before commands so placement validation sees the
-      // real water/tree map, and before the first step so wilderness does.
+      // Terrain must land before the first step so placement validation and
+      // wilderness see the real water/tree map. Saves are NOT loaded through
+      // init — the bridge follows up with 'load_snapshot'/'import_legacy'.
       if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
       if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
-      if (msg.payload.commands) {
-        for (const cmd of msg.payload.commands) {
-          host.apply_tool(cmd.tool, cmd.x, cmd.y, 0);
-        }
-        // Fast-forward enough for zone buildings to spawn (growth delay ≈ 40
-        // ticks). Cap at 120 so we don't overshoot into territory where Rust
-        // tick logic would diverge from what the TS display expects.
-        const targetTick = Math.min(msg.payload.targetTick ?? 0, 120);
-        const dt = 1 / 20;
-        while (host.tick_count() < targetTick) {
-          host.step(dt);
-        }
-        if (msg.payload.money !== undefined) {
-          host.set_money(msg.payload.money);
-        }
-      }
-      // The preloaded save is the undo floor — bulk-replayed history must
-      // never be reachable by undo.
-      host.clear_history();
       self.postMessage({ type: 'ready', history: historyFlags(host) });
       break;
     }
@@ -272,32 +273,69 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       }
       break;
     }
-    case 'reset': {
+    case 'new_city': {
+      // Fresh city on a new seed (MCP debug reset / future New Game flow).
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
       if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
+      postLoadResult(host, msg.payload.requestId);
       break;
     }
-    case 'load': {
+    case 'get_snapshot': {
       if (!host) break;
-      host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
-      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
-      if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
-      if (msg.payload.commands?.length) {
-        for (const cmd of msg.payload.commands) {
-          host.apply_tool(cmd.tool, cmd.x, cmd.y, 0);
-        }
-        // Match init: cap fast-forward at 120 ticks to avoid overshooting early saves.
-        const targetTick = Math.min(msg.payload.targetTick ?? 120, 120);
-        const dt = 1 / 20;
-        while (host.tick_count() < targetTick) host.step(dt);
+      const bytes = host.get_snapshot();
+      self.postMessage(
+        { type: 'snapshot_result', requestId: msg.payload.requestId, bytes },
+        { transfer: [bytes.buffer as ArrayBuffer] },
+      );
+      break;
+    }
+    case 'load_snapshot': {
+      if (!host) break;
+      try {
+        host.load_snapshot(msg.payload.bytes);
+      } catch (err) {
+        self.postMessage({ type: 'load_result', requestId: msg.payload.requestId, ok: false, error: String(err) });
+        break;
       }
-      if (msg.payload.money !== undefined) host.set_money(msg.payload.money);
-      // The loaded save is the undo floor — see 'init'.
-      host.clear_history();
-      const bytes = host.tile_buffer();
-      const stats = gatherStats(host);
-      self.postMessage({ type: 'step_result', bytes, stats }, { transfer: [bytes.buffer as ArrayBuffer] });
+      postLoadResult(host, msg.payload.requestId);
+      break;
+    }
+    case 'import_legacy': {
+      if (!host) break;
+      const p = msg.payload;
+      try {
+        host.import_legacy(
+          p.width, p.height, p.seed,
+          new Uint32Array(p.rngState), p.tiles,
+          p.money, p.day, p.tick, p.population, p.jobs,
+          JSON.stringify(p.policies),
+        );
+      } catch (err) {
+        self.postMessage({ type: 'load_result', requestId: p.requestId, ok: false, error: String(err) });
+        break;
+      }
+      postLoadResult(host, p.requestId);
       break;
     }
   }
 };
+
+/** Push the full post-load state back to the bridge in one message. */
+function postLoadResult(h: SimHost, requestId: number): void {
+  const bytes = h.tile_buffer();
+  self.postMessage(
+    {
+      type: 'load_result',
+      requestId,
+      ok: true,
+      width: h.width(),
+      height: h.height(),
+      seed: h.seed(),
+      policies: JSON.parse(h.policies_json()) as WorkerPolicies,
+      bytes,
+      stats: gatherStats(h),
+      history: historyFlags(h),
+    },
+    { transfer: [bytes.buffer as ArrayBuffer] },
+  );
+}

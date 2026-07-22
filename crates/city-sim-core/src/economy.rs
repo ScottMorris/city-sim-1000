@@ -300,8 +300,13 @@ pub fn apply_population_growth(state: &mut GameState, pop_cap: u32, job_cap: u32
 /// Mirrors `this.state.money = Math.max(0, this.state.money + netPerDay * (this.dt / 1.5))`.
 pub fn apply_money_tick(state: &mut GameState, dt: f64) {
     let delta = (state.budget.net_per_day as f64) * (dt / 1.5);
-    let new_money = (state.money as f64 + delta).max(0.0);
-    state.money = new_money.min(i64::MAX as f64) as i64;
+    // Accumulate fractionally: per-tick accrual is well under $1, so flooring
+    // into `money` alone would freeze both income and losses (audit A4).
+    let total = state.money as f64 + state.money_frac + delta;
+    let clamped = total.clamp(0.0, i64::MAX as f64);
+    let whole = clamped.floor();
+    state.money = whole as i64;
+    state.money_frac = clamped - whole;
 }
 
 // ---------------------------------------------------------------------------

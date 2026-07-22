@@ -17,7 +17,7 @@ The game is inspired by classic city-building titles and retro pixel-art aesthet
 
 For a concise overview of systems, balancing levers, and player-facing options, see **Systems Outline** in [`docs/game-parameters.md`](docs/game-parameters.md).
 
-Game saves are stored in **LocalStorage** with optional import/export.
+Game saves are stored in **IndexedDB** as binary CSAV containers (engine snapshot + client settings) with optional `.citysim` import/export; legacy LocalStorage/JSON saves are upgraded automatically.
 
 ---
 
@@ -56,7 +56,7 @@ Game saves are stored in **LocalStorage** with optional import/export.
 * **WASM** (`city-sim-wasm`) — Web Worker + `WasmSimBridge` for browser play
 * **Tauri v2** (`tauri-plugin-city-sim`) — native desktop via `TauriSimBridge`
 * **Service worker** for caching
-* **LocalStorage** + file import/export for saves
+* **IndexedDB** (CSAV containers) + `.citysim` file import/export for saves
 
 ---
 
@@ -355,15 +355,16 @@ Expenses:
 
 ## 6.6 Persistence
 
-### LocalStorage
+### IndexedDB
 
-* Key: `city-sim-1000-save`
-* JSON with versioning
+* Database `city-sim-1000`, store `saves`, one record per slot (`manual`; `autosave` planned)
+* Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard) + client JSON (settings/bylaws)
+* Legacy LocalStorage key `city-sim-1000-save` (plain JSON) is imported once and cleared after a successful CSAV write
 
 ### Import/Export
 
-* Export: download json
-* Import: upload json → validation → load
+* Export: download a `.citysim` binary container
+* Import: upload `.citysim` (or a legacy JSON export) → validation → load
 
 ---
 

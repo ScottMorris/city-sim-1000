@@ -109,7 +109,6 @@ export function clampPolicies(policies: Policies): Policies {
 export type SimCommand =
   | { type: 'ApplyTool'; tool: Tool; x: number; y: number; strokeId: number }
   | { type: 'SetSpeed'; multiplier: number }
-  | { type: 'LoadState'; seed: number }
   | { type: 'SetPolicies'; policies: Policies };
 
 export interface CommandResult {

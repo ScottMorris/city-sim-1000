@@ -7,9 +7,9 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
-use city_sim_core::command_log::CommandLog;
 use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::history::{History, HistoryConfig};
+use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
@@ -62,8 +62,6 @@ pub enum SimCmd {
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
     GetMapSeed(mpsc::SyncSender<MapSeed>),
-    GetCommandLog(mpsc::SyncSender<Result<Vec<u8>, String>>),
-    LoadCommandLog(Box<CommandLog>),
     Undo(mpsc::SyncSender<bool>),
     Redo(mpsc::SyncSender<bool>),
     Stop,
@@ -171,7 +169,6 @@ pub fn start(
 
     std::thread::spawn(move || {
         let mut sim = Simulation::new(width, height, seed);
-        let mut log = CommandLog::new(width, height, seed);
         let mut history = History::new(HistoryConfig::default());
 
         // Swap in a restored snapshot, carrying the live policies across —
@@ -193,15 +190,12 @@ pub fn start(
             loop {
                 match rx.try_recv() {
                     Ok(SimCmd::ApplyTool(tool, x, y, stroke)) => {
-                        log.record(sim.state.tick, tool, x, y);
                         let pending = history.prepare(&sim.state, stroke);
                         let result = sim_apply_tool(&mut sim.state, tool, x, y);
                         if result.success {
                             if let Some(bytes) = pending {
                                 history.commit(bytes, stroke);
                             }
-                        } else {
-                            log.pop();
                         }
                     }
                     Ok(SimCmd::SetSpeed(m)) => {
@@ -211,9 +205,6 @@ pub fn start(
                         sim.state.policies = policies.clamped();
                     }
                     Ok(SimCmd::SetNaturalTerrain(kinds)) => {
-                        // Record in the log so replays (undo, loadCommandLog)
-                        // rebuild the same map, then apply to the live state.
-                        log.set_terrain(kinds.clone());
                         sim.state.seed_natural_terrain(&kinds);
                     }
                     Ok(SimCmd::GetSnapshot(tx)) => {
@@ -221,10 +212,7 @@ pub fn start(
                         let _ = tx.send(result);
                     }
                     Ok(SimCmd::LoadSnapshot(gs)) => {
-                        // Reset the log and history: the loaded city is the
-                        // new undo floor, and recorded commands were against
-                        // the old city.
-                        log = CommandLog::new(gs.width, gs.height, gs.seed);
+                        // The loaded city is the new undo floor.
                         history.clear();
                         sim.load_state(*gs);
                     }
@@ -234,20 +222,6 @@ pub fn start(
                             height: sim.state.height,
                             seed: sim.state.seed,
                         });
-                    }
-                    Ok(SimCmd::GetCommandLog(tx)) => {
-                        let result = log.to_bytes().map_err(|e| e.to_string());
-                        let _ = tx.send(result);
-                    }
-                    Ok(SimCmd::LoadCommandLog(loaded_log)) => {
-                        // Policies are not part of the command log — carry them
-                        // across the replay (matches the WASM host's undo).
-                        let prev_speed = sim.speed();
-                        let prev_policies = sim.state.policies;
-                        sim = loaded_log.replay();
-                        sim.set_speed(prev_speed);
-                        sim.state.policies = prev_policies;
-                        log = *loaded_log;
                     }
                     Ok(SimCmd::Undo(tx)) => {
                         let happened = match history.undo(&sim.state) {
@@ -321,8 +295,7 @@ pub fn set_policies(state: State<'_, SimState>, policies: Policies) -> Result<()
 /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
 ///
 /// Only `Water`/`Tree` kinds are applied onto untouched `Land` tiles — see
-/// `GameState::seed_natural_terrain`. Recorded in the command log so undo
-/// replays rebuild the same map. Call once, right after `start`.
+/// `GameState::seed_natural_terrain`. Call once, right after `start`.
 #[tauri::command]
 pub fn set_natural_terrain(state: State<'_, SimState>, kinds: Vec<u8>) -> Result<(), Error> {
     state.send(SimCmd::SetNaturalTerrain(kinds))
@@ -366,6 +339,45 @@ pub fn load_snapshot(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), E
     state.send(SimCmd::LoadSnapshot(Box::new(game_state)))
 }
 
+/// One-time import of a legacy JSON save: rebuild an exact `GameState` from
+/// the wire-layout SoA tile buffer + headline scalars (see
+/// `city_sim_core::import`) and load it like a snapshot — the imported city
+/// becomes the undo floor.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn import_legacy(
+    state: State<'_, SimState>,
+    width: u32,
+    height: u32,
+    seed: u32,
+    rng_state: [u32; 4],
+    tiles: Vec<u8>,
+    money: i64,
+    day: u32,
+    tick: u64,
+    population: u32,
+    jobs: u32,
+    policies: Policies,
+) -> Result<(), Error> {
+    let imported = from_tile_buffer(
+        width,
+        height,
+        seed,
+        rng_state,
+        &tiles,
+        ImportStats {
+            money,
+            day,
+            tick,
+            population,
+            jobs,
+            policies,
+        },
+    )
+    .map_err(|e| Error::Snapshot(e.to_string()))?;
+    state.send(SimCmd::LoadSnapshot(Box::new(imported)))
+}
+
 /// Return the width, height, and seed that identify this city's starting map.
 ///
 /// The returned `MapSeed` can be passed back to `start()` to create a fresh
@@ -382,41 +394,6 @@ pub fn get_map_seed(state: State<'_, SimState>) -> Result<MapSeed, Error> {
             RecvTimeoutError::Timeout => Error::SnapshotTimeout,
             RecvTimeoutError::Disconnected => Error::ChannelClosed,
         })
-}
-
-/// Return the command log for the current session as raw bytes.
-///
-/// The log records every `applyTool` call since `start()`, tagged with the
-/// sim tick at which it occurred. Combined with the embedded `width`, `height`,
-/// and `seed`, the log is sufficient to deterministically replay the entire
-/// session — see `loadCommandLog`.
-///
-/// Blocks until the sim thread responds (max 2 s).
-#[tauri::command]
-pub fn get_command_log(state: State<'_, SimState>) -> Result<Vec<u8>, Error> {
-    let (tx, rx) = mpsc::sync_channel(0);
-    state.send(SimCmd::GetCommandLog(tx))?;
-    rx.recv_timeout(Duration::from_secs(2))
-        .map_err(|e| match e {
-            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
-            RecvTimeoutError::Disconnected => Error::ChannelClosed,
-        })?
-        .map_err(Error::Snapshot)
-}
-
-/// Replace the running simulation by replaying a command log from scratch.
-///
-/// `bytes` must be a log produced by `getCommandLog`. The sim thread replays
-/// all recorded commands at their original ticks starting from a fresh city
-/// (same `width`, `height`, `seed`). The replayed log becomes the active log,
-/// so subsequent `applyTool` calls extend it.
-///
-/// Rejects if `bytes` is not a valid CLOG file. Replay runs synchronously on
-/// the sim thread; a very long log may delay the next `TickEvent` briefly.
-#[tauri::command]
-pub fn load_command_log(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<(), Error> {
-    let log = CommandLog::from_bytes(&bytes).map_err(|e| Error::Snapshot(e.to_string()))?;
-    state.send(SimCmd::LoadCommandLog(Box::new(log)))
 }
 
 /// Undo the most recent player stroke by restoring its pre-stroke snapshot —

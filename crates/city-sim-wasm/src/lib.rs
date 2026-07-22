@@ -6,7 +6,9 @@
 use city_sim_core::{
     commands::apply_tool,
     history::{History, HistoryConfig},
+    import::{from_tile_buffer, ImportStats},
     sim::Simulation,
+    snapshot,
 };
 use city_sim_protocol::{
     commands::{Policies, Tool},
@@ -227,10 +229,6 @@ impl SimHost {
     pub fn wilderness_civic(&self) -> f32 {
         self.sim.state.wilderness.breakdown.civic
     }
-    pub fn set_money(&mut self, amount: f64) {
-        self.sim.state.money = amount as i64;
-    }
-
     /// Replace the full set of player policies from a camelCase JSON object
     /// (see `Policies` in `city-sim-protocol` — `{ budget: {...}, wilderness: {...} }`).
     /// Missing families keep their serde defaults; out-of-range values are
@@ -312,6 +310,78 @@ impl SimHost {
 
     pub fn can_redo(&self) -> bool {
         self.history.can_redo()
+    }
+
+    /// Serialise the full engine state to a `CSIM` snapshot blob (the byte
+    /// format shared with the Tauri plugin's `get_snapshot`). A pure read —
+    /// saving never touches the undo history.
+    pub fn get_snapshot(&self) -> Result<Vec<u8>, JsError> {
+        snapshot::to_bytes(&self.sim.state).map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    /// Replace the engine state with a previously captured snapshot and clear
+    /// the undo history — the loaded city is the new undo floor. The
+    /// snapshot's own policies become live (a save restores its taxes and
+    /// programmes).
+    pub fn load_snapshot(&mut self, bytes: &[u8]) -> Result<(), JsError> {
+        let state = snapshot::from_bytes(bytes).map_err(|e| JsError::new(&e.to_string()))?;
+        self.sim.load_state(state);
+        self.history.clear();
+        Ok(())
+    }
+
+    /// One-time import of a legacy JSON save (see `city_sim_core::import`):
+    /// wire-layout SoA tile buffer + headline scalars + camelCase policies
+    /// JSON. Clears the undo history — the imported city is the undo floor.
+    #[allow(clippy::too_many_arguments)]
+    pub fn import_legacy(
+        &mut self,
+        width: u32,
+        height: u32,
+        seed: u32,
+        rng_state: &[u32],
+        buffer: &[u8],
+        money: f64,
+        day: u32,
+        tick: f64,
+        population: u32,
+        jobs: u32,
+        policies_json: &str,
+    ) -> Result<(), JsError> {
+        let rng: [u32; 4] = rng_state
+            .try_into()
+            .map_err(|_| JsError::new("rng_state must have exactly 4 elements"))?;
+        let policies: Policies =
+            serde_json::from_str(policies_json).map_err(|e| JsError::new(&e.to_string()))?;
+        let state = from_tile_buffer(
+            width,
+            height,
+            seed,
+            rng,
+            buffer,
+            ImportStats {
+                money: money as i64,
+                day,
+                tick: tick as u64,
+                population,
+                jobs,
+                policies,
+            },
+        )
+        .map_err(|e| JsError::new(&e.to_string()))?;
+        self.sim.load_state(state);
+        self.history.clear();
+        Ok(())
+    }
+
+    /// The live `Policies` as camelCase JSON — read after a snapshot load so
+    /// the display mirror can adopt the save's policies.
+    pub fn policies_json(&self) -> Result<String, JsError> {
+        serde_json::to_string(&self.sim.state.policies).map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    pub fn seed(&self) -> u32 {
+        self.sim.state.seed
     }
 
     /// Drop all undo/redo history. Called after bulk preload on init/load so

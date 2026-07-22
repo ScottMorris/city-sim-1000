@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 //
 // Shows while the WASM worker initialises (or the Tauri plugin starts).
-// LocalSimBridge fires Ready synchronously so the screen barely flickers.
+// A bridge may fire Ready almost immediately; the screen barely flickers then.
 //
 // Visual elements:
 //   • Pixel-art skyline silhouette — buildings rise in with staggered delays

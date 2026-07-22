@@ -33,6 +33,9 @@ import {
   stop as pluginStop,
   undo as pluginUndo,
   redo as pluginRedo,
+  getSnapshot as pluginGetSnapshot,
+  loadSnapshot as pluginLoadSnapshot,
+  importLegacy as pluginImportLegacy,
   TOOL_ID,
   type ToolId,
   type TickEvent,
@@ -100,10 +103,6 @@ export class TauriSimBridge implements SimBridge {
       case 'SetSpeed':
         void pluginSetSpeed(cmd.multiplier);
         return { success: true };
-      case 'LoadState':
-        // Seed-only restart; full GameState load arrives in P5-1.
-        void this.restartPlugin(this.state.width, this.state.height, cmd.seed);
-        return { success: true };
       case 'SetPolicies':
         this.state.policies = cmd.policies;
         void pluginSetPolicies(cmd.policies);
@@ -119,9 +118,21 @@ export class TauriSimBridge implements SimBridge {
     return this.state;
   }
 
-  loadState(state: GameState): void {
-    this.state = structuredClone(state);
-    void this.restartPlugin(state.width, state.height, state.seed);
+  getSnapshot(): Promise<Uint8Array> {
+    return pluginGetSnapshot();
+  }
+
+  async loadSnapshot(bytes: Uint8Array): Promise<void> {
+    await pluginLoadSnapshot(bytes);
+  }
+
+  async importLegacy(imp: import('./simBridge').LegacyEngineImport): Promise<void> {
+    await pluginImportLegacy(imp);
+  }
+
+  async newCity(fresh: GameState): Promise<void> {
+    this.state = structuredClone(fresh);
+    await this.restartPlugin(fresh.width, fresh.height, fresh.seed);
   }
 
   setSpeed(multiplier: number): void {
@@ -147,9 +158,6 @@ export class TauriSimBridge implements SimBridge {
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
-
-  // Tauri bridge is not swappable, so no command log is needed.
-  getCommandLog() { return null; }
 
   // Returns null until Option B (Rust building_metadata() export) is implemented.
   getMetadata() { return null; }

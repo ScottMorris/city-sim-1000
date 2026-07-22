@@ -45,10 +45,11 @@ pub struct Simulation {
     ticks_per_second: u32,
     /// Speed multiplier (1.0 = normal, 0.0 = paused).
     speed: f32,
-    /// Fixed-timestep accumulator — real seconds waiting to be consumed as ticks.
+    /// Fixed-timestep accumulator — real seconds waiting to be consumed as
+    /// ticks. Real-time (not sim-time), so it stays on the driver; sim-time
+    /// accumulators (`day_frac`, `money_frac`) live in `GameState` instead so
+    /// snapshot restores are exact.
     accumulator: f64,
-    /// Sub-day accumulator — fractional days not yet rounded to a whole day.
-    day_frac: f64,
 }
 
 impl Simulation {
@@ -63,7 +64,6 @@ impl Simulation {
             ticks_per_second: 20,
             speed: 1.0,
             accumulator: 0.0,
-            day_frac: 0.0,
         }
     }
 
@@ -105,11 +105,12 @@ impl Simulation {
         let tick_dt = 1.0 / self.ticks_per_second as f64;
 
         // 1. Advance day — accumulate fractional days to avoid truncation to 0.
-        self.day_frac += tick_dt / 1.5;
-        let days_to_add = self.day_frac as u32;
+        // The accumulator lives in `GameState` so snapshot restores are exact.
+        self.state.day_frac += tick_dt / 1.5;
+        let days_to_add = self.state.day_frac as u32;
         if days_to_add > 0 {
             self.state.day += days_to_add;
-            self.day_frac -= days_to_add as f64;
+            self.state.day_frac -= days_to_add as f64;
         }
 
         // 2. Utility networks
@@ -196,12 +197,13 @@ impl Simulation {
         self.speed = multiplier.max(0.0);
     }
 
-    /// Replace the current state and reset transient caches.
+    /// Replace the current state and reset transient caches. Sim-time
+    /// accumulators (`day_frac`, `money_frac`) travel inside `GameState`, so
+    /// a restore continues the clock and treasury exactly.
     pub fn load_state(&mut self, state: GameState) {
         self.state = state;
         self.zone_growth = ZoneGrowthSim::new();
         self.accumulator = 0.0;
-        self.day_frac = 0.0;
     }
 
     // --- internal ---
@@ -294,7 +296,7 @@ mod tests {
     /// If this test fails, a determinism regression has been introduced.
     /// To re-commit after intentional sim changes, run:
     ///   REGEN=1 cargo test -p sim_core golden_hash 2>&1 | grep "new hash"
-    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0xb234ed590e7135fb;
+    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0xcd7650b68c9bc99c;
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;

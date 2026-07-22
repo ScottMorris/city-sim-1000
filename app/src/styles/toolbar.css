@@ -70,6 +70,48 @@
   box-shadow: 0 4px 0 var(--shadow-colour), 0 0 12px rgba(123, 255, 183, 0.25);
 }
 
+/* Undo was only ever reachable via Ctrl/Cmd+Z — no keyboard on touch, so
+   mis-taps (which cost money) had no cheap way back here. Icon-only and
+   fixed-size so it doesn't crowd the current-tool button's "label · cost"
+   text (M2-2) at narrow widths. */
+.toolbar-undo-btn {
+  background: #132644;
+  border: 2px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 var(--shadow-colour);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-undo-btn:active {
+  transform: translateY(1px);
+}
+
+.toolbar-undo-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbar-undo-btn:disabled:active {
+  transform: none;
+}
+
+/* Stacks the undo button above the radio widget instead of squeezing both
+   into one row alongside the current-tool button. */
+.toolbar-compact-dock-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .tool-sheet-backdrop {
   position: fixed;
   inset: 0;

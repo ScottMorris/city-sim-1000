@@ -4,14 +4,16 @@
 // SPDX-License-Identifier: MIT
 //
 // Implementations:
-//   LocalSimBridge  — TS sim in-process (?bridge=ts or debug toggle)
-//   WasmSimBridge   (P2-3) — Rust sim in a Web Worker via WASM
-//   TauriSimBridge  (P4-2) — native Rust sim via Tauri IPC Channel
+//   WasmSimBridge   — Rust sim in a Web Worker via WASM (default browser path)
+//   TauriSimBridge  — native Rust sim via Tauri IPC Channel (desktop)
 
 import type { GameState } from './gameState';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
 import type { BuildingTemplate } from './buildings/templates';
+import type { LegacyEngineImport } from '../workers/wasmSim.worker';
+
+export type { LegacyEngineImport };
 
 export type { SimCommand, CommandResult, FromSim };
 
@@ -46,12 +48,30 @@ export interface SimBridge {
   getState(): GameState;
 
   /**
-   * Replace the active GameState (used after a save-file load). The bridge
-   * resets all internal sim state to match. If `cmdLog` is provided the
-   * bridge replays those commands into the sim engine so WASM state matches
-   * the restored TS state; without it the engine resets to seed only.
+   * Serialise the engine's full state to an opaque CSIM snapshot blob — the
+   * payload of a CSAV save. A pure read: saving never touches undo history.
    */
-  loadState(state: GameState, cmdLog?: { tool: import('./toolTypes').Tool; x: number; y: number }[]): void;
+  getSnapshot(): Promise<Uint8Array>;
+
+  /**
+   * Replace the engine state with a CSIM snapshot (save/load, upload). The
+   * display mirror is resized and refreshed before the promise resolves; the
+   * loaded city becomes the undo floor. Rejects on a corrupt snapshot,
+   * leaving the running city untouched.
+   */
+  loadSnapshot(bytes: Uint8Array): Promise<void>;
+
+  /**
+   * One-time import of a legacy JSON save (pre-CSAV) into exact engine
+   * state — see `buildLegacyEngineImport` in `persistence.ts`.
+   */
+  importLegacy(imp: LegacyEngineImport): Promise<void>;
+
+  /**
+   * Start a fresh city from a newly generated display state (New Game, MCP
+   * debug reset). Clears undo history.
+   */
+  newCity(fresh: GameState): Promise<void>;
 
   /**
    * Adjust simulation speed as a multiplier of the base tick rate.
@@ -85,18 +105,11 @@ export interface SimBridge {
 
   /**
    * Return all building templates known to this bridge, or null if the bridge
-   * has not yet exported metadata.  LocalSimBridge returns data immediately
-   * (from templates.ts); WASM and Tauri bridges return null until Option B
-   * (Rust metadata export) is implemented.
+   * has not yet exported metadata. WASM and Tauri bridges return null until
+   * Option B (Rust metadata export) is implemented; UI callers fall back to
+   * the TS `templates.ts` table.
    */
   getMetadata(): BuildingTemplate[] | null;
-
-  /**
-   * Return the ordered list of tool placements made through this bridge, for
-   * use when swapping engines — the new bridge replays these to reconstruct
-   * the city. Returns null for bridges that don't support replay (Tauri).
-   */
-  getCommandLog(): { tool: import('./toolTypes').Tool; x: number; y: number }[] | null;
 
   /**
    * Tear down the bridge (terminate Worker, release SharedArrayBuffer, etc.).

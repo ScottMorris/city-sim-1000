@@ -1,4 +1,15 @@
-import { downloadState, loadFromBrowser, saveToBrowser, uploadState } from '../game/persistence';
+import {
+  SaveFormatError,
+  buildSaveMeta,
+  decodeLegacySave,
+  decodeSave,
+  downloadSave,
+  encodeSave,
+  isLegacyJsonSave,
+  type SaveContainer
+} from '../game/persistence';
+import { extractClientState } from '../game/clientState';
+import { getSave, putSave } from '../game/saveStore';
 import { GameState } from '../game/gameState';
 
 let toastRoot: HTMLDivElement | null = null;
@@ -105,30 +116,57 @@ interface PersistenceOptions {
   uploadBtn: HTMLButtonElement;
   fileInput: HTMLInputElement;
   getState: () => GameState;
-  getCmdLog?: () => import('../game/persistence').CmdLogEntry[];
-  onStateLoaded: (state: GameState, cmdLog?: import('../game/persistence').CmdLogEntry[]) => void;
+  /** Serialise the engine state — `SimBridge.getSnapshot`. */
+  getEngineSnapshot: () => Promise<Uint8Array>;
+  /** Restore a decoded CSAV container into the engine + display mirror. */
+  onContainerLoaded: (container: SaveContainer) => Promise<void>;
+  /** One-time import of a legacy JSON save (pre-CSAV upload). */
+  onLegacyLoaded: (state: GameState) => Promise<void>;
 }
 
 export function bindPersistenceControls(options: PersistenceOptions) {
-  const { saveBtn, loadBtn, downloadBtn, uploadBtn, fileInput, getState, getCmdLog, onStateLoaded } = options;
+  const {
+    saveBtn, loadBtn, downloadBtn, uploadBtn, fileInput,
+    getState, getEngineSnapshot, onContainerLoaded, onLegacyLoaded
+  } = options;
+
+  const buildContainer = async (): Promise<Uint8Array> => {
+    const state = getState();
+    const engineSnapshot = await getEngineSnapshot();
+    return encodeSave({
+      meta: buildSaveMeta(state, 'manual', new Date().toISOString()),
+      engineSnapshot,
+      client: extractClientState(state)
+    });
+  };
 
   saveBtn.addEventListener('click', () => {
-    saveToBrowser(getState(), getCmdLog?.());
-    showToast('Saved to browser');
+    void buildContainer()
+      .then(bytes => putSave('manual', decodeSave(bytes).meta, bytes))
+      .then(() => showToast('Saved to browser'))
+      .catch(() => showToast('Save failed — try Download instead', { severity: 'warning' }));
   });
 
   loadBtn.addEventListener('click', () => {
-    const loaded = loadFromBrowser();
-    if (!loaded) {
-      showToast('No save found');
-      return;
-    }
-    onStateLoaded(loaded.state, loaded.cmdLog);
-    showToast('Loaded from browser');
+    void getSave('manual')
+      .then(async record => {
+        if (!record) {
+          showToast('No save found');
+          return;
+        }
+        await onContainerLoaded(decodeSave(new Uint8Array(record.container)));
+        showToast('Loaded from browser');
+      })
+      .catch(() => showToast('Load failed — the save may be corrupt', { severity: 'warning' }));
   });
 
   downloadBtn.addEventListener('click', () => {
-    downloadState(getState(), getCmdLog?.());
+    void buildContainer()
+      .then(bytes => {
+        const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+        downloadSave(bytes, `city-sim-${stamp}.citysim`);
+      })
+      .catch(() => showToast('Download failed', { severity: 'warning' }));
   });
 
   uploadBtn.addEventListener('click', () => fileInput.click());
@@ -137,9 +175,17 @@ export function bindPersistenceControls(options: PersistenceOptions) {
     const file = target.files?.[0];
     if (!file) return;
     fileInput.value = '';
-    uploadState(file).then(({ state, cmdLog }) => {
-      onStateLoaded(state, cmdLog);
+    void (async () => {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (isLegacyJsonSave(bytes)) {
+        await onLegacyLoaded(decodeLegacySave(new TextDecoder().decode(bytes)));
+      } else {
+        await onContainerLoaded(decodeSave(bytes));
+      }
       showToast('Save loaded');
+    })().catch(err => {
+      const message = err instanceof SaveFormatError ? err.message : 'Could not load that file';
+      showToast(message, { severity: 'warning' });
     });
   });
 }

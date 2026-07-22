@@ -39,7 +39,7 @@
       <li>The tool info card beside the inspector shows cost, upkeep, and stats for the active tool; hit <em>Pin</em> to keep it always on.</li>
       <li>Use the Debug overlay button to see live stats (demand, utilities, zone counts) while tuning growth.</li>
       <li><strong>Hotkeys</strong>: Move with <code>WASD</code> or arrow keys, press <code>I</code> to enter Inspect mode, and use quick tool shortcuts: Raise (<code>E</code>), Lower (<code>Q</code>), Water paint (<code>F</code>), Trees (<code>T</code>), Road (<code>R</code>), Rail (<code>L</code>), Power Lines (<code>P</code>), Hydro Plant (<code>H</code>), Water Pump (<code>U</code>), Water Tower (<code>Y</code>), Elementary School (<code>J</code>), High School (<code>N</code>), Residential (<code>Z</code>), Commercial (<code>X</code>), Industrial (<code>C</code>), Park (<code>K</code>), Bulldoze (<code>B</code>), toggle the minimap (<code>M</code>). Set simulation speed with <code>1</code> (Slow), <code>2</code> (Fast), <code>3</code> (Ludicrous).</li>
-      <li><strong>Undo and redo</strong>: <code>Ctrl/Cmd+Z</code> undoes your last action; <code>Ctrl/Cmd+Shift+Z</code> or <code>Ctrl/Cmd+Y</code> redoes it. A drag that paints several tiles counts as one action. Undo rewinds the city to the moment just before that action — tiles, money, population, <em>and the clock</em> — and redo returns you exactly to where you pressed undo. When an undo skips back a day or more, the toast says how far (e.g. "Undone — rewound 3 days"). Holding the key does not repeat: each undo takes its own keypress. Making a new change clears the redo history. Undo reaches back only as far as the current session: loading a save (or reloading the page) starts a fresh history, so a loaded city can never be damaged by undoing "past" it. Taxes and programmes are never touched by undo — only tool actions are.</li>
+      <li><strong>Undo and redo</strong>: <code>Ctrl/Cmd+Z</code> undoes your last action; <code>Ctrl/Cmd+Shift+Z</code> or <code>Ctrl/Cmd+Y</code> redoes it. A drag that paints several tiles counts as one action. Undo rewinds the city to the moment just before that action — tiles, money, population, <em>and the clock</em> — and redo returns you exactly to where you pressed undo. When an undo skips back a day or more, the toast says how far (e.g. "Undone — rewound 3 days"). Holding the key does not repeat: each undo takes its own keypress. Making a new change clears the redo history. Undo reaches back only as far as the current session: loading a save (or reloading the page) starts a fresh history, so a loaded city can never be damaged by undoing "past" it. Taxes and programmes are never touched by undo — only tool actions are. On phones and other compact layouts, a round ↩️ button sits above the radio in the toolbar dock for one-tap undo; it greys out when there is nothing to undo.</li>
     </ul>
 
     <h2>Radio</h2>
@@ -126,9 +126,10 @@
     <h2>Saving & backups</h2>
     <ul>
       <li>Open the 💾 menu in the top status ribbon for all save actions.</li>
-      <li>Use <strong>Save</strong> to store your city in localStorage and <strong>Load</strong> to restore it.</li>
-      <li><strong>Download</strong> exports a JSON file so you can back it up.</li>
-      <li><strong>Upload</strong> lets you restore any exported city.</li>
+      <li>Use <strong>Save</strong> to store your city in the browser and <strong>Load</strong> to restore it. Saves capture the simulation's exact state — every building, the clock, the treasury (down to the cent), even the dice the city will roll next — so a loaded city carries on precisely where it left off.</li>
+      <li><strong>Download</strong> exports a <code>.citysim</code> file so you can back your city up or move it between devices.</li>
+      <li><strong>Upload</strong> restores any exported city — including JSON saves downloaded before the <code>.citysim</code> format existed; old browser saves are upgraded automatically the first time you play.</li>
+      <li>Loading a save starts a fresh undo history — the loaded city is the floor that undo can never damage.</li>
     </ul>
 
     <h2>The status ribbon</h2>
