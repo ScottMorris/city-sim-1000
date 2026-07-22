@@ -1189,10 +1189,15 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       {
         layoutMode: deviceMode.getMode().layoutMode,
         radioVolume: state.settings.audio.radioVolume,
-        radioStationId: previousStationId
+        radioStationId: previousStationId,
+        onUndo: performUndo
       }
     );
     radioController = toolbarControllers.radio;
+    // The compact-dock undo button greys itself in/out with the engine's
+    // undo availability; seed the current value on every shell rebuild.
+    toolbarControllers.setUndoEnabled(bridge.canUndo());
+    onHistoryChanged = (flags) => toolbarControllers.setUndoEnabled(flags.canUndo);
   };
   setupToolbar();
   handleDeviceModeChange = () => {

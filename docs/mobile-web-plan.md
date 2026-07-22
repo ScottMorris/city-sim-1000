@@ -121,7 +121,7 @@ when tools are added.*
   out of the tiny grid buttons; cost was the DoD and what M2-4 actually left with
   no compact-mode home. `deps:` M2-1.
   **DoD:** cost is visible before placing in compact mode. (#108)
-- [ ] **M2-3 · Prominent undo.** Surface the existing undo (P5-5) as a visible button
+- [x] **M2-3 · Prominent undo.** Surface the existing undo (P5-5) as a visible button
   in the compact HUD — mis-taps cost money and undo is the cheap fix. `deps:` M2-1.
   **DoD:** undo reachable in one tap; shows the same "Undone" notification.
 - [x] **M2-4 · Minimap + inspector in compact mode.** On-device testing found the

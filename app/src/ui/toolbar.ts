@@ -46,6 +46,7 @@ interface ToolbarOptions {
   radioVolume?: number;
   radioStationId?: string;
   onRadioStationChange?: (stationId: string) => void;
+  onUndo?: () => void;
 }
 
 // initToolbar can now be called more than once per page load (a live
@@ -58,6 +59,8 @@ export interface ToolbarControllers {
   radio: RadioWidget;
   setRadioStation: (stationId?: string, opts?: { triggerChange?: boolean }) => void;
   getActiveStationId: () => string | undefined;
+  /** Grey the compact-dock undo button in/out (driven by `HistoryChanged`). */
+  setUndoEnabled: (enabled: boolean) => void;
 }
 
 export function initToolbar(
@@ -68,7 +71,7 @@ export function initToolbar(
 ): ToolbarControllers {
   toolbarCleanups.get(toolbar)?.();
   toolbar.innerHTML = '';
-  const { layoutMode = 'full', radioVolume, radioStationId, onRadioStationChange } = options;
+  const { layoutMode = 'full', radioVolume, radioStationId, onRadioStationChange, onUndo } = options;
   toolbar.dataset.layoutMode = layoutMode;
 
   const groupedTools: Tool[][] = [
@@ -111,6 +114,8 @@ export function initToolbar(
 
   let radioHost: HTMLElement;
   let radioStationHost: HTMLElement;
+  // Compact-mode only; stays null in the full shell (desktop has Ctrl/Cmd+Z).
+  let undoBtn: HTMLButtonElement | null = null;
   let closeSheetOnEscape: ((e: KeyboardEvent) => void) | null = null;
 
   if (layoutMode === 'compact') {
@@ -158,7 +163,25 @@ export function initToolbar(
     currentToolBtn.setAttribute('aria-haspopup', 'true');
     currentToolBtn.setAttribute('aria-expanded', 'false');
 
-    dock.append(radioGroup, currentToolBtn);
+    // Undo was only ever reachable via Ctrl/Cmd+Z — there's no keyboard on
+    // touch, so mis-taps (which cost money) had no cheap way back. Icon-only,
+    // stacked above the radio widget rather than squeezed in beside it, so it
+    // doesn't crowd the current-tool button's "label · cost" text (M2-2) at
+    // narrow widths. Greyed out whenever nothing is undoable.
+    undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className = 'toolbar-undo-btn';
+    undoBtn.textContent = '↩️';
+    undoBtn.title = 'Undo';
+    undoBtn.disabled = true;
+    undoBtn.setAttribute('aria-label', 'Undo');
+    undoBtn.addEventListener('click', () => onUndo?.());
+
+    const leftCluster = document.createElement('div');
+    leftCluster.className = 'toolbar-compact-dock-left';
+    leftCluster.append(undoBtn, radioGroup);
+
+    dock.append(leftCluster, currentToolBtn);
     shell.append(sheetBackdrop, toolSheet, dock);
     toolbar.appendChild(shell);
 
@@ -434,7 +457,14 @@ export function initToolbar(
     window.removeEventListener('resize', restyleSubmenus);
   });
 
-  return { radio, setRadioStation, getActiveStationId: () => activeStationId ?? undefined };
+  return {
+    radio,
+    setRadioStation,
+    getActiveStationId: () => activeStationId ?? undefined,
+    setUndoEnabled: (enabled: boolean) => {
+      if (undoBtn) undoBtn.disabled = !enabled;
+    }
+  };
 }
 
 export function updateToolbar(toolbar: HTMLElement, active: Tool) {
