@@ -14,7 +14,7 @@
     "build:favicon":        "cd app && bun run build:favicon",
     "build:radio-playlist": "cd app && bun run build:radio-playlist",
     "build:wasm":           "wasm-pack build crates/city-sim-wasm --target web --out-dir ../../app/src/wasm/sim_wasm",
-    "build:plugin-js":      "bun --cwd crates/tauri-plugin-city-sim install && bun --cwd crates/tauri-plugin-city-sim run build"
+    "build:plugin-js":      "cd crates/tauri-plugin-city-sim && bun install && bun run build"
   },
   "engines": {
     "node": ">=20",
