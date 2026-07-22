@@ -50,15 +50,27 @@ const TOOL_TO_U8: Record<Tool, number> = {
   [Tool.Bulldoze]:         21,
 };
 
+interface WorkerHistoryFlags {
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
 type WorkerToMain =
-  | { type: 'ready' }
+  | { type: 'ready';        history: WorkerHistoryFlags }
   | { type: 'step_result';  bytes: Uint8Array; stats: SimStats }
-  | { type: 'apply_result'; success: boolean }
-  | { type: 'undo_result';  happened: false }
-  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats };
+  | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags };
 
 export interface WasmSimBridgeConfig {
   ticksPerSecond?: number;
+  /**
+   * Factory for the sim Worker — injectable so tests can substitute a fake.
+   * Defaults to the real `wasmSim.worker.ts` module Worker.
+   */
+  createWorker?: () => Worker;
 }
 
 export interface WasmInitCommand {
@@ -76,7 +88,13 @@ export class WasmSimBridge implements SimBridge {
   private pendingTileBuffer: Uint8Array | null = null;
   private pendingStats: SimStats | null = null;
   private pendingUndo: ((happened: boolean) => void) | null = null;
-  private cmdLog: { tool: Tool; x: number; y: number }[] = [];
+  private pendingRedo: ((happened: boolean) => void) | null = null;
+  private canUndoFlag = false;
+  private canRedoFlag = false;
+  private cmdLog: { tool: Tool; x: number; y: number; strokeId: number }[] = [];
+  // Strokes removed from cmdLog by undo, oldest-undone last — so redo can
+  // re-append them and a save taken mid-undo replays the right history.
+  private redoStrokes: { tool: Tool; x: number; y: number; strokeId: number }[][] = [];
   // Natural terrain snapshot taken at engine-swap time. Rust starts with
   // all-land, so without this, natural water/tree tiles would disappear after
   // the first tile-buffer update.
@@ -84,7 +102,7 @@ export class WasmSimBridge implements SimBridge {
   // Tile indices the player has explicitly modified — exempt from natural override.
   private modifiedTiles = new Set<number>();
 
-  constructor(state: GameState, _config: WasmSimBridgeConfig = {}, preloadCommands?: WasmInitCommand[]) {
+  constructor(state: GameState, config: WasmSimBridgeConfig = {}, preloadCommands?: WasmInitCommand[]) {
     // Hold the same reference as main.ts so updateStats / applyTileBuffer
     // mutate the object main.ts renders from. No clone — the Rust sim owns
     // sim state; this.state is only a display mirror.
@@ -97,16 +115,16 @@ export class WasmSimBridge implements SimBridge {
     // Seed the log with the replayed history so subsequent swaps carry the
     // full command history, not just commands added after this init.
     if (preloadCommands) {
-      this.cmdLog = [...preloadCommands];
+      // Preloaded history predates this session's strokes — stroke 0.
+      this.cmdLog = preloadCommands.map(c => ({ ...c, strokeId: 0 }));
       // Every replayed command position is player-modified — don't override those.
       for (const cmd of preloadCommands) {
         this.modifiedTiles.add(cmd.y * state.width + cmd.x);
       }
     }
-    this.worker = new Worker(
-      new URL('../workers/wasmSim.worker.ts', import.meta.url),
-      { type: 'module' },
-    );
+    this.worker =
+      config.createWorker?.() ??
+      new Worker(new URL('../workers/wasmSim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<WorkerToMain>) => {
       this.handleWorkerMsg(e.data);
     };
@@ -144,11 +162,12 @@ export class WasmSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool':
         if (this.ready) {
-          this.cmdLog.push({ tool: cmd.tool, x: cmd.x, y: cmd.y });
+          this.cmdLog.push({ tool: cmd.tool, x: cmd.x, y: cmd.y, strokeId: cmd.strokeId });
+          this.redoStrokes = [];
           this.modifiedTiles.add(cmd.y * this.state.width + cmd.x);
           this.worker.postMessage({
             type: 'apply_tool',
-            payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y },
+            payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y, strokeId: cmd.strokeId },
           });
         }
         break;
@@ -190,11 +209,16 @@ export class WasmSimBridge implements SimBridge {
     this.state = state;
     this.pendingTileBuffer = null;
     this.pendingStats = null;
+    // The loaded save is the new undo floor — session history does not
+    // survive a load (the worker clears the engine history too).
+    this.redoStrokes = [];
+    this.syncHistoryFlags({ canUndo: false, canRedo: false });
     // Re-snapshot natural terrain from the loaded state so water/tree tiles survive
     // the first tile-buffer update from the replayed WASM.
     this.naturalTileKinds = state.tiles.map(t => t.kind);
     if (cmdLog?.length && this.ready) {
-      this.cmdLog = [...cmdLog];
+      // Loaded history predates this session's strokes — stroke 0.
+      this.cmdLog = cmdLog.map(c => ({ ...c, strokeId: 0 }));
       this.modifiedTiles = new Set(cmdLog.map(c => c.y * state.width + c.x));
       this.worker.postMessage({
         type: 'load',
@@ -245,7 +269,24 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  getCommandLog() { return this.cmdLog; }
+  redo(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.ready) {
+        resolve(false);
+        return;
+      }
+      this.pendingRedo = resolve;
+      this.worker.postMessage({ type: 'redo' });
+    });
+  }
+
+  canUndo(): boolean { return this.canUndoFlag; }
+
+  canRedo(): boolean { return this.canRedoFlag; }
+
+  getCommandLog() {
+    return this.cmdLog.map(({ tool, x, y }) => ({ tool, x, y }));
+  }
 
   // Returns null until Option B (Rust building_metadata() export) is implemented.
   getMetadata() { return null; }
@@ -277,6 +318,7 @@ export class WasmSimBridge implements SimBridge {
         }
         // Policies may have changed while the worker was still booting.
         this.worker.postMessage({ type: 'set_policies', payload: this.state.policies });
+        this.syncHistoryFlags(msg.history);
         this.handler?.({ type: 'Ready' });
         break;
       case 'step_result':
@@ -287,6 +329,7 @@ export class WasmSimBridge implements SimBridge {
         if (!msg.success) {
           console.warn('[WasmSimBridge] apply_tool rejected by Rust sim');
         }
+        this.syncHistoryFlags(msg.history);
         break;
       case 'undo_result':
         // Discard any pending step_result — it was computed before the undo
@@ -294,19 +337,54 @@ export class WasmSimBridge implements SimBridge {
         this.pendingTileBuffer = null;
         this.pendingStats = null;
         if (msg.happened) {
-          // Keep cmdLog in sync with Rust's CommandLog so the next bridge swap
-          // or save-load doesn't replay the undone command.
-          const undone = this.cmdLog.pop();
-          if (undone !== undefined) {
-            this.modifiedTiles.delete(undone.y * this.state.width + undone.x);
+          // Rust undoes a whole stroke at once — mirror that by moving every
+          // trailing cmdLog entry of the last stroke onto the redo pile, so a
+          // save/engine-swap replays exactly the surviving history.
+          this.redoStrokes.push(this.popLastStroke());
+          this.applyTileBuffer(msg.bytes);
+          this.updateStats(msg.stats);
+        }
+        this.syncHistoryFlags(msg.history);
+        this.pendingUndo?.(msg.happened);
+        this.pendingUndo = null;
+        break;
+      case 'redo_result':
+        this.pendingTileBuffer = null;
+        this.pendingStats = null;
+        if (msg.happened) {
+          const stroke = this.redoStrokes.pop() ?? [];
+          for (const entry of stroke) {
+            this.cmdLog.push(entry);
+            this.modifiedTiles.add(entry.y * this.state.width + entry.x);
           }
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);
         }
-        this.pendingUndo?.(msg.happened);
-        this.pendingUndo = null;
+        this.syncHistoryFlags(msg.history);
+        this.pendingRedo?.(msg.happened);
+        this.pendingRedo = null;
         break;
     }
+  }
+
+  /** Remove and return the trailing cmdLog entries sharing the last stroke id. */
+  private popLastStroke(): { tool: Tool; x: number; y: number; strokeId: number }[] {
+    const stroke: { tool: Tool; x: number; y: number; strokeId: number }[] = [];
+    const last = this.cmdLog[this.cmdLog.length - 1];
+    if (last === undefined) return stroke;
+    while (this.cmdLog.length > 0 && this.cmdLog[this.cmdLog.length - 1].strokeId === last.strokeId) {
+      const entry = this.cmdLog.pop()!;
+      this.modifiedTiles.delete(entry.y * this.state.width + entry.x);
+      stroke.unshift(entry);
+    }
+    return stroke;
+  }
+
+  private syncHistoryFlags(flags: WorkerHistoryFlags): void {
+    if (flags.canUndo === this.canUndoFlag && flags.canRedo === this.canRedoFlag) return;
+    this.canUndoFlag = flags.canUndo;
+    this.canRedoFlag = flags.canRedo;
+    this.handler?.({ type: 'HistoryChanged', data: { canUndo: flags.canUndo, canRedo: flags.canRedo } });
   }
 
   private updateStats(stats: SimStats): void {

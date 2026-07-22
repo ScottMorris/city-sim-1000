@@ -125,6 +125,10 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   **DoD:** `CommandLog::pop()` in core; `UndoLast` `SimCmd` + `undo_last_command()` Tauri
   command; `SimBridge.undo()` interface; `TauriSimBridge` (real) + `WasmSimBridge` (no-op)
   implementations; Ctrl+Z handler in `main.ts` with "Undone" notification.
+  *Superseded:* replay-based undo reset stats when reaching into a loaded save's replayed
+  history (#109). Replaced by the snapshot-stack `History` in `city-sim-core/src/history.rs`
+  (stroke-level undo/redo via `snapshot::to_bytes` + `Simulation::load_state`, session-only,
+  policies carried across restores).
 - [x] **P5-6 · Benchmarks + CI for both targets** (criterion in `city-sim-core`; wasm + tauri
   build workflows). `deps:` P4-2.
 

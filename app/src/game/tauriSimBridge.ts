@@ -31,7 +31,8 @@ import {
   setPolicies as pluginSetPolicies,
   setNaturalTerrain as pluginSetNaturalTerrain,
   stop as pluginStop,
-  undoLastCommand as pluginUndoLastCommand,
+  undo as pluginUndo,
+  redo as pluginRedo,
   TOOL_ID,
   type ToolId,
   type TickEvent,
@@ -73,6 +74,8 @@ const TOOL_TO_ID: Record<Tool, ToolId> = {
 export class TauriSimBridge implements SimBridge {
   private state: GameState;
   private handler: ((msg: FromSim) => void) | null = null;
+  private canUndoFlag = false;
+  private canRedoFlag = false;
 
   constructor(state: GameState) {
     this.state = structuredClone(state);
@@ -88,7 +91,7 @@ export class TauriSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool': {
         const id = TOOL_TO_ID[cmd.tool];
-        void pluginApplyTool(id, cmd.x, cmd.y);
+        void pluginApplyTool(id, cmd.x, cmd.y, cmd.strokeId);
         // Optimistic: the Rust side will reject invalid placements silently;
         // a proper async result is deferred to P5 when we wire CommandResult
         // events back through the Channel.
@@ -126,8 +129,16 @@ export class TauriSimBridge implements SimBridge {
   }
 
   undo(): Promise<boolean> {
-    return pluginUndoLastCommand();
+    return pluginUndo();
   }
+
+  redo(): Promise<boolean> {
+    return pluginRedo();
+  }
+
+  canUndo(): boolean { return this.canUndoFlag; }
+
+  canRedo(): boolean { return this.canRedoFlag; }
 
   dispose(): void {
     void pluginStop();
@@ -194,6 +205,16 @@ export class TauriSimBridge implements SimBridge {
     // matching the budget breakdown limitation above)
     s.wilderness.score = event.wildernessScore;
     s.wilderness.trend = event.wildernessTrend;
+
+    // Undo/redo availability — emit HistoryChanged on transitions only.
+    if (event.canUndo !== this.canUndoFlag || event.canRedo !== this.canRedoFlag) {
+      this.canUndoFlag = event.canUndo;
+      this.canRedoFlag = event.canRedo;
+      this.handler?.({
+        type: 'HistoryChanged',
+        data: { canUndo: event.canUndo, canRedo: event.canRedo }
+      });
+    }
 
     // Tile kinds — resize the tiles array if dimensions changed
     const n = event.width * event.height;

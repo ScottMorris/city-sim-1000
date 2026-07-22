@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use city_sim_core::command_log::CommandLog;
 use city_sim_core::commands::apply_tool as sim_apply_tool;
+use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
@@ -46,12 +47,15 @@ pub struct TickEvent {
     pub height: u32,
     /// Tile kinds, one byte per tile, row-major. Values match `TileKind` u8 discriminants.
     pub tiles: Vec<u8>,
+    /// Whether an undo/redo step is currently available — drives button state.
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
 
 pub enum SimCmd {
-    ApplyTool(Tool, u32, u32),
+    ApplyTool(Tool, u32, u32, u64),
     SetSpeed(f32),
     SetPolicies(Policies),
     SetNaturalTerrain(Vec<u8>),
@@ -60,7 +64,8 @@ pub enum SimCmd {
     GetMapSeed(mpsc::SyncSender<MapSeed>),
     GetCommandLog(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadCommandLog(Box<CommandLog>),
-    UndoLast(mpsc::SyncSender<bool>),
+    Undo(mpsc::SyncSender<bool>),
+    Redo(mpsc::SyncSender<bool>),
     Stop,
 }
 
@@ -106,7 +111,7 @@ impl SimState {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn build_tick_event(sim: &Simulation) -> TickEvent {
+fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
     let s = &sim.state;
     let tiles: Vec<u8> = s.tiles.iter().map(|t| t.kind as u8).collect();
     TickEvent {
@@ -127,6 +132,8 @@ fn build_tick_event(sim: &Simulation) -> TickEvent {
         width: s.width,
         height: s.height,
         tiles,
+        can_undo: history.can_undo(),
+        can_redo: history.can_redo(),
     }
 }
 
@@ -165,6 +172,17 @@ pub fn start(
     std::thread::spawn(move || {
         let mut sim = Simulation::new(width, height, seed);
         let mut log = CommandLog::new(width, height, seed);
+        let mut history = History::new(HistoryConfig::default());
+
+        // Swap in a restored snapshot, carrying the live policies across —
+        // undo applies to tools, never to taxes or programmes.
+        fn restore(sim: &mut Simulation, restored: city_sim_core::state::GameState) {
+            let live_policies = sim.state.policies;
+            let prev_speed = sim.speed();
+            sim.load_state(restored);
+            sim.set_speed(prev_speed);
+            sim.state.policies = live_policies;
+        }
         let dt = 1.0_f64 / 20.0;
         let frame = Duration::from_micros(50_000); // 50 ms ≈ 20 Hz
 
@@ -174,9 +192,17 @@ pub fn start(
             // Drain all pending commands before ticking
             loop {
                 match rx.try_recv() {
-                    Ok(SimCmd::ApplyTool(tool, x, y)) => {
+                    Ok(SimCmd::ApplyTool(tool, x, y, stroke)) => {
                         log.record(sim.state.tick, tool, x, y);
-                        sim_apply_tool(&mut sim.state, tool, x, y);
+                        let pending = history.prepare(&sim.state, stroke);
+                        let result = sim_apply_tool(&mut sim.state, tool, x, y);
+                        if result.success {
+                            if let Some(bytes) = pending {
+                                history.commit(bytes, stroke);
+                            }
+                        } else {
+                            log.pop();
+                        }
                     }
                     Ok(SimCmd::SetSpeed(m)) => {
                         sim.set_speed(m);
@@ -195,10 +221,11 @@ pub fn start(
                         let _ = tx.send(result);
                     }
                     Ok(SimCmd::LoadSnapshot(gs)) => {
-                        // Reset the log: recorded commands were against the
-                        // old city and cannot replay correctly through a
-                        // snapshot-loaded state.
+                        // Reset the log and history: the loaded city is the
+                        // new undo floor, and recorded commands were against
+                        // the old city.
                         log = CommandLog::new(gs.width, gs.height, gs.seed);
+                        history.clear();
                         sim.load_state(*gs);
                     }
                     Ok(SimCmd::GetMapSeed(tx)) => {
@@ -222,15 +249,24 @@ pub fn start(
                         sim.state.policies = prev_policies;
                         log = *loaded_log;
                     }
-                    Ok(SimCmd::UndoLast(tx)) => {
-                        let happened = log.pop();
-                        if happened {
-                            let prev_speed = sim.speed();
-                            let prev_policies = sim.state.policies;
-                            sim = log.replay();
-                            sim.set_speed(prev_speed);
-                            sim.state.policies = prev_policies;
-                        }
+                    Ok(SimCmd::Undo(tx)) => {
+                        let happened = match history.undo(&sim.state) {
+                            Some(restored) => {
+                                restore(&mut sim, restored);
+                                true
+                            }
+                            None => false,
+                        };
+                        let _ = tx.send(happened);
+                    }
+                    Ok(SimCmd::Redo(tx)) => {
+                        let happened = match history.redo(&sim.state) {
+                            Some(restored) => {
+                                restore(&mut sim, restored);
+                                true
+                            }
+                            None => false,
+                        };
                         let _ = tx.send(happened);
                     }
                     Ok(SimCmd::Stop) => return,
@@ -240,7 +276,7 @@ pub fn start(
 
             sim.step(dt);
 
-            if on_tick.send(build_tick_event(&sim)).is_err() {
+            if on_tick.send(build_tick_event(&sim, &history)).is_err() {
                 break; // JS side closed the channel
             }
 
@@ -256,9 +292,15 @@ pub fn start(
 /// Apply a player tool at tile (x, y). `tool` is the `Tool` u8 discriminant
 /// (matching `city_sim_protocol::commands::Tool as u8`).
 #[tauri::command]
-pub fn apply_tool(state: State<'_, SimState>, tool: u8, x: u32, y: u32) -> Result<(), Error> {
+pub fn apply_tool(
+    state: State<'_, SimState>,
+    tool: u8,
+    x: u32,
+    y: u32,
+    stroke_id: u32,
+) -> Result<(), Error> {
     let tool = Tool::try_from(tool).map_err(|_| Error::InvalidTool(tool))?;
-    state.send(SimCmd::ApplyTool(tool, x, y))
+    state.send(SimCmd::ApplyTool(tool, x, y, stroke_id as u64))
 }
 
 /// Adjust simulation speed. `multiplier` is relative to the base 20 Hz rate.
@@ -377,17 +419,30 @@ pub fn load_command_log(state: State<'_, SimState>, bytes: Vec<u8>) -> Result<()
     state.send(SimCmd::LoadCommandLog(Box::new(log)))
 }
 
-/// Undo the most recent player tool action.
-///
-/// Removes the last entry from the active command log and replays from the city
-/// seed, rewinding the simulation to just before that action. Returns `true` if
-/// an action was undone, `false` if the log was already empty.
+/// Undo the most recent player stroke by restoring its pre-stroke snapshot —
+/// tiles, stats, RNG, and the clock all rewind. Returns `true` if a stroke was
+/// undone, `false` if the history was empty.
 ///
 /// Blocks until the sim thread responds (max 2 s).
 #[tauri::command]
-pub fn undo_last_command(state: State<'_, SimState>) -> Result<bool, Error> {
+pub fn undo(state: State<'_, SimState>) -> Result<bool, Error> {
     let (tx, rx) = mpsc::sync_channel(0);
-    state.send(SimCmd::UndoLast(tx))?;
+    state.send(SimCmd::Undo(tx))?;
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::SnapshotTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })
+}
+
+/// Redo the most recently undone stroke, returning to the exact moment undo
+/// was pressed. Returns `false` if there is nothing to redo.
+///
+/// Blocks until the sim thread responds (max 2 s).
+#[tauri::command]
+pub fn redo(state: State<'_, SimState>) -> Result<bool, Error> {
+    let (tx, rx) = mpsc::sync_channel(0);
+    state.send(SimCmd::Redo(tx))?;
     rx.recv_timeout(Duration::from_secs(2))
         .map_err(|e| match e {
             RecvTimeoutError::Timeout => Error::SnapshotTimeout,

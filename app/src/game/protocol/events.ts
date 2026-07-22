@@ -26,6 +26,12 @@ export interface NarrativeEvent {
   payload: unknown;
 }
 
+/** Undo/redo availability — emitted whenever either flag changes. */
+export interface HistoryFlags {
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
 export interface TickStats {
   tick: number;
   day: number;
@@ -41,4 +47,5 @@ export type FromSim =
   | { type: 'Alert'; data: SimAlert }
   | { type: 'Narrative'; data: NarrativeEvent }
   | { type: 'CommandResult'; success: boolean; message?: string }
-  | { type: 'TickStats'; data: TickStats };
+  | { type: 'TickStats'; data: TickStats }
+  | { type: 'HistoryChanged'; data: HistoryFlags };

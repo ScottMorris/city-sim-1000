@@ -3,7 +3,11 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-use city_sim_core::{command_log::CommandLog, commands::apply_tool, sim::Simulation};
+use city_sim_core::{
+    commands::apply_tool,
+    history::{History, HistoryConfig},
+    sim::Simulation,
+};
 use city_sim_protocol::{
     commands::{Policies, Tool},
     tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE},
@@ -17,12 +21,23 @@ pub fn version() -> String {
 
 /// Production simulation host for the browser Worker.
 ///
-/// Wraps `city-sim-core::Simulation` and a `CommandLog`, wiring the full Rust
-/// sim engine to the WASM cdylib surface for `WasmSimBridge`.
+/// Wraps `city-sim-core::Simulation` and a snapshot-stack `History`, wiring
+/// the full Rust sim engine to the WASM cdylib surface for `WasmSimBridge`.
 #[wasm_bindgen]
 pub struct SimHost {
     sim: Simulation,
-    log: CommandLog,
+    history: History,
+}
+
+impl SimHost {
+    /// Swap in a restored snapshot, carrying the live policies across — undo
+    /// applies to tools, never to taxes or programmes. Speed lives on
+    /// `Simulation` (not in `GameState`), so `load_state` already keeps it.
+    fn restore(&mut self, restored: city_sim_core::state::GameState) {
+        let live_policies = self.sim.state.policies;
+        self.sim.load_state(restored);
+        self.sim.state.policies = live_policies;
+    }
 }
 
 #[wasm_bindgen]
@@ -31,7 +46,7 @@ impl SimHost {
     pub fn new(width: u32, height: u32, seed: u32) -> SimHost {
         SimHost {
             sim: Simulation::new(width, height, seed),
-            log: CommandLog::new(width, height, seed),
+            history: History::new(HistoryConfig::default()),
         }
     }
 
@@ -230,11 +245,10 @@ impl SimHost {
     /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
     ///
     /// Only `Water`/`Tree` kinds are applied — see
-    /// `GameState::seed_natural_terrain`. Recorded in the command log so
-    /// undo replays and future bridge swaps rebuild the same map. Call once,
-    /// after construction and before any commands.
+    /// `GameState::seed_natural_terrain`. Call once, after construction and
+    /// before any commands. Terrain lives inside the state, so undo snapshots
+    /// and save snapshots carry it automatically.
     pub fn set_natural_terrain(&mut self, kinds: &[u8]) {
-        self.log.set_terrain(kinds.to_vec());
         self.sim.state.seed_natural_terrain(kinds);
     }
 
@@ -247,18 +261,21 @@ impl SimHost {
     /// Apply a player tool at tile (x, y).
     ///
     /// `tool_idx` is the `Tool` discriminant (0 = Inspect … 21 = Bulldoze),
-    /// matching `#[repr(u8)]` in `city-sim-protocol`. Returns `true` on
+    /// matching `#[repr(u8)]` in `city-sim-protocol`. `stroke_id` groups the
+    /// many calls of one drag-paint gesture into a single undo step — the
+    /// history captures one pre-stroke snapshot per id. Returns `true` on
     /// success; `false` if the tool could not be applied (out-of-bounds,
     /// insufficient funds, invalid placement).
-    pub fn apply_tool(&mut self, tool_idx: u8, x: u32, y: u32) -> bool {
+    pub fn apply_tool(&mut self, tool_idx: u8, x: u32, y: u32, stroke_id: u32) -> bool {
         let Ok(tool) = Tool::try_from(tool_idx) else {
             return false;
         };
-        // Record before apply; pop if rejected so the log stays clean.
-        self.log.record(self.sim.state.tick, tool, x, y);
+        let pending = self.history.prepare(&self.sim.state, stroke_id as u64);
         let result = apply_tool(&mut self.sim.state, tool, x, y);
-        if !result.success {
-            self.log.pop();
+        if result.success {
+            if let Some(bytes) = pending {
+                self.history.commit(bytes, stroke_id as u64);
+            }
         }
         result.success
     }
@@ -268,21 +285,39 @@ impl SimHost {
         self.sim.set_speed(multiplier);
     }
 
-    /// Undo the most recent player action by popping the command log and
-    /// replaying from seed. Returns `true` if an action was undone, `false`
-    /// if the log was already empty.
-    pub fn undo_last(&mut self) -> bool {
-        if !self.log.pop() {
+    /// Undo the most recent player stroke by restoring its pre-stroke
+    /// snapshot — tiles, stats, RNG, and the clock all rewind. Returns `true`
+    /// if a stroke was undone, `false` if the history was empty.
+    pub fn undo(&mut self) -> bool {
+        let Some(restored) = self.history.undo(&self.sim.state) else {
             return false;
-        }
-        let prev_speed = self.sim.speed();
-        // Policies are not part of the command log — carry them across the
-        // replay so undoing a tool doesn't also reset taxes or programmes.
-        let prev_policies = self.sim.state.policies;
-        self.sim = self.log.replay();
-        self.sim.set_speed(prev_speed);
-        self.sim.state.policies = prev_policies;
+        };
+        self.restore(restored);
         true
+    }
+
+    /// Redo the most recently undone stroke, returning to the exact moment
+    /// undo was pressed. Returns `false` if there is nothing to redo.
+    pub fn redo(&mut self) -> bool {
+        let Some(restored) = self.history.redo(&self.sim.state) else {
+            return false;
+        };
+        self.restore(restored);
+        true
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.history.can_undo()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        self.history.can_redo()
+    }
+
+    /// Drop all undo/redo history. Called after bulk preload on init/load so
+    /// the loaded city is the undo floor — undo can never corrupt it.
+    pub fn clear_history(&mut self) {
+        self.history.clear();
     }
 
     /// Total byte length of the SoA tile buffer (width × height × `BYTES_PER_TILE`).

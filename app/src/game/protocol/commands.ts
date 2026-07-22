@@ -107,7 +107,7 @@ export function clampPolicies(policies: Policies): Policies {
 }
 
 export type SimCommand =
-  | { type: 'ApplyTool'; tool: Tool; x: number; y: number }
+  | { type: 'ApplyTool'; tool: Tool; x: number; y: number; strokeId: number }
   | { type: 'SetSpeed'; multiplier: number }
   | { type: 'LoadState'; seed: number }
   | { type: 'SetPolicies'; policies: Policies };
@@ -117,8 +117,25 @@ export interface CommandResult {
   message?: string;
 }
 
-export function applyToolCmd(tool: Tool, x: number, y: number): SimCommand {
-  return { type: 'ApplyTool', tool, x, y };
+/**
+ * `strokeId` groups the many `ApplyTool` commands of one drag-paint gesture
+ * into a single undo step — allocate a fresh id per gesture with
+ * `nextStrokeId()`, not per painted tile.
+ */
+export function applyToolCmd(tool: Tool, x: number, y: number, strokeId: number): SimCommand {
+  return { type: 'ApplyTool', tool, x, y, strokeId };
+}
+
+let strokeCounter = 0;
+
+/**
+ * Allocate a fresh stroke id. Every command source (pointer input, the MCP
+ * debug bridge, tests) must share this allocator so ids never collide and
+ * commands from different gestures never coalesce into one undo step.
+ */
+export function nextStrokeId(): number {
+  strokeCounter += 1;
+  return strokeCounter;
 }
 
 export function setPoliciesCmd(policies: Policies): SimCommand {

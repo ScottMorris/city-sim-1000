@@ -367,6 +367,18 @@
           "markdownDescription": "Denies the load_snapshot command without any pre-configured scope."
         },
         {
+          "description": "Enables the redo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-redo",
+          "markdownDescription": "Enables the redo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the redo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-redo",
+          "markdownDescription": "Denies the redo command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_budget_policy command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-budget-policy",
@@ -449,6 +461,18 @@
           "type": "string",
           "const": "deny-stop",
           "markdownDescription": "Denies the stop command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the undo command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-undo",
+          "markdownDescription": "Enables the undo command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the undo command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-undo",
+          "markdownDescription": "Denies the undo command without any pre-configured scope."
         },
         {
           "description": "Enables the undo_last_command command without any pre-configured scope.",
