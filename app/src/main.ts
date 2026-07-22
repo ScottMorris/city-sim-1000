@@ -184,6 +184,37 @@ const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-bt
 const simBridgeBtn = requireElement<HTMLButtonElement>('#sim-bridge-btn');
 const newsTickerEl = requireElement<HTMLDivElement>('#news-ticker');
 
+// Compact layout has no room for the minimap and the tile inspector as two
+// separate floating panels (they collide) — they share one corner instead,
+// switched with these tabs. Always created (cheap, two buttons); style.css
+// scopes all of the compact-sharing CSS to the compact breakpoint, so this
+// is inert on desktop regardless of the dataset value below.
+const compactInfoTabs = document.createElement('div');
+compactInfoTabs.className = 'compact-info-tabs';
+const compactInfoTabMap = document.createElement('button');
+compactInfoTabMap.type = 'button';
+compactInfoTabMap.className = 'compact-info-tab';
+compactInfoTabMap.textContent = '🗺️ Map';
+const compactInfoTabInspect = document.createElement('button');
+compactInfoTabInspect.type = 'button';
+compactInfoTabInspect.className = 'compact-info-tab';
+compactInfoTabInspect.textContent = '🔍 Inspect';
+compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect);
+wrapper.append(compactInfoTabs);
+
+function setCompactInfoTab(tab: 'map' | 'inspect' | 'none') {
+  wrapper.dataset.compactInfoTab = tab;
+  compactInfoTabMap.classList.toggle('active', tab === 'map');
+  compactInfoTabInspect.classList.toggle('active', tab === 'inspect');
+}
+compactInfoTabMap.addEventListener('click', () => {
+  setCompactInfoTab(wrapper.dataset.compactInfoTab === 'map' ? 'none' : 'map');
+});
+compactInfoTabInspect.addEventListener('click', () => {
+  setCompactInfoTab(wrapper.dataset.compactInfoTab === 'inspect' ? 'none' : 'inspect');
+});
+setCompactInfoTab('none');
+
 // Ribbon dropdowns (<details>): only one open at a time, close on outside
 // click or Escape, and close the saves menu after an action is chosen.
 const ribbonMenus = [...document.querySelectorAll<HTMLDetailsElement>('details.ribbon-menu')];
@@ -236,6 +267,12 @@ const syncToolbarHeights = () => {
   if (toolbar.dataset.layoutMode === 'compact') {
     viewport.style.setProperty('--toolbar-base-height', '0px');
     viewport.style.setProperty('--toolbar-visible-height', '0px');
+    // The compact-info-tabs / shared minimap+inspector panel float above
+    // .toolbar-compact-dock (position: fixed, bottom: 0) — measure its real
+    // height (varies with safe-area-inset-bottom) instead of guessing, same
+    // approach as the full shell's own height vars above.
+    const dockHeight = toolbar.querySelector('.toolbar-compact-dock')?.getBoundingClientRect().height ?? 0;
+    viewport.style.setProperty('--compact-dock-height', `${dockHeight}px`);
     return;
   }
   const rect = toolbar.getBoundingClientRect();
@@ -501,6 +538,9 @@ function applyCurrentTool(tilePos: Position) {
   if (!getTile(state, tilePos.x, tilePos.y)) return;
   if (activeTool === Tool.Inspect) {
     selected = tilePos;
+    if (toolbar.dataset.layoutMode === 'compact') {
+      setCompactInfoTab('inspect');
+    }
     return;
   }
   const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y));
@@ -809,6 +849,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     wildernessChip,
     overlayRoot: wrapper
   });
+  hud.setToolInfoSuppressed(deviceMode.getMode().layoutMode === 'compact');
   newsTicker = initNewsTicker({
     root: newsTickerEl,
     getItems: () => narrativeManager.getTickerQueue(),
@@ -976,6 +1017,18 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     });
   };
 
+  // In compact mode the minimap's own Hide/Show control is replaced by the
+  // shared map/inspect tabs (see setCompactInfoTab above), so the panel's
+  // *content* should always be ready to draw — force `open` in memory only
+  // (syncSettings doesn't call onSettingsChange) rather than persisting it,
+  // so an explicit "hide minimap" choice made on desktop survives a phone
+  // session.
+  const syncMinimapSettings = (settings: GameState['settings']['minimap']) => {
+    minimap?.syncSettings(
+      deviceMode.getMode().layoutMode === 'compact' ? { ...settings, open: true } : settings
+    );
+  };
+
   const applySettings = (
     nextSettings: GameState['settings'],
     options: { skipHotkeyReload?: boolean } = {}
@@ -995,7 +1048,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     });
     newsTicker?.update();
     if (minimapChanged) {
-      minimap?.syncSettings(state.settings.minimap);
+      syncMinimapSettings(state.settings.minimap);
       minimap?.markDirty();
     }
     updatePendingPenaltyBtn();
@@ -1018,6 +1071,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getViewportSize: minimapViewport,
     palette
   });
+  syncMinimapSettings(state.settings.minimap);
 
   settingsModal = initSettingsModal({
     getSettings: () => state.settings,
@@ -1055,6 +1109,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     if (toolbar.dataset.layoutMode !== deviceMode.getMode().layoutMode) {
       setupToolbar();
     }
+    hud.setToolInfoSuppressed(deviceMode.getMode().layoutMode === 'compact');
+    syncMinimapSettings(state.settings.minimap);
     syncToolbarHeights();
     // See the matching comment below: force Pixi to pick up canvas-wrapper's
     // new size, since `resizeTo`'s own auto-resize doesn't reliably do so
