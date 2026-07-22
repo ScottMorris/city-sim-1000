@@ -11,7 +11,7 @@
      overflow: hidden to silently clip it with no way back in. */
   overflow-y: auto;
   background: #0d1731;
-  border-bottom: 2px solid #1f2c4b;
+  border-bottom: 2px solid var(--border-subtle);
   padding: 10px 16px;
   /* Keep controls clear of notches and rounded corners in viewport-fit=cover. */
   padding-top: calc(10px + env(safe-area-inset-top, 0px));
@@ -61,10 +61,10 @@
   gap: 5px;
   white-space: nowrap;
   background: var(--panel);
-  border: 2px solid #223557;
+  border: 2px solid var(--border);
   border-radius: 10px;
   padding: 7px 10px;
-  box-shadow: 0 4px 0 #0a1020;
+  box-shadow: 0 4px 0 var(--shadow-colour);
   font-size: 12px;
 }
 
@@ -92,7 +92,7 @@
 }
 
 .ribbon-dim {
-  color: #9fb2d1;
+  color: var(--text-dim);
 }
 
 /* Compact horizontal RCI demand meters. */
@@ -111,7 +111,7 @@
   width: 88px;
   height: 8px;
   background: #0c1425;
-  border: 1px solid #1f2c4b;
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -124,7 +124,7 @@
 
 .rci-label {
   font-size: 9px;
-  color: #9fb2d1;
+  color: var(--text-dim);
   width: 8px;
 }
 
@@ -136,13 +136,13 @@
   min-width: 34px;
   padding: 6px 8px;
   background: #132644;
-  border: 2px solid #223557;
+  border: 2px solid var(--border);
   border-radius: 10px;
   color: var(--text);
   font-family: inherit;
   font-size: 13px;
   cursor: pointer;
-  box-shadow: 0 4px 0 #0a1020;
+  box-shadow: 0 4px 0 var(--shadow-colour);
   list-style: none;
 }
 
@@ -152,7 +152,7 @@
 
 .ribbon-btn.active {
   border-color: var(--accent);
-  box-shadow: 0 4px 0 #0a1020, 0 0 10px rgba(123, 255, 183, 0.25);
+  box-shadow: 0 4px 0 var(--shadow-colour), 0 0 10px rgba(123, 255, 183, 0.25);
 }
 
 /* Dropdowns for Saves and Debug. */
@@ -183,8 +183,8 @@
   display: grid;
   gap: 6px;
   padding: 10px;
-  background: #0f1d34;
-  border: 2px solid #223557;
+  background: var(--panel-alt);
+  border: 2px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55);
   min-width: max-content;
@@ -196,10 +196,10 @@
 }
 
 .budget-net.positive {
-  color: #7bffb7;
+  color: var(--accent);
 }
 .budget-net.negative {
-  color: #ff8c8c;
+  color: var(--alert);
 }
 .budget-net.neutral {
   color: var(--text);
@@ -247,18 +247,18 @@ footer {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   padding-left: calc(16px + env(safe-area-inset-left, 0px));
   padding-right: calc(16px + env(safe-area-inset-right, 0px));
-  border-top: 2px solid #1f2c4b;
-  color: #7bffb7;
+  border-top: 2px solid var(--border-subtle);
+  color: var(--accent);
 }
 
 .footer-link {
-  color: #96d9ff;
+  color: var(--border-hover);
   text-decoration: none;
   font-weight: bold;
 }
 
 .footer-link:hover {
-  color: #7bffb7;
+  color: var(--accent);
   text-decoration: underline;
 }
 

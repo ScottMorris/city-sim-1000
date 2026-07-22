@@ -24,11 +24,11 @@
 .settings-title {
   font-size: 18px;
   font-weight: 700;
-  color: #e8f1ff;
+  color: var(--text);
 }
 
 .settings-subtitle {
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 12px;
 }
 
@@ -41,7 +41,7 @@
 
 .settings-section {
   background: #0a1224;
-  border: 1px solid #1f2c4b;
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 10px;
   display: grid;
@@ -56,11 +56,11 @@
 
 .settings-section-title {
   font-weight: 700;
-  color: #e8f1ff;
+  color: var(--text);
 }
 
 .settings-section-hint {
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 12px;
 }
 
@@ -79,11 +79,11 @@
 
 .settings-label {
   font-weight: 600;
-  color: #e8f1ff;
+  color: var(--text);
 }
 
 .settings-description {
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 12px;
 }
 
@@ -96,9 +96,9 @@
 .settings-row select,
 .settings-row input[type="range"],
 .settings-row input[type="text"] {
-  background: #0f1d34;
-  border: 1px solid #223557;
-  color: #e8f1ff;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-radius: 8px;
   padding: 6px 8px;
 }
@@ -112,12 +112,12 @@
 }
 
 .settings-warning {
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 12px;
 }
 
 .settings-warning.error {
-  color: #f08c42;
+  color: var(--negative);
 }
 
 .hotkey-table {
@@ -133,6 +133,6 @@
 }
 
 .hotkey-row-header {
-  color: #9fb2d1;
+  color: var(--text-dim);
   font-size: 12px;
 }
