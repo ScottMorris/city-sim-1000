@@ -346,7 +346,7 @@ export function initBudgetModal(options: BudgetModalOptions) {
     strip.className = 'ledger-strip';
 
     // --- City Hall sliders (built once; live labels updated in place) ---
-    const pendingPolicy: BudgetPolicy = { ...getState().budgetPolicy };
+    const pendingPolicy: BudgetPolicy = { ...getState().policies.budget };
     const valueLabels = new Map<keyof BudgetPolicy, HTMLElement>();
 
     const buildSliderSection = (title: string, specs: SliderSpec[]) => {
@@ -468,7 +468,7 @@ export function initBudgetModal(options: BudgetModalOptions) {
       `;
 
       // Sliders reflect external policy changes (e.g. a loaded save).
-      const current = state.budgetPolicy;
+      const current = state.policies.budget;
       for (const [key, label] of valueLabels) {
         const spec = [...TAX_SLIDERS, ...FUNDING_SLIDERS].find((s) => s.key === key);
         if (!spec) continue;

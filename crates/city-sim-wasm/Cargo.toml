@@ -16,5 +16,6 @@ city-sim-core     = { path = "../city-sim-core"     }
 city-sim-protocol = { path = "../city-sim-protocol" }
 serde        = { workspace = true }
 postcard     = { workspace = true }
+serde_json   = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys       = { workspace = true }

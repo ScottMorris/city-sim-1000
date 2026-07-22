@@ -7,8 +7,7 @@ Grants access to all city-sim simulation commands.
 - `allow-start`
 - `allow-apply-tool`
 - `allow-set-speed`
-- `allow-set-budget-policy`
-- `allow-set-wilderness-policy`
+- `allow-set-policies`
 - `allow-set-natural-terrain`
 - `allow-stop`
 
@@ -225,6 +224,32 @@ Enables the set_natural_terrain command without any pre-configured scope.
 <td>
 
 Denies the set_natural_terrain command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-set-policies`
+
+</td>
+<td>
+
+Enables the set_policies command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-set-policies`
+
+</td>
+<td>
+
+Denies the set_policies command without any pre-configured scope.
 
 </td>
 </tr>

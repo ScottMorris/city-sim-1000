@@ -80,12 +80,37 @@ export function createDefaultWildernessPolicy(): WildernessPolicy {
   return { natureReserve: false, greenIndustry: false };
 }
 
+/**
+ * Every player-adjustable policy family, grouped under one roof — TS mirror
+ * of `Policies` in `crates/city-sim-protocol/src/commands.rs` (camelCase
+ * serialisation). New policy families are added here as fields rather than as
+ * new top-level state or new wire commands.
+ */
+export interface Policies {
+  budget: BudgetPolicy;
+  wilderness: WildernessPolicy;
+}
+
+export function createDefaultPolicies(): Policies {
+  return {
+    budget: createDefaultBudgetPolicy(),
+    wilderness: createDefaultWildernessPolicy()
+  };
+}
+
+/** Clamp every family into its legal ranges. */
+export function clampPolicies(policies: Policies): Policies {
+  return {
+    budget: clampBudgetPolicy(policies.budget),
+    wilderness: policies.wilderness
+  };
+}
+
 export type SimCommand =
   | { type: 'ApplyTool'; tool: Tool; x: number; y: number }
   | { type: 'SetSpeed'; multiplier: number }
   | { type: 'LoadState'; seed: number }
-  | { type: 'SetBudgetPolicy'; policy: BudgetPolicy }
-  | { type: 'SetWildernessPolicy'; policy: WildernessPolicy };
+  | { type: 'SetPolicies'; policies: Policies };
 
 export interface CommandResult {
   success: boolean;
@@ -96,10 +121,6 @@ export function applyToolCmd(tool: Tool, x: number, y: number): SimCommand {
   return { type: 'ApplyTool', tool, x, y };
 }
 
-export function setBudgetPolicyCmd(policy: BudgetPolicy): SimCommand {
-  return { type: 'SetBudgetPolicy', policy: clampBudgetPolicy(policy) };
-}
-
-export function setWildernessPolicyCmd(policy: WildernessPolicy): SimCommand {
-  return { type: 'SetWildernessPolicy', policy };
+export function setPoliciesCmd(policies: Policies): SimCommand {
+  return { type: 'SetPolicies', policies: clampPolicies(policies) };
 }

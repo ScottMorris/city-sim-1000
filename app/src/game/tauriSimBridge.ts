@@ -28,8 +28,7 @@ import {
   start as pluginStart,
   applyTool as pluginApplyTool,
   setSpeed as pluginSetSpeed,
-  setBudgetPolicy as pluginSetBudgetPolicy,
-  setWildernessPolicy as pluginSetWildernessPolicy,
+  setPolicies as pluginSetPolicies,
   setNaturalTerrain as pluginSetNaturalTerrain,
   stop as pluginStop,
   undoLastCommand as pluginUndoLastCommand,
@@ -102,13 +101,9 @@ export class TauriSimBridge implements SimBridge {
         // Seed-only restart; full GameState load arrives in P5-1.
         void this.restartPlugin(this.state.width, this.state.height, cmd.seed);
         return { success: true };
-      case 'SetBudgetPolicy':
-        this.state.budgetPolicy = cmd.policy;
-        void pluginSetBudgetPolicy(cmd.policy);
-        return { success: true };
-      case 'SetWildernessPolicy':
-        this.state.wildernessPolicy = cmd.policy;
-        void pluginSetWildernessPolicy(cmd.policy);
+      case 'SetPolicies':
+        this.state.policies = cmd.policies;
+        void pluginSetPolicies(cmd.policies);
         return { success: true };
     }
   }
@@ -168,8 +163,7 @@ export class TauriSimBridge implements SimBridge {
       terrain[i] = tileKindToU8(state.tiles[i].kind);
     }
     await pluginSetNaturalTerrain(terrain);
-    await pluginSetBudgetPolicy(state.budgetPolicy);
-    await pluginSetWildernessPolicy(state.wildernessPolicy);
+    await pluginSetPolicies(state.policies);
   }
 
   private onTick(event: TickEvent): void {

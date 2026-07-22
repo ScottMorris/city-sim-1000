@@ -153,7 +153,7 @@ impl Simulation {
         {
             let tunables = self
                 .wilderness_tunables
-                .effective(&self.state.wilderness_policy);
+                .effective(&self.state.policies.wilderness);
             let out = compute_wilderness(&self.state, &tunables);
             update_trend(
                 &mut self.state.wilderness,

@@ -62,7 +62,7 @@ export function recomputeEducation(state: GameState): EducationStats {
     // `recompute_education` in city-sim-core; 100% funding → exact).
     const capacity =
       (template.service.capacity ?? 0) *
-      fundingMultiplier(state.budgetPolicy?.fundCivic ?? MAX_FUNDING);
+      fundingMultiplier(state.policies?.budget.fundCivic ?? MAX_FUNDING);
     if (capacity <= 0) continue;
 
     if (template.service.id === ServiceId.EducationElementary) elementaryCapacity += capacity;

@@ -12,7 +12,7 @@ use city_sim_core::commands::apply_tool as sim_apply_tool;
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
-use city_sim_protocol::commands::{BudgetPolicy, Tool, WildernessPolicy};
+use city_sim_protocol::commands::{Policies, Tool};
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
 
@@ -53,8 +53,7 @@ pub struct TickEvent {
 pub enum SimCmd {
     ApplyTool(Tool, u32, u32),
     SetSpeed(f32),
-    SetBudgetPolicy(BudgetPolicy),
-    SetWildernessPolicy(WildernessPolicy),
+    SetPolicies(Policies),
     SetNaturalTerrain(Vec<u8>),
     GetSnapshot(mpsc::SyncSender<Result<Vec<u8>, String>>),
     LoadSnapshot(Box<GameState>),
@@ -182,11 +181,8 @@ pub fn start(
                     Ok(SimCmd::SetSpeed(m)) => {
                         sim.set_speed(m);
                     }
-                    Ok(SimCmd::SetBudgetPolicy(policy)) => {
-                        sim.state.policy = policy.clamped();
-                    }
-                    Ok(SimCmd::SetWildernessPolicy(policy)) => {
-                        sim.state.wilderness_policy = policy;
+                    Ok(SimCmd::SetPolicies(policies)) => {
+                        sim.state.policies = policies.clamped();
                     }
                     Ok(SimCmd::SetNaturalTerrain(kinds)) => {
                         // Record in the log so replays (undo, loadCommandLog)
@@ -220,24 +216,20 @@ pub fn start(
                         // Policies are not part of the command log — carry them
                         // across the replay (matches the WASM host's undo).
                         let prev_speed = sim.speed();
-                        let prev_policy = sim.state.policy;
-                        let prev_wilderness_policy = sim.state.wilderness_policy;
+                        let prev_policies = sim.state.policies;
                         sim = loaded_log.replay();
                         sim.set_speed(prev_speed);
-                        sim.state.policy = prev_policy;
-                        sim.state.wilderness_policy = prev_wilderness_policy;
+                        sim.state.policies = prev_policies;
                         log = *loaded_log;
                     }
                     Ok(SimCmd::UndoLast(tx)) => {
                         let happened = log.pop();
                         if happened {
                             let prev_speed = sim.speed();
-                            let prev_policy = sim.state.policy;
-                            let prev_wilderness_policy = sim.state.wilderness_policy;
+                            let prev_policies = sim.state.policies;
                             sim = log.replay();
                             sim.set_speed(prev_speed);
-                            sim.state.policy = prev_policy;
-                            sim.state.wilderness_policy = prev_wilderness_policy;
+                            sim.state.policies = prev_policies;
                         }
                         let _ = tx.send(happened);
                     }
@@ -275,41 +267,13 @@ pub fn set_speed(state: State<'_, SimState>, multiplier: f32) -> Result<(), Erro
     state.send(SimCmd::SetSpeed(multiplier))
 }
 
-/// Set the fiscal policy (tax rates 0–20, funding levels 0–100). Values are
-/// clamped on the sim thread; applies from the next tick.
+/// Replace the full set of player policies (budget, wilderness, ...).
+/// The payload is the camelCase-serialised `Policies` struct from
+/// `city-sim-protocol`; missing families keep their defaults and
+/// out-of-range values are clamped on the sim thread.
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub fn set_budget_policy(
-    state: State<'_, SimState>,
-    tax_residential: u8,
-    tax_commercial: u8,
-    tax_industrial: u8,
-    fund_transport: u8,
-    fund_power: u8,
-    fund_civic: u8,
-) -> Result<(), Error> {
-    state.send(SimCmd::SetBudgetPolicy(BudgetPolicy {
-        tax_residential,
-        tax_commercial,
-        tax_industrial,
-        fund_transport,
-        fund_power,
-        fund_civic,
-    }))
-}
-
-/// Toggle the wilderness programmes (Nature Reserve, Green Industry).
-/// Applies from the next wilderness recompute (within ~10 ticks).
-#[tauri::command]
-pub fn set_wilderness_policy(
-    state: State<'_, SimState>,
-    nature_reserve: bool,
-    green_industry: bool,
-) -> Result<(), Error> {
-    state.send(SimCmd::SetWildernessPolicy(WildernessPolicy {
-        nature_reserve,
-        green_industry,
-    }))
+pub fn set_policies(state: State<'_, SimState>, policies: Policies) -> Result<(), Error> {
+    state.send(SimCmd::SetPolicies(policies))
 }
 
 /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).

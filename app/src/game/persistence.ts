@@ -143,10 +143,19 @@ export function deserialize(payload: string): GameState {
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
   parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
   parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
-  // Saves from before the fiscal-policy feature get the neutral defaults.
-  parsed.budgetPolicy = parsed.budgetPolicy
-    ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...parsed.budgetPolicy })
-    : createDefaultBudgetPolicy();
+  // Fold policies into the grouped `policies` shape. Legacy saves carry flat
+  // `budgetPolicy`/`wildernessPolicy` keys; saves from before those features
+  // get the neutral defaults.
+  const legacyBudget = parsed.policies?.budget ?? parsed.budgetPolicy;
+  const legacyWilderness = parsed.policies?.wilderness ?? parsed.wildernessPolicy;
+  parsed.policies = {
+    budget: legacyBudget
+      ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...legacyBudget })
+      : createDefaultBudgetPolicy(),
+    wilderness: { ...createDefaultWildernessPolicy(), ...(legacyWilderness ?? {}) }
+  };
+  delete parsed.budgetPolicy;
+  delete parsed.wildernessPolicy;
   // Old saves have no seed — assign 0 so they play deterministically going forward.
   if (parsed.seed === undefined) {
     parsed.seed = 0;
@@ -164,10 +173,6 @@ export function deserialize(payload: string): GameState {
       ...createDefaultWildernessStats().breakdown,
       ...(parsed.wilderness?.breakdown ?? {})
     }
-  };
-  parsed.wildernessPolicy = {
-    ...createDefaultWildernessPolicy(),
-    ...(parsed.wildernessPolicy ?? {})
   };
   parsed.bylaws = parsed.bylaws ?? { ...DEFAULT_BYLAWS };
   if (!parsed.bylaws.lighting) {
@@ -242,17 +247,27 @@ export function copyState(state: GameState): GameState {
   return deserialize(serialize(state));
 }
 
-export function saveToBrowser(state: GameState) {
-  localStorage.setItem(LOCAL_STORAGE_KEY, serialize(state));
+export type CmdLogEntry = { tool: string; x: number; y: number };
+
+// Carries the command log alongside the state, same as downloadState/
+// uploadState below — without it, a bridge rebuilt from this save (every
+// page load, or an explicit Load) has no history to undo *from*, so its
+// first undo rolls all the way back to the engine's compiled-in starting
+// scenario instead of one step back from the loaded save.
+export function saveToBrowser(state: GameState, cmdLog?: CmdLogEntry[]) {
+  const data: Record<string, unknown> = JSON.parse(serialize(state));
+  if (cmdLog?.length) data.cmdLog = cmdLog;
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
 }
 
-export function loadFromBrowser(): GameState | null {
+export function loadFromBrowser(): { state: GameState; cmdLog?: CmdLogEntry[] } | null {
   const data = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!data) return null;
-  return deserialize(data);
+  const raw = JSON.parse(data) as Record<string, unknown>;
+  const { cmdLog, ...stateData } = raw;
+  const state = deserialize(JSON.stringify(stateData));
+  return { state, cmdLog: Array.isArray(cmdLog) ? (cmdLog as CmdLogEntry[]) : undefined };
 }
-
-export type CmdLogEntry = { tool: string; x: number; y: number };
 
 export function downloadState(
   state: GameState,

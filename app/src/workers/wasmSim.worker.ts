@@ -89,46 +89,38 @@ export interface SimStats {
   wildernessCivic: number;
 }
 
-/** Fiscal policy as a flat tuple-ish record (mirrors SimHost.set_budget_policy args). */
-export interface WorkerBudgetPolicy {
-  taxResidential: number;
-  taxCommercial: number;
-  taxIndustrial: number;
-  fundTransport: number;
-  fundPower: number;
-  fundCivic: number;
-}
-
-/** Wilderness programmes (mirrors SimHost.set_wilderness_policy args). */
-export interface WorkerWildernessPolicy {
-  natureReserve: boolean;
-  greenIndustry: boolean;
+/**
+ * Every player-adjustable policy family — structural mirror of `Policies` in
+ * `city-sim-protocol` (camelCase). Passed to `SimHost.set_policies` as JSON so
+ * new families cross the boundary without new host methods.
+ */
+export interface WorkerPolicies {
+  budget: {
+    taxResidential: number;
+    taxCommercial: number;
+    taxIndustrial: number;
+    fundTransport: number;
+    fundPower: number;
+    fundCivic: number;
+  };
+  wilderness: {
+    natureReserve: boolean;
+    greenIndustry: boolean;
+  };
 }
 
 type MainToWorker =
-  | { type: 'init';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy; wildernessPolicy?: WorkerWildernessPolicy } }
+  | { type: 'init';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policies?: WorkerPolicies } }
   | { type: 'step';       payload: { dt: number } }
   | { type: 'apply_tool'; payload: { tool: number; x: number; y: number } }
   | { type: 'set_speed';  payload: { multiplier: number } }
-  | { type: 'set_policy'; payload: WorkerBudgetPolicy }
-  | { type: 'set_wilderness_policy'; payload: WorkerWildernessPolicy }
+  | { type: 'set_policies'; payload: WorkerPolicies }
   | { type: 'undo' }
   | { type: 'reset';      payload: { width: number; height: number; seed: number; terrain?: Uint8Array } }
-  | { type: 'load';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policy?: WorkerBudgetPolicy; wildernessPolicy?: WorkerWildernessPolicy } };
+  | { type: 'load';       payload: { width: number; height: number; seed: number; terrain?: Uint8Array; commands?: { tool: number; x: number; y: number }[]; money?: number; targetTick?: number; policies?: WorkerPolicies } };
 
-function applyPolicy(h: SimHost, p: WorkerBudgetPolicy) {
-  h.set_budget_policy(
-    p.taxResidential,
-    p.taxCommercial,
-    p.taxIndustrial,
-    p.fundTransport,
-    p.fundPower,
-    p.fundCivic,
-  );
-}
-
-function applyWildernessPolicy(h: SimHost, p: WorkerWildernessPolicy) {
-  h.set_wilderness_policy(p.natureReserve, p.greenIndustry);
+function applyPolicies(h: SimHost, p: WorkerPolicies) {
+  h.set_policies(JSON.stringify(p));
 }
 
 let host: SimHost | null = null;
@@ -204,8 +196,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       // Terrain must land before commands so placement validation sees the
       // real water/tree map, and before the first step so wilderness does.
       if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
-      if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
-      if (msg.payload.wildernessPolicy) applyWildernessPolicy(host, msg.payload.wildernessPolicy);
+      if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
       if (msg.payload.commands) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);
@@ -244,14 +235,9 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       host.set_speed(msg.payload.multiplier);
       break;
     }
-    case 'set_policy': {
+    case 'set_policies': {
       if (!host) break;
-      applyPolicy(host, msg.payload);
-      break;
-    }
-    case 'set_wilderness_policy': {
-      if (!host) break;
-      applyWildernessPolicy(host, msg.payload);
+      applyPolicies(host, msg.payload);
       break;
     }
     case 'undo': {
@@ -278,8 +264,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       if (!host) break;
       host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
       if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
-      if (msg.payload.policy) applyPolicy(host, msg.payload.policy);
-      if (msg.payload.wildernessPolicy) applyWildernessPolicy(host, msg.payload.wildernessPolicy);
+      if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
       if (msg.payload.commands?.length) {
         for (const cmd of msg.payload.commands) {
           host.apply_tool(cmd.tool, cmd.x, cmd.y);

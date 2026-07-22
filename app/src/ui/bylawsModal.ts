@@ -149,7 +149,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
 
     const renderWildernessOptions = () => {
       const state = getState();
-      const policy = state.wildernessPolicy;
+      const policy = state.policies.wilderness;
       const score = state.wilderness.score;
       const industrialZones = state.tiles.filter((t) => t.kind === TileKind.Industrial).length;
       const reserveUnlocked = policy.natureReserve || score >= NATURE_RESERVE_UNLOCK_SCORE;
@@ -197,7 +197,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
         checkbox.checked = programme.enabled;
         checkbox.disabled = programme.locked;
         checkbox.addEventListener('change', () => {
-          const next: WildernessPolicy = { ...getState().wildernessPolicy, [programme.key]: checkbox.checked };
+          const next: WildernessPolicy = { ...getState().policies.wilderness, [programme.key]: checkbox.checked };
           onWildernessPolicyChange?.(next);
           renderWildernessOptions();
           showToast(

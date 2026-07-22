@@ -61,7 +61,7 @@ export function recomputePowerNetwork(state: GameState) {
 
   // Underfunded power departments brown out: output scales with funding
   // (mirrors `recompute_utility_network` in city-sim-core; 100% → exact).
-  const fundPower = fundingMultiplier(state.budgetPolicy?.fundPower ?? MAX_FUNDING);
+  const fundPower = fundingMultiplier(state.policies?.budget.fundPower ?? MAX_FUNDING);
   state.utilities.powerProduced = Math.round(produced * fundPower);
   state.utilities.powerUsed = 0;
   state.utilities.power = state.utilities.powerProduced - state.utilities.powerUsed;

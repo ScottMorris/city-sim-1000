@@ -120,8 +120,7 @@ export class WasmSimBridge implements SimBridge {
         commands: preloadCommands?.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
         money: preloadCommands ? state.money : undefined,
         targetTick: preloadCommands ? state.tick : undefined,
-        policy: state.budgetPolicy,
-        wildernessPolicy: state.wildernessPolicy,
+        policies: state.policies,
       },
     });
   }
@@ -169,16 +168,10 @@ export class WasmSimBridge implements SimBridge {
           });
         }
         break;
-      case 'SetBudgetPolicy':
-        this.state.budgetPolicy = cmd.policy;
+      case 'SetPolicies':
+        this.state.policies = cmd.policies;
         if (this.ready) {
-          this.worker.postMessage({ type: 'set_policy', payload: cmd.policy });
-        }
-        break;
-      case 'SetWildernessPolicy':
-        this.state.wildernessPolicy = cmd.policy;
-        if (this.ready) {
-          this.worker.postMessage({ type: 'set_wilderness_policy', payload: cmd.policy });
+          this.worker.postMessage({ type: 'set_policies', payload: cmd.policies });
         }
         break;
     }
@@ -213,8 +206,7 @@ export class WasmSimBridge implements SimBridge {
           commands: cmdLog.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
           money: state.money,
           targetTick: state.tick,
-          policy: state.budgetPolicy,
-          wildernessPolicy: state.wildernessPolicy,
+          policies: state.policies,
         },
       });
     } else {
@@ -230,7 +222,7 @@ export class WasmSimBridge implements SimBridge {
             terrain: this.terrainBytes(),
           },
         });
-        this.worker.postMessage({ type: 'set_policy', payload: state.budgetPolicy });
+        this.worker.postMessage({ type: 'set_policies', payload: state.policies });
       }
     }
   }
@@ -284,8 +276,7 @@ export class WasmSimBridge implements SimBridge {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
         }
         // Policies may have changed while the worker was still booting.
-        this.worker.postMessage({ type: 'set_policy', payload: this.state.budgetPolicy });
-        this.worker.postMessage({ type: 'set_wilderness_policy', payload: this.state.wildernessPolicy });
+        this.worker.postMessage({ type: 'set_policies', payload: this.state.policies });
         this.handler?.({ type: 'Ready' });
         break;
       case 'step_result':

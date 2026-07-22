@@ -86,13 +86,10 @@ export class LocalSimBridge implements SimBridge {
         return { success: true };
       case 'LoadState':
         return { success: false, message: 'Use loadState(GameState) for LocalSimBridge' };
-      case 'SetBudgetPolicy':
-        // The TS sim reads policy straight off the shared GameState each tick.
-        this.state.budgetPolicy = cmd.policy;
-        return { success: true };
-      case 'SetWildernessPolicy':
-        // Wilderness is excluded from the TS oracle; store for display only.
-        this.state.wildernessPolicy = cmd.policy;
+      case 'SetPolicies':
+        // The TS sim reads the budget policy straight off the shared GameState
+        // each tick; wilderness is excluded from the oracle (display only).
+        this.state.policies = cmd.policies;
         return { success: true };
     }
   }

@@ -293,10 +293,14 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
     const NEUTRAL_TAX: f32 = 9.0;
     const TAX_DEMAND_SLOPE: f32 = 2.0;
     const TRANSPORT_DRAG_SLOPE: f32 = 0.08;
-    let tax_penalty_res = (state.policy.tax_residential as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
-    let tax_penalty_com = (state.policy.tax_commercial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
-    let tax_penalty_ind = (state.policy.tax_industrial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
-    let transport_drag = (100.0 - state.policy.fund_transport as f32) * TRANSPORT_DRAG_SLOPE;
+    let tax_penalty_res =
+        (state.policies.budget.tax_residential as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
+    let tax_penalty_com =
+        (state.policies.budget.tax_commercial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
+    let tax_penalty_ind =
+        (state.policies.budget.tax_industrial as f32 - NEUTRAL_TAX) * TAX_DEMAND_SLOPE;
+    let transport_drag =
+        (100.0 - state.policies.budget.fund_transport as f32) * TRANSPORT_DRAG_SLOPE;
 
     // Wilderness pull — a green city attracts residents, a paved one repels
     // them (±demand_weight at the score extremes, 0 at the neutral 50).

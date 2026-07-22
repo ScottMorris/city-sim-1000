@@ -125,44 +125,35 @@ export async function setSpeed(multiplier: number): Promise<void> {
 }
 
 /**
- * Stop the simulation thread.
+ * Every player-adjustable policy family, grouped under one roof.
  *
- * The `onTick` callback supplied to `start` will stop receiving events.
- * Safe to call even if no sim is running.
+ * Mirrors `Policies` in `city-sim-protocol` (camelCase serialisation). New
+ * policy families are added here as fields rather than as new commands.
  */
-export async function setBudgetPolicy(policy: {
-  taxResidential: number
-  taxCommercial: number
-  taxIndustrial: number
-  fundTransport: number
-  fundPower: number
-  fundCivic: number
-}): Promise<void> {
-  await invoke('plugin:city-sim|set_budget_policy', {
-    taxResidential: policy.taxResidential,
-    taxCommercial: policy.taxCommercial,
-    taxIndustrial: policy.taxIndustrial,
-    fundTransport: policy.fundTransport,
-    fundPower: policy.fundPower,
-    fundCivic: policy.fundCivic,
-  })
+export interface Policies {
+  budget: {
+    taxResidential: number
+    taxCommercial: number
+    taxIndustrial: number
+    fundTransport: number
+    fundPower: number
+    fundCivic: number
+  }
+  wilderness: {
+    natureReserve: boolean
+    greenIndustry: boolean
+  }
 }
 
 /**
- * Toggle the wilderness programmes (Nature Reserve, Green Industry).
+ * Replace the full set of player policies (budget, wilderness, ...).
  *
- * Applies from the next wilderness recompute (~10 sim ticks). Nature Reserve
- * boosts patch bonuses and softens fragmentation penalties for a flat daily
- * cost; Green Industry reduces industrial eco damage for a per-zone subsidy.
+ * Budget values apply from the next tick; wilderness programmes from the next
+ * wilderness recompute (~10 sim ticks). Out-of-range values are clamped on the
+ * sim thread.
  */
-export async function setWildernessPolicy(policy: {
-  natureReserve: boolean
-  greenIndustry: boolean
-}): Promise<void> {
-  await invoke('plugin:city-sim|set_wilderness_policy', {
-    natureReserve: policy.natureReserve,
-    greenIndustry: policy.greenIndustry,
-  })
+export async function setPolicies(policies: Policies): Promise<void> {
+  await invoke('plugin:city-sim|set_policies', { policies })
 }
 
 /**
