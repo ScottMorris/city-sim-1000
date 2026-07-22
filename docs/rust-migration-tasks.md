@@ -100,7 +100,7 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   **DoD for P3-x (each):** the system's own unit tests pass **and** all Phase-0
   regression fixtures stay in band **and** the Rust golden hash is stable run-to-run.
 - [x] **P3-10 · Parity milestone.** Full sim ported; all regression fixtures in band;
-  golden hash committed (`0x3d128c538d40e908`, seed=42, 8×8 city, 100 ticks). `deps:` P3-1..P3-9.
+  golden hash committed (see `GOLDEN_HASH_SEED42_8X8_100TICKS` in `sim.rs` for the current value; seed=42, 8×8 city, 100 ticks). `deps:` P3-1..P3-9.
 
 ## Phase 4 — Tauri v2 transport
 - [x] **P4-1 · `tauri-plugin-city-sim` backend** runs `city-sim-core` natively; commands + Channel events;

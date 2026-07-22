@@ -22,6 +22,10 @@ import {
   createDefaultBudgetPolicy,
   createDefaultWildernessPolicy
 } from './protocol/commands';
+import type { ClientState } from './clientState';
+import type { LegacyEngineImport } from '../workers/wasmSim.worker';
+import { BYTES_PER_TILE, FLAGS, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
+import { tileKindToU8 } from './protocol/tileKind';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -247,47 +251,204 @@ export function copyState(state: GameState): GameState {
   return deserialize(serialize(state));
 }
 
-export type CmdLogEntry = { tool: string; x: number; y: number };
+// ---------------------------------------------------------------------------
+// CSAV v1 — the binary save container
+// ---------------------------------------------------------------------------
+//
+//   "CSAV" | u32 LE version=1 | u32 LE M | meta JSON (UTF-8)
+//          | u32 LE E | engine snapshot (CSIM blob, self-versioned postcard)
+//          | u32 LE C | client JSON (UTF-8, ClientState)
+//
+// The engine snapshot is byte-for-byte what `SimHost.get_snapshot()` (or the
+// Tauri plugin's `get_snapshot`) returns — the container never inspects it.
+// The meta JSON is readable without decoding postcard, for save pickers and
+// autosave stamps. Legacy JSON saves (plain serialised `GameState`, possibly
+// with a `cmdLog` sibling key) remain loadable forever via `deserialize` +
+// the engine's legacy import.
 
-// Carries the command log alongside the state, same as downloadState/
-// uploadState below — without it, a bridge rebuilt from this save (every
-// page load, or an explicit Load) has no history to undo *from*, so its
-// first undo rolls all the way back to the engine's compiled-in starting
-// scenario instead of one step back from the loaded save.
-export function saveToBrowser(state: GameState, cmdLog?: CmdLogEntry[]) {
-  const data: Record<string, unknown> = JSON.parse(serialize(state));
-  if (cmdLog?.length) data.cmdLog = cmdLog;
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+const CSAV_MAGIC = 0x43534156; // "CSAV" big-endian read of the 4 magic bytes
+const CSAV_VERSION = 1;
+
+/** Headline save facts, decodable without touching postcard. */
+export interface SaveMeta {
+  name?: string;
+  /** ISO-8601 timestamp of the save. */
+  savedAt: string;
+  kind: 'manual' | 'autosave';
+  width: number;
+  height: number;
+  seed: number;
+  tick: number;
+  day: number;
+  population: number;
+  money: number;
 }
 
-export function loadFromBrowser(): { state: GameState; cmdLog?: CmdLogEntry[] } | null {
+export interface SaveContainer {
+  meta: SaveMeta;
+  /** CSIM engine snapshot bytes — opaque to the container. */
+  engineSnapshot: Uint8Array;
+  client: ClientState;
+}
+
+export class SaveFormatError extends Error {}
+
+export function buildSaveMeta(state: GameState, kind: SaveMeta['kind'], savedAt: string): SaveMeta {
+  return {
+    savedAt,
+    kind,
+    width: state.width,
+    height: state.height,
+    seed: state.seed,
+    tick: state.tick,
+    day: Math.floor(state.day),
+    population: state.population,
+    money: state.money
+  };
+}
+
+export function encodeSave(container: SaveContainer): Uint8Array {
+  const encoder = new TextEncoder();
+  const metaBytes = encoder.encode(JSON.stringify(container.meta));
+  const clientBytes = encoder.encode(JSON.stringify(container.client));
+  const engineBytes = container.engineSnapshot;
+  const total = 8 + 4 + metaBytes.length + 4 + engineBytes.length + 4 + clientBytes.length;
+  const out = new Uint8Array(total);
+  const view = new DataView(out.buffer);
+  let offset = 0;
+  view.setUint32(offset, CSAV_MAGIC, false);
+  offset += 4;
+  view.setUint32(offset, CSAV_VERSION, true);
+  offset += 4;
+  for (const section of [metaBytes, engineBytes, clientBytes]) {
+    view.setUint32(offset, section.length, true);
+    offset += 4;
+    out.set(section, offset);
+    offset += section.length;
+  }
+  return out;
+}
+
+export function decodeSave(bytes: Uint8Array): SaveContainer {
+  if (bytes.length < 8) throw new SaveFormatError('Save file is truncated');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(0, false) !== CSAV_MAGIC) {
+    throw new SaveFormatError('Not a CSAV save file (bad magic)');
+  }
+  const version = view.getUint32(4, true);
+  if (version !== CSAV_VERSION) {
+    throw new SaveFormatError(`Unsupported save version ${version} (expected ${CSAV_VERSION})`);
+  }
+  let offset = 8;
+  const readSection = (): Uint8Array => {
+    if (offset + 4 > bytes.length) throw new SaveFormatError('Save file is truncated');
+    const length = view.getUint32(offset, true);
+    offset += 4;
+    if (offset + length > bytes.length) throw new SaveFormatError('Save file is truncated');
+    const section = bytes.subarray(offset, offset + length);
+    offset += length;
+    return section;
+  };
+  const decoder = new TextDecoder();
+  let meta: SaveMeta;
+  let client: ClientState;
+  const metaBytes = readSection();
+  const engineSnapshot = readSection().slice();
+  const clientBytes = readSection();
+  try {
+    meta = JSON.parse(decoder.decode(metaBytes)) as SaveMeta;
+    client = JSON.parse(decoder.decode(clientBytes)) as ClientState;
+  } catch {
+    throw new SaveFormatError('Save file has corrupt JSON sections');
+  }
+  return { meta, engineSnapshot, client };
+}
+
+/** True when `bytes` look like a legacy JSON save rather than a CSAV blob. */
+export function isLegacyJsonSave(bytes: Uint8Array): boolean {
+  for (const byte of bytes) {
+    if (byte === 0x20 || byte === 0x09 || byte === 0x0a || byte === 0x0d) continue;
+    return byte === 0x7b; // '{'
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy JSON saves → engine import
+// ---------------------------------------------------------------------------
+
+/** Read + back-fill the legacy localStorage save, or null when absent. */
+export function loadLegacyBrowserSave(): GameState | null {
   const data = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!data) return null;
-  const raw = JSON.parse(data) as Record<string, unknown>;
-  const { cmdLog, ...stateData } = raw;
-  const state = deserialize(JSON.stringify(stateData));
-  return { state, cmdLog: Array.isArray(cmdLog) ? (cmdLog as CmdLogEntry[]) : undefined };
+  // Older saves may carry a `cmdLog` sibling key (PR #110); the snapshot
+  // model has no use for it — the tile grid itself is imported exactly.
+  const { cmdLog: _cmdLog, ...stateData } = JSON.parse(data) as Record<string, unknown>;
+  return deserialize(JSON.stringify(stateData));
 }
 
-export function downloadState(
-  state: GameState,
-  cmdLog?: CmdLogEntry[],
-  filename = 'city-sim-save.json',
-) {
-  const data: Record<string, unknown> = JSON.parse(serialize(state));
-  if (cmdLog?.length) data.cmdLog = cmdLog;
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+/** Delete the legacy localStorage save (after a confirmed CSAV write). */
+export function clearLegacyBrowserSave(): void {
+  localStorage.removeItem(LOCAL_STORAGE_KEY);
+}
+
+/** Parse an uploaded legacy JSON save file. */
+export function decodeLegacySave(json: string): GameState {
+  const { cmdLog: _cmdLog, ...stateData } = JSON.parse(json) as Record<string, unknown>;
+  return deserialize(JSON.stringify(stateData));
+}
+
+/**
+ * Re-encode a legacy TS `GameState` as the payload for the engine's one-time
+ * import (`SimHost.import_legacy` → `city_sim_core::import`): the wire-layout
+ * SoA tile buffer plus headline scalars. The exact inverse of the worker's
+ * tile-buffer decode.
+ */
+export function buildLegacyEngineImport(state: GameState): LegacyEngineImport {
+  const n = state.width * state.height;
+  const o = tileBufferOffsets(n);
+  const tiles = new Uint8Array(n * BYTES_PER_TILE);
+  for (let i = 0; i < n; i++) {
+    const tile = state.tiles[i];
+    tiles[o.kind + i] = tileKindToU8(tile.kind);
+    tiles[o.flags + i] =
+      (tile.powered ? FLAGS.POWERED : 0) |
+      (tile.watered ? FLAGS.WATERED : 0) |
+      (tile.abandoned ? FLAGS.ABANDONED : 0) |
+      (tile.roadUnderlay ? FLAGS.ROAD_UNDERLAY : 0) |
+      (tile.railUnderlay ? FLAGS.RAIL_UNDERLAY : 0) |
+      (tile.powerOverlay ? FLAGS.POWER_OVERLAY : 0);
+    tiles[o.happiness + i] = encodeHappiness(tile.happiness);
+    tiles[o.elevation + i] = tile.elevation & 0xff;
+    const buildingId = tile.buildingId ?? 0;
+    tiles[o.buildingId + i * 2] = buildingId & 0xff;
+    tiles[o.buildingId + i * 2 + 1] = (buildingId >> 8) & 0xff;
+    tiles[o.undergroundKind + i] =
+      tile.underground === undefined ? 0xff : tileKindToU8(tile.underground);
+    tiles[o.wilderness + i] = 128; // recomputed by the sim within one interval
+  }
+  return {
+    width: state.width,
+    height: state.height,
+    seed: state.seed,
+    rngState: state.rngState,
+    tiles,
+    money: state.money,
+    day: Math.floor(state.day),
+    tick: state.tick,
+    population: Math.floor(state.population),
+    jobs: Math.floor(state.jobs),
+    policies: state.policies
+  };
+}
+
+/** Trigger a browser download of a CSAV container as a `.citysim` file. */
+export function downloadSave(container: Uint8Array, filename: string): void {
+  const blob = new Blob([container.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-export async function uploadState(file: File): Promise<{ state: GameState; cmdLog?: CmdLogEntry[] }> {
-  const raw = JSON.parse(await file.text()) as Record<string, unknown>;
-  const { cmdLog, ...stateData } = raw;
-  const state = deserialize(JSON.stringify(stateData));
-  return { state, cmdLog: Array.isArray(cmdLog) ? (cmdLog as CmdLogEntry[]) : undefined };
 }

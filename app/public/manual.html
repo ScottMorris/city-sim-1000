@@ -126,9 +126,10 @@
     <h2>Saving & backups</h2>
     <ul>
       <li>Open the 💾 menu in the top status ribbon for all save actions.</li>
-      <li>Use <strong>Save</strong> to store your city in localStorage and <strong>Load</strong> to restore it.</li>
-      <li><strong>Download</strong> exports a JSON file so you can back it up.</li>
-      <li><strong>Upload</strong> lets you restore any exported city.</li>
+      <li>Use <strong>Save</strong> to store your city in the browser and <strong>Load</strong> to restore it. Saves capture the simulation's exact state — every building, the clock, the treasury (down to the cent), even the dice the city will roll next — so a loaded city carries on precisely where it left off.</li>
+      <li><strong>Download</strong> exports a <code>.citysim</code> file so you can back your city up or move it between devices.</li>
+      <li><strong>Upload</strong> restores any exported city — including JSON saves downloaded before the <code>.citysim</code> format existed; old browser saves are upgraded automatically the first time you play.</li>
+      <li>Loading a save starts a fresh undo history — the loaded city is the floor that undo can never damage.</li>
     </ul>
 
     <h2>The status ribbon</h2>

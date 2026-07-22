@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 
 use city_sim_core::{
-    command_log::CommandLog,
     commands::apply_tool,
+    history::{History, HistoryConfig},
     sim::Simulation,
     snapshot::{from_bytes, to_bytes},
     state::GameState,
@@ -38,36 +38,6 @@ fn make_populated_8x8(seed: u32) -> Simulation {
     sim.state.demand.commercial = 60.0;
     sim.state.demand.industrial = 60.0;
     sim
-}
-
-/// Build a command log with ~50 entries spread across tick 0..10.
-fn make_command_log_50() -> CommandLog {
-    let mut log = CommandLog::new(8, 8, 42);
-    // Lay roads along column 3 (ticks 0..5)
-    for row in 0..5u32 {
-        log.record(row as u64, Tool::Road, 3, row);
-    }
-    // Place zones adjacent to roads (ticks 5..10)
-    for row in 0..5u32 {
-        log.record((5 + row) as u64, Tool::Residential, 2, row);
-    }
-    // Additional commercial / industrial (tick 10)
-    log.record(10, Tool::Commercial, 4, 0);
-    log.record(10, Tool::Commercial, 4, 1);
-    log.record(10, Tool::Industrial, 4, 2);
-    log.record(10, Tool::Industrial, 4, 3);
-    // Water infrastructure (tick 12)
-    log.record(12, Tool::WaterPump, 6, 0);
-    log.record(12, Tool::WaterPipe, 5, 0);
-    log.record(12, Tool::WaterPipe, 4, 0);
-    // More roads to reach 50 entries
-    for i in 0..35u32 {
-        let x = (i % 7) + 1;
-        let y = (i / 7) % 8;
-        let tick = 15 + i as u64;
-        log.record(tick, Tool::Road, x, y);
-    }
-    log
 }
 
 // ---------------------------------------------------------------------------
@@ -147,16 +117,20 @@ fn snapshot_roundtrip(c: &mut Criterion) {
     });
 }
 
-/// `CommandLog::replay()` on a log with ~50 entries.
+/// One full undo step through the snapshot-stack `History`: capture the
+/// pre-stroke snapshot, then restore it via `Simulation::load_state`.
 ///
-/// Replay must advance the sim tick-by-tick between commands, so this
-/// measures both the replay dispatcher overhead and the underlying tick cost.
-fn command_log_replay(c: &mut Criterion) {
-    let log = make_command_log_50();
-
-    c.bench_function("command_log_replay", |b| {
+/// This is the whole cost of the O(1) undo model — replacing the old
+/// replay-from-seed bench, which scaled with session length.
+fn history_undo_restore(c: &mut Criterion) {
+    c.bench_function("history_undo_restore", |b| {
         b.iter(|| {
-            let sim = black_box(&log).replay();
+            let mut sim = make_populated_8x8(42);
+            let mut history = History::new(HistoryConfig::default());
+            let bytes = history.prepare(&sim.state, 1).expect("snapshot encodes");
+            history.commit(bytes, 1);
+            let restored = history.undo(&sim.state).expect("one entry");
+            sim.load_state(restored);
             black_box(sim)
         })
     });
@@ -172,6 +146,6 @@ criterion_group!(
     tick_1000_64x64,
     apply_tool_road,
     snapshot_roundtrip,
-    command_log_replay,
+    history_undo_restore,
 );
 criterion_main!(benches);

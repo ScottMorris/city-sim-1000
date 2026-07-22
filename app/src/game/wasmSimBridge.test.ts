@@ -94,13 +94,10 @@ describe('WasmSimBridge undo/redo', () => {
     await expect(pending).resolves.toBe(false);
   });
 
-  it('undo pops the whole stroke from the command log; redo restores it', async () => {
+  it('undo/redo round-trip resolves true and tracks history flags', async () => {
     const { worker, bridge } = makeBridge();
     const drag = nextStrokeId();
     bridge.send(applyToolCmd(Tool.Road, 1, 0, drag));
-    bridge.send(applyToolCmd(Tool.Road, 2, 0, drag));
-    bridge.send(applyToolCmd(Tool.Road, 3, 0, drag));
-    expect(bridge.getCommandLog()).toHaveLength(3);
 
     const pendingUndo = bridge.undo();
     worker.emit({
@@ -108,7 +105,7 @@ describe('WasmSimBridge undo/redo', () => {
       bytes: emptyTileBuffer(), stats: zeroStats(), history: flags(false, true)
     });
     await expect(pendingUndo).resolves.toBe(true);
-    expect(bridge.getCommandLog()).toHaveLength(0);
+    expect(bridge.canUndo()).toBe(false);
     expect(bridge.canRedo()).toBe(true);
 
     const pendingRedo = bridge.redo();
@@ -117,25 +114,60 @@ describe('WasmSimBridge undo/redo', () => {
       bytes: emptyTileBuffer(), stats: zeroStats(), history: flags(true, false)
     });
     await expect(pendingRedo).resolves.toBe(true);
-    expect(bridge.getCommandLog()).toHaveLength(3);
     expect(bridge.canUndo()).toBe(true);
+    expect(bridge.canRedo()).toBe(false);
   });
 
-  it('a new stroke clears the redo pile', async () => {
+  it('getSnapshot resolves with the worker snapshot bytes', async () => {
     const { worker, bridge } = makeBridge();
-    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
-    const pending = bridge.undo();
+    const pending = bridge.getSnapshot();
+    await Promise.resolve(); // let the readyPromise chain post the message
+    const sent = worker.sent.find(m => m.type === 'get_snapshot');
+    expect(sent).toBeDefined();
+    const requestId = (sent!.payload as { requestId: number }).requestId;
+    const blob = new Uint8Array([1, 2, 3]);
+    worker.emit({ type: 'snapshot_result', requestId, bytes: blob });
+    await expect(pending).resolves.toBe(blob);
+  });
+
+  it('loadSnapshot refreshes the mirror (dimensions, policies) before resolving', async () => {
+    const { worker, state, bridge } = makeBridge();
+    const pending = bridge.loadSnapshot(new Uint8Array([9, 9]));
+    await Promise.resolve(); // let the readyPromise chain post the message
+    const sent = worker.sent.find(m => m.type === 'load_snapshot');
+    expect(sent).toBeDefined();
+    const requestId = (sent!.payload as { requestId: number }).requestId;
+    const policies = {
+      budget: {
+        taxResidential: 14, taxCommercial: 9, taxIndustrial: 9,
+        fundTransport: 100, fundPower: 100, fundCivic: 100
+      },
+      wilderness: { natureReserve: true, greenIndustry: false }
+    };
     worker.emit({
-      type: 'undo_result', happened: true,
-      bytes: emptyTileBuffer(), stats: zeroStats(), history: flags(false, true)
+      type: 'load_result', requestId, ok: true,
+      width: 4, height: 4, seed: 77, policies,
+      bytes: new Uint8Array(4 * 4 * 8), stats: { ...zeroStats(), money: 555 },
+      history: flags(false, false)
     });
-    await pending;
-    bridge.send(applyToolCmd(Tool.Tree, 4, 4, nextStrokeId()));
-    const pendingRedo = bridge.redo();
-    worker.emit({ type: 'redo_result', happened: false, history: flags(true, false) });
-    await expect(pendingRedo).resolves.toBe(false);
-    // The undone road stroke must not resurface in the log.
-    expect(bridge.getCommandLog()).toEqual([{ tool: Tool.Tree, x: 4, y: 4 }]);
+    await expect(pending).resolves.toBeUndefined();
+    expect(state.width).toBe(4);
+    expect(state.tiles).toHaveLength(16);
+    expect(state.seed).toBe(77);
+    expect(state.policies.budget.taxResidential).toBe(14);
+    expect(state.money).toBe(555);
+  });
+
+  it('loadSnapshot rejects on an engine error, leaving the mirror untouched', async () => {
+    const { worker, state, bridge } = makeBridge();
+    const before = state.tiles.length;
+    const pending = bridge.loadSnapshot(new Uint8Array([0]));
+    await Promise.resolve();
+    const sent = worker.sent.find(m => m.type === 'load_snapshot');
+    const requestId = (sent!.payload as { requestId: number }).requestId;
+    worker.emit({ type: 'load_result', requestId, ok: false, error: 'bad magic' });
+    await expect(pending).rejects.toThrow('bad magic');
+    expect(state.tiles).toHaveLength(before);
   });
 
   it('emits HistoryChanged only on flag transitions', () => {

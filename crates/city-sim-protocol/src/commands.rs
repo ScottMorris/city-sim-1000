@@ -145,8 +145,6 @@ pub enum SimCommand {
     ApplyTool { tool: Tool, x: u16, y: u16 },
     /// Adjust simulation speed (multiplier relative to base tick rate).
     SetSpeed { multiplier: f32 },
-    /// Load a complete new state (e.g. after save-file upload).
-    LoadState { seed: u32 },
     /// Replace the full set of player policies (budget, wilderness, ...).
     SetPolicies { policies: Policies },
 }

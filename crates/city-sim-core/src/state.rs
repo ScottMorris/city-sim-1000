@@ -331,6 +331,15 @@ pub struct GameState {
     /// Sub-integer jobs accumulator — same pattern as `pop_frac`.
     #[serde(default)]
     pub jobs_frac: f64,
+    /// Sub-dollar treasury accumulator — per-tick accrual is far below $1, so
+    /// without this the `as i64` cast froze income for any city with
+    /// `net_per_day` under $30 (wasm-sim-audit A4).
+    #[serde(default)]
+    pub money_frac: f64,
+    /// Sub-day clock accumulator. Lives in state (not on `Simulation`) so
+    /// snapshot restores — undo and save/load — keep exact sub-day progress.
+    #[serde(default)]
+    pub day_frac: f64,
     pub utilities: UtilityStats,
     pub demand: DemandStats,
     /// Monotonically increasing counter — bumped whenever tiles change.
@@ -375,6 +384,8 @@ impl GameState {
             jobs: 4,
             pop_frac: 0.0,
             jobs_frac: 0.0,
+            money_frac: 0.0,
+            day_frac: 0.0,
             utilities: UtilityStats::initial(),
             demand: DemandStats::initial(),
             tile_revision: 0,

@@ -127,6 +127,32 @@ Denies the get_snapshot command without any pre-configured scope.
 <tr>
 <td>
 
+`city-sim:allow-import-legacy`
+
+</td>
+<td>
+
+Enables the import_legacy command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-import-legacy`
+
+</td>
+<td>
+
+Denies the import_legacy command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `city-sim:allow-load-command-log`
 
 </td>

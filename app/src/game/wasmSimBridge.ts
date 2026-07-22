@@ -4,8 +4,9 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 //
-// Phase 3: SimHost wraps city-sim-core::Simulation + CommandLog. Tool
-// placement, ticking, and Ctrl+Z undo all run through the Rust engine.
+// SimHost wraps city-sim-core::Simulation + a snapshot-stack History. Tool
+// placement, ticking, undo/redo, and save/load all run through the Rust
+// engine; saves carry the engine's own CSIM snapshot (no command replay).
 //
 // Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
@@ -14,7 +15,8 @@ import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
 import { recomputeEducation } from './education';
-import type { SimBridge } from './simBridge';
+import { createTileServiceState } from './services';
+import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
 import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
@@ -62,7 +64,15 @@ type WorkerToMain =
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags };
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags }
+  | { type: 'snapshot_result'; requestId: number; bytes: Uint8Array }
+  | { type: 'load_result'; requestId: number; ok: false; error?: string }
+  | {
+      type: 'load_result'; requestId: number; ok: true;
+      width: number; height: number; seed: number;
+      policies: GameState['policies'];
+      bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags;
+    };
 
 export interface WasmSimBridgeConfig {
   ticksPerSecond?: number;
@@ -71,12 +81,6 @@ export interface WasmSimBridgeConfig {
    * Defaults to the real `wasmSim.worker.ts` module Worker.
    */
   createWorker?: () => Worker;
-}
-
-export interface WasmInitCommand {
-  tool: Tool;
-  x: number;
-  y: number;
 }
 
 export class WasmSimBridge implements SimBridge {
@@ -91,53 +95,33 @@ export class WasmSimBridge implements SimBridge {
   private pendingRedo: ((happened: boolean) => void) | null = null;
   private canUndoFlag = false;
   private canRedoFlag = false;
-  private cmdLog: { tool: Tool; x: number; y: number; strokeId: number }[] = [];
-  // Strokes removed from cmdLog by undo, oldest-undone last — so redo can
-  // re-append them and a save taken mid-undo replays the right history.
-  private redoStrokes: { tool: Tool; x: number; y: number; strokeId: number }[][] = [];
-  // Natural terrain snapshot taken at engine-swap time. Rust starts with
-  // all-land, so without this, natural water/tree tiles would disappear after
-  // the first tile-buffer update.
-  private naturalTileKinds: TileKind[] | null = null;
-  // Tile indices the player has explicitly modified — exempt from natural override.
-  private modifiedTiles = new Set<number>();
+  private nextRequestId = 1;
+  private pendingSnapshots = new Map<number, (bytes: Uint8Array) => void>();
+  private pendingLoads = new Map<number, { resolve: () => void; reject: (err: Error) => void }>();
+  private resolveReady!: () => void;
+  private readyPromise = new Promise<void>(resolve => { this.resolveReady = resolve; });
 
-  constructor(state: GameState, config: WasmSimBridgeConfig = {}, preloadCommands?: WasmInitCommand[]) {
+  constructor(state: GameState, config: WasmSimBridgeConfig = {}) {
     // Hold the same reference as main.ts so updateStats / applyTileBuffer
     // mutate the object main.ts renders from. No clone — the Rust sim owns
     // sim state; this.state is only a display mirror.
     this.state = state;
-    // Snapshot current tile kinds as the natural terrain baseline. Rust
-    // GameState::new starts all-land, so the first tile-buffer update would
-    // erase any Water/Tree tiles from the TS terrain generator. We preserve
-    // them for all tiles the player hasn't explicitly touched.
-    this.naturalTileKinds = state.tiles.map(t => t.kind);
-    // Seed the log with the replayed history so subsequent swaps carry the
-    // full command history, not just commands added after this init.
-    if (preloadCommands) {
-      // Preloaded history predates this session's strokes — stroke 0.
-      this.cmdLog = preloadCommands.map(c => ({ ...c, strokeId: 0 }));
-      // Every replayed command position is player-modified — don't override those.
-      for (const cmd of preloadCommands) {
-        this.modifiedTiles.add(cmd.y * state.width + cmd.x);
-      }
-    }
     this.worker =
       config.createWorker?.() ??
       new Worker(new URL('../workers/wasmSim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<WorkerToMain>) => {
       this.handleWorkerMsg(e.data);
     };
+    // Seed the engine with the mirror's natural terrain (water/trees from the
+    // TS generator) — from here on the engine is the single source of truth
+    // for tiles; saves and undo snapshots carry the terrain in-state.
     this.worker.postMessage({
       type: 'init',
       payload: {
         width: state.width,
         height: state.height,
         seed: state.seed,
-        terrain: this.terrainBytes(),
-        commands: preloadCommands?.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
-        money: preloadCommands ? state.money : undefined,
-        targetTick: preloadCommands ? state.tick : undefined,
+        terrain: terrainBytes(state),
         policies: state.policies,
       },
     });
@@ -162,9 +146,6 @@ export class WasmSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool':
         if (this.ready) {
-          this.cmdLog.push({ tool: cmd.tool, x: cmd.x, y: cmd.y, strokeId: cmd.strokeId });
-          this.redoStrokes = [];
-          this.modifiedTiles.add(cmd.y * this.state.width + cmd.x);
           this.worker.postMessage({
             type: 'apply_tool',
             payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y, strokeId: cmd.strokeId },
@@ -173,19 +154,6 @@ export class WasmSimBridge implements SimBridge {
         break;
       case 'SetSpeed':
         this.setSpeed(cmd.multiplier);
-        break;
-      case 'LoadState':
-        if (this.ready) {
-          this.worker.postMessage({
-            type: 'reset',
-            payload: {
-              width: this.state.width,
-              height: this.state.height,
-              seed: cmd.seed,
-              terrain: this.terrainBytes(),
-            },
-          });
-        }
         break;
       case 'SetPolicies':
         this.state.policies = cmd.policies;
@@ -205,50 +173,60 @@ export class WasmSimBridge implements SimBridge {
     return this.state;
   }
 
-  loadState(state: GameState, cmdLog?: { tool: import('./toolTypes').Tool; x: number; y: number }[]): void {
-    this.state = state;
-    this.pendingTileBuffer = null;
-    this.pendingStats = null;
-    // The loaded save is the new undo floor — session history does not
-    // survive a load (the worker clears the engine history too).
-    this.redoStrokes = [];
-    this.syncHistoryFlags({ canUndo: false, canRedo: false });
-    // Re-snapshot natural terrain from the loaded state so water/tree tiles survive
-    // the first tile-buffer update from the replayed WASM.
-    this.naturalTileKinds = state.tiles.map(t => t.kind);
-    if (cmdLog?.length && this.ready) {
-      // Loaded history predates this session's strokes — stroke 0.
-      this.cmdLog = cmdLog.map(c => ({ ...c, strokeId: 0 }));
-      this.modifiedTiles = new Set(cmdLog.map(c => c.y * state.width + c.x));
+  /** Serialise the engine's full state to a CSIM snapshot blob (pure read). */
+  async getSnapshot(): Promise<Uint8Array> {
+    await this.readyPromise;
+    return new Promise(resolve => {
+      const requestId = this.nextRequestId++;
+      this.pendingSnapshots.set(requestId, resolve);
+      this.worker.postMessage({ type: 'get_snapshot', payload: { requestId } });
+    });
+  }
+
+  /**
+   * Replace the engine state with a CSIM snapshot. The mirror is resized and
+   * refreshed (tiles, stats, policies) before the promise resolves; rejects on
+   * a corrupt/incompatible snapshot, leaving the running city untouched.
+   */
+  async loadSnapshot(bytes: Uint8Array): Promise<void> {
+    await this.readyPromise;
+    return this.requestLoad(requestId => {
+      this.worker.postMessage({ type: 'load_snapshot', payload: { requestId, bytes } });
+    });
+  }
+
+  /** One-time import of a legacy JSON save — see `buildLegacyEngineImport`. */
+  async importLegacy(imp: LegacyEngineImport): Promise<void> {
+    await this.readyPromise;
+    return this.requestLoad(requestId => {
+      this.worker.postMessage({ type: 'import_legacy', payload: { requestId, ...imp } });
+    });
+  }
+
+  /** Start a fresh city from a newly generated mirror state. */
+  async newCity(fresh: GameState): Promise<void> {
+    await this.readyPromise;
+    this.state = fresh;
+    return this.requestLoad(requestId => {
       this.worker.postMessage({
-        type: 'load',
+        type: 'new_city',
         payload: {
-          width: state.width,
-          height: state.height,
-          seed: state.seed,
-          terrain: this.terrainBytes(),
-          commands: cmdLog.map(c => ({ tool: TOOL_TO_U8[c.tool], x: c.x, y: c.y })),
-          money: state.money,
-          targetTick: state.tick,
-          policies: state.policies,
+          requestId,
+          width: fresh.width,
+          height: fresh.height,
+          seed: fresh.seed,
+          terrain: terrainBytes(fresh),
         },
       });
-    } else {
-      this.cmdLog = [];
-      this.modifiedTiles = new Set();
-      if (this.ready) {
-        this.worker.postMessage({
-          type: 'reset',
-          payload: {
-            width: state.width,
-            height: state.height,
-            seed: state.seed,
-            terrain: this.terrainBytes(),
-          },
-        });
-        this.worker.postMessage({ type: 'set_policies', payload: state.policies });
-      }
-    }
+    });
+  }
+
+  private requestLoad(post: (requestId: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const requestId = this.nextRequestId++;
+      this.pendingLoads.set(requestId, { resolve, reject });
+      post(requestId);
+    });
   }
 
   setSpeed(multiplier: number): void {
@@ -284,10 +262,6 @@ export class WasmSimBridge implements SimBridge {
 
   canRedo(): boolean { return this.canRedoFlag; }
 
-  getCommandLog() {
-    return this.cmdLog.map(({ tool, x, y }) => ({ tool, x, y }));
-  }
-
   // Returns null until Option B (Rust building_metadata() export) is implemented.
   getMetadata() { return null; }
 
@@ -299,20 +273,11 @@ export class WasmSimBridge implements SimBridge {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  /** Natural terrain baseline as TileKind u8 bytes for the worker payloads. */
-  private terrainBytes(): Uint8Array | undefined {
-    if (this.naturalTileKinds === null) return undefined;
-    const bytes = new Uint8Array(this.naturalTileKinds.length);
-    for (let i = 0; i < bytes.length; i++) {
-      bytes[i] = tileKindToU8(this.naturalTileKinds[i]);
-    }
-    return bytes;
-  }
-
   private handleWorkerMsg(msg: WorkerToMain): void {
     switch (msg.type) {
       case 'ready':
         this.ready = true;
+        this.resolveReady();
         if (this.speedMult !== 1) {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });
         }
@@ -337,10 +302,6 @@ export class WasmSimBridge implements SimBridge {
         this.pendingTileBuffer = null;
         this.pendingStats = null;
         if (msg.happened) {
-          // Rust undoes a whole stroke at once — mirror that by moving every
-          // trailing cmdLog entry of the last stroke onto the redo pile, so a
-          // save/engine-swap replays exactly the surviving history.
-          this.redoStrokes.push(this.popLastStroke());
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);
         }
@@ -352,11 +313,6 @@ export class WasmSimBridge implements SimBridge {
         this.pendingTileBuffer = null;
         this.pendingStats = null;
         if (msg.happened) {
-          const stroke = this.redoStrokes.pop() ?? [];
-          for (const entry of stroke) {
-            this.cmdLog.push(entry);
-            this.modifiedTiles.add(entry.y * this.state.width + entry.x);
-          }
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);
         }
@@ -364,20 +320,48 @@ export class WasmSimBridge implements SimBridge {
         this.pendingRedo?.(msg.happened);
         this.pendingRedo = null;
         break;
+      case 'snapshot_result': {
+        const resolve = this.pendingSnapshots.get(msg.requestId);
+        this.pendingSnapshots.delete(msg.requestId);
+        resolve?.(msg.bytes);
+        break;
+      }
+      case 'load_result': {
+        const pending = this.pendingLoads.get(msg.requestId);
+        this.pendingLoads.delete(msg.requestId);
+        if (!msg.ok) {
+          pending?.reject(new Error(msg.error ?? 'Engine rejected the save'));
+          break;
+        }
+        // Discard pre-load frames and refresh the mirror atomically before
+        // the caller's promise resolves.
+        this.pendingTileBuffer = null;
+        this.pendingStats = null;
+        this.adoptDimensions(msg.width, msg.height, msg.seed);
+        this.state.policies = msg.policies;
+        this.applyTileBuffer(msg.bytes);
+        this.updateStats(msg.stats);
+        this.syncHistoryFlags(msg.history);
+        pending?.resolve();
+        break;
+      }
     }
   }
 
-  /** Remove and return the trailing cmdLog entries sharing the last stroke id. */
-  private popLastStroke(): { tool: Tool; x: number; y: number; strokeId: number }[] {
-    const stroke: { tool: Tool; x: number; y: number; strokeId: number }[] = [];
-    const last = this.cmdLog[this.cmdLog.length - 1];
-    if (last === undefined) return stroke;
-    while (this.cmdLog.length > 0 && this.cmdLog[this.cmdLog.length - 1].strokeId === last.strokeId) {
-      const entry = this.cmdLog.pop()!;
-      this.modifiedTiles.delete(entry.y * this.state.width + entry.x);
-      stroke.unshift(entry);
-    }
-    return stroke;
+  /** Resize the mirror's tile array when a load changes map dimensions. */
+  private adoptDimensions(width: number, height: number, seed: number): void {
+    this.state.seed = seed;
+    if (this.state.width === width && this.state.height === height) return;
+    this.state.width = width;
+    this.state.height = height;
+    this.state.tiles = Array.from({ length: width * height }, () => ({
+      kind: TileKind.Land,
+      elevation: 0,
+      happiness: 1,
+      powered: false,
+      watered: false,
+      services: createTileServiceState(),
+    }));
   }
 
   private syncHistoryFlags(flags: WorkerHistoryFlags): void {
@@ -479,21 +463,10 @@ export class WasmSimBridge implements SimBridge {
       const tile = this.state.tiles[i];
       const rustKind = tileKindFromU8(bytes[o.kind + i]);
       if (rustKind !== undefined) {
-        // The engine is seeded with natural terrain at init, so Rust normally
-        // reports Water/Tree itself now. This override remains as a fallback
-        // for any path where terrain seeding was missed.
-        if (
-          rustKind === TileKind.Land &&
-          this.naturalTileKinds !== null &&
-          !this.modifiedTiles.has(i)
-        ) {
-          const natural = this.naturalTileKinds[i];
-          tile.kind = (natural === TileKind.Water || natural === TileKind.Tree)
-            ? natural
-            : rustKind;
-        } else {
-          tile.kind = rustKind;
-        }
+        // The engine is seeded with natural terrain at init and every load
+        // path restores full state, so the buffer is the single source of
+        // truth for tile kinds — no display-side override.
+        tile.kind = rustKind;
       }
       const flags = bytes[o.flags + i];
       tile.powered      = (flags & FLAGS.POWERED)       !== 0;
@@ -547,4 +520,13 @@ export class WasmSimBridge implements SimBridge {
     // Recompute education coverage so the debug overlay and HUD stay current.
     this.state.education = recomputeEducation(this.state);
   }
+}
+
+/** A state's tile kinds as `TileKind` u8 bytes, for engine terrain seeding. */
+function terrainBytes(state: GameState): Uint8Array {
+  const bytes = new Uint8Array(state.tiles.length);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = tileKindToU8(state.tiles[i].kind);
+  }
+  return bytes;
 }

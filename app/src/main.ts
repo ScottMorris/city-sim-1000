@@ -20,11 +20,20 @@ import {
 import { Tool } from './game/toolTypes';
 import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
-import { LocalSimBridge } from './game/localSimBridge';
 import type { SimBridge } from './game/simBridge';
 import { applyToolCmd, nextStrokeId, setPoliciesCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
-import { loadFromBrowser } from './game/persistence';
+import {
+  buildLegacyEngineImport,
+  buildSaveMeta,
+  clearLegacyBrowserSave,
+  decodeSave,
+  encodeSave,
+  loadLegacyBrowserSave,
+  type SaveContainer
+} from './game/persistence';
+import { applyClientState, ensureSettingsShape, extractClientState } from './game/clientState';
+import { getSave, putSave } from './game/saveStore';
 import { initMcpBridge } from './game/mcpBridge';
 import { createCamera, centerCamera, screenToTile, zoomAt } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
@@ -107,7 +116,7 @@ appRoot.innerHTML = `
           <button id="load-btn" class="secondary">Load</button>
           <button id="download-btn" class="primary">Download</button>
           <button id="upload-btn" class="secondary">Upload</button>
-          <input type="file" id="file-input" accept="application/json" style="display:none" />
+          <input type="file" id="file-input" accept=".citysim,application/octet-stream,application/json" style="display:none" />
         </div>
       </details>
       <button id="manual-btn" class="ribbon-btn" title="Open the in-game manual" aria-label="Open manual">📖</button>
@@ -118,7 +127,6 @@ appRoot.innerHTML = `
           <button id="debug-overlay-btn" class="secondary">Show overlay</button>
           <button id="debug-copy-btn" class="secondary">Copy state</button>
           <button id="pending-penalty-btn" class="secondary">Penalties: On</button>
-          <button id="sim-bridge-btn" class="secondary">Sim: WASM</button>
         </div>
       </details>
     </div>
@@ -181,7 +189,6 @@ const settingsBtn = requireElement<HTMLButtonElement>('#settings-btn');
 const debugOverlayBtn = requireElement<HTMLButtonElement>('#debug-overlay-btn');
 const debugCopyBtn = requireElement<HTMLButtonElement>('#debug-copy-btn');
 const pendingPenaltyBtn = requireElement<HTMLButtonElement>('#pending-penalty-btn');
-const simBridgeBtn = requireElement<HTMLButtonElement>('#sim-bridge-btn');
 const newsTickerEl = requireElement<HTMLDivElement>('#news-ticker');
 
 // Compact layout has no room for the minimap and the tile inspector as two
@@ -294,37 +301,6 @@ const syncToolbarHeights = () => {
   viewport.style.setProperty('--toolbar-visible-height', `${visibleHeight}px`);
 };
 
-function ensureSettingsShape(settings?: GameState['settings']): GameState['settings'] {
-  const minimapDefaults = createDefaultMinimapSettings();
-  const minimapSettings = {
-    ...minimapDefaults,
-    ...(settings?.minimap ?? {})
-  };
-  if (!['base', 'power', 'water', 'alerts', 'education', 'underground'].includes(minimapSettings.mode)) {
-    minimapSettings.mode = 'base';
-  }
-  const inputDefaults = createDefaultInputSettings();
-  const accessibilityDefaults = createDefaultAccessibilitySettings();
-  const audioDefaults = createDefaultAudioSettings();
-  const cosmeticDefaults = createDefaultCosmeticSettings();
-  const narrativeDefaults = createDefaultNarrativeSettings();
-  const uiDefaults = createDefaultUiSettings();
-  const uiSettings = { ...uiDefaults, ...(settings?.ui ?? {}) };
-  if (!['auto', 'desktop', 'mobile'].includes(uiSettings.mode)) {
-    uiSettings.mode = 'auto';
-  }
-  return {
-    pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
-    minimap: minimapSettings,
-    input: { ...inputDefaults, ...(settings?.input ?? {}) },
-    accessibility: { ...accessibilityDefaults, ...(settings?.accessibility ?? {}) },
-    audio: { ...audioDefaults, ...(settings?.audio ?? {}) },
-    hotkeys: { ...defaultHotkeys, ...(settings?.hotkeys ?? {}) },
-    cosmetics: { ...cosmeticDefaults, ...(settings?.cosmetics ?? {}) },
-    narrative: { ...narrativeDefaults, ...(settings?.narrative ?? {}) },
-    ui: uiSettings
-  };
-}
 
 const app = new Application();
 const camera = createCamera();
@@ -368,12 +344,10 @@ function cancelPendingTouchApply() {
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
-const browserSave = loadFromBrowser();
-let state: GameState = browserSave?.state ?? createInitialState();
-// Without this, a bridge built from a loaded save has no command history to
-// undo *from* — its first undo would roll the sim all the way back to its
-// compiled-in starting scenario instead of one step back from the save.
-const initialCmdLog = browserSave?.cmdLog;
+// The bridge always boots a fresh city; any browser save (CSAV in
+// IndexedDB, or a legacy localStorage JSON) is loaded asynchronously right
+// after the engine is ready — see `bootLoadSave` below.
+const state: GameState = createInitialState();
 state.settings = ensureSettingsShape(state.settings);
 // Dev override, same pattern as `?bridge=`: forces `desktop`/`mobile` for
 // this load. Unlike the bridge param, this mutates `state.settings` (the
@@ -391,18 +365,8 @@ const narrativeManager = new NarrativeManager({
 const bridgeParam = new URLSearchParams(window.location.search).get('bridge');
 // Auto-detect Tauri shell when no explicit param is set.
 const inTauri = '__TAURI_INTERNALS__' in window;
-const isTauri = bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm' && bridgeParam !== 'ts');
-const isTs    = bridgeParam === 'ts';
-let activeBridgeKind: 'wasm' | 'local' | 'tauri' = isTauri ? 'tauri' : isTs ? 'local' : 'wasm';
-// Same cast the file-upload path already uses (see bindPersistenceControls'
-// onStateLoaded below) — persisted command logs are loosely typed (`tool` is
-// a plain string on disk) versus the bridges' stricter runtime Tool type.
-const typedInitialCmdLog = initialCmdLog as { tool: Tool; x: number; y: number }[] | undefined;
-let bridge: SimBridge = isTauri
-  ? new TauriSimBridge(state)
-  : isTs
-    ? new LocalSimBridge(state, { ticksPerSecond: 20, initialCmdLog: typedInitialCmdLog })
-    : new WasmSimBridge(state, {}, typedInitialCmdLog?.length ? typedInitialCmdLog : undefined);
+const isTauri = bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm');
+const bridge: SimBridge = isTauri ? new TauriSimBridge(state) : new WasmSimBridge(state);
 
 const loadingScreen = initLoadingScreen(document.body);
 
@@ -427,6 +391,10 @@ function wireBridge(b: SimBridge): void {
 // Set by UI modules (e.g. the compact-HUD undo button) that want to grey
 // themselves out when nothing is undoable/redoable.
 let onHistoryChanged: ((flags: { canUndo: boolean; canRedo: boolean }) => void) | null = null;
+
+// `applySettings` is created inside the boot IIFE (it needs the DOM); load
+// paths run before/outside it, so they reach it through this ref.
+let applySettingsRef: ((settings: GameState['settings']) => void) | null = null;
 
 /** "3 days" / "1 day" — for the undo/redo time-travel toasts. */
 function formatDaySpan(days: number): string {
@@ -463,31 +431,65 @@ function performRedo(): void {
   });
 }
 
+/** Restore a decoded CSAV container into the engine and display mirror. */
+async function loadCityContainer(container: SaveContainer): Promise<void> {
+  await bridge.loadSnapshot(container.engineSnapshot);
+  applyClientState(state, container.client);
+  afterCityLoaded();
+}
+
+/** One-time import of a legacy JSON save, then upgrade it to CSAV. */
+async function importLegacyCity(legacy: GameState): Promise<void> {
+  await bridge.importLegacy(buildLegacyEngineImport(legacy));
+  applyClientState(state, { settings: legacy.settings, bylaws: legacy.bylaws });
+  bridge.send(setPoliciesCmd(legacy.policies));
+  afterCityLoaded();
+  try {
+    // Upgrade in place; only drop the old localStorage save once the CSAV
+    // write has definitely landed, so a failure keeps the legacy fallback.
+    const bytes = encodeSave({
+      meta: buildSaveMeta(state, 'manual', new Date().toISOString()),
+      engineSnapshot: await bridge.getSnapshot(),
+      client: extractClientState(state)
+    });
+    await putSave('manual', decodeSave(bytes).meta, bytes);
+    clearLegacyBrowserSave();
+  } catch {
+    // IndexedDB unavailable (private mode, quota) — the legacy save stays.
+  }
+}
+
+/** Post-load housekeeping shared by every load path. */
+function afterCityLoaded(): void {
+  applySettingsRef?.(state.settings);
+  centerCamera(state, wrapper, TILE_SIZE, camera);
+  narrativeManager.reset();
+  lastNarrativeMonth = getCalendarPosition(state.day).month;
+  minimap?.markDirty();
+}
+
+/** Boot-time restore: CSAV from IndexedDB, else the legacy localStorage save. */
+async function bootLoadSave(): Promise<void> {
+  try {
+    const record = await getSave('manual');
+    if (record) {
+      await loadCityContainer(decodeSave(new Uint8Array(record.container)));
+      return;
+    }
+    const legacy = loadLegacyBrowserSave();
+    if (legacy) {
+      await importLegacyCity(legacy);
+    }
+  } catch (err) {
+    console.error('[boot] failed to restore save', err);
+    showToast('Could not restore your save — starting fresh', { severity: 'warning' });
+  }
+}
+
 wireBridge(bridge);
 initMcpBridge(bridge, state);
+void bootLoadSave();
 
-function swapSimBridge(): void {
-  if (activeBridgeKind === 'tauri') return; // Tauri bridge is not swappable
-  const currentState = bridge.getState();
-  const nextKind = activeBridgeKind === 'wasm' ? 'local' : 'wasm';
-  let newBridge: SimBridge;
-  // Carry the command log across the swap so the city survives in both
-  // directions. WASM→TS seeds the LocalSimBridge log so a second swap back to
-  // WASM can replay. TS→WASM replays the log into a fresh SimHost before ready.
-  const cmdLog = bridge.getCommandLog() ?? [];
-  if (nextKind === 'wasm') {
-    newBridge = new WasmSimBridge(currentState, {}, cmdLog.length ? cmdLog : undefined);
-  } else {
-    newBridge = new LocalSimBridge(currentState, { ticksPerSecond: 20, initialCmdLog: cmdLog });
-  }
-  wireBridge(newBridge);
-  newBridge.setSpeed(simSpeeds[simSpeed]);
-  bridge.dispose();
-  bridge = newBridge;
-  activeBridgeKind = nextKind;
-  simBridgeBtn.textContent = `Sim: ${nextKind === 'wasm' ? 'WASM' : 'TS'}`;
-  simBridgeBtn.classList.toggle('active', nextKind === 'local');
-}
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
 let minimap: ReturnType<typeof initMinimap> | null = null;
@@ -1223,6 +1225,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   // catch-all for the full shell and any other future case.)
   renderer.app.resize();
 
+  applySettingsRef = applySettings;
   bindPersistenceControls({
     saveBtn,
     loadBtn,
@@ -1230,15 +1233,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     uploadBtn,
     fileInput,
     getState: () => state,
-    getCmdLog: () => bridge.getCommandLog() ?? [],
-    onStateLoaded: (loaded, cmdLog) => {
-      state = loaded;
-      applySettings(state.settings);
-      bridge.loadState(state, cmdLog as { tool: Tool; x: number; y: number }[] | undefined);
-      centerCamera(state, wrapper, TILE_SIZE, camera);
-      narrativeManager.reset();
-      lastNarrativeMonth = getCalendarPosition(state.day).month;
-    }
+    getEngineSnapshot: () => bridge.getSnapshot(),
+    onContainerLoaded: loadCityContainer,
+    onLegacyLoaded: importLegacyCity
   });
 
   manualBtn.addEventListener('click', () => showManualModal());
@@ -1254,14 +1251,6 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     const current = state.settings?.pendingPenaltyEnabled ?? true;
     applySettings({ ...state.settings, pendingPenaltyEnabled: !current }, { skipHotkeyReload: true });
     showToast(`Over-zoning penalty ${state.settings.pendingPenaltyEnabled ? 'enabled' : 'disabled'}`);
-  });
-
-  simBridgeBtn.style.display = activeBridgeKind === 'tauri' ? 'none' : '';
-  simBridgeBtn.textContent = `Sim: ${activeBridgeKind === 'local' ? 'TS' : 'WASM'}`;
-  simBridgeBtn.classList.toggle('active', activeBridgeKind === 'local');
-  simBridgeBtn.addEventListener('click', () => {
-    swapSimBridge();
-    showToast(`Switched to ${activeBridgeKind === 'local' ? 'TypeScript' : 'WASM'} simulation`);
   });
 
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));
