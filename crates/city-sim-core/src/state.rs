@@ -420,6 +420,24 @@ impl GameState {
         self.tile_index(x, y).map(|i| &self.tiles[i])
     }
 
+    /// True once the player has opted into the water system: any pump, water
+    /// tower, or underground pipe exists.
+    ///
+    /// Until then, buildings do not *require* water — the in-game tool card
+    /// promises "water is stubbed high until pipes land" — so early cities
+    /// grow, stay `Active`, and draw power normally. Water requirements (and
+    /// water-use accounting) begin the moment the first piece of water
+    /// infrastructure is placed.
+    pub fn has_water_system(&self) -> bool {
+        self.buildings
+            .iter()
+            .any(|b| matches!(b.kind, TileKind::WaterPump | TileKind::WaterTower))
+            || self
+                .tiles
+                .iter()
+                .any(|t| t.underground == Some(TileKind::WaterPipe))
+    }
+
     pub fn tile_at_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
         self.tile_index(x, y).map(|i| &mut self.tiles[i])
     }
@@ -452,6 +470,27 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn has_water_system_detects_pumps_towers_and_pipes() {
+        let mut s = GameState::new(4, 4, 0);
+        assert!(!s.has_water_system(), "fresh city has no water system");
+
+        s.tiles[0].underground = Some(TileKind::WaterPipe);
+        assert!(s.has_water_system(), "a single pipe opts in");
+        s.tiles[0].underground = None;
+
+        s.buildings.push(crate::buildings::BuildingInstance::new(
+            1,
+            TileKind::WaterPump,
+            (0, 0),
+        ));
+        assert!(s.has_water_system(), "a pump opts in");
+        s.buildings[0].kind = TileKind::WaterTower;
+        assert!(s.has_water_system(), "a tower opts in");
+        s.buildings[0].kind = TileKind::Residential;
+        assert!(!s.has_water_system(), "zones alone do not opt in");
+    }
 
     fn gs() -> GameState {
         GameState::new(10, 8, 42)

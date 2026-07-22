@@ -126,8 +126,13 @@ impl Simulation {
             .tick(&mut self.state, &mut rng, delay_ticks);
         self.state.rng = rng;
 
-        // 4. Building states (power/water coverage per building footprint)
-        update_building_states(&mut self.state, self.water_enabled);
+        // 4. Building states (power/water coverage per building footprint).
+        // Water requirements are opt-in: until the first pump/tower/pipe
+        // exists, buildings don't need water ("stubbed high until pipes
+        // land"), so a young city's power draw behaves normally instead of
+        // every zone sitting at `InactiveNoWater` drawing nothing.
+        let water_active = self.water_enabled && self.state.has_water_system();
+        update_building_states(&mut self.state, water_active);
 
         // 5. Second network pass (building state changes affect node weights)
         recompute_utility_network(&mut self.state, UtilityKind::Power);
@@ -211,6 +216,9 @@ impl Simulation {
     /// Compute utility use (power_used, water_used) from active buildings and
     /// update the net balance in `state.utilities`.
     fn compute_utility_use(&mut self) {
+        // Mirrors the building-state gate above: no water system yet means
+        // water use is stubbed to zero, not accumulated into a deficit.
+        let water_active = self.water_enabled && self.state.has_water_system();
         let mut power_used: f32 = 0.0;
         let mut water_used: f32 = 0.0;
         for b in &self.state.buildings {
@@ -221,7 +229,7 @@ impl Simulation {
                 continue;
             };
             power_used += tmpl.power_use;
-            if self.water_enabled {
+            if water_active {
                 water_used += tmpl.water_use;
             }
         }
@@ -386,6 +394,66 @@ mod tests {
             state_hash(&restored.state),
             state_hash(&live.state),
             "a restored snapshot must continue on the identical deterministic path"
+        );
+    }
+
+    /// The "stubbed high until pipes land" rule: buildings must not require
+    /// water before the player has placed any water infrastructure — a young
+    /// city's zones stay `Active` and draw power normally. Placing the first
+    /// pump opts the city into the water system and unwatered zones start
+    /// requiring it.
+    #[test]
+    fn water_requirement_is_opt_in_until_infrastructure_exists() {
+        use crate::buildings::BuildingStatus;
+        use crate::commands::apply_tool;
+        use city_sim_protocol::commands::Tool;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut sim = Simulation::new(16, 16, 42);
+        for x in 0..12 {
+            apply_tool(&mut sim.state, Tool::Road, x, 5);
+        }
+        apply_tool(&mut sim.state, Tool::CoalPlant, 0, 3);
+        for x in 2..10 {
+            apply_tool(&mut sim.state, Tool::Residential, x, 4);
+            apply_tool(&mut sim.state, Tool::Residential, x, 6);
+        }
+        sim.state.demand.residential = 90.0;
+        for _ in 0..300 {
+            sim.step(1.0 / 20.0);
+        }
+
+        let zone_statuses: Vec<BuildingStatus> = sim
+            .state
+            .buildings
+            .iter()
+            .filter(|b| b.kind == TileKind::Residential)
+            .map(|b| b.status)
+            .collect();
+        assert!(!zone_statuses.is_empty(), "zones should have grown");
+        assert!(
+            zone_statuses
+                .iter()
+                .all(|s| *s != BuildingStatus::InactiveNoWater),
+            "no water system exists yet — water must not be required"
+        );
+        assert!(
+            sim.state.utilities.power_used > 0,
+            "active zones must draw power (the frozen-meter bug)"
+        );
+
+        // Opting in: a pump far from the zones activates the requirement.
+        apply_tool(&mut sim.state, Tool::WaterPump, 13, 13);
+        for _ in 0..5 {
+            sim.step(1.0 / 20.0);
+        }
+        assert!(
+            sim.state
+                .buildings
+                .iter()
+                .any(|b| b.kind == TileKind::Residential
+                    && b.status == BuildingStatus::InactiveNoWater),
+            "with a water system present, unwatered zones require water again"
         );
     }
 
