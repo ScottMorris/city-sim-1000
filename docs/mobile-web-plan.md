@@ -153,11 +153,17 @@ aggressively, and desktop browser sessions currently don't autosave either.*
   last few seconds; desktop refresh mid-game restores the city; no save spam while
   the tab stays visible.
   *Shipped (#117):* IndexedDB `'autosave'` slot (CSAV container, not localStorage — better than planned), 60 s cadence skipping idle ticks, `visibilitychange`/`pagehide` flushes, newest-wins boot restore with a toast. "Pause sim while hidden" was superseded by #116 — the sim now genuinely runs in background tabs via the worker clock.
-- [ ] **M3-2 · Durable storage request.** Call `navigator.storage.persist()` (once,
+- [x] **M3-2 · Durable storage request.** Call `navigator.storage.persist()` (once,
   post-first-save) to reduce eviction risk; surface quota problems as a notification
   rather than a silent failure. `deps:` M3-1.
   **DoD:** persistence request made and result logged; a failed save (quota) tells
   the player to export.
+  *Shipped (#120):* `durableStorage.ts` fires a once-only, fire-and-forget
+  `navigator.storage.persist()` request from `saveStore.putSave` after every
+  successful write (checks `persisted()` first, `console.info`s the outcome).
+  The "failed save tells the player to export" half of the DoD already
+  existed (the `dialogs.ts` save-button toast and `main.ts`'s `startAutosave`
+  `onError` toast both point at Download) — verified, not duplicated.
 - [ ] **M3-3 · Share-based save export on touch.** The download/upload save flow is
   awkward on phones — offer Web Share API export where available, falling back to
   the existing download path. `deps:` M0-1.

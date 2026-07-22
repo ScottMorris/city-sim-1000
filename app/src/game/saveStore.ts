@@ -4,14 +4,15 @@
 // SPDX-License-Identifier: MIT
 
 // Binary-native storage for browser saves: no base64 bloat, no 5 MB
-// localStorage ceiling, async writes off the frame budget — and ready for the
-// planned periodic autosave (M3) plus `navigator.storage.persist()`.
+// localStorage ceiling, async writes off the frame budget.
 //
-// One record per slot (`'manual'` now; `'autosave'` later). The whole CSAV
-// blob is stored verbatim alongside its decoded meta, so save pickers can
-// list cities without decoding postcard.
+// One record per slot (`'manual'`, `'autosave'`). The whole CSAV blob is
+// stored verbatim alongside its decoded meta, so save pickers can list
+// cities without decoding postcard. Every successful write also fires a
+// (once-only, fire-and-forget) `navigator.storage.persist()` request.
 
 import type { SaveMeta } from './persistence';
+import { requestDurableStorage } from './durableStorage';
 
 const DB_NAME = 'city-sim-1000';
 const DB_VERSION = 1;
@@ -73,6 +74,7 @@ async function withStore<T>(
 export async function putSave(id: SaveSlotId, meta: SaveMeta, container: Uint8Array): Promise<void> {
   const copy = container.slice().buffer as ArrayBuffer;
   await withStore('readwrite', store => store.put({ id, meta, container: copy } satisfies SaveRecord));
+  requestDurableStorage();
 }
 
 /** Fetch a slot's record, or null when the slot is empty. */
