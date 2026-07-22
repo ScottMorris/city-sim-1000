@@ -11,6 +11,6 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["vite/client", "vitest"]
   },
-  "include": ["src", "src/**/*.test.ts"],
+  "include": ["src", "src/**/*.test.ts", "e2e", "playwright.config.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

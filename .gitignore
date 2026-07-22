@@ -20,3 +20,8 @@ app/src/wasm/
 
 # Playwright MCP session artifacts (screenshots, console logs, page snapshots)
 .playwright-mcp/
+
+# Playwright/vitest test output (app/test-results/junit.xml is a CI artefact, not a commit)
+app/test-results/
+app/playwright-report/
+app/blob-report/

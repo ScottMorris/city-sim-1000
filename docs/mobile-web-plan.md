@@ -202,11 +202,23 @@ hardware.*
   existing `debug-pointer` localStorage flag). `deps:` none.
   **DoD:** a fresh contributor can iterate on a phone against the dev server from
   the docs alone.
-- [ ] **M5-2 · Playwright mobile emulation tests.** CI coverage with a touch +
+- [x] **M5-2 · Playwright mobile emulation tests.** CI coverage with a touch +
   phone-viewport context, both orientations: compact layout renders, tool sheet
   opens/picks, pinch-zoom and two-finger pan work, autosave fires on
   `visibilitychange`. `deps:` M1-2, M2-1, M3-1.
   **DoD:** suite green in CI; a deliberate compact-layout break fails it.
+  *Shipped (#121):* `app/playwright.config.ts` runs `app/e2e/mobile.spec.ts`
+  across `mobile-portrait`/`mobile-landscape` projects (Pixel 5 dimensions,
+  swapped) against a built `vite preview` server. `mcpBridge.ts`'s `?mcp`
+  debug bridge now exposes `window.__mcpTest` unconditionally (previously
+  dev-only) so it works against the production preview build the suite runs
+  under. Camera-change assertions use Playwright's own (CDP) element
+  screenshot rather than the MCP `screenshot` op — that op's
+  `canvas.toDataURL()` races the WebGL implicit buffer clear (no
+  `preserveDrawingBuffer`) and can return a stale/blank capture. New
+  `mobile-e2e` CI job builds WASM, installs Playwright's Chromium, and runs
+  the suite; wired into `report-pr-results`. Verified locally that renaming
+  `.toolbar-undo-btn` fails the compact-layout test, then reverted.
 - [ ] **M5-3 · Docs sync.** README, `manual.html`, and SPEC updated to describe the
   mobile mode, detection/override behaviour, and autosave. `deps:` M2-5, M3-1.
   **DoD:** shipped alongside the final feature PR, per repo convention.

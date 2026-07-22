@@ -278,19 +278,20 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
 
   connect();
 
-  // Dev-only helper: lets Playwright smoke-test the bridge without a real MCP client.
-  if (import.meta.env.DEV) {
-    (window as unknown as Record<string, unknown>).__mcpTest = (
-      method: string,
-      params?: Record<string, unknown>,
-    ) =>
-      new Promise((resolve, reject) => {
-        const id = crypto.randomUUID();
-        replyOverrides.set(id, (result, error) => {
-          if (error) reject(new Error(error));
-          else resolve(result);
-        });
-        void handleCommand({ id, method, params: params ?? {} });
+  // Lets Playwright (or any script) drive the bridge directly without a real
+  // MCP server — gated the same way the rest of this module is, by the
+  // explicit `?mcp` opt-in above, so it ships in production builds too (the
+  // mobile e2e suite runs against a built `vite preview`, not the dev server).
+  (window as unknown as Record<string, unknown>).__mcpTest = (
+    method: string,
+    params?: Record<string, unknown>,
+  ) =>
+    new Promise((resolve, reject) => {
+      const id = crypto.randomUUID();
+      replyOverrides.set(id, (result, error) => {
+        if (error) reject(new Error(error));
+        else resolve(result);
       });
-  }
+      void handleCommand({ id, method, params: params ?? {} });
+    });
 }

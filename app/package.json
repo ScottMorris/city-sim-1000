@@ -10,6 +10,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run --pool=threads --poolOptions.threads.singleThread=true",
     "test:ci": "vitest run --pool=threads --poolOptions.threads.singleThread=true --reporter=verbose --reporter=junit --outputFile.junit=test-results/junit.xml",
+    "test:e2e": "playwright test",
     "build:favicon": "node scripts/generate-favicon.mjs",
     "build:radio-playlist": "tsx scripts/build-radio-playlist.ts --extract-embedded-covers"
   },
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.83",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^24.10.1",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^27.2.0",
