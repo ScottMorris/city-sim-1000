@@ -12,7 +12,7 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// per-type maintenance breakdown fields.
 /// v3: `GameState` gained `wilderness: WildernessStats` and `BudgetStats`
 /// gained `revenue_tourism`.
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 
 /// Serialise `state` to a compact postcard byte vector prefixed by a 8-byte
 /// header: magic `CSIM` (4 bytes) + version u32 (4 bytes, little-endian).

@@ -38,7 +38,7 @@ describe('budget policy', () => {
 
     const taxed = createInitialState(8, 8, 1);
     developResidential(taxed, 4, 4);
-    taxed.budgetPolicy.taxResidential = 18; // double the neutral 9%
+    taxed.policies.budget.taxResidential = 18; // double the neutral 9%
     tickOnce(taxed);
 
     expect(taxed.budget.breakdown.revenue.residents).toBeCloseTo(
@@ -56,7 +56,7 @@ describe('budget policy', () => {
     const half = createInitialState(8, 8, 1);
     applyTool(half, Tool.Road, 4, 4);
     applyTool(half, Tool.Road, 5, 4);
-    half.budgetPolicy.fundTransport = 50;
+    half.policies.budget.fundTransport = 50;
     tickOnce(half);
 
     expect(half.budget.breakdown.details.transport.roads).toBeCloseTo(
@@ -74,7 +74,7 @@ describe('budget policy', () => {
       developResidential(state, 5, 4);
       developResidential(state, 7, 4);
       developResidential(state, 9, 4);
-      state.budgetPolicy.taxResidential = tax;
+      state.policies.budget.taxResidential = tax;
       tickOnce(state);
       return state.demand.residential;
     };
@@ -97,17 +97,28 @@ describe('budget policy', () => {
   it('back-fills the neutral policy on old saves', () => {
     const state = createInitialState(4, 4, 1);
     const raw = JSON.parse(serialize(state));
-    delete raw.budgetPolicy;
+    delete raw.policies;
     const restored = deserialize(JSON.stringify(raw));
-    expect(restored.budgetPolicy).toEqual(createDefaultBudgetPolicy());
+    expect(restored.policies.budget).toEqual(createDefaultBudgetPolicy());
+  });
+
+  it('folds legacy flat budgetPolicy/wildernessPolicy keys into policies', () => {
+    const state = createInitialState(4, 4, 1);
+    const raw = JSON.parse(serialize(state));
+    delete raw.policies;
+    raw.budgetPolicy = { ...createDefaultBudgetPolicy(), taxResidential: 14 };
+    raw.wildernessPolicy = { natureReserve: true, greenIndustry: false };
+    const restored = deserialize(JSON.stringify(raw));
+    expect(restored.policies.budget.taxResidential).toBe(14);
+    expect(restored.policies.wilderness.natureReserve).toBe(true);
   });
 
   it('clamps out-of-range policy values on load', () => {
     const state = createInitialState(4, 4, 1);
     const raw = JSON.parse(serialize(state));
-    raw.budgetPolicy = { ...raw.budgetPolicy, taxResidential: 99, fundPower: 900 };
+    raw.policies.budget = { ...raw.policies.budget, taxResidential: 99, fundPower: 900 };
     const restored = deserialize(JSON.stringify(raw));
-    expect(restored.budgetPolicy.taxResidential).toBe(20);
-    expect(restored.budgetPolicy.fundPower).toBe(100);
+    expect(restored.policies.budget.taxResidential).toBe(20);
+    expect(restored.policies.budget.fundPower).toBe(100);
   });
 });

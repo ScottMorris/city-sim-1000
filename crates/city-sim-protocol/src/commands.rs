@@ -45,6 +45,7 @@ pub enum Tool {
 /// with 100 as the fully-funded default; underfunding trims upkeep but has
 /// consequences (brownouts, crowded schools, commuter frustration).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BudgetPolicy {
     pub tax_residential: u8,
     pub tax_commercial: u8,
@@ -102,9 +103,38 @@ impl BudgetPolicy {
 /// `green_industry`: industrial tiles do reduced wilderness damage in return
 /// for a per-zone daily subsidy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WildernessPolicy {
     pub nature_reserve: bool,
     pub green_industry: bool,
+}
+
+/// Every player-adjustable policy, grouped under one roof.
+///
+/// New policy families nest here as additional fields rather than as new
+/// top-level state or new wire commands. Every field carries
+/// `#[serde(default)]` so older payloads decode cleanly after a policy is
+/// added. Policies are deliberately *not* undoable — undo applies to tools;
+/// the live `Policies` value is carried across every history restore.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Policies {
+    /// Tax rates and department funding levels (budget screen).
+    #[serde(default)]
+    pub budget: BudgetPolicy,
+    /// Wilderness programmes (Bylaws screen).
+    #[serde(default)]
+    pub wilderness: WildernessPolicy,
+}
+
+impl Policies {
+    /// Clamp every family into its legal ranges.
+    pub fn clamped(self) -> Self {
+        Self {
+            budget: self.budget.clamped(),
+            wilderness: self.wilderness,
+        }
+    }
 }
 
 /// A command sent from the UI/bridge into the simulation.
@@ -117,10 +147,8 @@ pub enum SimCommand {
     SetSpeed { multiplier: f32 },
     /// Load a complete new state (e.g. after save-file upload).
     LoadState { seed: u32 },
-    /// Set tax rates and department funding levels.
-    SetBudgetPolicy { policy: BudgetPolicy },
-    /// Toggle wilderness programmes (Nature Reserve, Green Industry).
-    SetWildernessPolicy { policy: WildernessPolicy },
+    /// Replace the full set of player policies (budget, wilderness, ...).
+    SetPolicies { policies: Policies },
 }
 
 /// Result returned synchronously for `ApplyTool` commands.
@@ -218,18 +246,44 @@ mod tests {
     }
 
     #[test]
-    fn budget_policy_round_trips_postcard() {
-        let policy = BudgetPolicy {
-            tax_residential: 12,
-            tax_commercial: 7,
-            tax_industrial: 20,
-            fund_transport: 80,
-            fund_power: 50,
-            fund_civic: 100,
+    fn policies_round_trip_postcard() {
+        let policies = Policies {
+            budget: BudgetPolicy {
+                tax_residential: 12,
+                tax_commercial: 7,
+                tax_industrial: 20,
+                fund_transport: 80,
+                fund_power: 50,
+                fund_civic: 100,
+            },
+            wilderness: WildernessPolicy {
+                nature_reserve: true,
+                green_industry: false,
+            },
         };
-        let bytes = to_allocvec(&SimCommand::SetBudgetPolicy { policy }).unwrap();
+        let bytes = to_allocvec(&SimCommand::SetPolicies { policies }).unwrap();
         let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(back, SimCommand::SetBudgetPolicy { policy: p } if p == policy));
+        assert!(matches!(back, SimCommand::SetPolicies { policies: p } if p == policies));
+    }
+
+    #[test]
+    fn default_policies_are_neutral() {
+        let p = Policies::default();
+        assert_eq!(p.budget, BudgetPolicy::default());
+        assert_eq!(p.wilderness, WildernessPolicy::default());
+    }
+
+    #[test]
+    fn policies_clamp_delegates_to_families() {
+        let p = Policies {
+            budget: BudgetPolicy {
+                tax_residential: 99,
+                ..BudgetPolicy::default()
+            },
+            wilderness: WildernessPolicy::default(),
+        }
+        .clamped();
+        assert_eq!(p.budget.tax_residential, MAX_TAX_RATE);
     }
 
     #[test]
@@ -249,17 +303,6 @@ mod tests {
         assert_eq!(policy.fund_transport, MAX_FUNDING);
         assert_eq!(policy.fund_power, MAX_FUNDING);
         assert_eq!(policy.fund_civic, 0);
-    }
-
-    #[test]
-    fn wilderness_policy_round_trips_postcard() {
-        let policy = WildernessPolicy {
-            nature_reserve: true,
-            green_industry: false,
-        };
-        let bytes = to_allocvec(&SimCommand::SetWildernessPolicy { policy }).unwrap();
-        let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(back, SimCommand::SetWildernessPolicy { policy: p } if p == policy));
     }
 
     #[test]

@@ -411,7 +411,7 @@ export class Simulation {
     // Fiscal policy pressure — mirrors compute_city_demand in city-sim-core:
     // taxes above the neutral 9% suppress that class's demand, and
     // underfunded transport drags all three. Zero at the neutral defaults.
-    const policy = this.state.budgetPolicy ?? createDefaultBudgetPolicy();
+    const policy = this.state.policies?.budget ?? createDefaultBudgetPolicy();
     const taxPenaltyRes = (policy.taxResidential - NEUTRAL_TAX_RATE) * 2.0;
     const taxPenaltyCom = (policy.taxCommercial - NEUTRAL_TAX_RATE) * 2.0;
     const taxPenaltyInd = (policy.taxIndustrial - NEUTRAL_TAX_RATE) * 2.0;

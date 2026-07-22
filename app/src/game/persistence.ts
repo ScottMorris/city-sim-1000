@@ -143,10 +143,19 @@ export function deserialize(payload: string): GameState {
   parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
   parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
   parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
-  // Saves from before the fiscal-policy feature get the neutral defaults.
-  parsed.budgetPolicy = parsed.budgetPolicy
-    ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...parsed.budgetPolicy })
-    : createDefaultBudgetPolicy();
+  // Fold policies into the grouped `policies` shape. Legacy saves carry flat
+  // `budgetPolicy`/`wildernessPolicy` keys; saves from before those features
+  // get the neutral defaults.
+  const legacyBudget = parsed.policies?.budget ?? parsed.budgetPolicy;
+  const legacyWilderness = parsed.policies?.wilderness ?? parsed.wildernessPolicy;
+  parsed.policies = {
+    budget: legacyBudget
+      ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...legacyBudget })
+      : createDefaultBudgetPolicy(),
+    wilderness: { ...createDefaultWildernessPolicy(), ...(legacyWilderness ?? {}) }
+  };
+  delete parsed.budgetPolicy;
+  delete parsed.wildernessPolicy;
   // Old saves have no seed — assign 0 so they play deterministically going forward.
   if (parsed.seed === undefined) {
     parsed.seed = 0;
@@ -164,10 +173,6 @@ export function deserialize(payload: string): GameState {
       ...createDefaultWildernessStats().breakdown,
       ...(parsed.wilderness?.breakdown ?? {})
     }
-  };
-  parsed.wildernessPolicy = {
-    ...createDefaultWildernessPolicy(),
-    ...(parsed.wildernessPolicy ?? {})
   };
   parsed.bylaws = parsed.bylaws ?? { ...DEFAULT_BYLAWS };
   if (!parsed.bylaws.lighting) {

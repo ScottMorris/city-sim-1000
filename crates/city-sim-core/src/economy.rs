@@ -136,7 +136,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     // Fiscal policy — tax multipliers scale revenue, funding multipliers
     // scale upkeep. Defaults (9% / 100%) are exactly 1.0, so a neutral
     // policy reproduces the pre-policy numbers bit-for-bit.
-    let policy = state.policy;
+    let policy = state.policies.budget;
     let tax_res = BudgetPolicy::tax_multiplier(policy.tax_residential);
     let tax_com = BudgetPolicy::tax_multiplier(policy.tax_commercial);
     let tax_ind = BudgetPolicy::tax_multiplier(policy.tax_industrial);
@@ -180,10 +180,10 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     // and a per-industrial-zone subsidy for Green Industry (#9).
     let wt = WildernessTunables::default();
     let mut expenses_policies = 0.0_f32;
-    if state.wilderness_policy.nature_reserve {
+    if state.policies.wilderness.nature_reserve {
         expenses_policies += wt.reserve_cost_per_day;
     }
-    if state.wilderness_policy.green_industry {
+    if state.policies.wilderness.green_industry {
         expenses_policies += industrial_zones as f32 * wt.green_industry_subsidy_per_zone;
     }
 
@@ -480,13 +480,13 @@ mod tests {
         let mut s = gs(4, 4);
         s.population = 100;
         let neutral = compute_daily_budget(&s).revenue_pop;
-        s.policy.tax_residential = 18; // double the neutral 9%
+        s.policies.budget.tax_residential = 18; // double the neutral 9%
         let taxed = compute_daily_budget(&s).revenue_pop;
         assert!(
             (taxed - neutral * 2.0).abs() < 0.001,
             "18% tax should double residential revenue"
         );
-        s.policy.tax_residential = 0;
+        s.policies.budget.tax_residential = 0;
         assert_eq!(
             compute_daily_budget(&s).revenue_pop,
             0.0,
@@ -500,7 +500,7 @@ mod tests {
         s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
         s.tile_at_mut(1, 0).unwrap().kind = TileKind::Road;
         let full = compute_daily_budget(&s).maint_roads;
-        s.policy.fund_transport = 50;
+        s.policies.budget.fund_transport = 50;
         let half = compute_daily_budget(&s).maint_roads;
         assert!(
             (half - full * 0.5).abs() < 0.0001,
@@ -560,7 +560,7 @@ mod tests {
         let before = compute_daily_budget(&s);
         assert_eq!(before.expenses_policies, 0.0);
 
-        s.wilderness_policy = WildernessPolicy {
+        s.policies.wilderness = WildernessPolicy {
             nature_reserve: true,
             green_industry: true,
         };

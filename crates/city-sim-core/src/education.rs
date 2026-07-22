@@ -275,7 +275,7 @@ pub fn recompute_education(state: &mut GameState) {
         // with the civic funding level (100% → full capacity, exact).
         let capacity = tmpl.service_capacity as f32
             * city_sim_protocol::commands::BudgetPolicy::funding_multiplier(
-                state.policy.fund_civic,
+                state.policies.budget.fund_civic,
             );
         let radius = tmpl.service_coverage;
 

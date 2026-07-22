@@ -5,12 +5,7 @@
 
 import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
-import {
-  createDefaultBudgetPolicy,
-  createDefaultWildernessPolicy,
-  type BudgetPolicy,
-  type WildernessPolicy
-} from './protocol/commands';
+import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
@@ -222,12 +217,10 @@ export interface GameState {
   services: ServiceSystemState;
   education: EducationStats;
   bylaws: BylawState;
-  /** Fiscal policy — tax rates and department funding from the budget screen. */
-  budgetPolicy: BudgetPolicy;
+  /** Every player-adjustable policy family (budget, wilderness, ...). */
+  policies: Policies;
   /** Wilderness score, trend, and breakdown — computed by the Rust sim. */
   wilderness: WildernessStats;
-  /** Active wilderness programmes (Nature Reserve, Green Industry). */
-  wildernessPolicy: WildernessPolicy;
   settings: GameSettings;
 }
 
@@ -383,9 +376,8 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       highCoverage: 0
     },
     bylaws: { ...DEFAULT_BYLAWS },
-    budgetPolicy: createDefaultBudgetPolicy(),
+    policies: createDefaultPolicies(),
     wilderness: createDefaultWildernessStats(),
-    wildernessPolicy: createDefaultWildernessPolicy(),
     settings: createDefaultSettings()
   };
 }

@@ -6,7 +6,7 @@
 use crate::buildings::BuildingInstance;
 use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
-use city_sim_protocol::commands::{BudgetPolicy, WildernessPolicy};
+use city_sim_protocol::commands::Policies;
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
 
@@ -346,16 +346,13 @@ pub struct GameState {
     pub budget: BudgetStats,
     /// Rolling 200-day budget history for the finance panel.
     pub budget_history: VecDeque<BudgetHistoryEntry>,
-    /// Fiscal policy — tax rates and department funding set from the budget
-    /// screen. Defaults are neutral (9% taxes, 100% funding), which
+    /// Every player-adjustable policy family (budget, wilderness, ...).
+    /// Budget defaults are neutral (9% taxes, 100% funding), which
     /// reproduces the pre-policy economy bit-for-bit.
-    pub policy: BudgetPolicy,
+    pub policies: Policies,
     /// Wilderness score, trend, and breakdown — recomputed every
     /// `WildernessTunables::recompute_interval_ticks` by the tick loop.
     pub wilderness: WildernessStats,
-    /// Active wilderness programmes (Nature Reserve, Green Industry) set
-    /// from the Bylaws screen.
-    pub wilderness_policy: WildernessPolicy,
 }
 
 impl GameState {
@@ -386,9 +383,8 @@ impl GameState {
             education: EducationStats::default(),
             budget: BudgetStats::default(),
             budget_history: VecDeque::new(),
-            policy: BudgetPolicy::default(),
+            policies: Policies::default(),
             wilderness: WildernessStats::default(),
-            wilderness_policy: WildernessPolicy::default(),
         }
     }
 

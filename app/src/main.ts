@@ -22,7 +22,7 @@ import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
 import { LocalSimBridge } from './game/localSimBridge';
 import type { SimBridge } from './game/simBridge';
-import { applyToolCmd, setBudgetPolicyCmd, setWildernessPolicyCmd } from './game/protocol/commands';
+import { applyToolCmd, setPoliciesCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
 import { initMcpBridge } from './game/mcpBridge';
@@ -908,8 +908,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getBudgetInsights: () => narrativeManager.getBudgetInsights(),
     refreshBudgetInsights: () => narrativeManager.refreshBudgetInsights(() => buildCitySnapshot(state)),
     onPolicyChange: (policy) => {
-      state.budgetPolicy = policy;
-      bridge.send(setBudgetPolicyCmd(policy));
+      state.policies = { ...state.policies, budget: policy };
+      bridge.send(setPoliciesCmd(state.policies));
     }
   });
   const bylawsModal = initBylawsModal({
@@ -919,8 +919,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       state.bylaws.lighting = lighting;
     },
     onWildernessPolicyChange: (policy) => {
-      state.wildernessPolicy = policy;
-      bridge.send(setWildernessPolicyCmd(policy));
+      state.policies = { ...state.policies, wilderness: policy };
+      bridge.send(setPoliciesCmd(state.policies));
     }
   });
 

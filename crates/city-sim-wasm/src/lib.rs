@@ -5,7 +5,7 @@
 
 use city_sim_core::{command_log::CommandLog, commands::apply_tool, sim::Simulation};
 use city_sim_protocol::{
-    commands::{BudgetPolicy, Tool, WildernessPolicy},
+    commands::{Policies, Tool},
     tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE},
 };
 use wasm_bindgen::prelude::*;
@@ -216,36 +216,15 @@ impl SimHost {
         self.sim.state.money = amount as i64;
     }
 
-    /// Set the fiscal policy (tax rates 0–20, funding levels 0–100).
-    /// Out-of-range values are clamped. Applies from the next tick.
-    #[allow(clippy::too_many_arguments)]
-    pub fn set_budget_policy(
-        &mut self,
-        tax_residential: u8,
-        tax_commercial: u8,
-        tax_industrial: u8,
-        fund_transport: u8,
-        fund_power: u8,
-        fund_civic: u8,
-    ) {
-        self.sim.state.policy = BudgetPolicy {
-            tax_residential,
-            tax_commercial,
-            tax_industrial,
-            fund_transport,
-            fund_power,
-            fund_civic,
-        }
-        .clamped();
-    }
-
-    /// Toggle the wilderness programmes (Nature Reserve, Green Industry).
-    /// Applies from the next wilderness recompute.
-    pub fn set_wilderness_policy(&mut self, nature_reserve: bool, green_industry: bool) {
-        self.sim.state.wilderness_policy = WildernessPolicy {
-            nature_reserve,
-            green_industry,
-        };
+    /// Replace the full set of player policies from a camelCase JSON object
+    /// (see `Policies` in `city-sim-protocol` — `{ budget: {...}, wilderness: {...} }`).
+    /// Missing families keep their serde defaults; out-of-range values are
+    /// clamped. Applies from the next tick / wilderness recompute.
+    pub fn set_policies(&mut self, json: &str) -> Result<(), JsError> {
+        let policies: Policies =
+            serde_json::from_str(json).map_err(|e| JsError::new(&e.to_string()))?;
+        self.sim.state.policies = policies.clamped();
+        Ok(())
     }
 
     /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
@@ -299,12 +278,10 @@ impl SimHost {
         let prev_speed = self.sim.speed();
         // Policies are not part of the command log — carry them across the
         // replay so undoing a tool doesn't also reset taxes or programmes.
-        let prev_policy = self.sim.state.policy;
-        let prev_wilderness_policy = self.sim.state.wilderness_policy;
+        let prev_policies = self.sim.state.policies;
         self.sim = self.log.replay();
         self.sim.set_speed(prev_speed);
-        self.sim.state.policy = prev_policy;
-        self.sim.state.wilderness_policy = prev_wilderness_policy;
+        self.sim.state.policies = prev_policies;
         true
     }
 
