@@ -114,7 +114,15 @@ export class LocalSimBridge implements SimBridge {
     this.simulation.setSpeed(multiplier);
   }
 
-  // TS sim does not support command-log undo; resolves false so callers degrade gracefully.
+  // TS sim does not support undo/redo; resolves false so callers degrade gracefully.
+  redo(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  canUndo(): boolean { return false; }
+
+  canRedo(): boolean { return false; }
+
   undo(): Promise<boolean> {
     return Promise.resolve(false);
   }

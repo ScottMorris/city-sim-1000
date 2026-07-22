@@ -9,6 +9,7 @@ pub mod commands;
 pub mod demand;
 pub mod economy;
 pub mod education;
+pub mod history;
 pub mod rng;
 pub mod sim;
 pub mod snapshot;

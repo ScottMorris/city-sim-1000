@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from './gameState';
 import { LocalSimBridge } from './localSimBridge';
-import { applyToolCmd } from './protocol/commands';
+import { applyToolCmd, nextStrokeId } from './protocol/commands';
 import { Tool } from './toolTypes';
 
 function makeBridge() {
@@ -28,7 +28,7 @@ describe('LocalSimBridge command log', () => {
 
   it('records a successful placement', () => {
     const { bridge } = makeBridge();
-    bridge.send(applyToolCmd(Tool.HydroPlant, 1, 1));
+    bridge.send(applyToolCmd(Tool.HydroPlant, 1, 1, nextStrokeId()));
     const log = bridge.getCommandLog();
     expect(log).toHaveLength(1);
     expect(log[0]).toEqual({ tool: Tool.HydroPlant, x: 1, y: 1 });
@@ -36,9 +36,9 @@ describe('LocalSimBridge command log', () => {
 
   it('records multiple placements in order', () => {
     const { bridge } = makeBridge();
-    bridge.send(applyToolCmd(Tool.HydroPlant, 1, 1));
-    bridge.send(applyToolCmd(Tool.Road, 3, 1));
-    bridge.send(applyToolCmd(Tool.Residential, 4, 1));
+    bridge.send(applyToolCmd(Tool.HydroPlant, 1, 1, nextStrokeId()));
+    bridge.send(applyToolCmd(Tool.Road, 3, 1, nextStrokeId()));
+    bridge.send(applyToolCmd(Tool.Residential, 4, 1, nextStrokeId()));
     const log = bridge.getCommandLog();
     expect(log).toHaveLength(3);
     expect(log[0].tool).toBe(Tool.HydroPlant);
@@ -49,19 +49,19 @@ describe('LocalSimBridge command log', () => {
   it('does not record rejected placements', () => {
     const { state, bridge } = makeBridge();
     state.money = 0; // can't afford anything
-    bridge.send(applyToolCmd(Tool.HydroPlant, 1, 1));
+    bridge.send(applyToolCmd(Tool.HydroPlant, 1, 1, nextStrokeId()));
     expect(bridge.getCommandLog()).toHaveLength(0);
   });
 
   it('does not record out-of-bounds placements', () => {
     const { bridge } = makeBridge();
-    bridge.send(applyToolCmd(Tool.Road, 99, 99));
+    bridge.send(applyToolCmd(Tool.Road, 99, 99, nextStrokeId()));
     expect(bridge.getCommandLog()).toHaveLength(0);
   });
 
   it('log entries have the shape WasmSimBridge expects ({tool, x, y})', () => {
     const { bridge } = makeBridge();
-    bridge.send(applyToolCmd(Tool.Road, 2, 3));
+    bridge.send(applyToolCmd(Tool.Road, 2, 3, nextStrokeId()));
     const [entry] = bridge.getCommandLog();
     expect(Object.keys(entry).sort()).toEqual(['tool', 'x', 'y']);
     expect(typeof entry.tool).toBe('string'); // Tool is a string enum
@@ -74,7 +74,7 @@ describe('LocalSimBridge command log', () => {
     // Inspect always succeeds but produces no city change — it should still
     // be recorded (the replay contract is: replay everything that succeeded).
     // If Inspect is ever filtered out, update this test to reflect that decision.
-    bridge.send(applyToolCmd(Tool.Inspect, 0, 0));
+    bridge.send(applyToolCmd(Tool.Inspect, 0, 0, nextStrokeId()));
     // Inspect returns success=true in applyTool, so it appears in the log.
     expect(bridge.getCommandLog()).toHaveLength(1);
   });

@@ -360,6 +360,33 @@ mod tests {
         );
     }
 
+    /// The determinism guarantee the snapshot-stack undo system rests on:
+    /// restoring a snapshot puts the sim back on the identical deterministic
+    /// path, so a restored city stepped forward matches the live run exactly.
+    #[test]
+    fn snapshot_restore_is_deterministic() {
+        let mut live = make_city_sim(42);
+        for _ in 0..50 {
+            live.step(1.0 / 20.0);
+        }
+        let bytes = crate::snapshot::to_bytes(&live.state).expect("snapshot encodes");
+        for _ in 0..100 {
+            live.step(1.0 / 20.0);
+        }
+
+        let mut restored = Simulation::new(8, 8, 42);
+        restored.load_state(crate::snapshot::from_bytes(&bytes).expect("snapshot decodes"));
+        for _ in 0..100 {
+            restored.step(1.0 / 20.0);
+        }
+
+        assert_eq!(
+            state_hash(&restored.state),
+            state_hash(&live.state),
+            "a restored snapshot must continue on the identical deterministic path"
+        );
+    }
+
     #[test]
     fn tick_advances_day_and_tick_counter() {
         let mut sim = Simulation::new(4, 4, 0);

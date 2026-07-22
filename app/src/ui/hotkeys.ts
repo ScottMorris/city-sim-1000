@@ -101,6 +101,14 @@ export function initHotkeys(options: HotkeyOptions = {}): HotkeyController {
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
       return;
     }
+    // Chorded presses belong to other shortcuts (Ctrl/Cmd+Z undo, Ctrl+Y
+    // redo, browser bindings) — a bare-key hotkey must not also fire, else
+    // Ctrl+Z would undo *and* switch the active tool to Residential. Keyup
+    // still processes so a held movement key releases cleanly even if a
+    // modifier came down mid-hold.
+    if (isDown && (e.ctrlKey || e.metaKey || e.altKey)) {
+      return;
+    }
     const actions = keyToActions.get(e.code);
     if (!actions) return;
     let handled = false;

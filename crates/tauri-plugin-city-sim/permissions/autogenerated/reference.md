@@ -179,6 +179,32 @@ Denies the load_snapshot command without any pre-configured scope.
 <tr>
 <td>
 
+`city-sim:allow-redo`
+
+</td>
+<td>
+
+Enables the redo command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-redo`
+
+</td>
+<td>
+
+Denies the redo command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `city-sim:allow-set-budget-policy`
 
 </td>
@@ -354,6 +380,32 @@ Enables the stop command without any pre-configured scope.
 <td>
 
 Denies the stop command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:allow-undo`
+
+</td>
+<td>
+
+Enables the undo command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`city-sim:deny-undo`
+
+</td>
+<td>
+
+Denies the undo command without any pre-configured scope.
 
 </td>
 </tr>

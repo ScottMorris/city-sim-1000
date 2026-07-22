@@ -59,13 +59,29 @@ export interface SimBridge {
   setSpeed(multiplier: number): void;
 
   /**
-   * Undo the most recent player tool action by removing it from the command log
-   * and replaying from the city seed. Resolves to `true` if an action was
-   * undone, `false` if the log was already empty.
+   * Undo the most recent player stroke by restoring its pre-stroke engine
+   * snapshot — tiles, stats, RNG, and the clock all rewind to the moment
+   * before the stroke. Resolves to `true` if a stroke was undone, `false` if
+   * the history was empty (e.g. right after a load — the loaded save is the
+   * undo floor).
    *
-   * Bridges that do not yet support undo resolve immediately with `false`.
+   * Bridges that do not support undo resolve immediately with `false`.
    */
   undo(): Promise<boolean>;
+
+  /**
+   * Redo the most recently undone stroke, returning to the exact moment undo
+   * was pressed. Resolves to `false` if there is nothing to redo (any new
+   * stroke clears the redo stack).
+   */
+  redo(): Promise<boolean>;
+
+  /**
+   * Whether an undo/redo step is currently available — synchronous reads of
+   * the flags carried by the latest `HistoryChanged` event, for button state.
+   */
+  canUndo(): boolean;
+  canRedo(): boolean;
 
   /**
    * Return all building templates known to this bridge, or null if the bridge

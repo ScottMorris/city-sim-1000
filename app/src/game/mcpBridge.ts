@@ -12,6 +12,7 @@ import type { GameState } from './gameState';
 import { createInitialState } from './gameState';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
+import { nextStrokeId } from './protocol/commands';
 
 // Bresenham's line — returns all integer (x,y) pairs from (x0,y0) to (x1,y1).
 function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
@@ -139,7 +140,7 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const x = params.x as number;
           const y = params.y as number;
           const moneyBefore = bridge.getState().money;
-          bridge.send({ type: 'ApplyTool', tool, x, y });
+          bridge.send({ type: 'ApplyTool', tool, x, y, strokeId: nextStrokeId() });
           await waitMs(150);
           reply(id, {
             moneyBefore,
@@ -190,8 +191,9 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
             params.x2 as number, params.y2 as number,
           );
           const moneyBefore = bridge.getState().money;
+          const lineStroke = nextStrokeId();
           for (const [px, py] of pts) {
-            bridge.send({ type: 'ApplyTool', tool, x: px, y: py });
+            bridge.send({ type: 'ApplyTool', tool, x: px, y: py, strokeId: lineStroke });
           }
           await waitMs(150);
           reply(id, { placed: pts.length, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
@@ -205,10 +207,11 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const bx = Math.max(params.x1 as number, params.x2 as number);
           const by = Math.max(params.y1 as number, params.y2 as number);
           const moneyBefore = bridge.getState().money;
+          const rectStroke = nextStrokeId();
           let placed = 0;
           for (let ry = ay; ry <= by; ry++) {
             for (let rx = ax; rx <= bx; rx++) {
-              bridge.send({ type: 'ApplyTool', tool, x: rx, y: ry });
+              bridge.send({ type: 'ApplyTool', tool, x: rx, y: ry, strokeId: rectStroke });
               placed++;
             }
           }

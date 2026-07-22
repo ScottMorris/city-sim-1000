@@ -10,7 +10,8 @@ const COMMANDS: &[&str] = &[
     "get_map_seed",
     "get_command_log",
     "load_command_log",
-    "undo_last_command",
+    "undo",
+    "redo",
 ];
 
 fn main() {

@@ -40,6 +40,9 @@ export interface TickEvent {
   height:             number   // u32 — grid height in tiles
   /** One byte per tile, row-major. Values are `TileKind` u8 discriminants. */
   tiles:              number[]
+  /** Whether an undo/redo step is currently available — drives button state. */
+  canUndo:            boolean
+  canRedo:            boolean
 }
 
 /**
@@ -106,12 +109,14 @@ export async function start(
  * Fire-and-forget: the command is queued into the sim thread and applied
  * before the next tick. Returns once the command is enqueued (not applied).
  *
- * @param tool A `TOOL_ID` value — the u8 discriminant from `sim_protocol::commands::Tool`.
- * @param x    Tile column (0-indexed from left).
- * @param y    Tile row (0-indexed from top).
+ * @param tool     A `TOOL_ID` value — the u8 discriminant from `sim_protocol::commands::Tool`.
+ * @param x        Tile column (0-indexed from left).
+ * @param y        Tile row (0-indexed from top).
+ * @param strokeId Groups the calls of one drag-paint gesture into a single
+ *                 undo step; bump it on every new gesture.
  */
-export async function applyTool(tool: ToolId, x: number, y: number): Promise<void> {
-  await invoke('plugin:city-sim|apply_tool', { tool, x, y })
+export async function applyTool(tool: ToolId, x: number, y: number, strokeId: number): Promise<void> {
+  await invoke('plugin:city-sim|apply_tool', { tool, x, y, strokeId })
 }
 
 /**
@@ -160,9 +165,8 @@ export async function setPolicies(policies: Policies): Promise<void> {
  * Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
  *
  * Only Water/Tree kinds are applied onto untouched Land tiles, so player-built
- * kinds present in a display snapshot can never leak into the engine. Recorded
- * in the command log so undo replays rebuild the same map. Call once, right
- * after `start()`.
+ * kinds present in a display snapshot can never leak into the engine. Call
+ * once, right after `start()`.
  */
 export async function setNaturalTerrain(kinds: Uint8Array): Promise<void> {
   await invoke('plugin:city-sim|set_natural_terrain', { kinds: Array.from(kinds) })
@@ -261,18 +265,26 @@ export async function loadCommandLog(bytes: Uint8Array): Promise<void> {
 // ── Undo ──────────────────────────────────────────────────────────────────────
 
 /**
- * Undo the most recent player tool action.
+ * Undo the most recent player stroke by restoring its pre-stroke snapshot —
+ * tiles, stats, RNG stream, and the clock all rewind to the moment before the
+ * stroke's first successful command.
  *
- * Removes the last entry from the active command log and replays from the city
- * seed, rewinding the simulation to just before that action was taken.
+ * Returns `true` if a stroke was undone, `false` if the history was empty
+ * (no player strokes since `start()` or the last `loadSnapshot`).
  *
- * Returns `true` if an action was undone, `false` if the log was already empty
- * (i.e. no player actions have been taken since `start()` or the last
- * `loadSnapshot`/`loadCommandLog`).
- *
- * Replay runs synchronously on the sim thread; a very long session may delay
- * the next `TickEvent` briefly. Blocks until the sim thread responds (max 2 s).
+ * Blocks until the sim thread responds (max 2 s).
  */
-export async function undoLastCommand(): Promise<boolean> {
-  return await invoke<boolean>('plugin:city-sim|undo_last_command', {})
+export async function undo(): Promise<boolean> {
+  return await invoke<boolean>('plugin:city-sim|undo', {})
+}
+
+/**
+ * Redo the most recently undone stroke, returning to the exact moment undo
+ * was pressed. Returns `false` if there is nothing to redo (a new stroke
+ * clears the redo stack).
+ *
+ * Blocks until the sim thread responds (max 2 s).
+ */
+export async function redo(): Promise<boolean> {
+  return await invoke<boolean>('plugin:city-sim|redo', {})
 }

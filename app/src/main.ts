@@ -22,7 +22,7 @@ import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
 import { LocalSimBridge } from './game/localSimBridge';
 import type { SimBridge } from './game/simBridge';
-import { applyToolCmd, setPoliciesCmd } from './game/protocol/commands';
+import { applyToolCmd, nextStrokeId, setPoliciesCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import { loadFromBrowser } from './game/persistence';
 import { initMcpBridge } from './game/mcpBridge';
@@ -332,6 +332,10 @@ let hovered: Position | null = null;
 let selected: Position | null = null;
 let isPanning = false;
 let isPainting = false;
+// Stroke id for the paint gesture in progress. All ApplyTool commands sharing
+// an id form a single undo step in the engine history; a fresh id is
+// allocated whenever a gesture ends.
+let strokeId = nextStrokeId();
 let pointerActive = false;
 let panStart = { x: 0, y: 0 };
 let cameraStart = { x: 0, y: 0 };
@@ -414,6 +418,47 @@ function wireBridge(b: SimBridge): void {
       });
     } else if (msg.type === 'Narrative') {
       narrativeManager.onEvent(msg.data.payload as Parameters<typeof narrativeManager.onEvent>[0]);
+    } else if (msg.type === 'HistoryChanged') {
+      onHistoryChanged?.(msg.data);
+    }
+  });
+}
+
+// Set by UI modules (e.g. the compact-HUD undo button) that want to grey
+// themselves out when nothing is undoable/redoable.
+let onHistoryChanged: ((flags: { canUndo: boolean; canRedo: boolean }) => void) | null = null;
+
+/** "3 days" / "1 day" — for the undo/redo time-travel toasts. */
+function formatDaySpan(days: number): string {
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
+/**
+ * Undo the last stroke and confirm with the shared "Undone" toast. Undo
+ * rewinds the clock to the pre-stroke moment, so when that skips a day or
+ * more the toast says how far — time travel should never be silent.
+ */
+function performUndo(): void {
+  const dayBefore = state.day;
+  void bridge.undo().then((happened) => {
+    if (happened) {
+      const daysRewound = Math.floor(dayBefore - state.day);
+      const message = daysRewound >= 1 ? `Undone — rewound ${formatDaySpan(daysRewound)}` : 'Undone';
+      notifications.publish({ id: 'undo', message, sticky: false });
+      minimap?.markDirty();
+    }
+  });
+}
+
+/** Redo the most recently undone stroke, mirroring `performUndo`. */
+function performRedo(): void {
+  const dayBefore = state.day;
+  void bridge.redo().then((happened) => {
+    if (happened) {
+      const daysForward = Math.floor(state.day - dayBefore);
+      const message = daysForward >= 1 ? `Redone — jumped forward ${formatDaySpan(daysForward)}` : 'Redone';
+      notifications.publish({ id: 'redo', message, sticky: false });
+      minimap?.markDirty();
     }
   });
 }
@@ -570,7 +615,7 @@ function applyCurrentTool(tilePos: Position) {
     }
     return;
   }
-  const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y));
+  const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y, strokeId));
   if (!result.success && result.message) {
     showToast(result.message);
   } else if (result.success) {
@@ -771,6 +816,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
     isPainting = false;
     lastPainted = null;
     pointerActive = false;
+    strokeId = nextStrokeId();
     restoreSelectedTool();
   };
 
@@ -1242,13 +1288,21 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
       e.preventDefault();
-      void bridge.undo().then((happened) => {
-        if (happened) {
-          notifications.publish({ id: 'undo', message: 'Undone', sticky: false });
-        }
-      });
+      // One undo per physical keypress: with full-rewind semantics, letting
+      // the key auto-repeat can silently unwind a whole session (a held
+      // Ctrl+Z fires ~30 undos/second, and each one may rewind days).
+      if (!e.repeat) performUndo();
+      return;
+    }
+    // Redo: Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y.
+    if (
+      (e.ctrlKey || e.metaKey) &&
+      ((e.shiftKey && (e.key === 'z' || e.key === 'Z')) || e.key === 'y' || e.key === 'Y')
+    ) {
+      e.preventDefault();
+      if (!e.repeat) performRedo();
       return;
     }
     if (e.key === 'Escape') {
