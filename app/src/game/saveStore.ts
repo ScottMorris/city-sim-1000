@@ -90,3 +90,19 @@ export async function listSaveMetas(): Promise<{ id: SaveSlotId; meta: SaveMeta 
 export async function deleteSave(id: SaveSlotId): Promise<void> {
   await withStore('readwrite', store => store.delete(id));
 }
+
+/**
+ * The record to restore on boot: whichever of the two slots has the later
+ * `savedAt`. Ties (or an invalid timestamp on one side) favour the manual
+ * save — the deliberate one.
+ */
+export function pickNewestSave(
+  manual: SaveRecord | null,
+  autosave: SaveRecord | null
+): SaveRecord | null {
+  if (!manual) return autosave;
+  if (!autosave) return manual;
+  const manualAt = Date.parse(manual.meta.savedAt);
+  const autoAt = Date.parse(autosave.meta.savedAt);
+  return Number.isFinite(autoAt) && autoAt > manualAt ? autosave : manual;
+}

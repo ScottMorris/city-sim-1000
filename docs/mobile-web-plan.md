@@ -146,12 +146,13 @@ when tools are added.*
 *Goal: nobody loses a city — on any platform. Mobile browsers discard background tabs
 aggressively, and desktop browser sessions currently don't autosave either.*
 
-- [ ] **M3-1 · Autosave (all platforms).** Periodic autosave to localStorage (existing
+- [x] **M3-1 · Autosave (all platforms).** Periodic autosave to localStorage (existing
   serialize path) plus save-on-`visibilitychange`/`pagehide`. Applies to desktop and
   mobile alike. Pause the sim (and radio, if playing) while hidden. `deps:` none.
   **DoD:** backgrounding the tab mid-game and having it discarded loses at most the
   last few seconds; desktop refresh mid-game restores the city; no save spam while
   the tab stays visible.
+  *Shipped (#117):* IndexedDB `'autosave'` slot (CSAV container, not localStorage — better than planned), 60 s cadence skipping idle ticks, `visibilitychange`/`pagehide` flushes, newest-wins boot restore with a toast. "Pause sim while hidden" was superseded by #116 — the sim now genuinely runs in background tabs via the worker clock.
 - [ ] **M3-2 · Durable storage request.** Call `navigator.storage.persist()` (once,
   post-first-save) to reduce eviction risk; surface quota problems as a notification
   rather than a silent failure. `deps:` M3-1.

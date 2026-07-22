@@ -33,7 +33,8 @@ import {
   type SaveContainer
 } from './game/persistence';
 import { applyClientState, ensureSettingsShape, extractClientState } from './game/clientState';
-import { getSave, putSave } from './game/saveStore';
+import { getSave, pickNewestSave, putSave } from './game/saveStore';
+import { initAutosave } from './game/autosave';
 import { initMcpBridge } from './game/mcpBridge';
 import { createCamera, centerCamera, screenToTile, zoomAt } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
@@ -468,12 +469,31 @@ function afterCityLoaded(): void {
   minimap?.markDirty();
 }
 
-/** Boot-time restore: CSAV from IndexedDB, else the legacy localStorage save. */
+/** "just now" / "5 min ago" / "3 h ago" — for the autosave-restore toast. */
+function formatAgo(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 0) return 'just now';
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} h ago`;
+}
+
+/**
+ * Boot-time restore: the newest of the manual and autosave slots (a crash or
+ * refresh should cost at most one autosave interval), else the legacy
+ * localStorage save.
+ */
 async function bootLoadSave(): Promise<void> {
   try {
-    const record = await getSave('manual');
+    const [manual, autosave] = await Promise.all([getSave('manual'), getSave('autosave')]);
+    const record = pickNewestSave(manual, autosave);
     if (record) {
       await loadCityContainer(decodeSave(new Uint8Array(record.container)));
+      if (record.id === 'autosave') {
+        showToast(`Restored autosave from ${formatAgo(record.meta.savedAt)}`);
+      }
       return;
     }
     const legacy = loadLegacyBrowserSave();
@@ -486,9 +506,33 @@ async function bootLoadSave(): Promise<void> {
   }
 }
 
+/**
+ * Start the periodic autosave — only after the boot restore has resolved, so
+ * a freshly booted default city can never overwrite a real autosave.
+ */
+function startAutosave(): void {
+  let warnedOnce = false;
+  initAutosave({
+    getTick: () => state.tick,
+    save: async () => {
+      const engineSnapshot = await bridge.getSnapshot();
+      const meta = buildSaveMeta(state, 'autosave', new Date().toISOString());
+      const bytes = encodeSave({ meta, engineSnapshot, client: extractClientState(state) });
+      await putSave('autosave', meta, bytes);
+    },
+    onError: (err) => {
+      console.error('[autosave] failed', err);
+      if (!warnedOnce) {
+        warnedOnce = true;
+        showToast('Autosave failed — use Download to back up your city', { severity: 'warning' });
+      }
+    }
+  });
+}
+
 wireBridge(bridge);
 initMcpBridge(bridge, state);
-void bootLoadSave();
+void bootLoadSave().finally(startAutosave);
 
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
 let hotkeys: HotkeyController | null = null;
