@@ -15,7 +15,7 @@
   --border: #223557;
   --border-subtle: #1f2c4b;
   --border-hover: #96d9ff;
-  --shadow-color: #0a1020;
+  --shadow-colour: #0a1020;
   --grid: #0f1b2f;
 }
 
@@ -91,13 +91,13 @@ button.secondary.active {
   background: #1f3354;
   border-color: var(--accent);
   color: var(--text);
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
 }
 
 button.primary:hover,
 button.secondary:hover {
   border-color: var(--border-hover);
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
 }
 
 button.primary:active,

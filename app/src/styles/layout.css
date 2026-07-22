@@ -64,7 +64,7 @@
   border: 2px solid var(--border);
   border-radius: 10px;
   padding: 7px 10px;
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
   font-size: 12px;
 }
 
@@ -142,7 +142,7 @@
   font-family: inherit;
   font-size: 13px;
   cursor: pointer;
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
   list-style: none;
 }
 
@@ -152,7 +152,7 @@
 
 .ribbon-btn.active {
   border-color: var(--accent);
-  box-shadow: 0 4px 0 var(--shadow-color), 0 0 10px rgba(123, 255, 183, 0.25);
+  box-shadow: 0 4px 0 var(--shadow-colour), 0 0 10px rgba(123, 255, 183, 0.25);
 }
 
 /* Dropdowns for Saves and Debug. */

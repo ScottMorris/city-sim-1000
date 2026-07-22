@@ -67,7 +67,7 @@
   font-size: 14px;
   font-weight: bold;
   cursor: pointer;
-  box-shadow: 0 4px 0 var(--shadow-color), 0 0 12px rgba(123, 255, 183, 0.25);
+  box-shadow: 0 4px 0 var(--shadow-colour), 0 0 12px rgba(123, 255, 183, 0.25);
 }
 
 .tool-sheet-backdrop {
@@ -134,7 +134,7 @@
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -201,7 +201,7 @@
 
 .toolbar-group-sub-open {
   border-color: var(--accent);
-  box-shadow: 0 4px 0 var(--shadow-color), 0 0 10px rgba(123, 255, 183, 0.22);
+  box-shadow: 0 4px 0 var(--shadow-colour), 0 0 10px rgba(123, 255, 183, 0.22);
   z-index: 2004;
 }
 
@@ -232,7 +232,7 @@
   font-size: 11px;
   cursor: pointer;
   transition: transform 0.1s ease, border-color 0.1s ease;
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
   height: 44px;
   display: inline-flex;
   align-items: center;
@@ -269,7 +269,7 @@
   border: 2px solid var(--border);
   border-radius: 14px;
   padding: 8px 8px;
-  box-shadow: 0 4px 0 var(--shadow-color);
+  box-shadow: 0 4px 0 var(--shadow-colour);
   position: relative;
   overflow: visible;
   z-index: 2002;

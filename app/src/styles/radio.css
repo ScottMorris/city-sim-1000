@@ -10,7 +10,7 @@
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
-  box-shadow: 0 2px 0 var(--shadow-color);
+  box-shadow: 0 2px 0 var(--shadow-colour);
   transition: border-color 0.1s ease, transform 0.1s ease;
   display: flex;
   align-items: center;
@@ -145,7 +145,7 @@
   cursor: pointer;
   font-size: 15px;
   line-height: 1;
-  box-shadow: 0 2px 0 var(--shadow-color);
+  box-shadow: 0 2px 0 var(--shadow-colour);
   transition: border-color 0.1s ease, transform 0.1s ease;
 }
 
