@@ -127,8 +127,10 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  step(dt: number): void {
-    // Apply tile state and stats received from the previous tick before advancing.
+  step(_dt: number): void {
+    // The worker drives the simulation clock itself (20 Hz interval, alive
+    // even in hidden tabs) — this per-frame call only flushes the latest
+    // engine update into the display mirror the renderer reads.
     if (this.pendingTileBuffer !== null) {
       this.applyTileBuffer(this.pendingTileBuffer);
       this.pendingTileBuffer = null;
@@ -137,9 +139,6 @@ export class WasmSimBridge implements SimBridge {
       this.updateStats(this.pendingStats);
       this.pendingStats = null;
     }
-    if (!this.ready) return;
-    // Pass raw dt — the speed multiplier is applied inside Simulation::tick.
-    this.worker.postMessage({ type: 'step', payload: { dt } });
   }
 
   send(cmd: SimCommand): CommandResult {

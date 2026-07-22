@@ -23,8 +23,11 @@ export type { BuildingTemplate };
 
 export interface SimBridge {
   /**
-   * Advance the simulation by `dt` seconds (real time, not sim time).
-   * The implementation applies its own speed multiplier internally.
+   * Flush pending engine updates into the display mirror. Engines drive
+   * their own clocks (the WASM worker via a 20 Hz interval that keeps
+   * running in hidden tabs; the Tauri plugin via its native thread), so
+   * this is a render-loop hook, not a simulation tick — `dt` is unused by
+   * current bridges and kept for interface stability.
    */
   step(dt: number): void;
 
