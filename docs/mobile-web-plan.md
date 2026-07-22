@@ -130,7 +130,7 @@ when tools are added.*
   Also hides the footer (cosmetic tagline + GitHub link, permanently buried under
   the fixed compact toolbar dock anyway) to reclaim its flow height for the canvas.
   `deps:` M2-1. **DoD:** neither element occludes the canvas by default on a
-  phone-sized viewport in either orientation.
+  phone-sized viewport in either orientation. (#104)
 - [ ] **M2-5 · Responsive modals + manual.** Settings/budget/bylaws modals size to
   small viewports in both orientations. `manual.html` is a separate document in an
   iframe — give it its own viewport meta and mobile styles, and document the touch
