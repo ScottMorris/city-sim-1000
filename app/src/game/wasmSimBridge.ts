@@ -491,8 +491,18 @@ export class WasmSimBridge implements SimBridge {
     // Scanning in row-major order means the first occurrence of each buildingId
     // is always the top-left (origin) tile of its footprint.
     const seen = new Map<number, { kind: TileKind; x: number; y: number }>();
+    // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
+    // until a pump, tower, or pipe exists, buildings don't require water.
+    let hasWaterSystem = false;
     for (let i = 0; i < n; i++) {
       const tile = this.state.tiles[i];
+      if (
+        tile.kind === TileKind.WaterPump ||
+        tile.kind === TileKind.WaterTower ||
+        tile.underground === TileKind.WaterPipe
+      ) {
+        hasWaterSystem = true;
+      }
       if (tile.buildingId === undefined || seen.has(tile.buildingId)) continue;
       seen.set(tile.buildingId, {
         kind: tile.kind,
@@ -508,7 +518,8 @@ export class WasmSimBridge implements SimBridge {
       const template = getBuildingTemplate(kind as string);
       const bstate = createBuildingState();
       const needsPower = template ? template.requiresPower !== false : false;
-      const needsWater = template ? (template.waterUse !== undefined && template.waterUse > 0) : false;
+      const needsWater =
+        hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
       if (needsPower && !originTile?.powered) {
         bstate.status = BuildingStatus.InactiveNoPower;
       } else if (needsWater && !originTile?.watered) {
