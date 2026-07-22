@@ -487,6 +487,39 @@ select {
   border-color: var(--accent);
 }
 
+/* Compact layout only: the minimap and tile inspector share one floating
+   corner (see .overlay/.minimap-panel in the compact breakpoint below)
+   instead of each getting their own, so these tabs pick which is showing.
+   Always in the DOM (main.ts creates them unconditionally) but only ever
+   visible once the compact breakpoint below turns display back on. */
+.compact-info-tabs {
+  display: none;
+  position: absolute;
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  /* Clears .toolbar-compact-dock (position: fixed, bottom: 0), whose real
+     height (safe-area-inset-bottom varies it) main.ts measures into this
+     var — see syncToolbarHeights(). The 84px fallback matches its typical
+     measured height before that first measurement lands. */
+  bottom: calc(var(--compact-dock-height, 84px) + 8px);
+  gap: 6px;
+  z-index: 7;
+}
+
+.compact-info-tab {
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 12px;
+  min-height: 40px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020;
+}
+
+.compact-info-tab.active {
+  border-color: var(--accent);
 }
 
 .toolbar-sub {
@@ -2267,10 +2300,37 @@ footer {
     height: 60vh;
     height: 60dvh;
   }
+  /* Purely cosmetic (tagline + GitHub link) and gets visually buried under
+     the fixed-position compact toolbar dock anyway — drop it to reclaim
+     real flow height for the canvas instead of leaving it fought-over. */
+  footer {
+    display: none;
+  }
+  .compact-info-tabs {
+    display: flex;
+  }
+  /* Minimap and the tile inspector now share this one footprint, switched
+     by .compact-info-tabs above instead of each floating independently
+     (where they used to overlap by roughly half their width on a phone). */
+  .overlay,
   .minimap-panel {
-    width: min(100%, 280px);
+    left: auto;
     right: calc(8px + env(safe-area-inset-right, 0px));
-    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    /* Sits directly above .compact-info-tabs — dock height + its own gap,
+       plus the tab strip's own ~40px height and gap. */
+    bottom: calc(var(--compact-dock-height, 84px) + 8px + 40px + 8px);
+    width: min(100%, 280px);
+  }
+  /* Title + the panel's own Hide/Show button are redundant here — the tabs
+     above now own showing/hiding it. */
+  .minimap-header {
+    display: none;
+  }
+  .canvas-wrapper[data-compact-info-tab='map'] .overlay,
+  .canvas-wrapper[data-compact-info-tab='inspect'] .minimap-panel,
+  .canvas-wrapper[data-compact-info-tab='none'] .overlay,
+  .canvas-wrapper[data-compact-info-tab='none'] .minimap-panel {
+    display: none !important;
   }
 }
 

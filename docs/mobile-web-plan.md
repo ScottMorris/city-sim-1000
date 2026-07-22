@@ -113,15 +113,24 @@ when tools are added.*
   `groupedTools` appears in both shells with no extra wiring; full layout unchanged. (#103)
 - [ ] **M2-2 · Tool info in the picker.** `toolInfo.ts` content (cost, description)
   shown for the highlighted tool inside the sheet, replacing hover. `deps:` M2-1.
-  **DoD:** cost is visible before placing in compact mode.
+  **DoD:** cost is visible before placing in compact mode. More load-bearing than it
+  was: M2-4 suppresses the old always-on tool-info card in compact mode entirely
+  (it was eating the same footprint the minimap/inspector needed), so tool cost has
+  no compact-mode home at all until this ships.
 - [ ] **M2-3 · Prominent undo.** Surface the existing undo (P5-5) as a visible button
   in the compact HUD — mis-taps cost money and undo is the cheap fix. `deps:` M2-1.
   **DoD:** undo reachable in one tap; shows the same "Undone" notification.
-- [ ] **M2-4 · Minimap + news ticker in compact mode.** Ticker collapses to a
-  tap-to-expand strip; minimap becomes toggleable (respecting existing minimap
-  settings). Both work in portrait and landscape. `deps:` M2-1.
-  **DoD:** neither element occludes the canvas by default on a phone-sized viewport
-  in either orientation.
+- [x] **M2-4 · Minimap + inspector in compact mode.** On-device testing found the
+  minimap and the tile inspector — not the news ticker, which turned out fine as-is —
+  were the real offenders: both float over `#canvas-wrapper` in the same bottom
+  corner and visibly collided. Implemented as one shared tabbed panel ("Map" /
+  "Inspect") instead of two independent floats; closed by default, and tapping a
+  tile with the Inspect tool active auto-switches to the Inspect tab. The
+  always-visible desktop tool-info card is suppressed in compact mode (see M2-2).
+  Also hides the footer (cosmetic tagline + GitHub link, permanently buried under
+  the fixed compact toolbar dock anyway) to reclaim its flow height for the canvas.
+  `deps:` M2-1. **DoD:** neither element occludes the canvas by default on a
+  phone-sized viewport in either orientation. (#104)
 - [ ] **M2-5 · Responsive modals + manual.** Settings/budget/bylaws modals size to
   small viewports in both orientations. `manual.html` is a separate document in an
   iframe — give it its own viewport meta and mobile styles, and document the touch

@@ -48,6 +48,12 @@ export function createHud(elements: HudElements) {
   let overlayContainer: HTMLDivElement | null = null;
   let toolInfoPinned = false;
   let overlayFrozen = false;
+  // In compact layout the tool-info card and the tile inspector share one
+  // small floating panel (tabbed) instead of each getting their own — the
+  // always-on "here's the selected tool's cost" card would otherwise eat
+  // that whole shared footprint by default. Suppressed there until M2-2
+  // gives tool info a proper home in the compact tool sheet instead.
+  let toolInfoSuppressed = false;
 
   const ensureOverlayContainer = () => {
     if (!overlayContainer) {
@@ -118,7 +124,7 @@ export function createHud(elements: HudElements) {
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
     if (overlayFrozen) return;
     const hasTileSelection = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
-    const showToolInfo = toolInfoPinned || activeTool !== Tool.Inspect;
+    const showToolInfo = !toolInfoSuppressed && (toolInfoPinned || activeTool !== Tool.Inspect);
 
     if (!showToolInfo && !hasTileSelection) {
       overlayContainer?.remove();
@@ -294,5 +300,9 @@ export function createHud(elements: HudElements) {
     cleanupOverlayContainer();
   };
 
-  return { update, renderOverlays };
+  const setToolInfoSuppressed = (suppressed: boolean) => {
+    toolInfoSuppressed = suppressed;
+  };
+
+  return { update, renderOverlays, setToolInfoSuppressed };
 }
