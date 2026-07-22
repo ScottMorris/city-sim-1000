@@ -41,6 +41,8 @@ bun run build:wasm             # compile crates/city-sim-wasm → app/src/wasm/s
 
 **Important:** `app/src/wasm/` is gitignored (generated output). Run `bun run build:wasm` once after a fresh clone before `bun run dev` or `bun run build`, otherwise the WASM Worker will fail to load. There is no longer a pure-TS fallback — WASM is the required browser runtime since P5-4.
 
+**Also after a fresh clone/worktree:** `crates/tauri-plugin-city-sim/dist-js/` is gitignored too — run `bun run build` inside `crates/tauri-plugin-city-sim` once, or the Vite dev server fails to resolve the `tauri-plugin-city-sim` package import in `tauriSimBridge.ts`.
+
 To run scripts directly inside `app/`:
 ```bash
 cd app && bun run test
