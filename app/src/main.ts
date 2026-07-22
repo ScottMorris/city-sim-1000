@@ -200,6 +200,11 @@ compactInfoTabInspect.type = 'button';
 compactInfoTabInspect.className = 'compact-info-tab';
 compactInfoTabInspect.textContent = '🔍 Inspect';
 compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect);
+// compactInfoTabs is a DOM child of wrapper (like .minimap-panel and the hud
+// .overlay before it), so without this a tap on it also bubbles up to
+// wrapper's own pointerdown handler below and gets treated as a tile tap —
+// applying the Inspect tool underneath and re-toggling the tab right back.
+compactInfoTabs.addEventListener('pointerdown', (e) => e.stopPropagation());
 wrapper.append(compactInfoTabs);
 
 function setCompactInfoTab(tab: 'map' | 'inspect' | 'none') {
