@@ -113,7 +113,7 @@ export function bindPersistenceControls(options: PersistenceOptions) {
   const { saveBtn, loadBtn, downloadBtn, uploadBtn, fileInput, getState, getCmdLog, onStateLoaded } = options;
 
   saveBtn.addEventListener('click', () => {
-    saveToBrowser(getState());
+    saveToBrowser(getState(), getCmdLog?.());
     showToast('Saved to browser');
   });
 
@@ -123,7 +123,7 @@ export function bindPersistenceControls(options: PersistenceOptions) {
       showToast('No save found');
       return;
     }
-    onStateLoaded(loaded);
+    onStateLoaded(loaded.state, loaded.cmdLog);
     showToast('Loaded from browser');
   });
 

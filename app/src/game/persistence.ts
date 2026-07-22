@@ -242,17 +242,27 @@ export function copyState(state: GameState): GameState {
   return deserialize(serialize(state));
 }
 
-export function saveToBrowser(state: GameState) {
-  localStorage.setItem(LOCAL_STORAGE_KEY, serialize(state));
+export type CmdLogEntry = { tool: string; x: number; y: number };
+
+// Carries the command log alongside the state, same as downloadState/
+// uploadState below — without it, a bridge rebuilt from this save (every
+// page load, or an explicit Load) has no history to undo *from*, so its
+// first undo rolls all the way back to the engine's compiled-in starting
+// scenario instead of one step back from the loaded save.
+export function saveToBrowser(state: GameState, cmdLog?: CmdLogEntry[]) {
+  const data: Record<string, unknown> = JSON.parse(serialize(state));
+  if (cmdLog?.length) data.cmdLog = cmdLog;
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
 }
 
-export function loadFromBrowser(): GameState | null {
+export function loadFromBrowser(): { state: GameState; cmdLog?: CmdLogEntry[] } | null {
   const data = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!data) return null;
-  return deserialize(data);
+  const raw = JSON.parse(data) as Record<string, unknown>;
+  const { cmdLog, ...stateData } = raw;
+  const state = deserialize(JSON.stringify(stateData));
+  return { state, cmdLog: Array.isArray(cmdLog) ? (cmdLog as CmdLogEntry[]) : undefined };
 }
-
-export type CmdLogEntry = { tool: string; x: number; y: number };
 
 export function downloadState(
   state: GameState,

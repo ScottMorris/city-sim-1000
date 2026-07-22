@@ -364,7 +364,12 @@ function cancelPendingTouchApply() {
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
-let state: GameState = loadFromBrowser() ?? createInitialState();
+const browserSave = loadFromBrowser();
+let state: GameState = browserSave?.state ?? createInitialState();
+// Without this, a bridge built from a loaded save has no command history to
+// undo *from* — its first undo would roll the sim all the way back to its
+// compiled-in starting scenario instead of one step back from the save.
+const initialCmdLog = browserSave?.cmdLog;
 state.settings = ensureSettingsShape(state.settings);
 // Dev override, same pattern as `?bridge=`: forces `desktop`/`mobile` for
 // this load. Unlike the bridge param, this mutates `state.settings` (the
@@ -385,11 +390,15 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 const isTauri = bridgeParam === 'tauri' || (inTauri && bridgeParam !== 'wasm' && bridgeParam !== 'ts');
 const isTs    = bridgeParam === 'ts';
 let activeBridgeKind: 'wasm' | 'local' | 'tauri' = isTauri ? 'tauri' : isTs ? 'local' : 'wasm';
+// Same cast the file-upload path already uses (see bindPersistenceControls'
+// onStateLoaded below) — persisted command logs are loosely typed (`tool` is
+// a plain string on disk) versus the bridges' stricter runtime Tool type.
+const typedInitialCmdLog = initialCmdLog as { tool: Tool; x: number; y: number }[] | undefined;
 let bridge: SimBridge = isTauri
   ? new TauriSimBridge(state)
   : isTs
-    ? new LocalSimBridge(state, { ticksPerSecond: 20 })
-    : new WasmSimBridge(state);
+    ? new LocalSimBridge(state, { ticksPerSecond: 20, initialCmdLog: typedInitialCmdLog })
+    : new WasmSimBridge(state, {}, typedInitialCmdLog?.length ? typedInitialCmdLog : undefined);
 
 const loadingScreen = initLoadingScreen(document.body);
 
