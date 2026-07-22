@@ -306,6 +306,19 @@ let lastPinchDistance: number | null = null;
 const TOUCH_TAP_SLOP_PX = 10;
 let touchDownPos: { x: number; y: number } | null = null;
 let touchSlopExceeded = false;
+// A touch pointerdown can't tell in advance whether a second finger is about
+// to land and turn it into a pinch/pan gesture — without this, the first
+// finger down immediately (and expensively) applies the active tool to
+// whatever tile it landed on. Give a fast-following second finger a brief
+// grace window to arrive and cancel it before it commits.
+const TOUCH_MULTI_TOUCH_GRACE_MS = 60;
+let pendingTouchApply: { tile: Position; timeoutId: number } | null = null;
+
+function cancelPendingTouchApply() {
+  if (!pendingTouchApply) return;
+  window.clearTimeout(pendingTouchApply.timeoutId);
+  pendingTouchApply = null;
+}
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
@@ -572,6 +585,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         // paint before it can commit another tile, and start a pinch-pan
         // gesture from the fingers' midpoint/spread. Re-priming on a third
         // finger joining (rather than requiring exactly two) avoids a jump.
+        cancelPendingTouchApply();
         isPainting = false;
         lastPainted = null;
         hovered = null;
@@ -603,9 +617,23 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
       }
     }
     if (hovered) {
-      isPainting = true;
-      lastPainted = hovered;
-      applyCurrentTool(hovered);
+      if (e.pointerType === 'touch') {
+        cancelPendingTouchApply();
+        const tile = hovered;
+        pendingTouchApply = {
+          tile,
+          timeoutId: window.setTimeout(() => {
+            pendingTouchApply = null;
+            isPainting = true;
+            lastPainted = tile;
+            applyCurrentTool(tile);
+          }, TOUCH_MULTI_TOUCH_GRACE_MS)
+        };
+      } else {
+        isPainting = true;
+        lastPainted = hovered;
+        applyCurrentTool(hovered);
+      }
     }
   });
 
@@ -652,6 +680,10 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         return;
       }
       touchSlopExceeded = true;
+      // Dragging means this was never a stationary tap — let the paint-while-
+      // dragging logic below take over from here rather than also committing
+      // the original touchdown tile once the grace window above elapses.
+      cancelPendingTouchApply();
     }
     const primaryDown = (e.buttons & 1) !== 0;
     const secondaryDown = (e.buttons & 2) !== 0;
