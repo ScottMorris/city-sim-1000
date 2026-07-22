@@ -7,6 +7,8 @@ export interface RadioWidget {
   setVolume: (volume: number) => void;
   getVolume: () => number;
   setPlaylistUrl: (url: string) => void;
+  /** Removes this widget's document-level listener. Call on teardown/rebuild. */
+  dispose: () => void;
 }
 
 export interface RadioWidgetOptions {
@@ -94,6 +96,11 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   };
 
   let hidePopoverTimeout: number | null = null;
+  // No hover on touch, so the popover (full title/artist/status/cover —
+  // compact mode strips the marquee+cover down to icon buttons only, see
+  // toolbar.css) needs a tap-triggered path that survives finger-up instead
+  // of closing on the next mouseleave-equivalent.
+  let popoverPinned = false;
 
   cover.addEventListener('error', () => {
     cover.classList.remove('visible');
@@ -119,7 +126,23 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   };
 
   const hidePopover = () => {
+    if (popoverPinned) return;
     hidePopoverTimeout = window.setTimeout(() => widget.classList.remove('radio-popover-open'), 80);
+  };
+
+  const togglePopoverPinned = () => {
+    popoverPinned = !popoverPinned;
+    if (popoverPinned) {
+      showPopover();
+    } else {
+      widget.classList.remove('radio-popover-open');
+    }
+  };
+
+  const closePinnedPopoverOutside = (event: PointerEvent) => {
+    if (!popoverPinned || widget.contains(event.target as Node | null)) return;
+    popoverPinned = false;
+    widget.classList.remove('radio-popover-open');
   };
 
   widget.addEventListener('mouseenter', showPopover);
@@ -130,6 +153,9 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
       hidePopover();
     }
   });
+  cover.addEventListener('click', togglePopoverPinned);
+  marqueeViewport.addEventListener('click', togglePopoverPinned);
+  document.addEventListener('pointerdown', closePinnedPopoverOutside);
 
   prevBtn.addEventListener('click', () => goToRelativeTrack(-1));
   nextBtn.addEventListener('click', () => goToRelativeTrack(1));
@@ -362,6 +388,9 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
       if (!url) return;
       playlistUrl = url;
       void loadPlaylist();
+    },
+    dispose: () => {
+      document.removeEventListener('pointerdown', closePinnedPopoverOutside);
     }
   };
 }

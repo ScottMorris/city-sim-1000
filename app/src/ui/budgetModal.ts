@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: MIT
 
 import { GameState } from '../game/gameState';
+import { showToast } from './dialogs';
 import { computeRunwayDays, getQuarterSummary, getRecentMonths } from '../game/economy';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 import { DEFAULT_BYLAWS, LIGHTING_POLICIES, applyLightingPolicy } from '../game/bylaws';
@@ -344,6 +345,15 @@ export function initBudgetModal(options: BudgetModalOptions) {
 
     const strip = document.createElement('div');
     strip.className = 'ledger-strip';
+    // No hover on touch — `.ledger-month`'s exact net-per-month figure
+    // (renderQuarterStrip's `title`) is otherwise only readable via the
+    // relative bar height. `strip`'s own innerHTML is replaced wholesale on
+    // every renderLive() tick, so this listener is delegated (attached once
+    // to the stable `strip` node) rather than re-bound to each bar.
+    strip.addEventListener('click', (e) => {
+      const month = (e.target as HTMLElement).closest<HTMLElement>('.ledger-month');
+      if (month?.title) showToast(month.title, { id: 'ledger-month-detail', durationMs: 4000 });
+    });
 
     // --- City Hall sliders (built once; live labels updated in place) ---
     const pendingPolicy: BudgetPolicy = { ...getState().policies.budget };

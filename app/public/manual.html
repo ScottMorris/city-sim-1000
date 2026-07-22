@@ -34,7 +34,7 @@
       <li><strong>Drag</strong> the map to pan. Use your mouse wheel or pinch to zoom.</li>
       <li><strong>Right-click</strong> to bulldoze tiles quickly — click once or hold and drag to sweep clears. Middle-click or hold <strong>Alt</strong> to pan instead. Right-click does nothing while Inspect is active.</li>
       <li>Choose a tool from the toolbar and click tiles to apply it.</li>
-      <li>Hover over demand bars to view the approximate need for Residential, Commercial, and Industrial zones.</li>
+      <li>The R/C/I demand bars fill up to show approximate need for Residential, Commercial, and Industrial zones; hover one on desktop for the exact percentage.</li>
       <li>Switch to the <strong>Inspect</strong> tool and click tiles to view terrain, utilities, and zone data.</li>
       <li>The tool info card beside the inspector shows cost, upkeep, and stats for the active tool; hit <em>Pin</em> to keep it always on.</li>
       <li>Use the Debug overlay button to see live stats (demand, utilities, zone counts) while tuning growth.</li>
@@ -43,11 +43,20 @@
       <li><strong>Undo and redo</strong>: <code>Ctrl/Cmd+Z</code> undoes your last action; <code>Ctrl/Cmd+Shift+Z</code> or <code>Ctrl/Cmd+Y</code> redoes it. A drag that paints several tiles counts as one action. Undo rewinds the city to the moment just before that action — tiles, money, population, <em>and the clock</em> — and redo returns you exactly to where you pressed undo. When an undo skips back a day or more, the toast says how far (e.g. "Undone — rewound 3 days"). Holding the key does not repeat: each undo takes its own keypress. Making a new change clears the redo history. Undo reaches back only as far as the current session: loading a save (or reloading the page) starts a fresh history, so a loaded city can never be damaged by undoing "past" it. Taxes and programmes are never touched by undo — only tool actions are. On phones and other compact layouts, a round ↩️ button sits above the radio in the toolbar dock for one-tap undo; it greys out when there is nothing to undo.</li>
     </ul>
 
+    <h2>Touch &amp; compact layout</h2>
+    <ul>
+      <li>On a phone-sized viewport (or any narrow/short window) the game switches to a compact layout automatically: a thumb-zone button at the bottom of the screen shows the current tool and its cost (e.g. "Road · $5.00") and opens a bottom sheet of every tool, grouped the same way as the desktop toolbar. Each button in the sheet shows its own cost directly — there's no hover to reveal it. Picking a tool closes the sheet.</li>
+      <li><strong>One finger</strong> drives the active tool exactly like a mouse click/drag; a <strong>second finger</strong> touching down always means camera control — it cancels any in-progress paint and switches to two-finger pan and pinch-zoom instead, so a stray second finger can never leave a half-finished drag behind. Pinch keeps the point under your fingers stationary.</li>
+      <li>The minimap and tile inspector share one small tabbed panel (🗺️ Map / 🔍 Inspect / 🛠️ Tool) above the toolbar dock instead of floating separately. Tapping a tile with the <strong>Inspect</strong> tool active automatically switches to the Inspect tab. The <strong>Tool</strong> tab shows the active tool's full details — upkeep, footprint, output, and hints — the same information the always-on desktop tool-info card shows; tap the tab again (or Map/Inspect) to close it and get the space back for the map.</li>
+      <li>A few desktop hover-only details get a tap equivalent on touch: tap the 🌲 <strong>Wilderness</strong> chip for its score breakdown, tap the radio's cover thumbnail for the full track title/artist (the marquee text is hidden in compact mode to save space, but the thumbnail stays visible even without cover art, precisely so there's always something to tap), and tap a bar in the City Ledger's quarterly trend strip for its exact monthly figure. Each shows briefly as a toast — tap elsewhere to dismiss it early.</li>
+      <li>Right-click bulldoze and Alt-pan have no touch equivalent yet — reach Bulldoze from the tool sheet instead.</li>
+    </ul>
+
     <h2>Radio</h2>
     <ul>
       <li>A compact radio widget sits at the trailing end of the toolbar (Budget/Bylaws/Settings live in the status ribbon instead). Emoji buttons control playback: ⏮️ previous, ▶️/⏸️ play or pause, ⏭️ next.</li>
       <li>The current track scrolls in a short marquee with “Artist — Title”; pausing also pauses the scroll and changing tracks resets it.</li>
-      <li>Hover or focus the radio to reveal a small popover above the toolbar with full track details and a larger cover preview when available. If no cover is provided, the thumbnail stays hidden.</li>
+      <li>Hover or focus the radio to reveal a small popover above the toolbar with full track details and a larger cover preview when available. If no cover is provided, the thumbnail stays hidden. On touch (where there's no hover), tap the cover thumbnail to pin the same popover open; tap it again, or tap anywhere else, to close it.</li>
       <li>If no playlist ships with the build yet, the radio reads “Radio offline” and controls are disabled until audio is added.</li>
     </ul>
 
@@ -102,7 +111,7 @@
 
     <h2>Wilderness</h2>
     <ul>
-      <li>The 🌲 <strong>Wilderness</strong> chip in the status ribbon scores how much of your map is thriving nature, 0–100, with a trend arrow. Hover it for the biggest contributors, positive and negative.</li>
+      <li>The 🌲 <strong>Wilderness</strong> chip in the status ribbon scores how much of your map is thriving nature, 0–100, with a trend arrow. Hover it (or tap it, on touch) for the biggest contributors, positive and negative.</li>
       <li>Nature is worth more as an <em>ecosystem</em>: contiguous forest and park patches beat scattered trees, waterfront greenery earns a wetland bonus, and isolated nature tiles are penalized for fragmentation.</li>
       <li>The minimap's <strong>Wilderness</strong> overlay paints the eco field on the map: lush green where nature thrives, grey where urban pressure dominates.</li>
       <li>Industry, roads, rail, and power infrastructure push the score down — coal plants hardest of all; wind and solar tread far more lightly, and hydro sits in between.</li>
@@ -137,7 +146,7 @@
     <h2>The status ribbon</h2>
     <ul>
       <li>The bar across the top shows treasury and monthly net, power and water balances, R/C/I demand columns, the calendar, population/jobs, and the 🌲 Wilderness score.</li>
-      <li>Hover any chip for details; the R/C/I columns rise with zone demand, SimCity-style.</li>
+      <li>Hover any chip for details (the treasury and Wilderness chips are also tap targets, on touch — treasury opens the City Ledger, Wilderness shows its breakdown); the R/C/I columns rise with zone demand, SimCity-style.</li>
       <li>Right side: a speed menu (icon shows the active tier — 🐢 Slow, 🐇 Fast, ⚡ Ludicrous — hotkeys <code>1</code>/<code>2</code>/<code>3</code>), a ⏸ pause toggle (hotkey <code>Space</code>; picking a speed while paused resumes at that speed), 📊 budget, 📜 bylaws, the 💾 saves menu, 📖 this manual, ⚙️ settings, and 🛠️ debug tools.</li>
     </ul>
   </body>

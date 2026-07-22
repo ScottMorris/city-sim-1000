@@ -93,12 +93,37 @@ PointerEvents in `main.ts`).*
   default camera zoom on compact layouts so tiles are finger-sized. `deps:` M1-1.
   **DoD:** on-device, single-tile placement is reliable at default zoom; slop does
   not affect mouse input. (#69, #98)
-- [ ] **M1-4 · Hover replacement.** Hovered-tile preview, tooltips, and `toolInfo`
+- [x] **M1-4 · Hover replacement.** Hovered-tile preview, tooltips, and `toolInfo`
   hover details don't exist on touch — surface the equivalent via tap feedback
   (e.g. tile inspect on tap with an inspect tool, tool details shown in the picker,
   M2-2). `deps:` M1-1, M2-2.
   **DoD:** every piece of information currently reachable only by hover has a touch
   path; documented in the manual.
+  *Shipped (#128):* audited every hover-only surface and gave each a tap path.
+  A new 🛠️ **Tool** tab joins M2-4's Map/Inspect compact panel — M2-2 only ever
+  gave the *cost* a compact home, so `hud.ts`'s full tool-info card (upkeep,
+  footprint, output, hints) had nowhere to live until now; `hud.ts`'s suppression
+  boolean became a three-state `ToolInfoMode` (`auto`/`forced`/`hidden`) since
+  the old pin-vs-Inspect precedence didn't apply once a dedicated tab existed.
+  The radio's hover/focus popover (`radio.ts`) — previously the *only* way to
+  see the current track/artist in compact mode, since the marquee is hidden
+  there for space — now also opens on tapping the cover thumbnail, which stays
+  visible even without cover art specifically so there's always a tap target;
+  the popover's `dispose()` needed wiring into `toolbar.ts`'s existing
+  rebuild-cleanup path (the toolbar, and the radio widget inside it, gets
+  fully torn down and recreated on every layout-mode flip). The 🌲 Wilderness
+  chip (now a real `<button>`, matching the treasury chip) and the City
+  Ledger's quarterly bars reveal their hover-only breakdown/exact-figure via a
+  toast on tap, reusing the same string already computed for their `title`
+  attribute rather than duplicating the formatting logic. `manual.html` gained
+  a "Touch & compact layout" section covering all of the above plus the
+  already-shipped M1-1/M1-2/M2-1/M2-4 gestures/shells it hadn't documented
+  yet. Playwright coverage added for the Tool tab and the two tap-reveal
+  paths (`app/e2e/mobile.spec.ts`) — hit one real flake in the wilderness
+  test (`hud.ts`'s wilderness score only populates a few sim ticks after
+  boot, so tapping too early bakes the generic fallback title into the toast;
+  fixed by waiting for the real title before tapping, not by weakening the
+  assertion).
 
 ## Phase M2 — Compact UI shell
 *Goal: tools get out of the way on small screens. The compact layout is a different
