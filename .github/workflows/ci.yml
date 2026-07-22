@@ -275,6 +275,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -312,6 +315,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -320,6 +326,12 @@ jobs:
 
       - name: Build Tauri plugin JS
         run: bun run build:plugin-js
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
 
       - name: Install Playwright browsers
         run: cd app && bunx playwright install --with-deps chromium
