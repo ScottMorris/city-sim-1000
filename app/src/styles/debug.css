@@ -1,0 +1,53 @@
+.debug-overlay {
+  position: absolute;
+  right: 12px;
+  top: calc(
+    var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 12px
+  );
+  min-width: 260px;
+  max-width: 360px;
+  background: rgba(10, 16, 32, 0.92);
+  border: 1px solid #35507a;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  display: none;
+  gap: 10px;
+}
+
+.debug-overlay.visible {
+  display: grid;
+}
+.debug-overlay.hidden {
+  display: none;
+}
+
+.debug-section {
+  border-bottom: 1px solid #1f2c4b;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.debug-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.debug-heading {
+  color: var(--accent);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.debug-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.debug-hint {
+  color: #9fb2d1;
+  font-size: 11px;
+  margin-top: 2px;
+}

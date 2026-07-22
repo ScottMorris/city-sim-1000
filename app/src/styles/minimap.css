@@ -1,0 +1,150 @@
+/* Minimap panel: mode chips, dual-canvas view, legend. See app/src/ui/minimap.ts. */
+
+.minimap-panel {
+  position: absolute;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  /* Never grow past the canvas area up beneath the toolbar. */
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  background: rgba(12, 20, 40, 0.9);
+  border: 2px solid #223557;
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.minimap-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.minimap-header-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.minimap-title {
+  color: var(--accent);
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.minimap-subtitle {
+  font-size: 11px;
+  color: #9fb2d1;
+}
+
+.minimap-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.minimap-panel .chip-button {
+  padding: 8px 10px;
+}
+
+.minimap-actions .chip-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.minimap-actions .minimap-span {
+  grid-column: 1 / -1;
+}
+
+.minimap-legend {
+  background: rgba(12, 20, 40, 0.75);
+  border: 1px solid #1f2c4b;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.minimap-legend summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 11px;
+  list-style: none;
+}
+
+.minimap-legend summary::-webkit-details-marker {
+  display: none;
+}
+
+.minimap-legend[open] summary {
+  margin-bottom: 4px;
+}
+
+.minimap-body {
+  margin-top: 8px;
+  background: rgba(9, 14, 26, 0.85);
+  border: 1px solid #1f2c4b;
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 10px;
+}
+
+.minimap-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.minimap-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  background: #0b1424;
+  border: 1px solid #1f2c4b;
+  border-radius: 10px;
+}
+
+.minimap-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.minimap-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #9fb2d1;
+}
+
+/* Matches deviceMode.ts's DEFAULT_COMPACT_BREAKPOINT_PX/
+   DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX — keep the two in sync, or CSS layout
+   and the JS-derived layoutMode can disagree. */
+@media (max-width: 900px), (max-height: 500px) {
+  /* Minimap and the tile inspector (hud.css's .overlay) now share this one
+     footprint, switched by .compact-info-tabs (hud.css) instead of each
+     floating independently (where they used to overlap by roughly half
+     their width on a phone). */
+  .minimap-panel {
+    left: auto;
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    /* Sits directly above .compact-info-tabs — dock height + its own gap,
+       plus the tab strip's own ~40px height and gap. */
+    bottom: calc(var(--compact-dock-height, 84px) + 8px + 40px + 8px);
+    width: min(100%, 280px);
+  }
+  /* Title + the panel's own Hide/Show button are redundant here — the tabs
+     (hud.css's .compact-info-tabs) now own showing/hiding it. */
+  .minimap-header {
+    display: none;
+  }
+  .canvas-wrapper[data-compact-info-tab='inspect'] .minimap-panel,
+  .canvas-wrapper[data-compact-info-tab='none'] .minimap-panel {
+    display: none !important;
+  }
+}

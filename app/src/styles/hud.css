@@ -1,0 +1,154 @@
+/* Tool-info / tile-inspector overlay (app/src/ui/hud.ts) and, in compact
+   layout, the tabs that switch it against the minimap for one shared
+   floating panel (app/src/ui/minimap.css owns the minimap side of that). */
+
+.overlay {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: grid;
+  gap: 8px;
+  width: 300px;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.status-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.map-stats {
+  font-size: 11px;
+  color: #9fb2d1;
+}
+
+.info-box {
+  background: rgba(10, 16, 32, 0.8);
+  padding: 10px;
+  border: 1px solid #1f2c4b;
+  border-radius: 8px;
+}
+
+.info-box.muted {
+  opacity: 0.65;
+}
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.info-label {
+  font-size: 11px;
+  color: #9fb2d1;
+}
+
+.info-name {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.info-meta {
+  font-size: 11px;
+  color: #9fb2d1;
+  margin-top: 2px;
+}
+
+.tool-rows {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.info-section {
+  display: grid;
+  gap: 6px;
+}
+
+.info-title {
+  display: grid;
+  gap: 2px;
+}
+
+.info-subtitle {
+  font-size: 11px;
+  color: #9fb2d1;
+  margin-top: 2px;
+}
+
+.tool-hints {
+  margin-top: 8px;
+  color: #9fb2d1;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tool-hints.warning {
+  color: #f08c42;
+}
+
+.tool-hints.subtle {
+  opacity: 0.9;
+}
+
+/* Compact layout only: the minimap and tile inspector share one floating
+   corner (see .overlay/.minimap-panel positioning in the compact breakpoint
+   below, and minimap.css's matching block) instead of each getting their
+   own, so these tabs pick which is showing. Always in the DOM (main.ts
+   creates them unconditionally) but only ever visible once the compact
+   breakpoint below turns display back on. */
+.compact-info-tabs {
+  display: none;
+  position: absolute;
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  /* Clears .toolbar-compact-dock (position: fixed, bottom: 0), whose real
+     height (safe-area-inset-bottom varies it) main.ts measures into this
+     var — see syncToolbarHeights(). The 84px fallback matches its typical
+     measured height before that first measurement lands. */
+  bottom: calc(var(--compact-dock-height, 84px) + 8px);
+  gap: 6px;
+  z-index: 7;
+}
+
+.compact-info-tab {
+  background: #132644;
+  border: 2px solid #223557;
+  border-radius: 10px;
+  color: var(--text);
+  padding: 8px 12px;
+  min-height: 40px;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #0a1020;
+}
+
+.compact-info-tab.active {
+  border-color: var(--accent);
+}
+
+@media (max-width: 900px), (max-height: 500px) {
+  .compact-info-tabs {
+    display: flex;
+  }
+  /* Minimap (minimap.css) and this tile inspector now share this one
+     footprint, switched by .compact-info-tabs above instead of each
+     floating independently (where they used to overlap by roughly half
+     their width on a phone). */
+  .overlay {
+    left: auto;
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    /* Sits directly above .compact-info-tabs — dock height + its own gap,
+       plus the tab strip's own ~40px height and gap. */
+    bottom: calc(var(--compact-dock-height, 84px) + 8px + 40px + 8px);
+    width: min(100%, 280px);
+  }
+  .canvas-wrapper[data-compact-info-tab='map'] .overlay,
+  .canvas-wrapper[data-compact-info-tab='none'] .overlay {
+    display: none !important;
+  }
+}
