@@ -351,6 +351,14 @@ const activeTouchPointers = new Map<number, { x: number; y: number }>();
 let isPinching = false;
 let lastPinchMidpoint: { x: number; y: number } | null = null;
 let lastPinchDistance: number | null = null;
+// Set when one finger of a multi-touch gesture lifts while another is still
+// down. Without this, the surviving finger's very next pointermove falls
+// through to plain single-finger paint-drag handling — using wherever that
+// finger currently happens to be as if it were a fresh tap — occasionally
+// leaving an unwanted tile behind right as a pinch/pan gesture ends. Stays
+// true until every finger is up; a genuinely new gesture starts fresh in
+// pointerdown.
+let ignoreTouchUntilAllLifted = false;
 // A single touch's down position and whether it's moved past tap slop yet —
 // keeps a slightly-trembling tap from registering as a one-tile drag-paint.
 const TOUCH_TAP_SLOP_PX = 10;
@@ -763,6 +771,7 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
         lastPainted = null;
         hovered = null;
         isPinching = true;
+        ignoreTouchUntilAllLifted = false;
         lastPinchMidpoint = touchMidpoint();
         lastPinchDistance = touchSpread(lastPinchMidpoint);
         return;
@@ -813,6 +822,9 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
   wrapper.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'touch' && activeTouchPointers.has(e.pointerId)) {
       activeTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (e.pointerType === 'touch' && ignoreTouchUntilAllLifted) {
+      return;
     }
     pointerActive = e.buttons !== 0;
     if (isPinching && lastPinchMidpoint && lastPinchDistance !== null) {
@@ -880,6 +892,25 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
   const stopPainting = (e?: PointerEvent) => {
     if (e?.pointerType === 'touch') {
       activeTouchPointers.delete(e.pointerId);
+      if (activeTouchPointers.size > 0) {
+        // One finger of a multi-touch gesture lifted, but at least one other
+        // is still down — stay fully inert (no accidental solo-paint using
+        // the survivor's current position) until every finger is up. See
+        // ignoreTouchUntilAllLifted's own comment for the failure mode this
+        // avoids.
+        isPanning = false;
+        isPinching = false;
+        lastPinchMidpoint = null;
+        lastPinchDistance = null;
+        touchDownPos = null;
+        touchSlopExceeded = false;
+        isPainting = false;
+        lastPainted = null;
+        pointerActive = false;
+        ignoreTouchUntilAllLifted = true;
+        return;
+      }
+      ignoreTouchUntilAllLifted = false;
     }
     isPanning = false;
     isPinching = false;

@@ -106,6 +106,69 @@ test.describe('mobile emulation', () => {
     expect(roadTiles).toEqual([]);
   });
 
+  test('lifting one finger of a two-finger gesture before the other does not leave a stray tile', async ({ page }) => {
+    await boot(page);
+    await mcp(page, 'set_speed', { multiplier: 0 });
+
+    // Found during the M4-3 device pass (#138): a real human two-finger lift
+    // is rarely simultaneous — one finger comes up first while the other is
+    // still down and often shifts slightly as it settles. stopPainting() used
+    // to run unconditionally on every single finger's pointerup, resetting
+    // isPinching regardless of whether another finger was still touching —
+    // the survivor's very next pointermove then fell through to plain
+    // single-finger paint-drag handling, occasionally placing a tile right
+    // where that finger happened to be.
+    await page.locator('.toolbar-current-tool-btn').tap();
+    await page.locator('.tool-sheet-button[data-tool="road"]').tap();
+
+    const box = await page.locator('#canvas-wrapper').boundingBox();
+    if (!box) throw new Error('#canvas-wrapper has no layout box');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    await page.evaluate(
+      async ({ cx, cy }) => {
+        const wrapper = document.querySelector('#canvas-wrapper');
+        if (!wrapper) throw new Error('#canvas-wrapper missing');
+        const fire = (type: string, id: number, x: number, y: number) => {
+          wrapper.dispatchEvent(
+            new PointerEvent(type, {
+              pointerId: id,
+              pointerType: 'touch',
+              clientX: x,
+              clientY: y,
+              bubbles: true,
+              cancelable: true,
+              isPrimary: id === 1,
+              buttons: 1
+            })
+          );
+        };
+        const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+        fire('pointerdown', 1, cx - 30, cy);
+        fire('pointerdown', 2, cx + 30, cy);
+        fire('pointermove', 1, cx - 50, cy - 10);
+        fire('pointermove', 2, cx + 50, cy + 10);
+        await wait(50);
+
+        // Finger 1 lifts alone; finger 2 stays down and settles slightly —
+        // exactly the asymmetric-lift pattern a real pinch produces.
+        fire('pointerup', 1, cx - 50, cy - 10);
+        await wait(30);
+        fire('pointermove', 2, cx + 55, cy + 15);
+        await wait(100);
+
+        fire('pointerup', 2, cx + 55, cy + 15);
+      },
+      { cx, cy }
+    );
+
+    await page.waitForTimeout(100);
+    const roadTiles = await mcp(page, 'get_tiles_where', { kind: 'road' });
+    expect(roadTiles).toEqual([]);
+  });
+
   test('compact combined tab surfaces tool details, labelled by the active tool (M1-4 hover replacement)', async ({ page }) => {
     await boot(page);
     // Desktop's always-on tool-info card only ever gets suppressed in
