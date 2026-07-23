@@ -10,16 +10,19 @@
    City Ledger (budget modal redesign)
    ========================================================================= */
 
-/* Everything below the header (summary cards, ledger, quarterly strip,
-   footer) lives in one scrolling region — see budgetModal.ts's `scrollArea`.
-   Without a single shared scroll container, each of those was a
-   non-shrinking flex sibling of `.budget-body` inside `.modal`'s flex
-   column, and on a small viewport they'd starve `.budget-body` down to
-   ~0px rather than yield space, silently clipping the whole ledger. */
+/* `.budget-scroll` (summary cards, ledger, quarterly strip, footer — see
+   budgetModal.ts's `scrollArea`) replaces those elements' old position as
+   direct flex children of `.modal`, but scrolls as one region only at
+   compact sizes (media query below). At desktop sizes it stays a transparent
+   flex passthrough — `.budget-body`'s two columns keep scrolling
+   *independently* there (a long ledger doesn't push the City Hall sliders
+   out of view), matching pre-#132 behaviour. Compact sizes need the single
+   shared scroll region because `header`/`summary`/`strip`/`footer` are
+   non-shrinking flex siblings of the one `min-height: 0` `body` — at small
+   heights they starved it to ~0px, silently clipping the whole ledger. */
 .budget-scroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -348,6 +351,12 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
+  /* Desktop only (undone at compact sizes below): stretches to fill
+     `.budget-scroll`'s remaining height so `.budget-column`'s own
+     `max-height: 100%` has something to measure against. */
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .budget-column {
@@ -358,6 +367,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Desktop only (undone at compact sizes below): each column scrolls on
+     its own, so a long ledger list doesn't push the City Hall sliders (or
+     vice versa) out of view. */
+  overflow-y: auto;
+  max-height: 100%;
 }
 
 .budget-section-title {
@@ -575,5 +589,25 @@
 
   .ledger-strip {
     grid-template-columns: 1fr;
+  }
+
+  /* At this size `header`/`summary`/`strip`/`footer` alone can already
+     exceed the modal's height, so `.budget-body`'s desktop-only stretch
+     (flex: 1/height: 100%) would starve it back down to ~0px the same way
+     it did before #132 — undo it and let `.budget-scroll` scroll the whole
+     region as one unit instead of `.budget-column` scrolling internally. */
+  .budget-scroll {
+    overflow-y: auto;
+  }
+
+  .budget-body {
+    flex: none;
+    min-height: auto;
+    height: auto;
+  }
+
+  .budget-column {
+    overflow-y: visible;
+    max-height: none;
   }
 }
