@@ -60,6 +60,15 @@ export function createHud(elements: HudElements) {
   // compact tab is open the card is fully hidden ('hidden') so the shared
   // panel is free for the minimap/tile inspector instead.
   let toolInfoMode: ToolInfoMode = 'auto';
+  // Tile-inspect results (tap a tile with the Inspect tool) previously
+  // showed whenever that tool was active with a selection, regardless of
+  // which compact tab was open — so they'd leak into the "Tool" tab too,
+  // since activeTool being Tool.Inspect has nothing to do with which tab
+  // the player tapped. Mirrors toolInfoMode: 'hidden' on any compact tab
+  // other than "Inspect" itself; 'auto'/'forced' both just mean "show it if
+  // there's actually a selection" — there's no pin-style precedence to
+  // choose between for tile results the way there is for the tool card.
+  let tileInspectMode: ToolInfoMode = 'auto';
 
   const ensureOverlayContainer = () => {
     if (!overlayContainer) {
@@ -129,7 +138,10 @@ export function createHud(elements: HudElements) {
 
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
     if (overlayFrozen) return;
-    const hasTileSelection = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
+    const hasTileSelection =
+      tileInspectMode !== 'hidden' && activeTool === Tool.Inspect && selected
+        ? getTile(state, selected.x, selected.y)
+        : null;
     const showToolInfo =
       toolInfoMode === 'forced' ? true :
       toolInfoMode === 'hidden' ? false :
@@ -313,5 +325,9 @@ export function createHud(elements: HudElements) {
     toolInfoMode = mode;
   };
 
-  return { update, renderOverlays, setToolInfoMode };
+  const setTileInspectMode = (mode: ToolInfoMode) => {
+    tileInspectMode = mode;
+  };
+
+  return { update, renderOverlays, setToolInfoMode, setTileInspectMode };
 }

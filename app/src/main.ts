@@ -226,9 +226,11 @@ compactInfoTabs.addEventListener('pointerdown', (e) => e.stopPropagation());
 wrapper.append(compactInfoTabs);
 
 // Reassigned once `hud`/`deviceMode` exist inside bootstrap() below (same
-// forward-declared-callback pattern as `handleDeviceModeChange`) — keeps the
-// tool-info card's visibility (hud.ts's setToolInfoMode) in sync with
-// whichever compact tab is open, on every tab switch and layout-mode flip.
+// forward-declared-callback pattern as `handleDeviceModeChange`) — keeps both
+// the tool-info card's and the tile-inspector's visibility (hud.ts's
+// setToolInfoMode/setTileInspectMode) in sync with whichever compact tab is
+// open, on every tab switch and layout-mode flip. They're never out of sync
+// with each other, so one callback drives both.
 let syncToolInfoMode: () => void = () => {};
 
 function setCompactInfoTab(tab: 'map' | 'inspect' | 'tool' | 'none') {
@@ -1063,6 +1065,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   syncToolInfoMode = () => {
     const compact = deviceMode.getMode().layoutMode === 'compact';
     hud.setToolInfoMode(!compact ? 'auto' : wrapper.dataset.compactInfoTab === 'tool' ? 'forced' : 'hidden');
+    hud.setTileInspectMode(!compact ? 'auto' : wrapper.dataset.compactInfoTab === 'inspect' ? 'forced' : 'hidden');
   };
   syncToolInfoMode();
   newsTicker = initNewsTicker({
