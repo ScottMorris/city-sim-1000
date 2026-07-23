@@ -229,7 +229,7 @@ aggressively, and desktop browser sessions currently don't autosave either.*
 *Goal: fast first load on cell data, sane battery/memory behaviour on mid-tier
 hardware.*
 
-- [ ] **M4-1 · Service worker precache audit.** Precache the essential payload (JS,
+- [x] **M4-1 · Service worker precache audit.** Precache the essential payload (JS,
   WASM from `app/src/wasm/`, icons, manual); **exclude radio audio entirely** —
   radio is off by default, so stations load/cache on demand only when the player
   turns it on. Verify WASM cache-busts correctly across `build:wasm` outputs.
@@ -237,6 +237,16 @@ hardware.*
   **DoD:** fresh install size measured and documented here; airplane-mode reload
   works with radio never having been enabled; a rebuilt WASM bundle is picked up
   after SW update, not served stale.
+  *Shipped (#79):* replaced the hand-written `app/public/service-worker.js` with
+  `vite-plugin-pwa` (Workbox `generateSW` mode), so the precache manifest and its
+  content-hash revisioning fall out of Vite's real build output instead of being
+  maintained by hand. 63 entries precached, 5.45 MiB — JS/WASM/CSS/icons/HTML,
+  `globIgnores` excludes `**/audio/**` and the two dead marketing images. Also
+  fixed a real bug found along the way: `radio.ts`'s `warmCacheForPlaylist()` was
+  eagerly fetching the entire ~55MB station library on every page load regardless
+  of whether the player ever opened the radio widget; it now fires once, lazily,
+  on first actual playback. Verified with a `bun run build` + `bun run preview` +
+  offline reload (airplane-mode boot works with radio untouched).
 - [ ] **M4-2 · Resolution cap + idle throttling.** Cap the Pixi canvas resolution
   (devicePixelRatio ≤ 2) and throttle the rAF loop when nothing is animating.
   `deps:` none.
