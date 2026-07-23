@@ -160,12 +160,36 @@ when tools are added.*
   the fixed compact toolbar dock anyway) to reclaim its flow height for the canvas.
   `deps:` M2-1. **DoD:** neither element occludes the canvas by default on a
   phone-sized viewport in either orientation. (#104)
-- [ ] **M2-5 · Responsive modals + manual.** Settings/budget/bylaws modals size to
+- [x] **M2-5 · Responsive modals + manual.** Settings/budget/bylaws modals size to
   small viewports in both orientations. `manual.html` is a separate document in an
   iframe — give it its own viewport meta and mobile styles, and document the touch
   controls (M1) in it. `deps:` M1-2, M2-1.
   **DoD:** all modals usable on a 360×640 viewport, portrait and landscape; manual
   readable without horizontal scrolling and covers touch controls.
+  *Shipped (#130):* the outer `.modal` shell (`min(90vw, 960px)` / `min(80dvh, 720px)`)
+  was already responsive — the real bugs were all in what's built inside it, found
+  by empirically measuring computed styles/bounding rects at 360×640 and 640×360,
+  not just reading the CSS. **Budget modal (critical):** `header`/`summary`/`strip`/
+  `footer` were four non-shrinking flex siblings of the one `min-height: 0` `body` —
+  at small heights they starved it to ~0px, silently clipping the entire ledger and
+  the footer behind the outer `.modal`'s `overflow: hidden`. Fixed by wrapping
+  everything but the header in one `.budget-scroll` region (`budgetModal.ts`) so the
+  whole thing scrolls as a unit instead of relying on `.budget-body`/`.budget-column`
+  fighting for space with siblings that couldn't shrink; `.budget-summary` and
+  `.ledger-strip`/`.ledger-columns` collapse to fewer/stacked columns at the
+  existing compact breakpoint. Also found and removed a dead `.ledger-body`
+  grid-column rule shadowed by `.budget-body`'s (same element, two classes) —
+  it never took effect. **Settings modal:** `.settings-row`'s `1fr 2fr auto` and
+  `.hotkey-row`'s `1fr 2fr` had no `minmax(0, …)`, and a hard-coded `180px` range
+  input width — combined, these overflowed the ~292px available content width at
+  360px. Bylaws modal needed no changes — its `.bylaws-options` `auto-fit`/
+  `minmax(240px, 1fr)` grid was already a good responsive pattern (self-collapses
+  to one column by container width, not a viewport breakpoint). `manual.html`
+  gains its own `viewport-fit=cover`, a compact-breakpoint media query (smaller
+  padding/font-size), and `overflow-wrap: break-word` on `<code>` so the long
+  comma-separated hotkey lists wrap instead of forcing horizontal scroll; its
+  touch-controls coverage was already added by M1-4's "Touch & compact layout"
+  section, verified readable at 360px width here.
 
 ## Phase M3 — Autosave + storage durability
 *Goal: nobody loses a city — on any platform. Mobile browsers discard background tabs

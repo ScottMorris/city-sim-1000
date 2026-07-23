@@ -10,8 +10,19 @@
    City Ledger (budget modal redesign)
    ========================================================================= */
 
-.ledger-body {
-  grid-template-columns: minmax(0, 1.8fr) minmax(220px, 1fr);
+/* Everything below the header (summary cards, ledger, quarterly strip,
+   footer) lives in one scrolling region — see budgetModal.ts's `scrollArea`.
+   Without a single shared scroll container, each of those was a
+   non-shrinking flex sibling of `.budget-body` inside `.modal`'s flex
+   column, and on a small viewport they'd starve `.budget-body` down to
+   ~0px rather than yield space, silently clipping the whole ledger. */
+.budget-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .ledger-main {
@@ -337,9 +348,6 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
-  flex: 1;
-  min-height: 0;
-  height: 100%;
 }
 
 .budget-column {
@@ -350,8 +358,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
-  max-height: 100%;
 }
 
 .budget-section-title {
@@ -552,4 +558,22 @@
   border: 1px solid #253a5a;
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+/* Matches deviceMode.ts's DEFAULT_COMPACT_BREAKPOINT_PX/
+   DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX — a 360×640 (or 640×360) modal falls
+   well inside this already (M2-5), so reuse it rather than pick a third,
+   modal-specific breakpoint. */
+@media (max-width: 900px), (max-height: 500px) {
+  .budget-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ledger-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .ledger-strip {
+    grid-template-columns: 1fr;
+  }
 }
