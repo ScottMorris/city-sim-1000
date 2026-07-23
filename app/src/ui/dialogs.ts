@@ -1,5 +1,6 @@
 import {
   SaveFormatError,
+  buildSaveFile,
   buildSaveMeta,
   decodeLegacySave,
   decodeSave,
@@ -11,6 +12,7 @@ import {
 import { extractClientState } from '../game/clientState';
 import { getSave, putSave } from '../game/saveStore';
 import { GameState } from '../game/gameState';
+import type { InputMode } from './deviceMode';
 
 let toastRoot: HTMLDivElement | null = null;
 const toastsById = new Map<string, HTMLDivElement>();
@@ -126,12 +128,29 @@ interface PersistenceOptions {
   onContainerLoaded: (container: SaveContainer) => Promise<void>;
   /** One-time import of a legacy JSON save (pre-CSAV upload). */
   onLegacyLoaded: (state: GameState) => Promise<void>;
+  /** Current touch/mouse input mode — gates the Web Share export path to touch devices; desktop always downloads. */
+  getInputMode: () => InputMode;
+}
+
+type ShareOutcome = 'shared' | 'cancelled' | 'unsupported' | 'failed';
+
+/** Attempt to export a save via the Web Share API (Android's share sheet, etc). Never throws — an unsupported browser or a real rejection both resolve to a fallback outcome for the caller to handle. */
+async function attemptShareSave(file: File): Promise<ShareOutcome> {
+  if (!navigator.share || !navigator.canShare) return 'unsupported';
+  if (!navigator.canShare({ files: [file] })) return 'unsupported';
+  try {
+    await navigator.share({ files: [file], title: 'City Sim save', text: file.name });
+    return 'shared';
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return 'cancelled';
+    return 'failed';
+  }
 }
 
 export function bindPersistenceControls(options: PersistenceOptions) {
   const {
     saveBtn, loadBtn, downloadBtn, uploadBtn, fileInput,
-    getState, getEngineSnapshot, onContainerLoaded, onLegacyLoaded
+    getState, getEngineSnapshot, onContainerLoaded, onLegacyLoaded, getInputMode
   } = options;
 
   const buildContainer = async (): Promise<Uint8Array> => {
@@ -166,9 +185,18 @@ export function bindPersistenceControls(options: PersistenceOptions) {
 
   downloadBtn.addEventListener('click', () => {
     void buildContainer()
-      .then(bytes => {
+      .then(async bytes => {
         const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '');
-        downloadSave(bytes, `city-sim-${stamp}.citysim`);
+        const filename = `city-sim-${stamp}.citysim`;
+        // Touch devices get a share-sheet-first export (Android's "Download"
+        // menu item is awkward to reach from a share sheet-native OS); mouse
+        // input keeps the exact `<a download>` behaviour unchanged.
+        if (getInputMode() === 'touch') {
+          const outcome = await attemptShareSave(buildSaveFile(bytes, filename));
+          if (outcome === 'shared' || outcome === 'cancelled') return;
+          // 'unsupported' or 'failed' fall through to the download path below.
+        }
+        downloadSave(bytes, filename);
       })
       .catch(() => showToast('Download failed', { severity: 'warning' }));
   });

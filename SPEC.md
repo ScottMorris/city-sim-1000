@@ -363,7 +363,7 @@ Expenses:
 
 ### Import/Export
 
-* Export: download a `.citysim` binary container
+* Export: download a `.citysim` binary container; on touch devices this instead opens the OS share sheet via the Web Share API, falling back to a plain download when sharing isn't supported or the user cancels
 * Import: upload `.citysim` (or a legacy JSON export) → validation → load
 
 ---
