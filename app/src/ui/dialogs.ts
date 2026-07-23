@@ -142,7 +142,10 @@ async function attemptShareSave(file: File): Promise<ShareOutcome> {
     await navigator.share({ files: [file], title: 'City Sim save', text: file.name });
     return 'shared';
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') return 'cancelled';
+    // DOMException's prototype chain isn't reliably `instanceof Error` across
+    // environments (Node's built-in DOMException vs. a browser's), so check
+    // `.name` directly rather than gating on `instanceof Error` first.
+    if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') return 'cancelled';
     return 'failed';
   }
 }
