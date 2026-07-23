@@ -244,10 +244,12 @@ export interface Tile {
 
 ## 6.3 Camera
 
-* Pan with right-click drag
-* Zoom in discrete steps: 1.0 → 1.5 → 2.0
-* Pixel-snap at all zoom levels
-* Optional easing for panning
+* Pan by dragging with the mouse, or with `WASD`/arrow keys; right-click drag is reserved for quick bulldoze instead
+* Continuous zoom (not discrete steps) via scroll wheel or pinch, clamped to `MIN_SCALE`–`MAX_SCALE` (0.5×–3×)
+* Zoom keeps the point under the cursor/pinch midpoint stationary
+* Touch input: one finger drives the active tool exactly like a mouse click/drag; a second finger touching down always means camera control — it cancels any in-progress paint and switches to two-finger pan + pinch-zoom, so a stray second finger never leaves a half-finished drag behind
+* Tap slop: a small movement tolerance on touch so a slightly-moving finger still registers as a tap rather than a one-tile drag-paint
+* Compact layout uses a deeper default zoom than desktop so tiles stay finger-sized
 
 ---
 
@@ -357,14 +359,37 @@ Expenses:
 
 ### IndexedDB
 
-* Database `city-sim-1000`, store `saves`, one record per slot (`manual`; `autosave` planned)
+* Database `city-sim-1000`, store `saves`, one record per slot: `manual` (explicit Save) and `autosave` (periodic, see below)
 * Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard) + client JSON (settings/bylaws)
 * Legacy LocalStorage key `city-sim-1000-save` (plain JSON) is imported once and cleared after a successful CSAV write
+
+### Autosave
+
+* Cross-platform (not mobile-only): desktop browser tabs lose unsaved progress just as easily as a phone browser reclaiming a background tab
+* Writes to the dedicated `autosave` slot every 60 seconds while the sim tick has advanced (skipped on an idle/paused city), plus an immediate flush on `visibilitychange` (tab hidden) and `pagehide`
+* Never touches the `manual` slot or the undo history — autosave is a pure read of the engine
+* On boot, whichever of `manual`/`autosave` is newest wins, with a toast naming which one and how long ago it was written (e.g. "Restored autosave from 2 min ago")
+* `navigator.storage.persist()` is requested once after the first successful save, best-effort — reduces (never eliminates) the browser's chance of evicting IndexedDB data under storage pressure
 
 ### Import/Export
 
 * Export: download a `.citysim` binary container; on touch devices this instead opens the OS share sheet via the Web Share API, falling back to a plain download when sharing isn't supported or the user cancels
 * Import: upload `.citysim` (or a legacy JSON export) → validation → load
+
+---
+
+## 6.7 Mobile & Touch Input
+
+* **Detection, not UA sniffing** — two independent axes, each re-evaluated live as the environment changes (no reload needed):
+  * *Input mode* (`touch` | `mouse`): `(pointer: coarse)` media query, falling back to `navigator.maxTouchPoints` if `matchMedia` is unavailable
+  * *Layout mode* (`compact` | `full`): viewport width ≤ 900px **or** height ≤ 500px — matching on either dimension (not just width) catches a phone in landscape, which is comfortably wider than 900px but too short for a full desktop shell to leave any canvas
+* A tablet gets full layout with touch-sized targets; a desktop with a touchscreen gets full layout with touch gestures — the two axes are independent
+* **Override**: a `ui: 'auto' | 'desktop' | 'mobile'` setting (Settings modal) forces a mode regardless of detection; `?ui=mobile` / `?ui=desktop` in the URL forces it for a single dev/test load and persists into the setting if the player then explicitly Saves
+* **Compact UI shell**: the desktop toolbar row is replaced by a thumb-zone "current tool" button (bottom-right, shows the active tool + cost) that opens a bottom sheet listing every tool; the tile-inspector and tool-info card share one small tabbed panel (Map / Inspect) above the sheet instead of each floating independently, auto-switching content and label to match whichever the active tool makes relevant — the same logic desktop's always-on tool-info card already used
+* **Gesture model**: one finger drives the active tool exactly like a mouse click/drag; a second finger touching down always means camera control (cancels any in-progress paint, switches to two-finger pan + pinch-zoom); a small tap-slop tolerance keeps a slightly-moving finger from registering as an accidental drag-paint
+* **Safe areas**: `viewport-fit=cover` plus `env(safe-area-inset-*)` padding on HUD/toolbar chrome so notches/home indicators never cover controls; `dvh`/`svh` (not bare `vh`) so the layout survives the mobile browser chrome showing/hiding
+* **Save export**: touch devices try the Web Share API first (native share sheet), falling back to the desktop download path when unsupported or cancelled
+* **Radio**: gesture-gated like any autoplay-restricted audio — enabling it is itself the qualifying tap; an out-of-band interruption (OS audio focus loss, a phone call) resyncs the play/pause UI rather than leaving it claiming to still be playing
 
 ---
 
@@ -398,6 +423,9 @@ Create `public/manual.html` with:
 ## 9. Performance Targets
 
 * 60 FPS on modern desktop browsers
+* 30 FPS minimum on a mid-tier Android phone (not a flagship) — verified ~60fps sustained on a Google Pixel 8 Pro with only slight thermal warmth over a play session
+* Pixi canvas `resolution` capped at `min(devicePixelRatio, 2)` — retina-sharp without paying the full uncapped cost on DPR-3 phones
+* The per-frame redraw is skipped when the sim is paused and nothing that feeds it (camera, hover/selection, tool, engine mirror) has changed since the last frame
 * Limit re-drawing:
 
   * Only redraw changed tiles
