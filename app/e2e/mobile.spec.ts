@@ -106,16 +106,24 @@ test.describe('mobile emulation', () => {
     expect(roadTiles).toEqual([]);
   });
 
-  test('compact Tool tab surfaces full tool details (M1-4 hover replacement)', async ({ page }) => {
+  test('compact combined tab surfaces tool details, labelled by the active tool (M1-4 hover replacement)', async ({ page }) => {
     await boot(page);
     // Desktop's always-on tool-info card only ever gets suppressed in
-    // compact layout — the Tool tab is its dedicated compact-mode home.
+    // compact layout — this tab is its dedicated compact-mode home. It's one
+    // combined tab (not a separate Inspect + Tool pair) that auto-switches
+    // content exactly like desktop does: tile-inspect results while using
+    // the Inspect tool, otherwise the active tool's own card. Its own label
+    // follows suit, since there's nothing to inspect for the Inspect tool
+    // itself.
     const overlay = page.locator('.overlay');
     await expect(overlay).toHaveCount(0);
+    const combinedTab = page.locator('.compact-info-tab').nth(1);
+    await expect(combinedTab).toHaveText('🔍 Inspect');
 
     await page.locator('.toolbar-current-tool-btn').tap();
     await page.locator('.tool-sheet-button[data-tool="road"]').tap();
-    await page.locator('.compact-info-tab', { hasText: 'Tool' }).tap();
+    await expect(combinedTab).toHaveText('🛠️ Details');
+    await combinedTab.tap();
 
     const infoSection = page.locator('.overlay .info-section').first();
     await expect(infoSection).toContainText('Cost');
@@ -126,6 +134,12 @@ test.describe('mobile emulation', () => {
     await page.locator('.compact-info-tab', { hasText: 'Map' }).tap();
     await expect(overlay).toBeHidden();
     await expect(page.locator('.minimap-panel')).toBeVisible();
+
+    // Back to the Inspect tool: label reverts, and tapping a tile now shows
+    // tile-inspect results in the very same tab/spot instead of the tool card.
+    await page.locator('.toolbar-current-tool-btn').tap();
+    await page.locator('.tool-sheet-button[data-tool="inspect"]').tap();
+    await expect(combinedTab).toHaveText('🔍 Inspect');
   });
 
   test('wilderness chip and radio cover reveal hover-only info on tap', async ({ page }) => {
