@@ -452,3 +452,8 @@ export function downloadSave(container: Uint8Array, filename: string): void {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** Wrap a CSAV container as a `File` — same bytes/filename convention as `downloadSave`, shareable via the Web Share API. */
+export function buildSaveFile(container: Uint8Array, filename: string): File {
+  return new File([container.slice().buffer as ArrayBuffer], filename, { type: 'application/octet-stream' });
+}

@@ -1366,7 +1366,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     getState: () => state,
     getEngineSnapshot: () => bridge.getSnapshot(),
     onContainerLoaded: loadCityContainer,
-    onLegacyLoaded: importLegacyCity
+    onLegacyLoaded: importLegacyCity,
+    getInputMode: () => deviceMode.getMode().inputMode
   });
 
   manualBtn.addEventListener('click', () => showManualModal());

@@ -195,6 +195,19 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     updateMarqueeAnimation();
   });
 
+  // The browser/OS can pause playback out-of-band (another app grabbing audio
+  // focus, a phone call, a platform auto-pausing backgrounded audio) without
+  // going through togglePlay(). Resync state.playing so the UI stops claiming
+  // it's playing silence. Safe to fire redundantly when we paused it ourselves.
+  audio.addEventListener('pause', () => resyncPlayingFromAudio());
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      resyncPlayingFromAudio();
+    }
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
   function createIconButton(icon: string, label: string, action: string) {
     const btn = document.createElement('button');
     btn.className = 'radio-icon-button';
@@ -283,6 +296,14 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     playBtn.textContent = state.playing ? '⏸️' : '▶️';
     playBtn.title = state.playing ? 'Pause' : 'Play';
     playBtn.setAttribute('aria-label', state.playing ? 'Pause' : 'Play');
+  }
+
+  function resyncPlayingFromAudio() {
+    if (!state.playing || !audio.paused) return;
+    state.playing = false;
+    updatePlayLabel();
+    updateMarqueeAnimation();
+    setPopoverMetaForCurrentTrack();
   }
 
   function togglePlay() {
@@ -397,6 +418,7 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     },
     dispose: () => {
       document.removeEventListener('pointerdown', closePinnedPopoverOutside);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     }
   };
 }
