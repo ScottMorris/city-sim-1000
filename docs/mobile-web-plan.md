@@ -326,8 +326,18 @@ hardware.*
     cluster (undo above radio), aligned with neither — changed to `flex-end`.
 
   Filed, not fixed here: a pinch-zoom/two-finger gesture bug found while
-  playtesting (#138) — needs hands-on iterative debugging on a live device
-  rather than a blind fix.
+  playtesting (#138) — needed hands-on iterative debugging on a live device
+  rather than a blind fix. *Fixed separately:* a real two-finger lift is
+  rarely simultaneous — one finger lifts first while the other, still down,
+  often shifts slightly as it settles. `stopPainting()` reset `isPinching`
+  unconditionally on any single finger's `pointerup`, so the survivor's next
+  `pointermove` fell through to plain single-finger paint-drag handling and
+  occasionally placed a stray tile right where it happened to be. Added
+  `ignoreTouchUntilAllLifted`: once any finger of a multi-touch gesture
+  lifts, stay inert until every finger is up. Verified with a negative
+  control (reverted the fix, confirmed the exact repro reliably placed a
+  tile; restored it, confirmed zero) plus a new e2e regression test covering
+  the asymmetric-lift sequence the existing two-finger test never exercised.
 - [x] **M4-4 · Gesture-gated audio start.** Mobile browsers require a user gesture
   before audio plays. Radio is off by default, so this only bites when the player
   enables it — make sure enabling radio (a tap) is itself the gesture, handle the
