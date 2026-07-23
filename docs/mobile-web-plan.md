@@ -190,6 +190,12 @@ when tools are added.*
   comma-separated hotkey lists wrap instead of forcing horizontal scroll; its
   touch-controls coverage was already added by M1-4's "Touch & compact layout"
   section, verified readable at 360px width here.
+  *Follow-up:* the initial `.budget-scroll` restructure applied unconditionally,
+  losing desktop's independent per-column scrolling in the ledger (a long ledger
+  list could push the City Hall sliders out of view along with it, whereas before
+  each column scrolled on its own) — gated the single-scroll-region behaviour
+  behind the same compact media query so desktop keeps its original per-column
+  scroll and only compact sizes get the starvation fix.
 
 ## Phase M3 — Autosave + storage durability
 *Goal: nobody loses a city — on any platform. Mobile browsers discard background tabs
