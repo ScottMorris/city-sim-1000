@@ -7,7 +7,7 @@
     },
     "app": {
       "name": "city-sim-1000",
-      "version": "0.0.1",
+      "version": "0.1.0",
       "dependencies": {
         "@tauri-apps/api": "^2.0.0",
         "pixi.js": "^8.1.5",
