@@ -6,6 +6,9 @@
   );
   min-width: 260px;
   max-width: 360px;
+  /* Unclamped by default — this is the original, desktop-oriented "full"
+     view. It's fine to dominate the screen there since it never has to
+     compete with the map for room the way it does on a phone. */
   max-height: calc(100% - 24px);
   overflow-y: auto;
   background: rgba(10, 16, 32, 0.92);
@@ -24,14 +27,27 @@
   display: none;
 }
 
-@media (max-width: 900px), (max-height: 500px) {
-  .debug-overlay {
-    /* Full-height-ish on a phone would leave nothing to play — cap it to a
-       corner panel short enough that most of the map stays visible/playable
-       underneath while it's open. */
-    max-height: min(40vh, 40dvh);
-    max-width: min(300px, calc(100vw - 24px));
-  }
+.debug-overlay.mode-mini {
+  /* Mini mode is FPS + Memory only (~4 lines) — small enough on any
+     viewport that it never needs to scroll and never has to fight the map
+     for screen space, on a phone or otherwise. */
+  min-width: 0;
+  max-width: 220px;
+  max-height: none;
+  overflow-y: visible;
+}
+
+.debug-mode-toggle {
+  /* .debug-overlay is display:grid — justify-self (not margin-left:auto)
+     is what right-aligns a single grid item within its own row/cell. */
+  justify-self: end;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
 }
 
 .debug-section {
