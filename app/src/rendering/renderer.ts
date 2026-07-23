@@ -100,7 +100,11 @@ export class MapRenderer {
     await this.app.init({
       background: '#0b1424',
       resizeTo,
-      antialias: true
+      antialias: true,
+      // Cap device-pixel-ratio scaling at 2x — retina-sharp without paying
+      // the full uncapped cost on DPR-3 mobile devices (Pixi v8 defaults to
+      // window.devicePixelRatio with no cap).
+      resolution: Math.min(window.devicePixelRatio, 2)
     });
     this.parent.appendChild(this.app.canvas);
     this.app.stage.addChild(this.container);

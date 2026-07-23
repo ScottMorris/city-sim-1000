@@ -161,6 +161,21 @@ const MAX_STEP_DT_S = 2;
 let stepTimer: ReturnType<typeof setInterval> | null = null;
 let lastStepAt = 0;
 
+// Bumped every time `apply_tool` runs (see the 'apply_tool' case below).
+// `apply_tool` mutates tiles directly and is NOT gated by the speed-scaled
+// tick accumulator (a tool placed while paused changes the tile buffer
+// without bumping tick_count) — WasmSimBridge stamps every step_result/
+// undo_result/redo_result/load_result with the current value of this counter
+// so it can tell "buffer identical to what I already applied" (same tick AND
+// same mutationSeq) apart from "a tool was placed since, tick just hasn't
+// moved because we're paused" (same tick, different mutationSeq). Bumping it
+// synchronously inside the single-threaded worker means any step_result
+// gathered after an apply_tool call is guaranteed to carry the post-mutation
+// value — no ack/race window, unlike a main-thread "did I just send a
+// command" flag (which can't tell a stale in-flight step_result apart from
+// a fresh post-mutation one).
+let mutationSeq = 0;
+
 function startStepLoop(): void {
   if (stepTimer !== null) return;
   lastStepAt = performance.now();
@@ -172,7 +187,7 @@ function startStepLoop(): void {
     host.step(dt);
     const bytes = host.tile_buffer();
     const stats = gatherStats(host);
-    self.postMessage({ type: 'step_result', bytes, stats }, { transfer: [bytes.buffer as ArrayBuffer] });
+    self.postMessage({ type: 'step_result', bytes, stats, mutationSeq }, { transfer: [bytes.buffer as ArrayBuffer] });
   }, STEP_INTERVAL_MS);
 }
 
@@ -256,6 +271,10 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'apply_tool': {
       if (!host) break;
       const success = host.apply_tool(msg.payload.tool, msg.payload.x, msg.payload.y, msg.payload.strokeId);
+      // Bump unconditionally (not just on success) — cheap, and keeps this
+      // simple; a rejected placement just costs one extra harmless apply on
+      // the main thread instead of a missed one.
+      mutationSeq++;
       self.postMessage({ type: 'apply_result', success, history: historyFlags(host) });
       break;
     }
@@ -276,7 +295,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         const bytes = host.tile_buffer();
         const stats = gatherStats(host);
         self.postMessage(
-          { type: 'undo_result', happened: true, bytes, stats, history: historyFlags(host) },
+          { type: 'undo_result', happened: true, bytes, stats, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -291,7 +310,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         const bytes = host.tile_buffer();
         const stats = gatherStats(host);
         self.postMessage(
-          { type: 'redo_result', happened: true, bytes, stats, history: historyFlags(host) },
+          { type: 'redo_result', happened: true, bytes, stats, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -360,6 +379,7 @@ function postLoadResult(h: SimHost, requestId: number): void {
       policies: JSON.parse(h.policies_json()) as WorkerPolicies,
       bytes,
       stats: gatherStats(h),
+      mutationSeq,
       history: historyFlags(h),
     },
     { transfer: [bytes.buffer as ArrayBuffer] },

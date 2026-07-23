@@ -79,16 +79,28 @@ export class TauriSimBridge implements SimBridge {
   private handler: ((msg: FromSim) => void) | null = null;
   private canUndoFlag = false;
   private canRedoFlag = false;
+  // Set on every onTick — the native thread pushes TickEvents at its own
+  // 20 Hz cadence regardless of pause state (mirrors the WASM worker), so
+  // this doesn't distinguish "paused, nothing changed" from "just ticked";
+  // it's a conservative "always redraw" signal for this bridge rather than
+  // the finer-grained tick/mutationSeq check WasmSimBridge does. Correct,
+  // just without the render-skip's savings on this path.
+  private dirty = false;
 
   constructor(state: GameState) {
     this.state = structuredClone(state);
     void this.startPlugin(this.state);
   }
 
-  // step() is a no-op: the Rust thread runs at its own 20 Hz cadence and
-  // pushes TickEvents asynchronously. The main loop still calls step() each
-  // rAF frame so the SimBridge contract is satisfied.
-  step(_dt: number): void {}
+  // The Rust thread runs at its own 20 Hz cadence and pushes TickEvents
+  // asynchronously (onTick, below) — this per-frame call just reports
+  // whether the mirror changed since the last call, via the `dirty` flag
+  // onTick sets.
+  step(_dt: number): boolean {
+    const changed = this.dirty;
+    this.dirty = false;
+    return changed;
+  }
 
   send(cmd: SimCommand): CommandResult {
     switch (cmd.type) {
@@ -187,6 +199,7 @@ export class TauriSimBridge implements SimBridge {
 
   private onTick(event: TickEvent): void {
     const s = this.state;
+    this.dirty = true;
 
     // Stats
     s.tick       = event.tick;

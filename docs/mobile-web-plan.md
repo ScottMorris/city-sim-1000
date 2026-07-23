@@ -247,11 +247,27 @@ hardware.*
   of whether the player ever opened the radio widget; it now fires once, lazily,
   on first actual playback. Verified with a `bun run build` + `bun run preview` +
   offline reload (airplane-mode boot works with radio untouched).
-- [ ] **M4-2 · Resolution cap + idle throttling.** Cap the Pixi canvas resolution
+- [x] **M4-2 · Resolution cap + idle throttling.** Cap the Pixi canvas resolution
   (devicePixelRatio ≤ 2) and throttle the rAF loop when nothing is animating.
   `deps:` none.
   **DoD:** measurable frame-time improvement on a DPR-3 device with no visible
   quality loss; no regression in desktop rendering.
+  *Shipped (#80):* `renderer.ts` caps Pixi's `resolution` at `min(devicePixelRatio, 2)`.
+  The idle throttle turned out to need more than a tick-equality check: `apply_tool`
+  mutates tiles directly without bumping `tick_count`, so a tool placed while paused
+  wouldn't have been detected as a change. Fixed with a `mutationSeq` counter
+  (`wasmSim.worker.ts`) threaded through `step_result`/`undo_result`/`redo_result`/
+  `load_result`, so `wasmSimBridge.ts`'s `step()` — now returning `boolean` instead
+  of `void` — can tell "nothing changed" from "changed while paused" and skip
+  `applyTileBuffer`/`updateStats`/`recomputeEducation` only when truly safe.
+  `main.ts`'s `gameLoop` skips `renderer.render()` only when paused **and** the
+  mirror didn't change **and** camera/hover/selection/tool/overlay/pointer are all
+  unchanged since the last frame. `TauriSimBridge.step()` conservatively reports
+  "changed" on every native tick (correct, just without the skip's savings on that
+  path). Verified via Playwright: placing/undoing tiles while paused with the
+  camera and mouse untouched — the scenario a naive tick-only check would have
+  silently broken — updates both the engine mirror and the visible canvas
+  correctly, including under rapid bursts.
 - [ ] **M4-3 · Mid-tier device pass.** Profile on a mid-range Android phone (not a
   flagship): sustained FPS at default map size, memory headroom, thermal behaviour
   over ~15 min. Record findings here; fix what's cheap, file the rest. `deps:`

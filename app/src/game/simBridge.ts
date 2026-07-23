@@ -28,8 +28,15 @@ export interface SimBridge {
    * running in hidden tabs; the Tauri plugin via its native thread), so
    * this is a render-loop hook, not a simulation tick — `dt` is unused by
    * current bridges and kept for interface stability.
+   *
+   * Returns true if the display mirror (`getState()`'s object) was actually
+   * mutated since the last call to `step` — either during this call, or
+   * asynchronously in between (e.g. an undo/redo/load applied out of band).
+   * Conservative bridges may always return true; callers must not assume a
+   * `false` return means literally nothing happened, only that it's safe to
+   * skip a redraw that only depends on the mirror's contents.
    */
-  step(dt: number): void;
+  step(dt: number): boolean;
 
   /**
    * Submit a player command. Returns optimistically — the CommandResult

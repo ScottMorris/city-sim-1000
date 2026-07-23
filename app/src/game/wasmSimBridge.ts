@@ -59,19 +59,19 @@ interface WorkerHistoryFlags {
 
 type WorkerToMain =
   | { type: 'ready';        history: WorkerHistoryFlags }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; mutationSeq: number }
   | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'snapshot_result'; requestId: number; bytes: Uint8Array }
   | { type: 'load_result'; requestId: number; ok: false; error?: string }
   | {
       type: 'load_result'; requestId: number; ok: true;
       width: number; height: number; seed: number;
       policies: GameState['policies'];
-      bytes: Uint8Array; stats: SimStats; history: WorkerHistoryFlags;
+      bytes: Uint8Array; stats: SimStats; mutationSeq: number; history: WorkerHistoryFlags;
     };
 
 export interface WasmSimBridgeConfig {
@@ -91,10 +91,42 @@ export class WasmSimBridge implements SimBridge {
   private speedMult = 1;
   private pendingTileBuffer: Uint8Array | null = null;
   private pendingStats: SimStats | null = null;
+  private pendingMutationSeq = 0;
   private pendingUndo: ((happened: boolean) => void) | null = null;
   private pendingRedo: ((happened: boolean) => void) | null = null;
   private canUndoFlag = false;
   private canRedoFlag = false;
+  /**
+   * Tick number last actually applied to the mirror. The worker posts a
+   * fresh step_result every 50ms regardless of sim speed (paused included —
+   * see wasmSim.worker.ts's step loop), so when the incoming tick matches
+   * this, nothing meaningful could have changed and the expensive
+   * applyTileBuffer/updateStats work is skipped — UNLESS mutationSeq (below)
+   * also matches.
+   */
+  private lastAppliedTick: number | null = null;
+  /**
+   * Mirrors the worker's `mutationSeq` counter (see wasmSim.worker.ts) as of
+   * the last buffer actually applied. `apply_tool` mutates tiles directly and
+   * is NOT gated by the speed-scaled tick accumulator — a tool placed while
+   * paused changes the tile buffer without bumping tick_count, so tick
+   * equality alone can't detect it. mutationSeq is bumped synchronously
+   * inside the worker's apply_tool handler, so any step_result gathered
+   * afterwards is guaranteed to carry the post-mutation value — unlike a
+   * main-thread "a command was just sent" flag, which can't distinguish a
+   * stale in-flight step_result (queued before the worker processed the
+   * command) from a fresh post-mutation one.
+   */
+  private lastAppliedMutationSeq = 0;
+  /**
+   * True whenever the mirror was actually mutated since the last `step()`
+   * call — set both by the in-`step()` apply path and by the out-of-band
+   * undo/redo/load handlers (which apply immediately on message arrival,
+   * not gated by `step()`). Read and cleared by `step()`'s return value so
+   * `main.ts`'s gameLoop can know whether a redraw is needed even when the
+   * mutation landed between two rAF frames.
+   */
+  private dirtySinceLastStep = false;
   private nextRequestId = 1;
   private pendingSnapshots = new Map<number, (bytes: Uint8Array) => void>();
   private pendingLoads = new Map<number, { resolve: () => void; reject: (err: Error) => void }>();
@@ -127,18 +159,46 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  step(_dt: number): void {
+  step(_dt: number): boolean {
     // The worker drives the simulation clock itself (20 Hz interval, alive
     // even in hidden tabs) — this per-frame call only flushes the latest
     // engine update into the display mirror the renderer reads.
+    //
+    // The worker posts a step_result every 50ms regardless of sim speed —
+    // even paused (multiplier 0) — because its setInterval clock never
+    // stops. When the posted tick AND mutationSeq both match what's already
+    // applied, nothing meaningful could have changed and the buffer is
+    // byte-identical to what's already applied, so skip the full tile-array
+    // rebuild + building-list rebuild + recomputeEducation.
+    if (
+      this.pendingStats !== null &&
+      this.pendingStats.tick === this.lastAppliedTick &&
+      this.pendingMutationSeq === this.lastAppliedMutationSeq
+    ) {
+      this.pendingTileBuffer = null;
+      this.pendingStats = null;
+      return this.consumeDirty();
+    }
     if (this.pendingTileBuffer !== null) {
       this.applyTileBuffer(this.pendingTileBuffer);
       this.pendingTileBuffer = null;
+      this.dirtySinceLastStep = true;
     }
     if (this.pendingStats !== null) {
       this.updateStats(this.pendingStats);
+      this.lastAppliedTick = this.pendingStats.tick;
+      this.lastAppliedMutationSeq = this.pendingMutationSeq;
       this.pendingStats = null;
+      this.dirtySinceLastStep = true;
     }
+    return this.consumeDirty();
+  }
+
+  /** Read-and-clear `dirtySinceLastStep` — see its field doc. */
+  private consumeDirty(): boolean {
+    const dirty = this.dirtySinceLastStep;
+    this.dirtySinceLastStep = false;
+    return dirty;
   }
 
   send(cmd: SimCommand): CommandResult {
@@ -288,6 +348,7 @@ export class WasmSimBridge implements SimBridge {
       case 'step_result':
         this.pendingTileBuffer = msg.bytes;
         this.pendingStats = msg.stats;
+        this.pendingMutationSeq = msg.mutationSeq;
         break;
       case 'apply_result':
         if (!msg.success) {
@@ -303,6 +364,9 @@ export class WasmSimBridge implements SimBridge {
         if (msg.happened) {
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);
+          this.lastAppliedTick = msg.stats.tick;
+          this.lastAppliedMutationSeq = msg.mutationSeq;
+          this.dirtySinceLastStep = true;
         }
         this.syncHistoryFlags(msg.history);
         this.pendingUndo?.(msg.happened);
@@ -314,6 +378,9 @@ export class WasmSimBridge implements SimBridge {
         if (msg.happened) {
           this.applyTileBuffer(msg.bytes);
           this.updateStats(msg.stats);
+          this.lastAppliedTick = msg.stats.tick;
+          this.lastAppliedMutationSeq = msg.mutationSeq;
+          this.dirtySinceLastStep = true;
         }
         this.syncHistoryFlags(msg.history);
         this.pendingRedo?.(msg.happened);
@@ -340,6 +407,9 @@ export class WasmSimBridge implements SimBridge {
         this.state.policies = msg.policies;
         this.applyTileBuffer(msg.bytes);
         this.updateStats(msg.stats);
+        this.lastAppliedTick = msg.stats.tick;
+        this.lastAppliedMutationSeq = msg.mutationSeq;
+        this.dirtySinceLastStep = true;
         this.syncHistoryFlags(msg.history);
         pending?.resolve();
         break;

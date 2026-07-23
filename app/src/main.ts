@@ -15,7 +15,8 @@ import {
   createDefaultUiSettings,
   createInitialState,
   GameState,
-  getTile
+  getTile,
+  MinimapMode
 } from './game/gameState';
 import { Tool } from './game/toolTypes';
 import { WasmSimBridge } from './game/wasmSimBridge';
@@ -920,6 +921,34 @@ function attachViewportEvents(canvas: HTMLCanvasElement) {
 }
 
 let lastFrame = performance.now();
+// Idle render-skip tracking (M4-2): renderer.render() is a full immediate-mode
+// redraw (clears and rebuilds everything, no dirty flag) — the heaviest call
+// in the loop. When the sim is paused AND the display mirror wasn't mutated
+// this frame (bridge.step()'s return — covers both tool placements applied
+// while paused and undo/redo/load landing out of band, not just camera/
+// selection) AND none of the inputs that feed the draw have changed since
+// the last frame, the redraw would produce a byte-identical frame, so it's
+// skipped. HUD/minimap/ticker/debug overlay still run every frame regardless
+// — comparatively cheap DOM writes, not worth the added complexity/risk of
+// gating those too. Never skipped while unpaused — the sim is visibly
+// progressing (tiles building, money changing) whenever unpaused, even if
+// camera/selection happen to be momentarily unchanged.
+let lastRenderCameraX = camera.x;
+let lastRenderCameraY = camera.y;
+let lastRenderCameraScale = camera.scale;
+let lastRenderHovered: Position | null = hovered;
+let lastRenderSelected: Position | null = selected;
+let lastRenderTool: Tool = activeTool;
+let lastRenderOverlayMode: MinimapMode | null = null;
+let lastRenderPointerActive = pointerActive;
+let hasRenderedOnce = false;
+
+function positionsEqual(a: Position | null, b: Position | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return a.x === b.x && a.y === b.y;
+}
+
 function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   try {
     const now = performance.now();
@@ -932,7 +961,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       camera.x -= movement.x * panSpeed * direction * deltaSeconds;
       camera.y -= movement.y * panSpeed * direction * deltaSeconds;
     }
-    bridge.step(deltaSeconds);
+    const mirrorChanged = bridge.step(deltaSeconds);
     const calendar = getCalendarPosition(state.day);
     while (calendar.month > lastNarrativeMonth) {
       narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
@@ -944,7 +973,30 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       lastNarrativeGc = nowMs;
     }
     const overlayMode = state.settings?.minimap?.mode ?? 'base';
-    renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
+    const canSkipRender =
+      hasRenderedOnce &&
+      isPaused &&
+      !mirrorChanged &&
+      camera.x === lastRenderCameraX &&
+      camera.y === lastRenderCameraY &&
+      camera.scale === lastRenderCameraScale &&
+      positionsEqual(hovered, lastRenderHovered) &&
+      positionsEqual(selected, lastRenderSelected) &&
+      activeTool === lastRenderTool &&
+      overlayMode === lastRenderOverlayMode &&
+      pointerActive === lastRenderPointerActive;
+    if (!canSkipRender) {
+      renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
+      lastRenderCameraX = camera.x;
+      lastRenderCameraY = camera.y;
+      lastRenderCameraScale = camera.scale;
+      lastRenderHovered = hovered;
+      lastRenderSelected = selected;
+      lastRenderTool = activeTool;
+      lastRenderOverlayMode = overlayMode;
+      lastRenderPointerActive = pointerActive;
+      hasRenderedOnce = true;
+    }
     hud.update(state);
     hud.renderOverlays(state, selected, activeTool);
     minimap?.update(state, camera);
