@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional release tag (defaults to `v` plus the synchronised manifest version)
+        required: false
+        type: string
+      release_draft:
+        description: Create or keep this release as a draft
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && (inputs.release_tag || github.sha) || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare-release:
+    name: Prepare release
+    runs-on: ubuntu-24.04
+    outputs:
+      release_version: ${{ steps.meta.outputs.release_version }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      release_url: ${{ steps.release.outputs.release_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          MANUAL_RELEASE_TAG: ${{ github.event.inputs.release_tag || '' }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main
+          git fetch --tags origin
+
+          CHECKOUT_REF="${GITHUB_SHA}"
+          RELEASE_TARGET="${GITHUB_SHA}"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${MANUAL_RELEASE_TAG}" ]]; then
+            TAG_NAME="${MANUAL_RELEASE_TAG}"
+            if [[ ! "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Invalid release tag: ${TAG_NAME}" >&2
+              echo "Expected a tag matching vX.Y.Z or vX.Y.Z-beta.N" >&2
+              exit 1
+            fi
+            CHECKOUT_REF="${TAG_NAME}"
+            RELEASE_TARGET="$(git rev-list -n 1 "${TAG_NAME}")"
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+            if [[ ! "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Invalid release tag: ${TAG_NAME}" >&2
+              echo "Expected a tag matching vX.Y.Z or vX.Y.Z-beta.N" >&2
+              exit 1
+            fi
+          fi
+
+          if ! git merge-base --is-ancestor "${RELEASE_TARGET}" "origin/main"; then
+            echo "Release commit is not on origin/main: ${RELEASE_TARGET}" >&2
+            exit 1
+          fi
+
+          git checkout --quiet "${CHECKOUT_REF}"
+
+          RELEASE_VERSION="$(./scripts/check-release-versions.sh --current-version)"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -z "${MANUAL_RELEASE_TAG}" ]]; then
+            TAG_NAME="v${RELEASE_VERSION}"
+          fi
+
+          if [[ "${TAG_NAME#v}" != "${RELEASE_VERSION}" ]]; then
+            echo "Release tag ${TAG_NAME} does not match the synchronised manifest version ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+
+          PRERELEASE=false
+          if [[ "${TAG_NAME}" == *-* ]]; then
+            PRERELEASE=true
+          fi
+
+          echo "release_version=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag_name=${TAG_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "release_target=${RELEASE_TARGET}" >> "${GITHUB_OUTPUT}"
+          echo "release_name=City Sim 1000 ${TAG_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create or reuse GitHub Release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.meta.outputs.tag_name }}
+          RELEASE_TARGET: ${{ steps.meta.outputs.release_target }}
+          RELEASE_NAME: ${{ steps.meta.outputs.release_name }}
+          RELEASE_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.release_draft || false }}
+          RELEASE_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+
+          RELEASE_MATCH="$(
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"${TAG_NAME}\") | [.id, .html_url] | @tsv" \
+              | head -n 1 || true
+          )"
+
+          if [[ -z "${RELEASE_MATCH}" ]]; then
+            RELEASE_JSON="$(
+              gh api \
+                --method POST \
+                "repos/${GITHUB_REPOSITORY}/releases" \
+                -f tag_name="${TAG_NAME}" \
+                -f target_commitish="${RELEASE_TARGET}" \
+                -f name="${RELEASE_NAME}" \
+                -f body='See the mobile-web plan and CHANGELOG-style PR history for details.' \
+                -F generate_release_notes=true \
+                -F draft="${RELEASE_DRAFT}" \
+                -F prerelease="${RELEASE_PRERELEASE}"
+            )"
+            RELEASE_ID="$(printf '%s' "${RELEASE_JSON}" | jq -r '.id')"
+            RELEASE_URL="$(printf '%s' "${RELEASE_JSON}" | jq -r '.html_url')"
+            RELEASE_ACTION="created"
+          else
+            RELEASE_ID="$(awk '{print $1}' <<< "${RELEASE_MATCH}")"
+            RELEASE_URL="$(awk '{print $2}' <<< "${RELEASE_MATCH}")"
+
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -f name="${RELEASE_NAME}" \
+              -F draft="${RELEASE_DRAFT}" \
+              -F prerelease="${RELEASE_PRERELEASE}" \
+              >/dev/null
+
+            RELEASE_ACTION="reused"
+          fi
+
+          echo "release_id=${RELEASE_ID}" >> "${GITHUB_OUTPUT}"
+          echo "release_url=${RELEASE_URL}" >> "${GITHUB_OUTPUT}"
+          echo "release_action=${RELEASE_ACTION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## City Sim 1000 Release Summary"
+            echo
+            echo "- Resolved version: \`${{ steps.meta.outputs.release_version || 'unavailable' }}\`"
+            echo "- Release tag: \`${{ steps.meta.outputs.tag_name || 'unavailable' }}\`"
+            echo "- Release action: \`${{ steps.release.outputs.release_action || 'unavailable' }}\`"
+            echo "- Draft: \`${{ github.event_name == 'workflow_dispatch' && inputs.release_draft || false }}\`"
+            echo "- Prerelease: \`${{ steps.meta.outputs.prerelease || 'unavailable' }}\`"
+            echo "- Release URL: ${{ steps.release.outputs.release_url || 'unavailable' }}"
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
