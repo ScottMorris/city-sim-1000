@@ -219,11 +219,18 @@ aggressively, and desktop browser sessions currently don't autosave either.*
   The "failed save tells the player to export" half of the DoD already
   existed (the `dialogs.ts` save-button toast and `main.ts`'s `startAutosave`
   `onError` toast both point at Download) — verified, not duplicated.
-- [ ] **M3-3 · Share-based save export on touch.** The download/upload save flow is
+- [x] **M3-3 · Share-based save export on touch.** The download/upload save flow is
   awkward on phones — offer Web Share API export where available, falling back to
   the existing download path. `deps:` M0-1.
   **DoD:** on Android, "export save" opens the share sheet; desktop behaviour
   unchanged.
+  *Shipped (#78):* the Download button's handler tries `navigator.canShare`/
+  `navigator.share` first on touch input, wrapping the same CSAV bytes
+  `downloadSave` already produces as a `File` (`buildSaveFile` in
+  `persistence.ts`). A cancelled share does nothing further; an unsupported
+  browser or a real rejection falls through to the unchanged `<a download>`
+  path. Desktop/mouse input skips the share attempt entirely — byte-for-byte
+  the same code path as before.
 
 ## Phase M4 — Offline payload + performance + audio
 *Goal: fast first load on cell data, sane battery/memory behaviour on mid-tier
