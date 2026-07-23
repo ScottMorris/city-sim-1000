@@ -144,7 +144,6 @@
     display: none;
   }
   .canvas-wrapper[data-compact-info-tab='inspect'] .minimap-panel,
-  .canvas-wrapper[data-compact-info-tab='tool'] .minimap-panel,
   .canvas-wrapper[data-compact-info-tab='none'] .minimap-panel {
     display: none !important;
   }

@@ -124,6 +124,16 @@ PointerEvents in `main.ts`).*
   boot, so tapping too early bakes the generic fallback title into the toast;
   fixed by waiting for the real title before tapping, not by weakening the
   assertion).
+  *Follow-up (found during M4-3's device pass):* the three-way Map/Inspect/Tool
+  split didn't match desktop, where tile-inspect results and the tool-info card
+  already share one spot and auto-switch based on the active tool (`auto`
+  mode) — there was never a separate "Tool" concept there. That made "Inspect"
+  a dead, always-empty tab whenever any tool other than Inspect was selected.
+  Collapsed back to two tabs (Map + one combined tab) whose own label now
+  follows the active tool (🔍 Inspect / 🛠️ Details); both `toolInfoMode` and
+  a new sibling `tileInspectMode` are just `'auto'` now, matching desktop
+  exactly — the existing CSS hiding `.overlay` while "map"/"none" is showing
+  is what actually gates visibility on a phone.
 
 ## Phase M2 — Compact UI shell
 *Goal: tools get out of the way on small screens. The compact layout is a different
@@ -275,11 +285,49 @@ hardware.*
   camera and mouse untouched — the scenario a naive tick-only check would have
   silently broken — updates both the engine mirror and the visible canvas
   correctly, including under rapid bursts.
-- [ ] **M4-3 · Mid-tier device pass.** Profile on a mid-range Android phone (not a
+- [x] **M4-3 · Mid-tier device pass.** Profile on a mid-range Android phone (not a
   flagship): sustained FPS at default map size, memory headroom, thermal behaviour
   over ~15 min. Record findings here; fix what's cheap, file the rest. `deps:`
   M4-2. **DoD:** playable (30fps+) on the chosen reference device; findings noted
   in this doc.
+  *Shipped (#81):* reference device Google Pixel 8 Pro, tested in both Chrome
+  and Firefox over LAN against the dev server. Sustained ~60fps, phone got
+  only slightly warm — comfortably clears the 30fps DoD. Added a lightweight
+  FPS/memory readout to the existing debug overlay (`debugOverlay.ts`) to make
+  this kind of pass repeatable without a devtools connection.
+
+  Several real bugs turned up and got fixed along the way ("fix what's
+  cheap"):
+  - A critical regression from M4-2 itself: `camera.ts`'s `screenToTile` scaled
+    tap coordinates by the canvas backing-store/CSS-size ratio, which Pixi's
+    actual coordinate space (CSS/logical pixels) never uses — invisible as
+    long as resolution defaulted to 1 (Pixi's real default, not
+    `devicePixelRatio` as M4-2's own commit had assumed), but on any phone
+    with `devicePixelRatio > 1` once M4-2 started setting a real resolution,
+    every tap landed roughly resolution× further from the camera origin than
+    intended. Fixed by dropping the scale factor entirely — verified with real
+    `deviceScaleFactor` emulation that DPR-1 and DPR-3 now select the same tile
+    for the same on-screen tap.
+  - The debug overlay itself was unusable on a phone: no size cap (dominated
+    the screen), no `stopPropagation()` guard (taps leaked through to
+    paint/inspect the tile underneath, unlike every other overlay living
+    inside `canvas-wrapper`), and even after capping its size the sim-detail
+    sections buried the FPS/Memory readout behind a scroll. Added a mini
+    (FPS + Memory only) / full (everything, unclamped) toggle instead,
+    mini defaulting on compact viewports.
+  - The compact Map/Inspect/Tool tab split (M1-4) didn't match desktop, where
+    tile-inspect results and the tool-info card already share one auto-
+    switching spot — "Inspect" was a dead, always-empty tab whenever any tool
+    other than Inspect was active. Collapsed back to two tabs (Map + one
+    combined tab whose label follows the active tool) matching desktop's
+    `auto` behaviour exactly.
+  - `.toolbar-compact-dock`'s `align-items: center` vertically centred the
+    current-tool pill against the *combined* height of the two-row left
+    cluster (undo above radio), aligned with neither — changed to `flex-end`.
+
+  Filed, not fixed here: a pinch-zoom/two-finger gesture bug found while
+  playtesting (#138) — needs hands-on iterative debugging on a live device
+  rather than a blind fix.
 - [x] **M4-4 · Gesture-gated audio start.** Mobile browsers require a user gesture
   before audio plays. Radio is off by default, so this only bites when the player
   enables it — make sure enabling radio (a tap) is itself the gesture, handle the

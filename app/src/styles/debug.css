@@ -1,11 +1,22 @@
 .debug-overlay {
   position: absolute;
   right: 12px;
+  /* --toolbar-visible-height tracks #toolbar (the tool palette, which
+     relocates entirely to the bottom dock in compact mode, correctly going
+     to 0 there) — not .topbar/.news-ticker above canvas-wrapper, which are
+     already cleared for free by normal document flow. The extra margin here
+     is just breathing room so the panel doesn't read as flush against the
+     border under them. */
   top: calc(
-    var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 12px
+    var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 20px
   );
   min-width: 260px;
   max-width: 360px;
+  /* Unclamped by default — this is the original, desktop-oriented "full"
+     view. It's fine to dominate the screen there since it never has to
+     compete with the map for room the way it does on a phone. */
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   background: rgba(10, 16, 32, 0.92);
   border: 1px solid #35507a;
   border-radius: 12px;
@@ -20,6 +31,29 @@
 }
 .debug-overlay.hidden {
   display: none;
+}
+
+.debug-overlay.mode-mini {
+  /* Mini mode is FPS + Memory only (~4 lines) — small enough on any
+     viewport that it never needs to scroll and never has to fight the map
+     for screen space, on a phone or otherwise. */
+  min-width: 0;
+  max-width: 220px;
+  max-height: none;
+  overflow-y: visible;
+}
+
+.debug-mode-toggle {
+  /* .debug-overlay is display:grid — justify-self (not margin-left:auto)
+     is what right-aligns a single grid item within its own row/cell. */
+  justify-self: end;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
 }
 
 .debug-section {

@@ -2,6 +2,9 @@ import { DemandDetails, getSimulationDebugStats } from '../game/debugStats';
 import { GameState } from '../game/gameState';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 import { showToast } from './dialogs';
+import { DEFAULT_COMPACT_BREAKPOINT_PX, DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX } from './deviceMode';
+
+type DebugOverlayMode = 'mini' | 'full';
 
 interface HeapSnapshot {
   available: boolean;
@@ -25,6 +28,29 @@ const heapSampler = {
   lastSample: 0,
   sampling: false
 };
+
+const FPS_WINDOW_MS = 5000;
+const fpsTracker = {
+  ema: 0,
+  windowMin: Infinity,
+  windowStart: 0,
+  lastWindowMin: null as number | null
+};
+
+/** Feed each frame's delta in; cheap enough to call unconditionally regardless of overlay visibility. */
+function recordFrame(deltaSeconds: number) {
+  if (deltaSeconds <= 0) return;
+  const instantFps = 1 / deltaSeconds;
+  fpsTracker.ema = fpsTracker.ema === 0 ? instantFps : fpsTracker.ema * 0.9 + instantFps * 0.1;
+  fpsTracker.windowMin = Math.min(fpsTracker.windowMin, instantFps);
+  const now = performance.now();
+  if (fpsTracker.windowStart === 0) fpsTracker.windowStart = now;
+  if (now - fpsTracker.windowStart >= FPS_WINDOW_MS) {
+    fpsTracker.lastWindowMin = fpsTracker.windowMin;
+    fpsTracker.windowMin = Infinity;
+    fpsTracker.windowStart = now;
+  }
+}
 
 async function sampleHeap(force = false) {
   const now = performance.now();
@@ -84,14 +110,75 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   overlay.id = 'debug-overlay';
   overlay.className = 'debug-overlay hidden';
   root.appendChild(overlay);
+  // The overlay lives inside canvas-wrapper (for positioning), whose delegated
+  // pointerdown handler treats any tap as a map interaction regardless of
+  // target — stop it here so tapping the overlay doesn't also paint/inspect
+  // the tile underneath. Matches minimap.ts/hud.ts's existing overlay guard.
+  overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+  overlay.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
+
+  // Kept as stable, persistent elements rather than part of the per-frame
+  // innerHTML rebuild below — recreating an interactive button every frame
+  // makes it a moving target for a real tap (the element can be swapped out
+  // mid-gesture), not just an automated-test flakiness risk.
+  const modeToggleBtn = document.createElement('button');
+  modeToggleBtn.type = 'button';
+  modeToggleBtn.className = 'debug-mode-toggle';
+  overlay.appendChild(modeToggleBtn);
+  const contentEl = document.createElement('div');
+  contentEl.className = 'debug-content';
+  overlay.appendChild(contentEl);
 
   let visible = false;
+  // Mini defaults on phone-sized viewports (matches the same breakpoint every
+  // other compact-mode CSS override in this codebase uses) — the full,
+  // everything-included panel is the original desktop-oriented view, sized
+  // for a mouse+keyboard session where it never needed to compete with the
+  // map for screen space the way it does on a phone.
+  const compactQuery = window.matchMedia(
+    `(max-width: ${DEFAULT_COMPACT_BREAKPOINT_PX}px), (max-height: ${DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX}px)`
+  );
+  let mode: DebugOverlayMode = compactQuery.matches ? 'mini' : 'full';
+
+  const perfAndMemorySections = (heap: HeapSnapshot) => `
+    <div class="debug-section">
+      <div class="debug-heading">Performance</div>
+      <div class="debug-row"><span>FPS</span><strong>${fpsTracker.ema.toFixed(0)}</strong></div>
+      <div class="debug-hint">Min last 5s: ${
+        fpsTracker.lastWindowMin === null ? '—' : fpsTracker.lastWindowMin.toFixed(0)
+      }</div>
+    </div>
+    <div class="debug-section">
+      <div class="debug-heading">Memory</div>
+      ${
+        heap.available
+          ? `
+        <div class="debug-row"><span>JS heap</span><strong>${heap.usedMB?.toFixed(1)}${
+             heap.limitMB ? ` / ${heap.limitMB.toFixed(0)}` : ''
+           } MB</strong></div>
+        ${
+          heap.allocatedMB
+            ? `<div class="debug-hint">Allocated ${heap.allocatedMB.toFixed(0)} MB</div>`
+            : ''
+        }
+      `
+          : `<div class="debug-row"><span>Status</span><strong>${heap.reason}</strong></div>`
+      }
+    </div>
+  `;
 
   const renderStats = (state: GameState) => {
     if (!visible) return;
+    modeToggleBtn.textContent = mode === 'mini' ? '⤢ Full' : '⤡ Mini';
     try {
-      const stats = getSimulationDebugStats(state);
       const heap = getHeapSnapshot();
+
+      if (mode === 'mini') {
+        contentEl.innerHTML = perfAndMemorySections(heap);
+        return;
+      }
+
+      const stats = getSimulationDebugStats(state);
       const calendar = getCalendarPosition(stats.day);
       const totalDays = Math.floor(stats.day);
       const formatDemandHint = (details: DemandDetails) =>
@@ -109,7 +196,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
               details.utilityPenalty ? `, power penalty -${details.utilityPenalty.toFixed(1)}` : ''
             }`;
 
-      overlay.innerHTML = `
+      contentEl.innerHTML = `
         <div class="debug-section">
           <div class="debug-heading">Tick ${stats.tick} • Day ${totalDays} (Month ${calendar.month}, Day ${calendar.dayOfMonth}/${DAYS_PER_MONTH})</div>
           <div class="debug-row"><span>Population</span><strong>${Math.floor(stats.population)} / ${Math.floor(stats.capacities.population)}</strong></div>
@@ -154,29 +241,20 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
           )} out / ${stats.utilities.waterUse.toFixed(1)} use</strong></div>
           <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
         </div>
-        <div class="debug-section">
-          <div class="debug-heading">Memory</div>
-          ${
-            heap.available
-              ? `
-            <div class="debug-row"><span>JS heap</span><strong>${heap.usedMB?.toFixed(1)}${
-                 heap.limitMB ? ` / ${heap.limitMB.toFixed(0)}` : ''
-               } MB</strong></div>
-            ${
-              heap.allocatedMB
-                ? `<div class="debug-hint">Allocated ${heap.allocatedMB.toFixed(0)} MB</div>`
-                : ''
-            }
-          `
-              : `<div class="debug-row"><span>Status</span><strong>${heap.reason}</strong></div>`
-          }
-        </div>
+        ${perfAndMemorySections(heap)}
       `;
     } catch (err) {
       console.error('Debug overlay render failed', err);
-      overlay.innerHTML = `<div class="debug-section"><div class="debug-heading">Debug overlay</div><div class="debug-row"><span>Status</span><strong>Render error</strong></div><div class="debug-hint">${(err as Error)?.message ?? err}</div></div>`;
+      contentEl.innerHTML = `<div class="debug-section"><div class="debug-heading">Debug overlay</div><div class="debug-row"><span>Status</span><strong>Render error</strong></div><div class="debug-hint">${(err as Error)?.message ?? err}</div></div>`;
     }
   };
+
+  modeToggleBtn.addEventListener('click', () => {
+    mode = mode === 'mini' ? 'full' : 'mini';
+    overlay.classList.toggle('mode-mini', mode === 'mini');
+    renderStats(getState());
+  });
+  overlay.classList.toggle('mode-mini', mode === 'mini');
 
   toggleBtn.addEventListener('click', () => {
     visible = !visible;
@@ -201,6 +279,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   return {
     update(state: GameState) {
       renderStats(state);
-    }
+    },
+    recordFrame
   };
 }

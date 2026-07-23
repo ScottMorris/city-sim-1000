@@ -204,20 +204,20 @@ const compactInfoTabMap = document.createElement('button');
 compactInfoTabMap.type = 'button';
 compactInfoTabMap.className = 'compact-info-tab';
 compactInfoTabMap.textContent = '🗺️ Map';
+// One combined tab, not a separate "Inspect" + "Tool" pair — desktop already
+// shows tile-inspect results and the active tool's cost/upkeep/hints card in
+// the very same shared spot, auto-switching on whichever the current tool
+// makes relevant (hud.ts's 'auto' mode). Splitting that into two compact tabs
+// meant "Inspect" was a dead, empty tab whenever any tool other than Inspect
+// was active — this mirrors the desktop model instead: one tab, content (and
+// its own label) follows the active tool. Label is refreshed in
+// setActiveTool below, not just on tab clicks, since it needs to stay
+// accurate even while this tab isn't the one currently open.
 const compactInfoTabInspect = document.createElement('button');
 compactInfoTabInspect.type = 'button';
 compactInfoTabInspect.className = 'compact-info-tab';
 compactInfoTabInspect.textContent = '🔍 Inspect';
-// The active tool's full cost/upkeep/footprint/hints text (hud.ts's
-// tool-info card, `getToolDetails` — M2-2 only ever gave the *cost* a
-// compact-mode home, on the tool-sheet buttons and current-tool dock
-// button) — a third tab rather than auto-showing, so it doesn't eat the map
-// on every tool switch the way the always-on desktop card would.
-const compactInfoTabTool = document.createElement('button');
-compactInfoTabTool.type = 'button';
-compactInfoTabTool.className = 'compact-info-tab';
-compactInfoTabTool.textContent = '🛠️ Tool';
-compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect, compactInfoTabTool);
+compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect);
 // compactInfoTabs is a DOM child of wrapper (like .minimap-panel and the hud
 // .overlay before it), so without this a tap on it also bubbles up to
 // wrapper's own pointerdown handler below and gets treated as a tile tap —
@@ -226,16 +226,17 @@ compactInfoTabs.addEventListener('pointerdown', (e) => e.stopPropagation());
 wrapper.append(compactInfoTabs);
 
 // Reassigned once `hud`/`deviceMode` exist inside bootstrap() below (same
-// forward-declared-callback pattern as `handleDeviceModeChange`) — keeps the
-// tool-info card's visibility (hud.ts's setToolInfoMode) in sync with
-// whichever compact tab is open, on every tab switch and layout-mode flip.
+// forward-declared-callback pattern as `handleDeviceModeChange`) — keeps both
+// the tool-info card's and the tile-inspector's visibility (hud.ts's
+// setToolInfoMode/setTileInspectMode) in sync with whichever compact tab is
+// open, on every tab switch and layout-mode flip. They're never out of sync
+// with each other, so one callback drives both.
 let syncToolInfoMode: () => void = () => {};
 
-function setCompactInfoTab(tab: 'map' | 'inspect' | 'tool' | 'none') {
+function setCompactInfoTab(tab: 'map' | 'inspect' | 'none') {
   wrapper.dataset.compactInfoTab = tab;
   compactInfoTabMap.classList.toggle('active', tab === 'map');
   compactInfoTabInspect.classList.toggle('active', tab === 'inspect');
-  compactInfoTabTool.classList.toggle('active', tab === 'tool');
   syncToolInfoMode();
 }
 compactInfoTabMap.addEventListener('click', () => {
@@ -244,10 +245,15 @@ compactInfoTabMap.addEventListener('click', () => {
 compactInfoTabInspect.addEventListener('click', () => {
   setCompactInfoTab(wrapper.dataset.compactInfoTab === 'inspect' ? 'none' : 'inspect');
 });
-compactInfoTabTool.addEventListener('click', () => {
-  setCompactInfoTab(wrapper.dataset.compactInfoTab === 'tool' ? 'none' : 'tool');
-});
 setCompactInfoTab('none');
+
+// Labels which content the combined tab currently holds — there's nothing to
+// show for the Inspect tool itself (that's what tapping a tile is for), so
+// every other tool reads as "Details" (its cost/upkeep/hints card) instead.
+function syncCompactInfoTabLabel(tool: Tool) {
+  compactInfoTabInspect.textContent = tool === Tool.Inspect ? '🔍 Inspect' : '🛠️ Details';
+}
+syncCompactInfoTabLabel(Tool.Inspect);
 
 // Ribbon dropdowns (<details>): only one open at a time, close on outside
 // click or Escape, and close the saves menu after an action is chosen.
@@ -659,6 +665,7 @@ const setActiveTool = (nextTool: Tool) => {
   activeTool = nextTool;
   updateToolbar(toolbar, nextTool);
   syncToolbarHeights();
+  syncCompactInfoTabLabel(nextTool);
 };
 
 const selectTool = (nextTool: Tool) => {
@@ -954,6 +961,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     const now = performance.now();
     const deltaSeconds = (now - lastFrame) / 1000;
     lastFrame = now;
+    debugOverlay?.recordFrame(deltaSeconds);
     const movement = hotkeys?.getMovementVector();
     if (movement) {
       const panSpeed = PAN_SPEEDS[state.settings.input.panSpeed] ?? PAN_SPEEDS.normal;
@@ -1059,9 +1067,14 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     wildernessChip,
     overlayRoot: wrapper
   });
+  // Always 'auto' now, desktop and compact alike — content picks itself
+  // (tile info vs. the active tool's card) exactly like the desktop-only
+  // panel always did. The CSS rule hiding .overlay entirely while the
+  // compact "map"/"none" tab is showing is what actually gates visibility
+  // on a phone; this only controls which content wins once it's visible.
   syncToolInfoMode = () => {
-    const compact = deviceMode.getMode().layoutMode === 'compact';
-    hud.setToolInfoMode(!compact ? 'auto' : wrapper.dataset.compactInfoTab === 'tool' ? 'forced' : 'hidden');
+    hud.setToolInfoMode('auto');
+    hud.setTileInspectMode('auto');
   };
   syncToolInfoMode();
   newsTicker = initNewsTicker({
