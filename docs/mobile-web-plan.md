@@ -371,9 +371,21 @@ hardware.*
   `mobile-e2e` CI job builds WASM, installs Playwright's Chromium, and runs
   the suite; wired into `report-pr-results`. Verified locally that renaming
   `.toolbar-undo-btn` fails the compact-layout test, then reverted.
-- [ ] **M5-3 · Docs sync.** README, `manual.html`, and SPEC updated to describe the
+- [x] **M5-3 · Docs sync.** README, `manual.html`, and SPEC updated to describe the
   mobile mode, detection/override behaviour, and autosave. `deps:` M2-5, M3-1.
   **DoD:** shipped alongside the final feature PR, per repo convention.
+  *Shipped (#85):* `manual.html`'s player-facing "Touch & compact layout" and
+  "Saving & backups" sections were already in good shape from incremental
+  updates across the session — no changes needed there. `README.md` gained a
+  "Mobile & touch" section (detection axes, `?ui=`/Settings override, gesture
+  model, autosave). `SPEC.md` got the most work: §6.3 Camera had gone stale
+  (still described discrete zoom steps and right-click-drag panning from
+  before those changed) — corrected, plus a new §6.7 "Mobile & Touch Input"
+  consolidating detection/override/gesture/safe-area/share/radio-gesture
+  behaviour; §6.6 Persistence's "autosave planned" note was outdated (M3-1
+  shipped it) — replaced with the actual cadence/flush/newest-wins/durable-
+  storage behaviour; §9 Performance Targets gained the verified mobile figures
+  from M4-3's device pass.
 
 ---
 

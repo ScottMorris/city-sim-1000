@@ -82,6 +82,13 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 - Undo/redo: `Ctrl/Cmd+Z` undoes the last action (a drag counts as one action); `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` redoes it. Undo rewinds the whole city — including the clock — to just before the action; history is per-session and stops at the last load.
 - Inspector: select Inspect, click a tile to see utilities, status, and capacity; pin the tool info card to keep build stats visible.
 
+## Mobile & touch
+- A phone-sized viewport (or any narrow/short window) switches to a compact touch layout automatically — two independent axes, each re-evaluated live with no reload: input mode (`touch`/`mouse`, from `(pointer: coarse)`) and layout mode (`compact`/`full`, from viewport width/height). A tablet gets full layout with touch-sized targets; a touchscreen desktop gets full layout with touch gestures.
+- Force a mode for testing with `?ui=mobile` or `?ui=desktop` in the URL (same pattern as `?bridge=tauri`), or the `ui` setting in Settings for a persistent override.
+- One finger drives the active tool like a mouse click/drag; a second finger always means camera control (two-finger pan + pinch-zoom), cancelling any in-progress paint so a stray second finger never leaves a half-finished drag behind.
+- The compact shell moves tool selection to a bottom-sheet current-tool button, and shares the minimap/tile-inspector/tool-info card in one small tabbed panel instead of floating them separately — see `public/manual.html`'s "Touch & compact layout" section for the full player-facing rundown.
+- Autosave is cross-platform (not mobile-only): the game writes to a dedicated IndexedDB slot every 60 seconds plus on tab-hide/close, and restores whichever of the manual/autosave slots is newest on boot. `navigator.storage.persist()` is requested once after the first save to reduce (not eliminate) the browser's chance of evicting saved data under storage pressure.
+
 ## Offline & PWA
 - `vite-plugin-pwa` (Workbox `generateSW` mode, configured in `vite.config.ts`) generates the service worker at build time from the real Vite build manifest, precaching JS/CSS/HTML/WASM/icons — radio audio (`public/audio/`) and the marketing images (`readme-banner.png`, `social-preview.png`) are excluded via `globIgnores`.
 - `public/manifest.webmanifest` and icons let you install the game as a standalone experience.
