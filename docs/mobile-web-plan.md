@@ -124,6 +124,16 @@ PointerEvents in `main.ts`).*
   boot, so tapping too early bakes the generic fallback title into the toast;
   fixed by waiting for the real title before tapping, not by weakening the
   assertion).
+  *Follow-up (found during M4-3's device pass):* the three-way Map/Inspect/Tool
+  split didn't match desktop, where tile-inspect results and the tool-info card
+  already share one spot and auto-switch based on the active tool (`auto`
+  mode) — there was never a separate "Tool" concept there. That made "Inspect"
+  a dead, always-empty tab whenever any tool other than Inspect was selected.
+  Collapsed back to two tabs (Map + one combined tab) whose own label now
+  follows the active tool (🔍 Inspect / 🛠️ Details); both `toolInfoMode` and
+  a new sibling `tileInspectMode` are just `'auto'` now, matching desktop
+  exactly — the existing CSS hiding `.overlay` while "map"/"none" is showing
+  is what actually gates visibility on a phone.
 
 ## Phase M2 — Compact UI shell
 *Goal: tools get out of the way on small screens. The compact layout is a different
