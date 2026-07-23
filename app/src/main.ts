@@ -93,10 +93,10 @@ appRoot.innerHTML = `
         <div class="ribbon-line"><span id="population">👥 0</span></div>
         <div class="ribbon-line"><span id="jobs">💼 0</span></div>
       </div>
-      <div class="ribbon-chip" id="wilderness-chip" title="Wilderness score — how much of the map is thriving nature">
+      <button type="button" class="ribbon-chip ribbon-chip-button" id="wilderness-chip" title="Wilderness score — how much of the map is thriving nature">
         <div class="ribbon-line"><span id="wilderness" class="ribbon-strong">🌲 —</span></div>
         <div class="ribbon-line"><span class="ribbon-dim">Wilderness</span></div>
-      </div>
+      </button>
     </div>
     <div class="ribbon-controls">
       <details class="ribbon-menu">
@@ -169,7 +169,7 @@ const indBar = requireElement<HTMLDivElement>('#ind-bar');
 const popEl = requireElement<HTMLDivElement>('#population');
 const jobsEl = requireElement<HTMLDivElement>('#jobs');
 const wildernessEl = requireElement<HTMLSpanElement>('#wilderness');
-const wildernessChip = requireElement<HTMLDivElement>('#wilderness-chip');
+const wildernessChip = requireElement<HTMLButtonElement>('#wilderness-chip');
 const monthEl = requireElement<HTMLDivElement>('#month');
 const dayEl = requireElement<HTMLDivElement>('#day');
 const speedSlowBtn = requireElement<HTMLButtonElement>('#speed-slow');
@@ -207,7 +207,16 @@ const compactInfoTabInspect = document.createElement('button');
 compactInfoTabInspect.type = 'button';
 compactInfoTabInspect.className = 'compact-info-tab';
 compactInfoTabInspect.textContent = '🔍 Inspect';
-compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect);
+// The active tool's full cost/upkeep/footprint/hints text (hud.ts's
+// tool-info card, `getToolDetails` — M2-2 only ever gave the *cost* a
+// compact-mode home, on the tool-sheet buttons and current-tool dock
+// button) — a third tab rather than auto-showing, so it doesn't eat the map
+// on every tool switch the way the always-on desktop card would.
+const compactInfoTabTool = document.createElement('button');
+compactInfoTabTool.type = 'button';
+compactInfoTabTool.className = 'compact-info-tab';
+compactInfoTabTool.textContent = '🛠️ Tool';
+compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect, compactInfoTabTool);
 // compactInfoTabs is a DOM child of wrapper (like .minimap-panel and the hud
 // .overlay before it), so without this a tap on it also bubbles up to
 // wrapper's own pointerdown handler below and gets treated as a tile tap —
@@ -215,16 +224,27 @@ compactInfoTabs.append(compactInfoTabMap, compactInfoTabInspect);
 compactInfoTabs.addEventListener('pointerdown', (e) => e.stopPropagation());
 wrapper.append(compactInfoTabs);
 
-function setCompactInfoTab(tab: 'map' | 'inspect' | 'none') {
+// Reassigned once `hud`/`deviceMode` exist inside bootstrap() below (same
+// forward-declared-callback pattern as `handleDeviceModeChange`) — keeps the
+// tool-info card's visibility (hud.ts's setToolInfoMode) in sync with
+// whichever compact tab is open, on every tab switch and layout-mode flip.
+let syncToolInfoMode: () => void = () => {};
+
+function setCompactInfoTab(tab: 'map' | 'inspect' | 'tool' | 'none') {
   wrapper.dataset.compactInfoTab = tab;
   compactInfoTabMap.classList.toggle('active', tab === 'map');
   compactInfoTabInspect.classList.toggle('active', tab === 'inspect');
+  compactInfoTabTool.classList.toggle('active', tab === 'tool');
+  syncToolInfoMode();
 }
 compactInfoTabMap.addEventListener('click', () => {
   setCompactInfoTab(wrapper.dataset.compactInfoTab === 'map' ? 'none' : 'map');
 });
 compactInfoTabInspect.addEventListener('click', () => {
   setCompactInfoTab(wrapper.dataset.compactInfoTab === 'inspect' ? 'none' : 'inspect');
+});
+compactInfoTabTool.addEventListener('click', () => {
+  setCompactInfoTab(wrapper.dataset.compactInfoTab === 'tool' ? 'none' : 'tool');
 });
 setCompactInfoTab('none');
 
@@ -987,7 +1007,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     wildernessChip,
     overlayRoot: wrapper
   });
-  hud.setToolInfoSuppressed(deviceMode.getMode().layoutMode === 'compact');
+  syncToolInfoMode = () => {
+    const compact = deviceMode.getMode().layoutMode === 'compact';
+    hud.setToolInfoMode(!compact ? 'auto' : wrapper.dataset.compactInfoTab === 'tool' ? 'forced' : 'hidden');
+  };
+  syncToolInfoMode();
   newsTicker = initNewsTicker({
     root: newsTickerEl,
     getItems: () => narrativeManager.getTickerQueue(),
@@ -1217,6 +1241,12 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   });
 
   treasuryChip.addEventListener('click', () => budgetModal.open());
+  // No hover on touch — the breakdown behind this chip's `title` tooltip
+  // (hud.ts's update()) needs a tap equivalent; reuse the same string
+  // rather than recomputing it here.
+  wildernessChip.addEventListener('click', () => {
+    showToast(wildernessChip.title, { id: 'wilderness-breakdown', durationMs: 5000 });
+  });
   budgetModalBtn.addEventListener('click', () => budgetModal.open());
   bylawsModalBtn.addEventListener('click', () => bylawsModal.open());
   settingsBtn.addEventListener('click', () => settingsModal?.open());
@@ -1252,7 +1282,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     if (toolbar.dataset.layoutMode !== deviceMode.getMode().layoutMode) {
       setupToolbar();
     }
-    hud.setToolInfoSuppressed(deviceMode.getMode().layoutMode === 'compact');
+    syncToolInfoMode();
     syncMinimapSettings(state.settings.minimap);
     syncToolbarHeights();
     // See the matching comment below: force Pixi to pick up canvas-wrapper's

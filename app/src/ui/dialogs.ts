@@ -69,6 +69,10 @@ export function showToast(message: string, options: ToastOptions = {}) {
   const div = document.createElement('div');
   div.textContent = message;
   div.style.padding = '10px 12px';
+  // Some toasts now carry longer tap-revealed info (e.g. the wilderness
+  // score breakdown) rather than a short one-line confirmation — keep those
+  // from running edge-to-edge/off-screen on a narrow phone.
+  div.style.maxWidth = 'min(320px, calc(100vw - 24px))';
   const severityStyles: Record<ToastSeverity, { background: string; border: string }> = {
     info: { background: '#1f2c4b', border: '#7bffb7' },
     success: { background: '#1f2c4b', border: '#7bffb7' },

@@ -106,6 +106,54 @@ test.describe('mobile emulation', () => {
     expect(roadTiles).toEqual([]);
   });
 
+  test('compact Tool tab surfaces full tool details (M1-4 hover replacement)', async ({ page }) => {
+    await boot(page);
+    // Desktop's always-on tool-info card only ever gets suppressed in
+    // compact layout — the Tool tab is its dedicated compact-mode home.
+    const overlay = page.locator('.overlay');
+    await expect(overlay).toHaveCount(0);
+
+    await page.locator('.toolbar-current-tool-btn').tap();
+    await page.locator('.tool-sheet-button[data-tool="road"]').tap();
+    await page.locator('.compact-info-tab', { hasText: 'Tool' }).tap();
+
+    const infoSection = page.locator('.overlay .info-section').first();
+    await expect(infoSection).toContainText('Cost');
+    await expect(infoSection).toContainText('$5.00');
+    await expect(infoSection).toContainText('Upkeep');
+
+    // Switching to Map hides the tool card again and frees the panel for the minimap.
+    await page.locator('.compact-info-tab', { hasText: 'Map' }).tap();
+    await expect(overlay).toBeHidden();
+    await expect(page.locator('.minimap-panel')).toBeVisible();
+  });
+
+  test('wilderness chip and radio cover reveal hover-only info on tap', async ({ page }) => {
+    await boot(page);
+
+    // The status ribbon scrolls horizontally on a narrow phone (by design —
+    // see layout.css), so the chip needs an explicit scroll into view first;
+    // `.tap()`'s own auto-scroll doesn't reliably reach into this nested
+    // overflow-x container. The chip's own always-visible label is just
+    // "Wilderness" (no score) — matching the "NN/100" fraction specifically
+    // distinguishes the toast from that label, which stays on screen throughout.
+    const wildernessChip = page.locator('#wilderness-chip');
+    await wildernessChip.scrollIntoViewIfNeeded();
+    // hud.ts's update() only fills in the real score/breakdown once the sim
+    // has ticked at least once — tapping before then would bake the generic
+    // fallback title (no "NN/100") into the toast. Wait for the real value.
+    await expect(wildernessChip).toHaveAttribute('title', /\d+\/100/);
+    await wildernessChip.tap();
+    await expect(page.getByText(/Wilderness \d+\/100/)).toBeVisible();
+
+    const cover = page.locator('.radio-cover');
+    await expect(cover).toBeVisible();
+    await cover.tap();
+    await expect(page.locator('.radio-widget.radio-popover-open')).toHaveCount(1);
+    await cover.tap();
+    await expect(page.locator('.radio-widget.radio-popover-open')).toHaveCount(0);
+  });
+
   test('autosave fires on visibilitychange', async ({ page }) => {
     await boot(page);
     await mcp(page, 'apply_tool', { tool: 'road', x: 2, y: 2 });

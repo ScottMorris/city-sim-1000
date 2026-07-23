@@ -193,15 +193,24 @@
 
 /* The full radio widget (flex-basis 360px, marquee + cover art) is sized for
    the spacious desktop trailing cluster and alone would overflow the whole
-   compact dock. Collapse it to just its icon buttons + station picker here;
-   hover/focus's existing popover still surfaces the track/cover details. */
+   compact dock. Collapse it to just its icon buttons + station picker + the
+   cover thumbnail here — the marquee text alone would still overflow. The
+   cover doubles as the tap target for the full title/artist/status popover
+   (radio.ts's tap-to-pin handling), so unlike desktop (where it only shows
+   once art loads) it stays visible here even without art, as a plain
+   background square, so there's always something to tap. */
 .toolbar-compact-dock .radio-widget {
   flex: 0 0 auto;
 }
 
-.toolbar-compact-dock .radio-marquee-viewport,
-.toolbar-compact-dock .radio-cover {
+.toolbar-compact-dock .radio-marquee-viewport {
   display: none;
+}
+
+.toolbar-compact-dock .radio-cover {
+  opacity: 1;
+  visibility: visible;
+  cursor: pointer;
 }
 
 .tool-sheet-button.active {

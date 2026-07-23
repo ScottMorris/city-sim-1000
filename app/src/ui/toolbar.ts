@@ -455,6 +455,7 @@ export function initToolbar(
     window.removeEventListener('resize', positionStationMenu);
     toolbar.removeEventListener('scroll', restyleSubmenus);
     window.removeEventListener('resize', restyleSubmenus);
+    radio.dispose();
   });
 
   return {

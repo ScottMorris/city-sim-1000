@@ -84,5 +84,66 @@ describe('radio widget', () => {
       const marqueeAfter = host.querySelector('.radio-marquee-text');
       expect(marqueeAfter?.textContent).toContain('Night Lines — Overnight');
     });
+
+    it('tapping the cover pins the popover open, and tapping it again closes it', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const widget = initRadioWidget(host, {
+        fetchImpl: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ version: '1.0', tracks: [] }) }) as unknown as typeof fetch,
+        audioFactory: () => new AudioStub() as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const widgetEl = host.querySelector('.radio-widget');
+      const cover = host.querySelector<HTMLElement>('.radio-cover');
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(false);
+
+      cover?.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(true);
+
+      cover?.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(false);
+
+      widget.dispose();
+    });
+
+    it('a pointerdown outside the widget closes a pinned popover', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const widget = initRadioWidget(host, {
+        fetchImpl: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ version: '1.0', tracks: [] }) }) as unknown as typeof fetch,
+        audioFactory: () => new AudioStub() as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const widgetEl = host.querySelector('.radio-widget');
+      const cover = host.querySelector<HTMLElement>('.radio-cover');
+      cover?.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(true);
+
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(false);
+
+      widget.dispose();
+    });
+
+    it('dispose stops reacting to outside pointerdown events', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const widget = initRadioWidget(host, {
+        fetchImpl: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ version: '1.0', tracks: [] }) }) as unknown as typeof fetch,
+        audioFactory: () => new AudioStub() as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const widgetEl = host.querySelector('.radio-widget');
+      const cover = host.querySelector<HTMLElement>('.radio-cover');
+      cover?.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(true);
+
+      widget.dispose();
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(true);
+    });
   }
 );

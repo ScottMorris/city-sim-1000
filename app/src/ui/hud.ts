@@ -44,16 +44,22 @@ const WILDERNESS_LABELS: [keyof import('../game/gameState').WildernessBreakdown,
   ['civic', 'Civic']
 ];
 
+export type ToolInfoMode = 'auto' | 'forced' | 'hidden';
+
 export function createHud(elements: HudElements) {
   let overlayContainer: HTMLDivElement | null = null;
   let toolInfoPinned = false;
   let overlayFrozen = false;
   // In compact layout the tool-info card and the tile inspector share one
-  // small floating panel (tabbed) instead of each getting their own — the
-  // always-on "here's the selected tool's cost" card would otherwise eat
-  // that whole shared footprint by default. Suppressed there until M2-2
-  // gives tool info a proper home in the compact tool sheet instead.
-  let toolInfoSuppressed = false;
+  // small floating panel (tabbed) instead of each getting their own. Desktop
+  // ('auto') keeps the original pin-vs-Inspect precedence; compact mode
+  // instead has its own dedicated "Tool" tab (see main.ts's
+  // compactInfoTabs), so while that tab is open the card must show
+  // unconditionally ('forced') — the Inspect precedence doesn't apply, since
+  // the tabs already give Inspect its own separate home. While any other
+  // compact tab is open the card is fully hidden ('hidden') so the shared
+  // panel is free for the minimap/tile inspector instead.
+  let toolInfoMode: ToolInfoMode = 'auto';
 
   const ensureOverlayContainer = () => {
     if (!overlayContainer) {
@@ -124,7 +130,10 @@ export function createHud(elements: HudElements) {
   const renderOverlays = (state: GameState, selected: Position | null, activeTool: Tool) => {
     if (overlayFrozen) return;
     const hasTileSelection = activeTool === Tool.Inspect && selected ? getTile(state, selected.x, selected.y) : null;
-    const showToolInfo = !toolInfoSuppressed && (toolInfoPinned || activeTool !== Tool.Inspect);
+    const showToolInfo =
+      toolInfoMode === 'forced' ? true :
+      toolInfoMode === 'hidden' ? false :
+      (toolInfoPinned || activeTool !== Tool.Inspect);
 
     if (!showToolInfo && !hasTileSelection) {
       overlayContainer?.remove();
@@ -300,9 +309,9 @@ export function createHud(elements: HudElements) {
     cleanupOverlayContainer();
   };
 
-  const setToolInfoSuppressed = (suppressed: boolean) => {
-    toolInfoSuppressed = suppressed;
+  const setToolInfoMode = (mode: ToolInfoMode) => {
+    toolInfoMode = mode;
   };
 
-  return { update, renderOverlays, setToolInfoSuppressed };
+  return { update, renderOverlays, setToolInfoMode };
 }
