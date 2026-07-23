@@ -130,7 +130,7 @@ jobs:
                 -f tag_name="${TAG_NAME}" \
                 -f target_commitish="${RELEASE_TARGET}" \
                 -f name="${RELEASE_NAME}" \
-                -f body='See the mobile-web plan and CHANGELOG-style PR history for details.' \
+                -f body='See the merged pull requests below for what changed.' \
                 -F generate_release_notes=true \
                 -F draft="${RELEASE_DRAFT}" \
                 -F prerelease="${RELEASE_PRERELEASE}"
