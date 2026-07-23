@@ -145,5 +145,118 @@ describe('radio widget', () => {
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
       expect(widgetEl?.classList.contains('radio-popover-open')).toBe(true);
     });
+
+    it('resyncs the UI when audio.play() rejects (autoplay-policy style refusal)', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            version: '1.0',
+            tracks: [{ id: 'a', title: 'Downtown Drive', artist: 'City Crew', src: '/audio/radio/a.opus' }]
+          })
+      });
+
+      const audio = new AudioStub();
+      audio.play = vi.fn(async () => {
+        throw new DOMException('play() failed because the user didn\'t interact with the document first.', 'NotAllowedError');
+      });
+
+      const widget = initRadioWidget(host, {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        audioFactory: () => audio as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const playBtn = host.querySelector<HTMLButtonElement>('.radio-icon-button[data-action="play"]');
+      const popoverStatus = host.querySelector('.radio-popover-status');
+
+      playBtn?.dispatchEvent(new Event('click'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(audio.play).toHaveBeenCalled();
+      expect(playBtn?.textContent).toBe('▶️');
+      expect(playBtn?.title).toBe('Play');
+      expect(popoverStatus?.textContent).toBe('Paused');
+    });
+
+    it('resyncs state.playing and the UI when the audio element pauses out of band (e.g. an interruption)', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            version: '1.0',
+            tracks: [{ id: 'a', title: 'Downtown Drive', artist: 'City Crew', src: '/audio/radio/a.opus' }]
+          })
+      });
+
+      const audio = new AudioStub();
+      const widget = initRadioWidget(host, {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        audioFactory: () => audio as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const playBtn = host.querySelector<HTMLButtonElement>('.radio-icon-button[data-action="play"]');
+      const popoverStatus = host.querySelector('.radio-popover-status');
+
+      playBtn?.dispatchEvent(new Event('click'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(playBtn?.textContent).toBe('⏸️');
+      expect(popoverStatus?.textContent).toBe('Playing');
+
+      // Simulate the browser/OS pausing playback out of band (audio focus
+      // stolen, a phone call, background-tab throttling) without going
+      // through the widget's own togglePlay()/pause() path.
+      audio.paused = true;
+      audio.dispatchEvent(new Event('pause'));
+
+      expect(playBtn?.textContent).toBe('▶️');
+      expect(playBtn?.title).toBe('Play');
+      expect(popoverStatus?.textContent).toBe('Paused');
+
+      widget.dispose();
+    });
+
+    it('a redundant out-of-band pause event after our own pause is a harmless no-op', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            version: '1.0',
+            tracks: [{ id: 'a', title: 'Downtown Drive', artist: 'City Crew', src: '/audio/radio/a.opus' }]
+          })
+      });
+
+      const audio = new AudioStub();
+      const widget = initRadioWidget(host, {
+        fetchImpl: fetchMock as unknown as typeof fetch,
+        audioFactory: () => audio as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const playBtn = host.querySelector<HTMLButtonElement>('.radio-icon-button[data-action="play"]');
+      playBtn?.dispatchEvent(new Event('click'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Our own togglePlay() pause path.
+      playBtn?.dispatchEvent(new Event('click'));
+      expect(playBtn?.textContent).toBe('▶️');
+
+      // A late/duplicate 'pause' event for the pause we already initiated
+      // ourselves must not throw, loop, or otherwise misbehave.
+      expect(() => audio.dispatchEvent(new Event('pause'))).not.toThrow();
+      expect(playBtn?.textContent).toBe('▶️');
+
+      widget.dispose();
+    });
   }
 );
