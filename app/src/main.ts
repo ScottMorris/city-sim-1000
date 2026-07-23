@@ -954,6 +954,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     const now = performance.now();
     const deltaSeconds = (now - lastFrame) / 1000;
     lastFrame = now;
+    debugOverlay?.recordFrame(deltaSeconds);
     const movement = hotkeys?.getMovementVector();
     if (movement) {
       const panSpeed = PAN_SPEEDS[state.settings.input.panSpeed] ?? PAN_SPEEDS.normal;

@@ -26,6 +26,29 @@ const heapSampler = {
   sampling: false
 };
 
+const FPS_WINDOW_MS = 5000;
+const fpsTracker = {
+  ema: 0,
+  windowMin: Infinity,
+  windowStart: 0,
+  lastWindowMin: null as number | null
+};
+
+/** Feed each frame's delta in; cheap enough to call unconditionally regardless of overlay visibility. */
+function recordFrame(deltaSeconds: number) {
+  if (deltaSeconds <= 0) return;
+  const instantFps = 1 / deltaSeconds;
+  fpsTracker.ema = fpsTracker.ema === 0 ? instantFps : fpsTracker.ema * 0.9 + instantFps * 0.1;
+  fpsTracker.windowMin = Math.min(fpsTracker.windowMin, instantFps);
+  const now = performance.now();
+  if (fpsTracker.windowStart === 0) fpsTracker.windowStart = now;
+  if (now - fpsTracker.windowStart >= FPS_WINDOW_MS) {
+    fpsTracker.lastWindowMin = fpsTracker.windowMin;
+    fpsTracker.windowMin = Infinity;
+    fpsTracker.windowStart = now;
+  }
+}
+
 async function sampleHeap(force = false) {
   const now = performance.now();
   if (!force && (heapSampler.sampling || now - heapSampler.lastSample < 1500)) return;
@@ -84,6 +107,12 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   overlay.id = 'debug-overlay';
   overlay.className = 'debug-overlay hidden';
   root.appendChild(overlay);
+  // The overlay lives inside canvas-wrapper (for positioning), whose delegated
+  // pointerdown handler treats any tap as a map interaction regardless of
+  // target — stop it here so tapping the overlay doesn't also paint/inspect
+  // the tile underneath. Matches minimap.ts/hud.ts's existing overlay guard.
+  overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+  overlay.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
 
   let visible = false;
 
@@ -155,6 +184,13 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
           <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
         </div>
         <div class="debug-section">
+          <div class="debug-heading">Performance</div>
+          <div class="debug-row"><span>FPS</span><strong>${fpsTracker.ema.toFixed(0)}</strong></div>
+          <div class="debug-hint">Min last 5s: ${
+            fpsTracker.lastWindowMin === null ? '—' : fpsTracker.lastWindowMin.toFixed(0)
+          }</div>
+        </div>
+        <div class="debug-section">
           <div class="debug-heading">Memory</div>
           ${
             heap.available
@@ -201,6 +237,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   return {
     update(state: GameState) {
       renderStats(state);
-    }
+    },
+    recordFrame
   };
 }

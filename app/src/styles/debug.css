@@ -6,6 +6,8 @@
   );
   min-width: 260px;
   max-width: 360px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
   background: rgba(10, 16, 32, 0.92);
   border: 1px solid #35507a;
   border-radius: 12px;
@@ -20,6 +22,16 @@
 }
 .debug-overlay.hidden {
   display: none;
+}
+
+@media (max-width: 900px), (max-height: 500px) {
+  .debug-overlay {
+    /* Full-height-ish on a phone would leave nothing to play — cap it to a
+       corner panel short enough that most of the map stays visible/playable
+       underneath while it's open. */
+    max-height: min(40vh, 40dvh);
+    max-width: min(300px, calc(100vw - 24px));
+  }
 }
 
 .debug-section {
