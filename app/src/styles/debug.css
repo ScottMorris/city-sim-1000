@@ -1,8 +1,14 @@
 .debug-overlay {
   position: absolute;
   right: 12px;
+  /* --toolbar-visible-height tracks #toolbar (the tool palette, which
+     relocates entirely to the bottom dock in compact mode, correctly going
+     to 0 there) — not .topbar/.news-ticker above canvas-wrapper, which are
+     already cleared for free by normal document flow. The extra margin here
+     is just breathing room so the panel doesn't read as flush against the
+     border under them. */
   top: calc(
-    var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 12px
+    var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 20px
   );
   min-width: 260px;
   max-width: 360px;

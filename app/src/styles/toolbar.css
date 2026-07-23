@@ -43,7 +43,10 @@
   bottom: 0;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  /* The left cluster is two rows tall (undo above radio); center would put
+     the single-row current-tool button's middle between them, aligned with
+     neither. flex-end lines its bottom edge up with the radio widget's. */
+  align-items: flex-end;
   padding: 12px 16px;
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   padding-left: calc(16px + env(safe-area-inset-left, 0px));
