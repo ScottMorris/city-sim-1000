@@ -280,13 +280,23 @@ hardware.*
   over ~15 min. Record findings here; fix what's cheap, file the rest. `deps:`
   M4-2. **DoD:** playable (30fps+) on the chosen reference device; findings noted
   in this doc.
-- [ ] **M4-4 · Gesture-gated audio start.** Mobile browsers require a user gesture
+- [x] **M4-4 · Gesture-gated audio start.** Mobile browsers require a user gesture
   before audio plays. Radio is off by default, so this only bites when the player
   enables it — make sure enabling radio (a tap) is itself the gesture, handle the
   rejected-`play()` promise gracefully, and re-acquire audio after interruptions
   (e.g. a phone call). `deps:` M2-1.
   **DoD:** enabling radio on-device starts playback first try; an interruption
   doesn't leave the UI claiming it's playing silence.
+  *Shipped (#82):* the enable-radio tap and the rejected-`play()` handling were
+  already correct (`safePlay()` invokes `audio.play()` synchronously within the
+  click's call stack, and only sets `state.playing` after the promise settles
+  either way). The actual gap was interruptions: nothing resynced the UI when
+  the `<audio>` element was paused out-of-band (OS/browser audio-focus loss, a
+  phone call, background-tab throttling), so the play button/popover could
+  keep claiming "Playing" over silence. Fixed with an `audio` `'pause'`
+  listener plus a `visibilitychange` fallback that resync `state.playing`
+  (idempotently — harmless whether it fires from our own pause or a genuine
+  interruption). Deliberately does not auto-resume playback on interruption-end.
 
 ## Phase M5 — Testing + dev loop
 *Goal: the mobile experience can't silently regress.*
