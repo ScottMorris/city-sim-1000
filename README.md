@@ -8,7 +8,7 @@ A browser-based, offline-ready city simulator built with TypeScript, Vite, and W
 - TypeScript + Vite
 - PixiJS for WebGL rendering
 - Vanilla CSS for UI
-- Service worker + PWA manifest for offline play
+- Workbox-generated service worker (via `vite-plugin-pwa`) + PWA manifest for offline play
 
 ## Getting started
 
@@ -83,6 +83,7 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 - Inspector: select Inspect, click a tile to see utilities, status, and capacity; pin the tool info card to keep build stats visible.
 
 ## Offline & PWA
-- `public/service-worker.js` caches core pages and dynamically caches other assets.
+- `vite-plugin-pwa` (Workbox `generateSW` mode, configured in `vite.config.ts`) generates the service worker at build time from the real Vite build manifest, precaching JS/CSS/HTML/WASM/icons — radio audio (`public/audio/`) and the marketing images (`readme-banner.png`, `social-preview.png`) are excluded via `globIgnores`.
 - `public/manifest.webmanifest` and icons let you install the game as a standalone experience.
+- The radio widget only fetches its (small) playlist JSON on boot; the full audio/cover library is fetched lazily the first time the player presses play, so a fresh install/reload never pulls the whole radio library over the network.
 - Regenerate the emoji favicon and PWA icons with `npm run build:favicon`; it draws the 🏙️ emoji onto a dark blue gradient for consistent branding.

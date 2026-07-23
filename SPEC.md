@@ -55,7 +55,7 @@ Game saves are stored in **IndexedDB** as binary CSAV containers (engine snapsho
 * **Rust** (`city-sim-core`) for the simulation engine
 * **WASM** (`city-sim-wasm`) — Web Worker + `WasmSimBridge` for browser play
 * **Tauri v2** (`tauri-plugin-city-sim`) — native desktop via `TauriSimBridge`
-* **Service worker** for caching
+* **Workbox service worker** (via `vite-plugin-pwa`, generated at build time) for caching
 * **IndexedDB** (CSAV containers) + `.citysim` file import/export for saves
 
 ---
@@ -67,9 +67,9 @@ Game saves are stored in **IndexedDB** as binary CSAV containers (engine snapsho
 ├─ index.html
 ├─ public/
 │  ├─ manifest.webmanifest
-│  ├─ service-worker.js
 │  ├─ icons/
 │  └─ manual.html
+│     (service worker is generated at build time into dist/sw.js by vite-plugin-pwa — not checked in)
 ├─ src/
 │  ├─ main.ts
 │  ├─ game/
@@ -371,12 +371,13 @@ Expenses:
 ## 7. PWA Requirements
 
 * `manifest.webmanifest` with icons
-* `service-worker.js` that caches:
+* A Workbox service worker, generated at build time by `vite-plugin-pwa` (`generateSW` mode, `registerType: 'autoUpdate'`) from the real Vite build manifest, that precaches:
 
-  * index.html
+  * index.html and manual.html
   * built JS + CSS
-  * textures/sprites
-  * manual.html
+  * the WASM binary + worker chunk
+  * textures/sprites and icons
+  * excluding radio audio (`public/audio/`) and the marketing images (`readme-banner.png`, `social-preview.png`)
 * Offline support required
 
 ---

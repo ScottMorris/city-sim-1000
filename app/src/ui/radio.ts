@@ -95,6 +95,9 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     sources: []
   };
 
+  // Radio is off-by-default: don't fetch the full audio/cover library (~55MB)
+  // until the player actually presses play for the first time.
+  let hasWarmedCache = false;
   let hidePopoverTimeout: number | null = null;
   // No hover on touch, so the popover (full title/artist/status/cover —
   // compact mode strips the marquee+cover down to icon buttons only, see
@@ -260,6 +263,10 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
   }
 
   async function safePlay() {
+    if (!hasWarmedCache) {
+      hasWarmedCache = true;
+      warmCacheForPlaylist(state.playlist);
+    }
     try {
       await audio.play();
       state.playing = true;
@@ -373,7 +380,6 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
     updatePlayLabel();
     updateMarqueeAnimation();
     setPopoverMetaForCurrentTrack();
-    void warmCacheForPlaylist(state.playlist);
   }
 
   void loadPlaylist();
