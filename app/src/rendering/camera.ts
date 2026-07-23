@@ -23,11 +23,19 @@ export function screenToTile(
   clientX: number,
   clientY: number
 ) {
+  // Pixi's stage/sprite coordinates (and camera.x/y, derived from
+  // wrapper.clientWidth/clientHeight) are always in CSS/logical pixels —
+  // resolution only scales canvas.width/height (the backing store) for
+  // sharpness, it never changes the logical coordinate space sprites are
+  // positioned in. Scaling by canvas.width/rect.width here would convert
+  // into backing-store space, which nothing else in this app's coordinate
+  // math expects; it was a no-op (ratio always 1) as long as resolution was
+  // never set explicitly, which masked it until M4-2 started setting a real
+  // resolution on high-DPI screens — every tap landed resolution× further
+  // from the camera origin than intended.
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const x = ((clientX - rect.left) * scaleX - camera.x) / (tileSize * camera.scale);
-  const y = ((clientY - rect.top) * scaleY - camera.y) / (tileSize * camera.scale);
+  const x = (clientX - rect.left - camera.x) / (tileSize * camera.scale);
+  const y = (clientY - rect.top - camera.y) / (tileSize * camera.scale);
   return { x: Math.floor(x), y: Math.floor(y) };
 }
 

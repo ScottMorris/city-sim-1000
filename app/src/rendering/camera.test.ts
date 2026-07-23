@@ -93,11 +93,22 @@ describe('screenToTile', () => {
     ).toEqual({ x: 3, y: 2 });
   });
 
-  it('compensates for a canvas whose backing store differs from its CSS size', () => {
+  it('ignores the canvas backing store size — only the CSS rect matters', () => {
+    // Pixi's stage coordinates (and camera.x/y) are always in CSS/logical
+    // pixels regardless of resolution/devicePixelRatio; canvas.width/height
+    // (the backing store) only controls rendering sharpness. A tap must map
+    // the same way whether resolution is 1 (backing store == CSS size) or
+    // capped at 2 on a high-DPI phone (backing store == 2x CSS size) — this
+    // was a real bug (M4-2's resolution cap): scaling by canvas.width/rect.width
+    // here put every tap resolution× further from the camera origin than
+    // intended, e.g. the DPR-2/resolution-2 case below used to compute
+    // { x: 1, y: 0 } for a tap at the midpoint of tile 0.
     const camera = createCamera();
-    // Backing store at 2x the CSS rect — e.g. a devicePixelRatio-2 display.
-    const canvas = fakeCanvas(1600, 1200, { width: 800, height: 600 });
-    expect(screenToTile(camera, TILE_SIZE, canvas, TILE_SIZE / 2, 0)).toEqual({ x: 1, y: 0 });
+    const canvas1x = fakeCanvas(800, 600, { width: 800, height: 600 });
+    const canvas2x = fakeCanvas(1600, 1200, { width: 800, height: 600 });
+    const expected = { x: 0, y: 0 };
+    expect(screenToTile(camera, TILE_SIZE, canvas1x, TILE_SIZE / 2, 0)).toEqual(expected);
+    expect(screenToTile(camera, TILE_SIZE, canvas2x, TILE_SIZE / 2, 0)).toEqual(expected);
   });
 
   it('offsets by the canvas position in the page', () => {
