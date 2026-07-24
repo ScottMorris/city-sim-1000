@@ -414,18 +414,29 @@ const loadingScreen = initLoadingScreen(document.body);
 // A stuck loading screen with no devtools access (a phone, most often) would
 // otherwise be a silent dead end — surface anything that happens before the
 // engine is up directly on the one screen we know is actually being looked at.
-window.addEventListener('error', (event) => {
+// Only relevant during boot, so both listeners come off once the outcome (Ready
+// or InitError) is known — nothing after that point should still be routed here.
+function onBootError(event: ErrorEvent): void {
   loadingScreen.showError(`Error: ${event.message}`);
-});
-window.addEventListener('unhandledrejection', (event) => {
-  loadingScreen.showError(`Unhandled rejection: ${String(event.reason)}`);
-});
+}
+function onBootRejection(event: PromiseRejectionEvent): void {
+  const reason = event.reason;
+  loadingScreen.showError(`Unhandled rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
+}
+window.addEventListener('error', onBootError);
+window.addEventListener('unhandledrejection', onBootRejection);
+function stopBootErrorWatch(): void {
+  window.removeEventListener('error', onBootError);
+  window.removeEventListener('unhandledrejection', onBootRejection);
+}
 
 function wireBridge(b: SimBridge): void {
   b.onMessage((msg: FromSim) => {
     if (msg.type === 'Ready') {
+      stopBootErrorWatch();
       loadingScreen.complete();
     } else if (msg.type === 'InitError') {
+      stopBootErrorWatch();
       loadingScreen.showError(msg.message);
     } else if (msg.type === 'Alert') {
       notifications.publish({

@@ -269,8 +269,12 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         // init — the bridge follows up with 'load_snapshot'/'import_legacy'.
         if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
         if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
-        self.postMessage({ type: 'ready', history: historyFlags(host) });
+        // Posting 'ready' must be the last statement in this block — once the
+        // main thread has been told we're up, nothing after this may throw
+        // into the catch below, or it would post 'init_error' for a boot that
+        // already succeeded.
         startStepLoop();
+        self.postMessage({ type: 'ready', history: historyFlags(host) });
       } catch (err) {
         self.postMessage({ type: 'init_error', message: err instanceof Error ? err.message : String(err) });
       }

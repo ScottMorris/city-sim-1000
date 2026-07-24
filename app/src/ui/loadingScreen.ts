@@ -142,8 +142,18 @@ export function initLoadingScreen(root: HTMLElement): LoadingScreen {
     clearInterval(elapsedInterval);
   };
 
+  // Once the outcome is settled (success or failure), ignore anything else —
+  // `overlay.isConnected` alone isn't enough, since the fade-out after
+  // complete() leaves the overlay attached for ~600ms, and a later unrelated
+  // error/rejection could otherwise flash "Failed to start" over a boot that
+  // already succeeded, or a second failure could overwrite the first (and
+  // usually more diagnostic) error message.
+  let settled = false;
+
   return {
     complete() {
+      if (settled) return;
+      settled = true;
       teardown();
       stageEl.textContent = 'Ready!';
 
@@ -159,7 +169,8 @@ export function initLoadingScreen(root: HTMLElement): LoadingScreen {
       }, 250);
     },
     showError(message: string) {
-      if (!overlay.isConnected) return; // Already completed/removed — nothing to show this on.
+      if (settled) return;
+      settled = true;
       teardown();
       stageEl.textContent = 'Failed to start';
       const errorEl = overlay.querySelector<HTMLElement>('#ls-error')!;

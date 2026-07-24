@@ -222,4 +222,15 @@ describe('WasmSimBridge undo/redo', () => {
     expect(initErrors).toHaveLength(1);
     expect(initErrors[0]).toMatchObject({ type: 'InitError', message: 'Worker failed to start' });
   });
+
+  it('reports InitError without Ready ever having arrived, matching a real boot failure', () => {
+    // Unlike makeBridge(), this never emits 'ready' first — reproducing the
+    // actual ordering a WASM instantiation failure produces on a real boot.
+    const worker = new FakeWorker();
+    const state = createInitialState(8, 8, 1);
+    const events: FromSim[] = [];
+    new WasmSimBridge(state, { createWorker: () => worker as unknown as Worker }).onMessage(msg => events.push(msg));
+    worker.emit({ type: 'init_error', message: 'WASM instantiation failed' });
+    expect(events).toEqual([{ type: 'InitError', message: 'WASM instantiation failed' }]);
+  });
 });
