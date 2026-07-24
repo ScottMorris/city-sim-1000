@@ -1,4 +1,5 @@
 import type { BudgetInsights, NarrativeInput } from '../types';
+import { formatCurrency } from '../../../utils/currency';
 
 const MAX_TOP_CHANGES = 3;
 const MAX_DRIVERS = 4;
@@ -35,14 +36,6 @@ const formatNumber = (value: number, unit?: string) => {
 const formatSignedNumber = (value: number, unit?: string) => {
   const sign = value > 0 ? '+' : value < 0 ? '-' : '';
   return `${sign}${formatNumber(value, unit)}`;
-};
-
-export const formatCurrency = (value: number, opts: { signed?: boolean } = {}) => {
-  const { signed = false } = opts;
-  const abs = Math.abs(value);
-  const formatted = abs >= 100 ? Math.round(abs).toLocaleString() : abs.toFixed(2);
-  const sign = signed ? (value > 0 ? '+' : value < 0 ? '-' : '') : '';
-  return `${sign}$${formatted}`;
 };
 
 const formatSignedCurrency = (value: number, suffix?: string) => {

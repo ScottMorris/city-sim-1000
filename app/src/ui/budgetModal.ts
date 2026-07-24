@@ -5,6 +5,7 @@
 // SPDX-License-Identifier: MIT
 
 import { GameState } from '../game/gameState';
+import { formatCurrency } from '../utils/currency';
 import { showToast } from './dialogs';
 import { computeRunwayDays, getQuarterSummary, getRecentMonths } from '../game/economy';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
@@ -31,14 +32,6 @@ interface BudgetModalOptions {
 
 /** How often the open ledger re-reads the sim state (ms). */
 const LIVE_REFRESH_MS = 600;
-
-export function formatCurrency(value: number, opts: { signed?: boolean } = {}) {
-  const { signed = false } = opts;
-  const abs = Math.abs(value);
-  const formatted = abs >= 100 ? Math.round(abs).toLocaleString() : abs.toFixed(2);
-  const sign = signed ? (value > 0 ? '+' : value < 0 ? '-' : '') : '';
-  return `${sign}$${formatted}`;
-}
 
 function formatRunway(runwayDays: number) {
   if (!Number.isFinite(runwayDays)) return '∞';
