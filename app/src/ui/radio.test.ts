@@ -107,6 +107,59 @@ describe('radio widget', () => {
       widget.dispose();
     });
 
+    it('flips the popover above the widget when it would overflow the bottom of the viewport (#145)', async () => {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const widget = initRadioWidget(host, {
+        fetchImpl: vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ version: '1.0', tracks: [] }) }) as unknown as typeof fetch,
+        audioFactory: () => new AudioStub() as unknown as HTMLAudioElement
+      });
+      await widget.refresh();
+
+      const widgetEl = host.querySelector<HTMLElement>('.radio-widget');
+      const popoverEl = host.querySelector<HTMLElement>('.radio-popover');
+      const cover = host.querySelector<HTMLElement>('.radio-cover');
+
+      // Simulate the compact bottom dock: the widget sits near the bottom of
+      // a short viewport, so a naive `rect.bottom + 8` placement would push
+      // most of the popover off-screen with no way to scroll to it.
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(640);
+      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(360);
+      vi.spyOn(widgetEl!, 'getBoundingClientRect').mockReturnValue({
+        top: 580,
+        bottom: 620,
+        left: 10,
+        right: 190,
+        width: 180,
+        height: 40,
+        x: 10,
+        y: 580,
+        toJSON: () => ({})
+      } as DOMRect);
+      vi.spyOn(popoverEl!, 'getBoundingClientRect').mockReturnValue({
+        top: 0,
+        bottom: 100,
+        left: 0,
+        right: 200,
+        width: 200,
+        height: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      } as DOMRect);
+
+      cover?.dispatchEvent(new Event('click', { bubbles: true }));
+
+      expect(widgetEl?.classList.contains('radio-popover-open')).toBe(true);
+      const top = parseFloat(popoverEl!.style.top);
+      // Naive placement (620 + 8 = 628) would overflow the 640px viewport
+      // with a 100px-tall popover; it should flip above the widget instead.
+      expect(top).toBe(580 - 100 - 8);
+
+      vi.restoreAllMocks();
+      widget.dispose();
+    });
+
     it('a pointerdown outside the widget closes a pinned popover', async () => {
       const host = document.createElement('div');
       document.body.appendChild(host);
