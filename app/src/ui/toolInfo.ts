@@ -2,6 +2,7 @@ import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '..
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { TileKind } from '../game/gameState';
 import { Tool } from '../game/toolTypes';
+import { formatCurrency } from '../utils/currency';
 import { defaultHotkeys, HotkeyAction } from './hotkeys';
 
 export interface ToolDetails {
@@ -110,14 +111,6 @@ export function getToolHotkey(tool: Tool): string | undefined {
   return formatHotkey(binding);
 }
 
-function formatCurrency(value: number | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  const abs = Math.abs(value);
-  const formatted =
-    abs >= 100 ? Math.round(value).toLocaleString() : abs >= 10 ? value.toFixed(1) : value.toFixed(2);
-  return `$${formatted}`;
-}
-
 function formatFootprint(width: number, height: number): string {
   return `${width}x${height} tiles`;
 }
@@ -147,7 +140,7 @@ export function getToolDetails(tool: Tool): ToolDetails {
   const name = toolNames[tool] ?? tool;
   const hotkey = getToolHotkey(tool);
   if (cost !== undefined && (tool !== Tool.Inspect || cost > 0)) {
-    rows.push({ label: 'Cost', value: formatCurrency(cost) ?? '$0' });
+    rows.push({ label: 'Cost', value: formatCurrency(cost) });
   }
 
   switch (tool) {
@@ -219,7 +212,7 @@ export function getToolDetails(tool: Tool): ToolDetails {
         tool === Tool.Residential ? TileKind.Residential : tool === Tool.Commercial ? TileKind.Commercial : TileKind.Industrial;
       const template = getBuildingTemplate(kind);
       if (template) {
-        rows.push({ label: 'Maintenance', value: `${formatCurrency(template.maintenance) ?? '$0'} / day` });
+        rows.push({ label: 'Maintenance', value: `${formatCurrency(template.maintenance)} / day` });
         addUtilityUse(rows, template.powerUse, template.waterUse, template.waterOutput);
         if (template.populationCapacity !== undefined) {
           rows.push({ label: 'Capacity', value: `${template.populationCapacity} pop` });
