@@ -32,7 +32,7 @@ interface BudgetModalOptions {
 /** How often the open ledger re-reads the sim state (ms). */
 const LIVE_REFRESH_MS = 600;
 
-function formatCurrency(value: number, opts: { signed?: boolean } = {}) {
+export function formatCurrency(value: number, opts: { signed?: boolean } = {}) {
   const { signed = false } = opts;
   const abs = Math.abs(value);
   const formatted = abs >= 100 ? Math.round(abs).toLocaleString() : abs.toFixed(2);
