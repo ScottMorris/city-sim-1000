@@ -138,6 +138,47 @@ describe('edit view', () => {
     expect(draftArg[0].gainLevel).toBeCloseTo(0.42);
   });
 
+  it('code view shows generated code for the current draft, and switching back applies edits', () => {
+    const { editor, sfx } = initTestEditor();
+    editor.open();
+    const editBtn = document.querySelectorAll('.sfx-editor-row button')[1] as HTMLButtonElement;
+    editBtn.click();
+
+    const [slidersBtn, codeBtn] = document.querySelectorAll<HTMLButtonElement>('.sfx-editor-mode-toggle button');
+    codeBtn.click();
+    const textarea = document.querySelector<HTMLTextAreaElement>('.sfx-editor-code-textarea');
+    expect(textarea).not.toBeNull();
+    expect(textarea!.value).toContain('note(');
+
+    textarea!.value = textarea!.value.replace(/\.gain\([\d.]+\)/, '.gain(0.11)');
+    slidersBtn.click();
+
+    const previewBtn = document.querySelector<HTMLButtonElement>('.sfx-editor-actions button');
+    previewBtn?.click();
+    const draftArg = (sfx.preview as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(draftArg[0].gainLevel).toBeCloseTo(0.11);
+  });
+
+  it('invalid code shows an inline error and does not lose the draft', () => {
+    const { editor, sfx, onSaveCity } = initTestEditor();
+    editor.open();
+    const editBtn = document.querySelectorAll('.sfx-editor-row button')[1] as HTMLButtonElement;
+    editBtn.click();
+
+    const codeBtn = document.querySelectorAll<HTMLButtonElement>('.sfx-editor-mode-toggle button')[1];
+    codeBtn.click();
+    const textarea = document.querySelector<HTMLTextAreaElement>('.sfx-editor-code-textarea')!;
+    textarea.value = 'not valid js [[[';
+
+    const [previewBtn, saveCityBtn] = document.querySelectorAll<HTMLButtonElement>('.sfx-editor-actions button');
+    previewBtn.click();
+    expect(sfx.preview).not.toHaveBeenCalled();
+    expect(document.querySelector<HTMLElement>('.sfx-editor-code-error')?.hidden).toBe(false);
+
+    saveCityBtn.click();
+    expect(onSaveCity).not.toHaveBeenCalled();
+  });
+
   it('cancel discards the draft and returns to the list view without saving', () => {
     const { editor, onSaveCity, onSaveGlobal } = initTestEditor();
     editor.open();

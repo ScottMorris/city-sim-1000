@@ -97,3 +97,46 @@
   gap: 8px;
   padding-top: 8px;
 }
+
+.sfx-editor-mode-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.sfx-editor-mode-toggle button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sfx-editor-edit-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sfx-editor-code-help {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.sfx-editor-code-textarea {
+  font-family: monospace;
+  font-size: 12px;
+  min-height: 260px;
+  resize: vertical;
+  background: #0b1424;
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px;
+  white-space: pre;
+}
+
+.sfx-editor-code-error {
+  border: 1px solid #f08c42;
+  border-radius: 8px;
+  background: rgba(240, 140, 66, 0.1);
+  color: #ffcc9a;
+  font-size: 12px;
+  padding: 8px 10px;
+}
