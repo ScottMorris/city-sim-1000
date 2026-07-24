@@ -159,6 +159,37 @@ describe('edit view', () => {
     expect(draftArg[0].gainLevel).toBeCloseTo(0.11);
   });
 
+  it('the generated code includes filter fields for a layer with a defined filterCutoff', () => {
+    const { editor } = initTestEditor();
+    editor.open();
+    const editBtn = document.querySelectorAll('.sfx-editor-row button')[1] as HTMLButtonElement;
+    editBtn.click(); // placeBuilding — its first layer has a defined filterCutoff (220)
+
+    const codeBtn = document.querySelectorAll<HTMLButtonElement>('.sfx-editor-mode-toggle button')[1];
+    codeBtn.click();
+    const textarea = document.querySelector<HTMLTextAreaElement>('.sfx-editor-code-textarea')!;
+    expect(textarea.value).toContain('.lpf(220)');
+    expect(textarea.value).toContain('.lpenv(');
+  });
+
+  it('round-trips an edit through code → sliders → code without losing it', () => {
+    const { editor } = initTestEditor();
+    editor.open();
+    const editBtn = document.querySelectorAll('.sfx-editor-row button')[1] as HTMLButtonElement;
+    editBtn.click();
+
+    const [slidersBtn, codeBtn] = document.querySelectorAll<HTMLButtonElement>('.sfx-editor-mode-toggle button');
+    codeBtn.click();
+    let textarea = document.querySelector<HTMLTextAreaElement>('.sfx-editor-code-textarea')!;
+    textarea.value = textarea.value.replace(/\.gain\([\d.]+\)/, '.gain(0.77)');
+
+    slidersBtn.click(); // compiles the edit into the draft
+    codeBtn.click(); // regenerates code from that same draft
+
+    textarea = document.querySelector<HTMLTextAreaElement>('.sfx-editor-code-textarea')!;
+    expect(textarea.value).toContain('.gain(0.77)');
+  });
+
   it('invalid code shows an inline error and does not lose the draft', () => {
     const { editor, sfx, onSaveCity } = initTestEditor();
     editor.open();

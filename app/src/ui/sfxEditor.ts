@@ -261,8 +261,9 @@ export function initSfxEditorModal(options: SfxEditorOptions) {
     function renderCode(): void {
       const help = document.createElement('div');
       help.className = 'sfx-editor-code-help';
-      help.textContent = 'Advanced: hand-edit the voice stack directly. Must evaluate to an array '
-        + "of voices, e.g. [note(60).attack(0.01).decay(0.1).sustain(0).release(0.05).gain(0.8)].";
+      help.textContent = 'Advanced: hand-edit the voice stack directly. Must be a single array '
+        + 'expression of voices, e.g. [note(60).attack(0.01).decay(0.1).sustain(0).release(0.05).gain(0.8)] '
+        + '— no other statements. A trailing semicolon is fine.';
       contentEl.appendChild(help);
 
       codeTextarea = document.createElement('textarea');

@@ -53,6 +53,18 @@ describe('paramsToCode / codeToParams round-trip', () => {
   });
 });
 
+describe('codeToParams trailing-semicolon tolerance', () => {
+  it('tolerates a trailing semicolon (the most natural thing to type after an array literal)', () => {
+    const code = "[note(60).sound('sine').attack(0.01).decay(0.1).sustain(0).release(0.05).gain(0.8)];";
+    expect(() => codeToParams(code)).not.toThrow();
+  });
+
+  it('tolerates trailing semicolon plus surrounding whitespace/newlines', () => {
+    const code = "\n  [note(60).sound('sine').attack(0.01).decay(0.1).sustain(0).release(0.05).gain(0.8)]  ;\n\n";
+    expect(() => codeToParams(code)).not.toThrow();
+  });
+});
+
 describe('codeToParams error handling', () => {
   it('throws a descriptive error on a syntax error', () => {
     expect(() => codeToParams('[note(60).attack(')).toThrow(/Couldn't parse/);
