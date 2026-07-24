@@ -59,6 +59,7 @@ interface WorkerHistoryFlags {
 
 type WorkerToMain =
   | { type: 'ready';        history: WorkerHistoryFlags }
+  | { type: 'init_error';   message: string }
   | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; mutationSeq: number }
   | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
@@ -143,6 +144,12 @@ export class WasmSimBridge implements SimBridge {
       new Worker(new URL('../workers/wasmSim.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<WorkerToMain>) => {
       this.handleWorkerMsg(e.data);
+    };
+    // Catches worker-thread failures the 'init' handler's own try/catch
+    // can't (a syntax error, the module failing to load at all) — without
+    // this, such a failure is silent and 'Ready' simply never arrives.
+    this.worker.onerror = (event: ErrorEvent) => {
+      this.handler?.({ type: 'InitError', message: event.message || 'Worker failed to start' });
     };
     // Seed the engine with the mirror's natural terrain (water/trees from the
     // TS generator) — from here on the engine is the single source of truth
@@ -344,6 +351,9 @@ export class WasmSimBridge implements SimBridge {
         this.worker.postMessage({ type: 'set_policies', payload: this.state.policies });
         this.syncHistoryFlags(msg.history);
         this.handler?.({ type: 'Ready' });
+        break;
+      case 'init_error':
+        this.handler?.({ type: 'InitError', message: msg.message });
         break;
       case 'step_result':
         this.pendingTileBuffer = msg.bytes;

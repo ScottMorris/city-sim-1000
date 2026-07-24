@@ -87,6 +87,14 @@ function buildSkylineHtml(): string {
 export interface LoadingScreen {
   /** Call this when the bridge fires { type: 'Ready' }. */
   complete(): void;
+  /**
+   * Shows a persistent, on-screen error and stops the stage-label rotation —
+   * for failures that mean 'Ready' will never arrive (WASM init failure, an
+   * uncaught worker error). No devtools access on a phone means an error that
+   * only reaches the console is invisible; this is the one place a player
+   * stuck on this screen is guaranteed to be looking at.
+   */
+  showError(message: string): void;
 }
 
 export function initLoadingScreen(root: HTMLElement): LoadingScreen {
@@ -105,6 +113,8 @@ export function initLoadingScreen(root: HTMLElement): LoadingScreen {
         </div>
       </div>
       <div class="ls-stage" id="ls-stage">${STAGES[0]}</div>
+      <div class="ls-elapsed" id="ls-elapsed">0s</div>
+      <div class="ls-error" id="ls-error" hidden></div>
     </div>
   `;
   root.appendChild(overlay);
@@ -117,9 +127,34 @@ export function initLoadingScreen(root: HTMLElement): LoadingScreen {
     stageEl.textContent = STAGES[stageIdx];
   }, 700);
 
+  // A live elapsed-time counter is the one piece of "what is it currently
+  // doing" a player stuck here (often with no devtools access, e.g. on a
+  // phone) can always read: it distinguishes a genuine hang from just being
+  // slow, without needing anything from the actual boot sequence.
+  const startedAt = Date.now();
+  const elapsedEl = overlay.querySelector<HTMLElement>('#ls-elapsed')!;
+  const elapsedInterval = setInterval(() => {
+    elapsedEl.textContent = `${Math.round((Date.now() - startedAt) / 1000)}s`;
+  }, 1000);
+
+  const teardown = () => {
+    clearInterval(stageInterval);
+    clearInterval(elapsedInterval);
+  };
+
+  // Once the outcome is settled (success or failure), ignore anything else —
+  // `overlay.isConnected` alone isn't enough, since the fade-out after
+  // complete() leaves the overlay attached for ~600ms, and a later unrelated
+  // error/rejection could otherwise flash "Failed to start" over a boot that
+  // already succeeded, or a second failure could overwrite the first (and
+  // usually more diagnostic) error message.
+  let settled = false;
+
   return {
     complete() {
-      clearInterval(stageInterval);
+      if (settled) return;
+      settled = true;
+      teardown();
       stageEl.textContent = 'Ready!';
 
       const fill = overlay.querySelector<HTMLElement>('#ls-bar-fill')!;
@@ -132,6 +167,15 @@ export function initLoadingScreen(root: HTMLElement): LoadingScreen {
         overlay.style.transition = 'opacity 350ms ease';
         overlay.style.opacity = '0';
       }, 250);
+    },
+    showError(message: string) {
+      if (settled) return;
+      settled = true;
+      teardown();
+      stageEl.textContent = 'Failed to start';
+      const errorEl = overlay.querySelector<HTMLElement>('#ls-error')!;
+      errorEl.textContent = message;
+      errorEl.hidden = false;
     },
   };
 }

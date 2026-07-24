@@ -133,3 +133,23 @@
   text-transform: uppercase;
   min-height: 1.2em;
 }
+
+.ls-elapsed {
+  font-size: 0.62rem;
+  color: #4c6b87;
+  margin-top: 4px;
+}
+
+.ls-error {
+  margin-top: 16px;
+  padding: 10px 14px;
+  max-width: 90vw;
+  border: 1px solid #f08c42;
+  border-radius: 8px;
+  background: rgba(240, 140, 66, 0.1);
+  color: #ffcc9a;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  text-align: left;
+  word-break: break-word;
+}
