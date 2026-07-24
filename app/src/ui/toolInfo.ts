@@ -113,8 +113,7 @@ export function getToolHotkey(tool: Tool): string | undefined {
 function formatCurrency(value: number | undefined): string | undefined {
   if (value === undefined) return undefined;
   const abs = Math.abs(value);
-  const formatted =
-    abs >= 100 ? Math.round(value).toLocaleString() : abs >= 10 ? value.toFixed(1) : value.toFixed(2);
+  const formatted = abs >= 100 ? Math.round(value).toLocaleString() : value.toFixed(2);
   return `$${formatted}`;
 }
 

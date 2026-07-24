@@ -35,8 +35,7 @@ const LIVE_REFRESH_MS = 600;
 function formatCurrency(value: number, opts: { signed?: boolean } = {}) {
   const { signed = false } = opts;
   const abs = Math.abs(value);
-  const formatted =
-    abs >= 100 ? Math.round(abs).toLocaleString() : abs >= 10 ? abs.toFixed(1) : abs.toFixed(2);
+  const formatted = abs >= 100 ? Math.round(abs).toLocaleString() : abs.toFixed(2);
   const sign = signed ? (value > 0 ? '+' : value < 0 ? '-' : '') : '';
   return `${sign}$${formatted}`;
 }
