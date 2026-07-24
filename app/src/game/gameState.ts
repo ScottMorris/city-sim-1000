@@ -7,6 +7,7 @@ import { PowerPlantType } from './constants';
 import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
+import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
@@ -86,6 +87,7 @@ export interface AccessibilitySettings {
 export interface AudioSettings {
   radioVolume: number;
   sfxVolume: number;
+  sfxMuted: boolean;
 }
 
 export interface CosmeticSettings {
@@ -113,6 +115,8 @@ export interface GameSettings {
   cosmetics: CosmeticSettings;
   narrative: NarrativeSettings;
   ui: UiSettings;
+  /** City-scoped custom sound effect voice stacks; see also globalSfxStore.ts for the cross-city scope. */
+  sfxOverrides: SfxOverrides;
 }
 
 export interface UtilityStats {
@@ -250,7 +254,8 @@ export function createDefaultAccessibilitySettings(): AccessibilitySettings {
 export function createDefaultAudioSettings(): AudioSettings {
   return {
     radioVolume: 1,
-    sfxVolume: 1
+    sfxVolume: 1,
+    sfxMuted: false
   };
 }
 
@@ -303,7 +308,8 @@ export function createDefaultSettings(): GameSettings {
     hotkeys: { ...defaultHotkeys },
     cosmetics: createDefaultCosmeticSettings(),
     narrative: createDefaultNarrativeSettings(),
-    ui: createDefaultUiSettings()
+    ui: createDefaultUiSettings(),
+    sfxOverrides: createDefaultSfxOverrides()
   };
 }
 

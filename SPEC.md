@@ -307,6 +307,13 @@ Bulldoze
 * Water Pipe: Connects water network underground. Requires Underground View.
 * Power lines: graph-based connectivity
 
+#### Sound Effects
+
+* Procedural one-shot audio via `@liminal-hq/undertone` (zero-dependency Web Audio synth, published separately at [liminal-hq/undertone](https://github.com/liminal-hq/undertone)) — no sample files, every sound is synthesised from oscillator/noise voices with envelope and filter parameters.
+* Four built-in effects: **Place Building** (any successful non-bulldoze tool placement — the priority-1 sound, never throttled, even during a fast drag-paint stroke), **Bulldoze**, **Error** (any failed placement), **Undo**. Bulldoze/Error/Undo get a short per-effect cooldown so rapid repeats don't stack into mush.
+* Settings → Audio has a live volume slider plus a "🎚️ Edit Sound Effects" button opening an in-game editor: every voice layer of every effect is fully tunable (attack/decay/sustain/release, filter cutoff + envelope, pitch slide, sound type/note), with a live Preview button and a generated-parameter save. Edits save either **to this city** (rides the normal save file, `settings.sfxOverrides`) or **globally** (all cities, `localStorage` — the one deliberate exception to this app's IndexedDB-only persistence, since it's small, cross-save, and non-critical if lost). Resolution order: city override → global override → built-in default. Reset (per effect) and Reset All revert to the built-in default.
+* A quick mute toggle lives in the top ribbon next to Pause, independent of the volume slider's saved level.
+
 ---
 
 ## 6.5 Simulation
@@ -362,6 +369,7 @@ Expenses:
 * Database `city-sim-1000`, store `saves`, one record per slot: `manual` (explicit Save) and `autosave` (periodic, see below)
 * Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard) + client JSON (settings/bylaws)
 * Legacy LocalStorage key `city-sim-1000-save` (plain JSON) is imported once and cleared after a successful CSAV write
+* One deliberate exception: globally-scoped sound effect customizations (§6.4) live in `localStorage`, not IndexedDB — small, cross-save, non-critical if lost
 
 ### Autosave
 
@@ -442,7 +450,6 @@ Create `public/manual.html` with:
 * More tile types
 * Modding support
 * Chunked tile rendering for huge maps
-* Sound effects & music
 
 ---
 
