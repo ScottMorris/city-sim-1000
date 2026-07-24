@@ -21,6 +21,7 @@ import {
 } from './gameState';
 import { DEFAULT_BYLAWS, type BylawState } from './bylaws';
 import { defaultHotkeys } from '../ui/hotkeys';
+import { createDefaultSfxOverrides } from './sfxOverrides';
 
 /** The TS-owned surface of a save — serialised as the CSAV client JSON. */
 export interface ClientState {
@@ -47,6 +48,7 @@ export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSetti
   const cosmeticDefaults = createDefaultCosmeticSettings();
   const narrativeDefaults = createDefaultNarrativeSettings();
   const uiDefaults = createDefaultUiSettings();
+  const sfxOverridesDefaults = createDefaultSfxOverrides();
   const uiSettings = { ...uiDefaults, ...(settings?.ui ?? {}) };
   if (!['auto', 'desktop', 'mobile'].includes(uiSettings.mode)) {
     uiSettings.mode = 'auto';
@@ -60,7 +62,8 @@ export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSetti
     hotkeys: { ...defaultHotkeys, ...(settings?.hotkeys ?? {}) },
     cosmetics: { ...cosmeticDefaults, ...(settings?.cosmetics ?? {}) },
     narrative: { ...narrativeDefaults, ...(settings?.narrative ?? {}) },
-    ui: uiSettings
+    ui: uiSettings,
+    sfxOverrides: { ...sfxOverridesDefaults, ...(settings?.sfxOverrides ?? {}) }
   };
 }
 

@@ -4,6 +4,7 @@ import { defaultHotkeys, HotkeyAction } from './hotkeys';
 interface SettingsModalOptions {
   getSettings: () => GameSettings;
   onApply: (settings: GameSettings) => void;
+  onOpenSfxEditor?: () => void;
 }
 
 const PAN_SPEED_LABELS: Record<PanSpeedPreset, string> = {
@@ -98,7 +99,7 @@ function createToggleRow(options: {
 }
 
 export function initSettingsModal(options: SettingsModalOptions) {
-  const { getSettings, onApply } = options;
+  const { getSettings, onApply, onOpenSfxEditor } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((e: KeyboardEvent) => void) | null = null;
   const cleanup = () => {
@@ -328,7 +329,7 @@ export function initSettingsModal(options: SettingsModalOptions) {
     });
     input.append(invertPanRow, panSpeedRow, shiftScrollRow, ctrlScrollRow, zoomRow, edgeScrollRow);
 
-    const audio = createSection('Audio', 'Radio volume and future effects.');
+    const audio = createSection('Audio', 'Radio and sound effect volume.');
     const radioRow = document.createElement('div');
     radioRow.className = 'settings-row';
     const radioLabel = document.createElement('div');
@@ -353,18 +354,38 @@ export function initSettingsModal(options: SettingsModalOptions) {
     sfxRow.className = 'settings-row';
     const sfxLabel = document.createElement('div');
     sfxLabel.className = 'settings-label';
-    sfxLabel.textContent = 'Sound effects (stub)';
+    sfxLabel.textContent = 'Sound effects';
     const sfxDesc = document.createElement('div');
     sfxDesc.className = 'settings-description';
-    sfxDesc.textContent = 'Placeholder control for future effects.';
+    sfxDesc.textContent = 'Volume for placement, bulldoze, and error sounds.';
     const sfxSlider = document.createElement('input');
     sfxSlider.type = 'range';
     sfxSlider.min = '0';
     sfxSlider.max = '100';
     sfxSlider.value = Math.round((draft.audio.sfxVolume ?? 1) * 100).toString();
-    sfxSlider.disabled = true;
+    sfxSlider.addEventListener('input', () => {
+      const next = Math.max(0, Math.min(100, Number(sfxSlider.value)));
+      draft.audio.sfxVolume = next / 100;
+      onApply(draft);
+    });
     sfxRow.append(sfxLabel, sfxDesc, sfxSlider);
-    audio.append(radioRow, sfxRow);
+
+    const sfxEditorRow = document.createElement('div');
+    sfxEditorRow.className = 'settings-row';
+    const sfxEditorLabel = document.createElement('div');
+    sfxEditorLabel.className = 'settings-label';
+    sfxEditorLabel.textContent = 'Customize sound effects';
+    const sfxEditorDesc = document.createElement('div');
+    sfxEditorDesc.className = 'settings-description';
+    sfxEditorDesc.textContent = 'Edit, preview, and save your own version of each sound.';
+    const sfxEditorBtn = document.createElement('button');
+    sfxEditorBtn.type = 'button';
+    sfxEditorBtn.className = 'secondary';
+    sfxEditorBtn.textContent = '🎚️ Edit Sound Effects';
+    sfxEditorBtn.addEventListener('click', () => onOpenSfxEditor?.());
+    sfxEditorRow.append(sfxEditorLabel, sfxEditorDesc, sfxEditorBtn);
+
+    audio.append(radioRow, sfxRow, sfxEditorRow);
 
     const accessibility = createSection('Accessibility', 'Make the HUD easier to parse.');
     const reducedMotionRow = createToggleRow({

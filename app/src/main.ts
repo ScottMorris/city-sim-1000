@@ -53,6 +53,9 @@ import { initMinimap } from './ui/minimap';
 import { initBudgetModal } from './ui/budgetModal';
 import { initSettingsModal } from './ui/settingsModal';
 import { initBylawsModal } from './ui/bylawsModal';
+import { initSfx } from './ui/sfx';
+import { initSfxEditorModal } from './ui/sfxEditor';
+import { loadGlobalSfxOverrides, saveGlobalSfxOverrides } from './game/globalSfxStore';
 import { initNewsTicker } from './ui/newsTicker';
 import type { RadioWidget } from './ui/radio';
 import { initLoadingScreen } from './ui/loadingScreen';
@@ -109,6 +112,7 @@ appRoot.innerHTML = `
         </div>
       </details>
       <button id="pause-btn" class="ribbon-btn" title="Pause (hotkey Space)" aria-label="Pause">⏸</button>
+      <button id="mute-btn" class="ribbon-btn" title="Mute sound effects" aria-label="Mute sound effects">🔊</button>
       <button id="budget-modal-btn" class="ribbon-btn" title="Open the budget screen" aria-label="Open budget">📊</button>
       <button id="bylaws-modal-btn" class="ribbon-btn" title="Open city bylaws" aria-label="Open bylaws">📜</button>
       <details class="ribbon-menu">
@@ -178,6 +182,7 @@ const speedFastBtn = requireElement<HTMLButtonElement>('#speed-fast');
 const speedLudicrousBtn = requireElement<HTMLButtonElement>('#speed-ludicrous');
 const speedSummaryEl = requireElement<HTMLElement>('#speed-summary');
 const pauseBtn = requireElement<HTMLButtonElement>('#pause-btn');
+const muteBtn = requireElement<HTMLButtonElement>('#mute-btn');
 const saveBtn = requireElement<HTMLButtonElement>('#save-btn');
 const loadBtn = requireElement<HTMLButtonElement>('#load-btn');
 const downloadBtn = requireElement<HTMLButtonElement>('#download-btn');
@@ -450,6 +455,7 @@ function performUndo(): void {
       const message = daysRewound >= 1 ? `Undone — rewound ${formatDaySpan(daysRewound)}` : 'Undone';
       notifications.publish({ id: 'undo', message, sticky: false });
       minimap?.markDirty();
+      sfx?.playUndo();
     }
   });
 }
@@ -574,6 +580,7 @@ let hotkeys: HotkeyController | null = null;
 let minimap: ReturnType<typeof initMinimap> | null = null;
 let radioController: RadioWidget | null = null;
 let newsTicker: ReturnType<typeof initNewsTicker> | null = null;
+let sfx: ReturnType<typeof initSfx> | null = null;
 const PAN_SPEEDS = {
   slow: 420,
   normal: 700,
@@ -698,6 +705,7 @@ function applyCurrentTool(tilePos: Position) {
     return;
   }
   const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y, strokeId));
+  sfx?.playToolResult(activeTool, result.success);
   if (!result.success && result.message) {
     showToast(result.message);
   } else if (result.success) {
@@ -1287,6 +1295,15 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     );
   };
 
+  const syncMuteButton = () => {
+    const muted = state.settings.audio.sfxMuted;
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    const label = muted ? 'Unmute sound effects' : 'Mute sound effects';
+    muteBtn.title = label;
+    muteBtn.setAttribute('aria-label', label);
+    muteBtn.classList.toggle('active', muted);
+  };
+
   const applySettings = (
     nextSettings: GameState['settings'],
     options: { skipHotkeyReload?: boolean } = {}
@@ -1311,6 +1328,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     }
     updatePendingPenaltyBtn();
     radioController?.setVolume(state.settings.audio.radioVolume ?? 1);
+    syncMuteButton();
     const shouldReloadHotkeys = hotkeysChanged || !hotkeys;
     if (!options.skipHotkeyReload && shouldReloadHotkeys) {
       rebuildHotkeys();
@@ -1318,6 +1336,22 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   };
 
   let settingsModal: ReturnType<typeof initSettingsModal> | null = null;
+
+  sfx = initSfx({
+    getVolume: () => (state.settings.audio.sfxMuted ? 0 : (state.settings.audio.sfxVolume ?? 1)),
+    getCityOverrides: () => state.settings.sfxOverrides,
+    getGlobalOverrides: loadGlobalSfxOverrides
+  });
+
+  const sfxEditorModal = initSfxEditorModal({
+    sfx,
+    getCityOverrides: () => state.settings.sfxOverrides,
+    getGlobalOverrides: loadGlobalSfxOverrides,
+    onSaveCity: (next) => {
+      state.settings.sfxOverrides = next;
+    },
+    onSaveGlobal: saveGlobalSfxOverrides
+  });
 
   minimap = initMinimap({
     root: wrapper,
@@ -1333,7 +1367,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   settingsModal = initSettingsModal({
     getSettings: () => state.settings,
-    onApply: (next) => applySettings(next)
+    onApply: (next) => applySettings(next),
+    onOpenSfxEditor: () => sfxEditorModal.open()
   });
 
   treasuryChip.addEventListener('click', () => budgetModal.open());
@@ -1433,6 +1468,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   speedFastBtn.addEventListener('click', () => setSimSpeed('fast'));
   speedLudicrousBtn.addEventListener('click', () => setSimSpeed('ludicrous'));
   pauseBtn.addEventListener('click', () => togglePause());
+  muteBtn.addEventListener('click', () => {
+    state.settings.audio.sfxMuted = !state.settings.audio.sfxMuted;
+    syncMuteButton();
+  });
+  syncMuteButton();
   setSimSpeed(simSpeed, { silent: true });
   updatePendingPenaltyBtn();
 
