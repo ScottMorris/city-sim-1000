@@ -48,4 +48,10 @@ export type FromSim =
   | { type: 'Narrative'; data: NarrativeEvent }
   | { type: 'CommandResult'; success: boolean; message?: string }
   | { type: 'TickStats'; data: TickStats }
-  | { type: 'HistoryChanged'; data: HistoryFlags };
+  | { type: 'HistoryChanged'; data: HistoryFlags }
+  /**
+   * TS/worker-only — not mirrored from the Rust side. The engine can't have
+   * emitted anything yet if this fires: it means the WASM module itself
+   * failed to load/instantiate/boot, so `Ready` will never arrive.
+   */
+  | { type: 'InitError'; message: string };

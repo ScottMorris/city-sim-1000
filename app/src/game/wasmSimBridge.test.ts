@@ -18,7 +18,7 @@ import { Tool } from './toolTypes';
 class FakeWorker {
   sent: { type: string; payload?: Record<string, unknown> }[] = [];
   onmessage: ((e: MessageEvent) => void) | null = null;
-  onerror = null;
+  onerror: ((e: ErrorEvent) => void) | null = null;
   postMessage(msg: { type: string; payload?: Record<string, unknown> }): void {
     this.sent.push(msg);
   }
@@ -197,5 +197,29 @@ describe('WasmSimBridge undo/redo', () => {
     // step_result must be gone, leaving the undone stats in place.
     bridge.step(1 / 20);
     expect(state.money).toBe(1111);
+  });
+
+  it('translates a worker init_error message into an InitError event', () => {
+    const { worker, events } = makeBridge();
+    worker.emit({ type: 'init_error', message: 'WASM instantiation failed' });
+    const initErrors = events.filter(e => e.type === 'InitError');
+    expect(initErrors).toHaveLength(1);
+    expect(initErrors[0]).toMatchObject({ type: 'InitError', message: 'WASM instantiation failed' });
+  });
+
+  it('translates a worker onerror into an InitError event', () => {
+    const { worker, events } = makeBridge();
+    worker.onerror?.({ message: 'script error' } as ErrorEvent);
+    const initErrors = events.filter(e => e.type === 'InitError');
+    expect(initErrors).toHaveLength(1);
+    expect(initErrors[0]).toMatchObject({ type: 'InitError', message: 'script error' });
+  });
+
+  it('falls back to a generic message when worker onerror has no message', () => {
+    const { worker, events } = makeBridge();
+    worker.onerror?.({ message: '' } as ErrorEvent);
+    const initErrors = events.filter(e => e.type === 'InitError');
+    expect(initErrors).toHaveLength(1);
+    expect(initErrors[0]).toMatchObject({ type: 'InitError', message: 'Worker failed to start' });
   });
 });

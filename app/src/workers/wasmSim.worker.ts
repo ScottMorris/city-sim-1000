@@ -257,15 +257,23 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
   const msg = e.data;
   switch (msg.type) {
     case 'init': {
-      await init();
-      host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
-      // Terrain must land before the first step so placement validation and
-      // wilderness see the real water/tree map. Saves are NOT loaded through
-      // init — the bridge follows up with 'load_snapshot'/'import_legacy'.
-      if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
-      if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
-      self.postMessage({ type: 'ready', history: historyFlags(host) });
-      startStepLoop();
+      // Nothing has booted yet if this throws (unsupported WASM feature,
+      // fetch failure, out of memory on a constrained device) — surface it
+      // rather than leaving the main thread waiting for a 'ready' that will
+      // never arrive.
+      try {
+        await init();
+        host = new SimHost(msg.payload.width, msg.payload.height, msg.payload.seed);
+        // Terrain must land before the first step so placement validation and
+        // wilderness see the real water/tree map. Saves are NOT loaded through
+        // init — the bridge follows up with 'load_snapshot'/'import_legacy'.
+        if (msg.payload.terrain) host.set_natural_terrain(msg.payload.terrain);
+        if (msg.payload.policies) applyPolicies(host, msg.payload.policies);
+        self.postMessage({ type: 'ready', history: historyFlags(host) });
+        startStepLoop();
+      } catch (err) {
+        self.postMessage({ type: 'init_error', message: err instanceof Error ? err.message : String(err) });
+      }
       break;
     }
     case 'apply_tool': {
