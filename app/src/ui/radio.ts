@@ -123,8 +123,18 @@ export function initRadioWidget(host: HTMLElement, options: RadioWidgetOptions =
       hidePopoverTimeout = null;
     }
     const rect = widget.getBoundingClientRect();
-    popover.style.left = `${Math.round(rect.left)}px`;
-    popover.style.top = `${Math.round(rect.bottom + 8)}px`;
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const popoverRect = popover.getBoundingClientRect();
+    // On compact layout the widget sits inside the bottom-anchored dock, so
+    // rect.bottom is already near the screen edge — flip above it rather
+    // than let a position:fixed popover render (unreachably) off-screen.
+    const fitsBelow = rect.bottom + 8 + popoverRect.height <= viewportHeight;
+    const top = fitsBelow ? rect.bottom + 8 : Math.max(8, rect.top - popoverRect.height - 8);
+    const maxLeft = Math.max(8, viewportWidth - popoverRect.width - 8);
+    const left = Math.min(Math.max(8, rect.left), maxLeft);
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
     widget.classList.add('radio-popover-open');
   };
 
