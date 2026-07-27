@@ -55,21 +55,23 @@ offset_x = (FINAL_PX - scaled_side) // 2
 offset_y = int(GROUND_Y - scaled_side)
 pixelated.alpha_composite(house_scaled, (offset_x, offset_y))
 
-# Manicured-lawn background, no oval ring: the earlier version tiled the
-# game's rough dithered grass.png and only smoothed a lawn oval on top of
-# it, which read as a weird patch rather than a coherent "this is a tended
-# yard" ground. Simpler and closer to what was asked for: the WHOLE canvas
-# is the same low-contrast mowed-stripe fill, no ring, no separate "wild
-# grass" texture to clash with it.
-LAWN_LIGHT = (46, 89, 22)
-LAWN_DARK = (34, 73, 17)
-STRIPE_H = 6
+# Manicured-lawn background: keep the game's existing patch/checker grass
+# convention (same block-grid look as grass.png), just far more uniform --
+# mostly one flat colour, with only the occasional patch a different shade,
+# instead of grass.png's dense every-block-differs noise. No mow stripes
+# (that read as a totally different pattern, not what was asked for) and no
+# oval ring.
+LAWN_BASE = (40, 80, 19)
+LAWN_VARIANTS = [(46, 89, 22), (34, 72, 17)]
+BLOCK = 8  # matches grass.png's own patch scale
+PATCH_CHANCE = 0.12  # most blocks stay LAWN_BASE; only a few get a variant
 bg = Image.new('RGB', (FINAL_PX, FINAL_PX))
-for y in range(FINAL_PX):
-    stripe_colour = LAWN_LIGHT if (y // STRIPE_H) % 2 == 0 else LAWN_DARK
-    for x in range(FINAL_PX):
-        jitter = random.randint(-3, 3)
-        bg.putpixel((x, y), tuple(max(0, min(255, c + jitter)) for c in stripe_colour))
+for by in range(0, FINAL_PX, BLOCK):
+    for bx in range(0, FINAL_PX, BLOCK):
+        colour = random.choice(LAWN_VARIANTS) if random.random() < PATCH_CHANCE else LAWN_BASE
+        for y in range(by, min(by + BLOCK, FINAL_PX)):
+            for x in range(bx, min(bx + BLOCK, FINAL_PX)):
+                bg.putpixel((x, y), colour)
 
 bg = bg.convert('RGBA')
 bg.alpha_composite(pixelated)
