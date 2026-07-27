@@ -112,6 +112,11 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
         pop=0,  jobs=0,  maint=0.05,   zone=false, plant=false, civic=true,
         svc=ServiceKind::None, scap=0, scov=0
     };
+    static PARK_LARGE: BuildingTemplate = tmpl! {
+        (2,2), pwr=false, wat=false, wu=0.0,  wo=0,  pu=0.0,
+        pop=0,  jobs=0,  maint=0.16,   zone=false, plant=false, civic=true,
+        svc=ServiceKind::None, scap=0, scov=0
+    };
     // Elementary school: capacity=180, radius=8 (from services.ts DEFAULT_SERVICE_DEFINITIONS)
     static ELEM_SCHOOL: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=4.0,
@@ -140,6 +145,7 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
         WaterPump => Some(&WATER_PUMP),
         WaterTower => Some(&WATER_TOWER),
         Park => Some(&PARK),
+        ParkLarge => Some(&PARK_LARGE),
         ElementarySchool => Some(&ELEM_SCHOOL),
         HighSchool => Some(&HIGH_SCHOOL),
         HydroPlant | CoalPlant | WindTurbine | SolarFarm => Some(&POWER_PLANT),

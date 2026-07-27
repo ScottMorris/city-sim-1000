@@ -17,5 +17,6 @@
   { "u8": 15, "ts": "park" },
   { "u8": 16, "ts": "coal" },
   { "u8": 17, "ts": "wind" },
-  { "u8": 18, "ts": "solar" }
+  { "u8": 18, "ts": "solar" },
+  { "u8": 19, "ts": "park_large" }
 ]

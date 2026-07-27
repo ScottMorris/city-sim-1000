@@ -29,6 +29,7 @@ export interface TileTextures {
   commercialGeminiBuildings: PIXI.Texture[];
   industrialBuildings: PIXI.Texture[];
   schools: Partial<Record<'elementary' | 'high', PIXI.Texture>>;
+  parks: Partial<Record<'small' | 'large', PIXI.Texture>>;
   indicators: Partial<Record<'noPower' | 'noWater', PIXI.Texture>>;
 }
 
@@ -99,6 +100,11 @@ const schoolTexturePaths = {
   high:       assetPath('assets/tiles/buildings/school-high.png')
 };
 
+const parkTexturePaths = {
+  small: assetPath('assets/tiles/buildings/park-small.png'),
+  large: assetPath('assets/tiles/buildings/park-large.png')
+};
+
 const indicatorTexturePaths = {
   noPower: assetPath('assets/tiles/indicators/indicator-no-power.png'),
   noWater: assetPath('assets/tiles/indicators/indicator-no-water.png')
@@ -159,6 +165,13 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
+  const parkEntries = await Promise.all(
+    Object.entries(parkTexturePaths).map(async ([key, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [key as 'small' | 'large', texture] as const;
+    })
+  );
+
   const indicatorEntries = await Promise.all(
     (Object.entries(indicatorTexturePaths) as ['noPower' | 'noWater', string][]).map(async ([key, path]) => {
       const texture = await PIXI.Assets.load<PIXI.Texture>(path);
@@ -177,6 +190,7 @@ export async function loadTileTextures(): Promise<TileTextures> {
     commercialGeminiBuildings,
     industrialBuildings,
     schools:                Object.fromEntries(schoolEntries),
+    parks:                  Object.fromEntries(parkEntries),
     indicators:             Object.fromEntries(indicatorEntries)
   };
 }

@@ -1,3 +1,8 @@
+// hotkeys.ts — default keybindings and the keydown/keyup dispatcher.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 export type HotkeyAction =
   | 'moveUp'
   | 'moveDown'
@@ -20,6 +25,7 @@ export type HotkeyAction =
   | 'selectCommercial'
   | 'selectIndustrial'
   | 'selectPark'
+  | 'selectParkLarge'
   | 'selectBulldoze'
   | 'speedSlow'
   | 'speedFast'
@@ -51,6 +57,7 @@ export const defaultHotkeys: HotkeyBindings = {
   selectCommercial: ['KeyX'],
   selectIndustrial: ['KeyC'],
   selectPark: ['KeyK'],
+  selectParkLarge: ['KeyO'],
   selectBulldoze: ['KeyB'],
   speedSlow: ['Digit1'],
   speedFast: ['Digit2'],

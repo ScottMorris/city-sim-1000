@@ -1,3 +1,8 @@
+// tileRenderUtils.ts — resolveTileSprite: maps a tile to its texture/footprint for the renderer.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import type { Texture } from 'pixi.js';
 import { isPowerCarrier } from '../game/adjacency';
 import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
@@ -123,6 +128,28 @@ export function resolveTileSprite(
             : tileTextures.schools?.high;
         if (texture) {
           return { texture, widthTiles: width, heightTiles: height, borderWidth: BUILDING_BORDER_WIDTH };
+        }
+      } else if (x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height) {
+        return { skip: true };
+      }
+    }
+  }
+  if (
+    (tile.kind === TileKind.Park || tile.kind === TileKind.ParkLarge) &&
+    tile.buildingId !== undefined
+  ) {
+    const entry = buildingLookup.get(tile.buildingId);
+    const template = entry?.template;
+    const origin = entry?.origin;
+    if (template && origin) {
+      const width = template.footprint.width;
+      const height = template.footprint.height;
+      if (x === origin.x && y === origin.y) {
+        const texture = tile.kind === TileKind.Park ? tileTextures.parks?.small : tileTextures.parks?.large;
+        if (texture) {
+          // No borderWidth: unlike schools/power plants, parks are ground-cover —
+          // the source art's grass edges are designed to abut seamlessly, like Tree.
+          return { texture, widthTiles: width, heightTiles: height };
         }
       } else if (x >= origin.x && x < origin.x + width && y >= origin.y && y < origin.y + height) {
         return { skip: true };

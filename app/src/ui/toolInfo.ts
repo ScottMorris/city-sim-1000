@@ -1,3 +1,8 @@
+// toolInfo.ts — tool labels, hotkey lookups, and the tool detail-panel content.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { TileKind } from '../game/gameState';
@@ -36,12 +41,14 @@ export const toolLabels: Record<Tool, string> = {
   [Tool.Commercial]: '🏪 Com',
   [Tool.Industrial]: '🏭 Ind',
   [Tool.Bulldoze]: '🪓 Bulldoze',
-  [Tool.Park]: '🌳 Park'
+  [Tool.Park]: '🌳 Small',
+  [Tool.ParkLarge]: '🏞️ Large'
 };
 
 export const primaryLabelOverrides: Partial<Record<Tool, string>> = {
   [Tool.WaterPipe]: '🚰 Water',
-  [Tool.ElementarySchool]: '🎓 Schools'
+  [Tool.ElementarySchool]: '🎓 Schools',
+  [Tool.Park]: '🌳 Park'
 };
 
 const toolNames: Record<Tool, string> = {
@@ -66,7 +73,8 @@ const toolNames: Record<Tool, string> = {
   [Tool.Commercial]: 'Commercial Zone',
   [Tool.Industrial]: 'Industrial Zone',
   [Tool.Bulldoze]: 'Bulldoze',
-  [Tool.Park]: 'Park'
+  [Tool.Park]: 'Small Park',
+  [Tool.ParkLarge]: 'Large Park'
 };
 
 const toolHotkeyActions: Partial<Record<Tool, HotkeyAction>> = {
@@ -87,6 +95,7 @@ const toolHotkeyActions: Partial<Record<Tool, HotkeyAction>> = {
   [Tool.Commercial]: 'selectCommercial',
   [Tool.Industrial]: 'selectIndustrial',
   [Tool.Park]: 'selectPark',
+  [Tool.ParkLarge]: 'selectParkLarge',
   [Tool.Bulldoze]: 'selectBulldoze'
 };
 
@@ -224,8 +233,9 @@ export function getToolDetails(tool: Tool): ToolDetails {
       hints.push('Needs road access and power; water is stubbed high until pipes land.');
       break;
     }
-    case Tool.Park: {
-      const template = getBuildingTemplate(TileKind.Park);
+    case Tool.Park:
+    case Tool.ParkLarge: {
+      const template = getBuildingTemplate(tool === Tool.Park ? TileKind.Park : TileKind.ParkLarge);
       if (template) {
         withMaintenanceRow(rows, template.maintenance);
         rows.push({ label: 'Footprint', value: formatFootprint(template.footprint.width, template.footprint.height) });

@@ -67,7 +67,8 @@ Each tile contributes a base “eco value” (positive or negative), then receiv
 | `TileKind`         | Base Eco | Rationale |
 | ------------------ | -------: | --------- |
 | `Tree`             |       +6 | Strongest natural capital. |
-| `Park`             |       +4 | Managed green space. |
+| `Park`             |       +4 | Managed green space (Small, 1x1). |
+| `ParkLarge`        |       +4 | Managed green space (Large, 2x2 footprint — same per-tile weight as Small, so it contributes ~4x in total). |
 | `Land`             |       +1 | Open natural land — small but citywide. |
 | `Water`            |        0 | Neutral base; contributes via the water-edge bonus instead. |
 | `Residential`      |       −1 | Mild footprint. |

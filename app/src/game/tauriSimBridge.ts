@@ -1,3 +1,8 @@
+// tauriSimBridge.ts — SimBridge backed by the native Rust simulation via Tauri IPC.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
  * TauriSimBridge — implements SimBridge by routing through the native Rust
  * simulation via the `tauri-plugin-city-sim` Tauri v2 plugin (P4-1).
@@ -68,6 +73,7 @@ const TOOL_TO_ID: Record<Tool, ToolId> = {
   [Tool.Industrial]:       TOOL_ID.Industrial,
   [Tool.Park]:             TOOL_ID.Park,
   [Tool.Bulldoze]:         TOOL_ID.Bulldoze,
+  [Tool.ParkLarge]:        TOOL_ID.ParkLarge,
 };
 
 // ---------------------------------------------------------------------------

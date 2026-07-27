@@ -74,6 +74,7 @@ export const TOOL_ID = {
   Industrial:       19,
   Park:             20,
   Bulldoze:         21,
+  ParkLarge:        22,
 } as const
 
 export type ToolId = typeof TOOL_ID[keyof typeof TOOL_ID]

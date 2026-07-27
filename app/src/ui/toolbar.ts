@@ -28,6 +28,7 @@ const powerOptions: Tool[] = [
 
 const waterOptions: Tool[] = [Tool.WaterPipe, Tool.WaterPump, Tool.WaterTower];
 const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
+const parkOptions: Tool[] = [Tool.Park, Tool.ParkLarge];
 
 // Maps a group's "representative" tool — the one shown collapsed on the full
 // desktop shell, with the rest revealed via its anchored popup submenu — to
@@ -38,7 +39,8 @@ const educationOptions: Tool[] = [Tool.ElementarySchool, Tool.HighSchool];
 const submenuSources: Partial<Record<Tool, Tool[]>> = {
   [Tool.PowerLine]: powerOptions,
   [Tool.WaterPipe]: waterOptions,
-  [Tool.ElementarySchool]: educationOptions
+  [Tool.ElementarySchool]: educationOptions,
+  [Tool.Park]: parkOptions
 };
 
 interface ToolbarOptions {
@@ -217,10 +219,14 @@ export function initToolbar(
     const educationRow = document.createElement('div');
     educationRow.className = 'toolbar-sub';
     educationRow.dataset.submenu = 'education';
+    const parkRow = document.createElement('div');
+    parkRow.className = 'toolbar-sub';
+    parkRow.dataset.submenu = 'park';
     toolbar.appendChild(primaryRow);
     toolbar.appendChild(powerRow);
     toolbar.appendChild(waterRow);
     toolbar.appendChild(educationRow);
+    toolbar.appendChild(parkRow);
 
     groupedTools.forEach((group) => {
       const groupEl = document.createElement('div');
@@ -266,6 +272,7 @@ export function initToolbar(
     educationOptions.forEach((key) =>
       createSubButton(educationRow, key, key === Tool.ElementarySchool ? '🎓 Elementary' : '🏢 High')
     );
+    parkOptions.forEach((key) => createSubButton(parkRow, key));
   }
 
   const radio = initRadioWidget(radioHost, { initialVolume: radioVolume });
@@ -499,11 +506,13 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
       active === Tool.SolarFarm;
     const activeWater = active === Tool.WaterPump || active === Tool.WaterTower || active === Tool.WaterPipe;
     const activeEducation = active === Tool.ElementarySchool || active === Tool.HighSchool;
+    const activePark = active === Tool.Park || active === Tool.ParkLarge;
     const isActive =
       key === active ||
       (activePower && key === Tool.PowerLine) ||
       (activeWater && key === Tool.WaterPipe) ||
-      (activeEducation && key === Tool.ElementarySchool);
+      (activeEducation && key === Tool.ElementarySchool) ||
+      (activePark && key === Tool.Park);
     btn.classList.toggle('active', isActive);
   });
   toolbar.querySelectorAll('.tool-sub-button').forEach((btn) => {
@@ -513,6 +522,7 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
   const powerRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="power"]');
   const waterRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="water"]');
   const educationRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="education"]');
+  const parkRow = toolbar.querySelector<HTMLDivElement>('.toolbar-sub[data-submenu="park"]');
 
   const allGroups = toolbar.querySelectorAll<HTMLElement>('.toolbar-group');
   allGroups.forEach((group) => group.classList.remove('toolbar-group-sub-open'));
@@ -556,5 +566,14 @@ export function updateToolbar(toolbar: HTMLElement, active: Tool) {
     educationRow.style.minWidth = '';
     educationRow.classList.toggle('toolbar-sub-open', open);
     if (open) positionSubmenu(educationRow, Tool.ElementarySchool);
+  }
+  if (parkRow) {
+    const open = parkOptions.includes(active);
+    parkRow.style.display = open ? 'flex' : 'none';
+    parkRow.style.left = '';
+    parkRow.style.top = '';
+    parkRow.style.minWidth = '';
+    parkRow.classList.toggle('toolbar-sub-open', open);
+    if (open) positionSubmenu(parkRow, Tool.Park);
   }
 }

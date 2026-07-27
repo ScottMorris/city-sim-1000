@@ -125,7 +125,7 @@ server.tool(
       'powerline', 'hydro',
       'pump', 'water_tower', 'water_pipe',
       'elementary_school', 'high_school',
-      'park',
+      'park', 'park_large',
     ]).describe('Tile kind string. Note: all power plant types (coal/wind/solar/hydro) share the kind "hydro"'),
   },
   async ({ kind }) => textResult(await callGame('get_tiles_where', { kind })),
@@ -144,7 +144,7 @@ server.tool(
       'pump', 'water_tower', 'water_pipe',
       'elementary_school', 'high_school',
       'residential', 'commercial', 'industrial',
-      'park', 'bulldoze',
+      'park', 'park_large', 'bulldoze',
     ]).describe('Tool to apply'),
     x: z.number().int().describe('Tile column'),
     y: z.number().int().describe('Tile row'),
@@ -193,7 +193,7 @@ server.tool(
   'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns number of tiles placed and money delta.',
   {
     tool: z.enum([
-      'residential', 'commercial', 'industrial', 'park',
+      'residential', 'commercial', 'industrial', 'park', 'park_large',
       'road', 'water_pipe', 'powerline', 'bulldoze',
     ]).describe('Tool to apply across the rectangle'),
     x1: z.number().int().describe('Left column (inclusive)'),

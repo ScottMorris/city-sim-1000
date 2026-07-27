@@ -116,7 +116,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         } else if tmpl.is_civic {
             maint_civic += maint;
             match building.kind {
-                TileKind::Park => maint_civic_park += maint,
+                TileKind::Park | TileKind::ParkLarge => maint_civic_park += maint,
                 TileKind::WaterPump => maint_civic_pump += maint,
                 TileKind::WaterTower => maint_civic_tower += maint,
                 TileKind::ElementarySchool | TileKind::HighSchool => maint_civic_school += maint,
