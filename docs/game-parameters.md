@@ -115,12 +115,13 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
 
 - **Score**: `100 · P / (P + U + k)` where P sums positive per-tile eco values, U sums
   negative magnitudes, and `k = 0.5 × buildable tiles`. An untouched map lands ≈ 67.
-- **Base eco weights**: Tree +6, Park +4, Land +1, Water 0 (edge-bonus donor);
+- **Base eco weights**: Tree +6, Park (Small or Large, per tile) +4, Land +1, Water 0 (edge-bonus donor);
   Residential/schools/pumps/towers/power lines/wind/solar −1, Commercial/roads/rail/hydro −2,
   Industrial −5, Coal −8. Underground water pipes are excluded.
 - **Ecosystem adjustments** (Tree/Park only): patch bonus up to +2 on a saturating curve
   (reference cluster size 32), water-edge bonus +2, fragmentation penalty −2 when a nature
-  tile has fewer than 3 nature 8-neighbours.
+  tile has fewer than 3 nature 8-neighbours. A Large Park's 2x2 footprint counts as four
+  adjacent Park tiles, so it naturally scores a bigger patch bonus than four scattered Small Parks.
 - **Consequences**: Residential demand ±6 points at the score extremes (0 at 50);
   zone-tile happiness drifts toward `1.0 ± 0.2` (2% of the gap per recompute);
   tourism dividend above score 60, up to **$0.40/citizen/day** at score 100, shown as its
@@ -149,7 +150,7 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
 - Terraform: Raise `E`, Lower `Q`.
 - Painting: Water `F`, Trees `T`.
 - Transport & Utilities: Road `R`, Rail `L`, Power Lines `P`, Hydro Plant `H`, Water Pump `U`, Water Tower `Y`.
-- Zoning & Amenities: Residential `Z`, Commercial `X`, Industrial `C`, Park `K`.
+- Zoning & Amenities: Residential `Z`, Commercial `X`, Industrial `C`, Small Park `K`, Large Park `O`.
 - Bulldoze: `B`.
 - Simulation Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x).
 - Pause: `Space` toggles pause/resume; resumes at the last-selected speed.

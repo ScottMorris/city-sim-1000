@@ -1,3 +1,8 @@
+// tools.ts — applyTool: cost, placement rules, and per-tool handlers.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BUILD_COST, PowerPlantType } from './constants';
 import { type BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './buildings/templates';
 import { placeBuilding, removeBuilding } from './buildings/manager';
@@ -187,6 +192,8 @@ const registry: ToolRegistry = {
   },
   [Tool.Park]: ({ state, x, y }, cost) =>
     placeTemplatedBuilding(state, getBuildingTemplate(TileKind.Park), x, y, cost),
+  [Tool.ParkLarge]: ({ state, x, y }, cost) =>
+    placeTemplatedBuilding(state, getBuildingTemplate(TileKind.ParkLarge), x, y, cost),
   [Tool.Bulldoze]: ({ state, x, y }, cost) => {
     const tile = getTile(state, x, y);
     if (!tile) return { success: false };

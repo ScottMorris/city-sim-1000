@@ -34,6 +34,7 @@ pub enum Tool {
     Industrial = 19,
     Park = 20,
     Bulldoze = 21,
+    ParkLarge = 22,
 }
 
 /// SimCity-style fiscal policy: per-class tax rates and per-department
@@ -174,8 +175,8 @@ impl CommandResult {
 impl TryFrom<u8> for Tool {
     type Error = ();
     fn try_from(v: u8) -> Result<Self, ()> {
-        if v <= Tool::Bulldoze as u8 {
-            // SAFETY: Tool is #[repr(u8)] with contiguous discriminants 0..=21.
+        if v <= Tool::ParkLarge as u8 {
+            // SAFETY: Tool is #[repr(u8)] with contiguous discriminants 0..=22.
             Ok(unsafe { std::mem::transmute::<u8, Tool>(v) })
         } else {
             Err(())
@@ -205,6 +206,7 @@ pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
         Tool::Commercial => Some(TileKind::Commercial),
         Tool::Industrial => Some(TileKind::Industrial),
         Tool::Park => Some(TileKind::Park),
+        Tool::ParkLarge => Some(TileKind::ParkLarge),
         Tool::Inspect | Tool::TerraformRaise | Tool::TerraformLower | Tool::Bulldoze => None,
     }
 }
@@ -216,11 +218,11 @@ mod tests {
 
     #[test]
     fn tool_try_from_u8_roundtrips() {
-        for v in 0u8..=21 {
+        for v in 0u8..=22 {
             let tool = Tool::try_from(v).expect("valid discriminant");
             assert_eq!(tool as u8, v);
         }
-        assert!(Tool::try_from(22).is_err());
+        assert!(Tool::try_from(23).is_err());
         assert!(Tool::try_from(255).is_err());
     }
 

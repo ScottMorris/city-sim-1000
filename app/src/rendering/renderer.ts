@@ -65,6 +65,7 @@ export class MapRenderer {
       commercialGeminiBuildings: [],
       industrialBuildings: [],
       schools: {},
+      parks: {},
       indicators: {}
     }
   ) {

@@ -1,3 +1,8 @@
+// settingsModal.ts — the Settings modal: minimap, input, hotkey, and accessibility controls.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { GameSettings, MinimapSize, PanSpeedPreset, UiMode, ZoomSensitivityPreset } from '../game/gameState';
 import { defaultHotkeys, HotkeyAction } from './hotkeys';
 
@@ -46,7 +51,8 @@ const HOTKEY_LABELS: Record<HotkeyAction, string> = {
   selectResidential: 'Residential zone',
   selectCommercial: 'Commercial zone',
   selectIndustrial: 'Industrial zone',
-  selectPark: 'Park',
+  selectPark: 'Small park',
+  selectParkLarge: 'Large park',
   selectBulldoze: 'Bulldoze',
   speedSlow: 'Speed: Slow',
   speedFast: 'Speed: Fast',

@@ -1,3 +1,8 @@
+// toolTypes.ts — the player-facing Tool enum, one variant per placeable tool.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 export enum Tool {
   Inspect = 'inspect',
   TerraformRaise = 'terraform_raise',
@@ -20,5 +25,6 @@ export enum Tool {
   Commercial = 'commercial',
   Industrial = 'industrial',
   Park = 'park',
+  ParkLarge = 'park_large',
   Bulldoze = 'bulldoze'
 }

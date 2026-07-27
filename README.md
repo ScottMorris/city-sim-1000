@@ -38,7 +38,7 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 
 ## Features
 - WebGL canvas renderer with zoom and pan for fast navigation.
-- Terraform tools for land, water, trees, parks, bulldozing, and infrastructure (roads, rail, power lines).
+- Terraform tools for land, water, trees, parks (Small 1x1 or Large 2x2, with a fountain), bulldozing, and infrastructure (roads, rail, power lines).
 - Dedicated water services submenu that separates surface water from infrastructure; place pumps or water towers and connect them with underground pipes.
 - Zoning for Residential, Commercial, and Industrial areas with live demand bars.
 - Education submenu with Elementary and High Schools that need power, flood coverage along roads, and gently influence demand and decay when underserved.
@@ -77,7 +77,7 @@ Pointer/touch debugging: in a dev build, run `localStorage.setItem('debug-pointe
 ## Controls (quick reference)
 - Pan: drag with mouse or use `WASD` / arrow keys; zoom with scroll/pinch.
 - Quick bulldoze: right-click to bulldoze the tile under your cursor, or hold and drag to clear a path. Middle-click or Alt-drag still pans. The Inspect tool does not bulldoze on right-click.
-- Tools: click toolbar buttons or hotkeys — Inspect (`I`), Raise (`E`), Lower (`Q`), Water paint (`F`), Trees (`T`), Road (`R`), Rail (`L`), Power Lines (`P`), Hydro (`H`), Pump (`U`), Tower (`Y`), Elementary School (`J`), High School (`N`), Residential (`Z`), Commercial (`X`), Industrial (`C`), Park (`K`), Bulldoze (`B`).
+- Tools: click toolbar buttons or hotkeys — Inspect (`I`), Raise (`E`), Lower (`Q`), Water paint (`F`), Trees (`T`), Road (`R`), Rail (`L`), Power Lines (`P`), Hydro (`H`), Pump (`U`), Tower (`Y`), Elementary School (`J`), High School (`N`), Residential (`Z`), Commercial (`X`), Industrial (`C`), Small Park (`K`), Large Park (`O`), Bulldoze (`B`).
 - Speed: `1` Slow (0.5x), `2` Fast (1x), `3` Ludicrous (3x); `Space` toggles pause (resumes at the last-selected speed).
 - Undo/redo: `Ctrl/Cmd+Z` undoes the last action (a drag counts as one action); `Ctrl/Cmd+Shift+Z` or `Ctrl/Cmd+Y` redoes it. Undo rewinds the whole city — including the clock — to just before the action; history is per-session and stops at the last load.
 - Inspector: select Inspect, click a tile to see utilities, status, and capacity; pin the tool info card to keep build stats visible.

@@ -43,6 +43,7 @@ pub fn tool_cost(tool: Tool) -> i64 {
         Tool::Industrial => 80,
         Tool::Park => 10,
         Tool::Bulldoze => 1,
+        Tool::ParkLarge => 32,
     }
 }
 
@@ -217,6 +218,7 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             place_footprint_building(state, TileKind::HighSchool, x, y, cost, 0, 0.0)
         }
         Tool::Park => place_footprint_building(state, TileKind::Park, x, y, cost, 0, 0.0),
+        Tool::ParkLarge => place_footprint_building(state, TileKind::ParkLarge, x, y, cost, 0, 0.0),
 
         Tool::Bulldoze => bulldoze(state, x, y, cost),
     }

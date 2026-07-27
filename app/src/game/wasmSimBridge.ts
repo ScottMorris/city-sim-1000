@@ -50,6 +50,7 @@ const TOOL_TO_U8: Record<Tool, number> = {
   [Tool.Industrial]:       19,
   [Tool.Park]:             20,
   [Tool.Bulldoze]:         21,
+  [Tool.ParkLarge]:        22,
 };
 
 interface WorkerHistoryFlags {

@@ -126,7 +126,7 @@ Tiles include:
 * Road (auto-connect)
 * Rail (auto-connect)
 * Trees
-* Parks
+* Parks (Small 1x1, Large 2x2)
 
 ### 5.3 Power Network (v1)
 
@@ -274,6 +274,7 @@ Res
 Com
 Ind
 Park
+ParkLarge
 Bulldoze
 ```
 

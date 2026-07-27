@@ -1,3 +1,8 @@
+// constants.ts — build costs, maintenance, and power plant configs.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { TileKind } from './gameState';
 import { Tool } from './toolTypes';
 
@@ -76,7 +81,8 @@ export const BUILD_COST: Record<Tool, number> = {
   [Tool.Commercial]: 60,
   [Tool.Industrial]: 80,
   [Tool.Bulldoze]: 1,
-  [Tool.Park]: 10
+  [Tool.Park]: 10,
+  [Tool.ParkLarge]: 32
 };
 
 export const MAINTENANCE: Partial<Record<TileKind, number>> = {

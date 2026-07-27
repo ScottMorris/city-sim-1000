@@ -29,7 +29,7 @@ use city_sim_protocol::tile_kind::TileKind;
 #[derive(Debug, Clone)]
 pub struct WildernessTunables {
     /// Base eco value indexed by `TileKind as u8`.
-    pub base_eco: [f32; 19],
+    pub base_eco: [f32; 20],
     /// Patch bonus ceiling per strong-nature tile (saturating curve).
     pub patch_bonus_cap: f32,
     /// Cluster size at which the patch bonus reaches ~63% of its cap.
@@ -89,7 +89,7 @@ impl WildernessTunables {
 
 impl Default for WildernessTunables {
     fn default() -> Self {
-        let mut base_eco = [0.0_f32; 19];
+        let mut base_eco = [0.0_f32; 20];
         base_eco[TileKind::Land as usize] = 1.0;
         base_eco[TileKind::Water as usize] = 0.0;
         base_eco[TileKind::Tree as usize] = 6.0;
@@ -109,6 +109,7 @@ impl Default for WildernessTunables {
         base_eco[TileKind::ElementarySchool as usize] = -1.0;
         base_eco[TileKind::HighSchool as usize] = -1.0;
         base_eco[TileKind::Park as usize] = 4.0;
+        base_eco[TileKind::ParkLarge as usize] = 4.0;
         base_eco[TileKind::CoalPlant as usize] = -8.0;
         base_eco[TileKind::WindTurbine as usize] = -1.0;
         base_eco[TileKind::SolarFarm as usize] = -1.0;
@@ -193,7 +194,7 @@ pub struct WildernessOutput {
 /// Strong nature: contributes to clusters, earns bonuses, risks fragmentation.
 #[inline]
 fn is_strong_nature(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Tree | TileKind::Park)
+    matches!(kind, TileKind::Tree | TileKind::Park | TileKind::ParkLarge)
 }
 
 /// Buildable tiles set the scale of the softening constant `k` so that
@@ -272,7 +273,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
         // Accumulate the base value into its breakdown category.
         match kind {
             TileKind::Tree => breakdown.forests += eco,
-            TileKind::Park => breakdown.parks += eco,
+            TileKind::Park | TileKind::ParkLarge => breakdown.parks += eco,
             TileKind::Land => breakdown.open_land += eco,
             TileKind::Residential | TileKind::Commercial => breakdown.zones += eco,
             TileKind::Industrial => breakdown.industry += eco,

@@ -1,3 +1,8 @@
+// sprites.ts — tile size constant and the flat-colour fallback palette per TileKind.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { TileKind } from '../game/gameState';
 
 export const TILE_SIZE = 28;
@@ -21,5 +26,6 @@ export const palette: Record<TileKind, number> = {
   [TileKind.WaterPipe]: 0x73c3c9,
   [TileKind.ElementarySchool]: 0x6aa7ff,
   [TileKind.HighSchool]: 0x8f7bff,
-  [TileKind.Park]: 0x2fa05a
+  [TileKind.Park]: 0x2fa05a,
+  [TileKind.ParkLarge]: 0x2fa05a
 };

@@ -1,3 +1,8 @@
+// templates.ts — static BuildingTemplate data for zones, civic buildings, and power plants.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from '../constants';
 import { TileKind } from '../gameState';
 import { Tool } from '../toolTypes';
@@ -105,12 +110,22 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   },
   [TileKind.Park]: {
     id: TileKind.Park,
-    name: 'Park',
+    name: 'Small Park',
     category: BuildingCategory.Civic,
     footprint: { width: 1, height: 1 },
     cost: 10,
     maintenance: 0.05,
     tileKind: TileKind.Park,
+    requiresPower: false
+  },
+  [TileKind.ParkLarge]: {
+    id: TileKind.ParkLarge,
+    name: 'Large Park',
+    category: BuildingCategory.Civic,
+    footprint: { width: 2, height: 2 },
+    cost: 32,
+    maintenance: 0.16,
+    tileKind: TileKind.ParkLarge,
     requiresPower: false
   },
   [TileKind.ElementarySchool]: {

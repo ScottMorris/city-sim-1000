@@ -34,7 +34,8 @@ export enum TileKind {
   WaterPipe = 'water_pipe',
   ElementarySchool = 'elementary_school',
   HighSchool = 'high_school',
-  Park = 'park'
+  Park = 'park',
+  ParkLarge = 'park_large'
 }
 
 export interface Tile {
