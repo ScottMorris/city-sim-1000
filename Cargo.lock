@@ -377,7 +377,7 @@ dependencies = [
 
 [[package]]
 name = "city-sim-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "city-sim-protocol",
  "criterion",
@@ -388,7 +388,7 @@ dependencies = [
 
 [[package]]
 name = "city-sim-protocol"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "postcard",
  "serde",
@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "city-sim-wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "city-sim-core",
  "city-sim-protocol",
@@ -3401,7 +3401,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-city-sim"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "city-sim-core",
  "city-sim-protocol",
