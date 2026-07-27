@@ -73,6 +73,25 @@ for by in range(0, FINAL_PX, BLOCK):
             for x in range(bx, min(bx + BLOCK, FINAL_PX)):
                 bg.putpixel((x, y), colour)
 
+# Occasional dandelion/violet flecks, matching the park sprites' own
+# flower convention (small 2-3px clusters of a single bright colour,
+# scattered sparsely on the grass) -- mow-line sheen fought visually with
+# the patch grid, this doesn't.
+DANDELION = (230, 178, 60)  # matches the park sprites' flower yellow
+VIOLET = (138, 95, 179)
+FLOWER_CHANCE = 0.035  # sparse -- a few per tile, not a carpet
+for by in range(0, FINAL_PX, BLOCK):
+    for bx in range(0, FINAL_PX, BLOCK):
+        if random.random() >= FLOWER_CHANCE:
+            continue
+        colour = random.choice([DANDELION, VIOLET])
+        fx = bx + random.randint(1, BLOCK - 2)
+        fy = by + random.randint(1, BLOCK - 2)
+        for dx, dy in ((0, 0), (1, 0), (0, 1)):
+            px, py = fx + dx, fy + dy
+            if 0 <= px < FINAL_PX and 0 <= py < FINAL_PX:
+                bg.putpixel((px, py), colour)
+
 bg = bg.convert('RGBA')
 bg.alpha_composite(pixelated)
 bg.convert('RGB').save(OUT)
