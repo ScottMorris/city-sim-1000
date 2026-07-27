@@ -48,26 +48,53 @@ def look_at(obj, target):
 # the fact just puts visible *bands* into a gradient that's still shaped
 # like a gradient. A pixel artist doesn't do that: they pick 2 (sometimes 3)
 # flat tones per face directly -- "this face is lit, this face is in
-# shadow" -- with a hard edge between them, no falloff. Shader-to-RGB lets
-# us do the same thing for real: evaluate a Diffuse BSDF's lighting response
-# (which naturally varies smoothly by face angle), then immediately quantize
-# it through a CONSTANT colour ramp into a hard 2-band light/shadow multiplier
-# *before* it ever becomes a gradient, then multiply that onto the surface's
-# own flat/patterned colour and output via Emission so nothing downstream
-# (Cycles' own PBR response) can soften it back into a gradient again.
+# shadow" -- with a hard edge between them, no falloff.
+#
+# The first version of this used Diffuse BSDF -> ShaderNodeShaderToRGB to
+# get that lighting response and quantize it. That turned out to be
+# unreliable: sampling the raw ShaderToRGB output directly showed an EXACT
+# constant (206, 206, 206) on the wall, roof, chimney, AND the bush all at
+# once -- not a real per-surface lighting evaluation, a fallback value.
+# It's a known Cycles reliability gap (see e.g. the Blender manual's own
+# notes on ShaderToRGB's limited support across render paths), and it only
+# went unnoticed because the wall-to-wall "contrast" everyone was reading as
+# toon shading was actually just each face's own siding/shingle band colour
+# -- there was never any real light/shadow split happening.
+#
+# The robust alternative (what most Cycles NPR/toon setups actually use):
+# skip ShaderToRGB and compute N.L directly with plain vector math against a
+# fixed light-direction constant (matching the key sun below). Deterministic,
+# no path-tracing-dependent node involved.
+_KEY_LIGHT_DIR = (-0.557, -0.371, 0.743)  # normalized, points FROM origin
+# TOWARD the key sun at (-6,-4,8) -- keep in sync if that light ever moves.
+
+
 def _toon_lighting(nodes, links):
-    diffuse = nodes.new('ShaderNodeBsdfDiffuse')
-    diffuse.inputs['Roughness'].default_value = 1.0
-    shader_to_rgb = nodes.new('ShaderNodeShaderToRGB')
+    geometry = nodes.new('ShaderNodeNewGeometry')
+    light_vec = nodes.new('ShaderNodeCombineXYZ')
+    light_vec.inputs['X'].default_value = _KEY_LIGHT_DIR[0]
+    light_vec.inputs['Y'].default_value = _KEY_LIGHT_DIR[1]
+    light_vec.inputs['Z'].default_value = _KEY_LIGHT_DIR[2]
+    dot = nodes.new('ShaderNodeVectorMath')
+    dot.operation = 'DOT_PRODUCT'
+    links.new(geometry.outputs['Normal'], dot.inputs[0])
+    links.new(light_vec.outputs['Vector'], dot.inputs[1])
+    # Dot product is -1..1 (facing away..facing toward the light); remap to
+    # 0..1 so the ramp's 0..1 position convention lines up with it, with the
+    # shadow/lit split landing exactly at "perpendicular to the light".
+    remap = nodes.new('ShaderNodeMath')
+    remap.operation = 'MULTIPLY_ADD'
+    remap.inputs[1].default_value = 0.5
+    remap.inputs[2].default_value = 0.5
+    links.new(dot.outputs['Value'], remap.inputs[0])
     ramp = nodes.new('ShaderNodeValToRGB')
     ramp.color_ramp.interpolation = 'CONSTANT'
     shadow, lit = ramp.color_ramp.elements
-    shadow.position = 0.55
+    shadow.position = 0.5
     shadow.color = (0.6, 0.6, 0.6, 1)
-    lit.position = 0.551
+    lit.position = 0.501
     lit.color = (1.0, 1.0, 1.0, 1)
-    links.new(diffuse.outputs['BSDF'], shader_to_rgb.inputs['Shader'])
-    links.new(shader_to_rgb.outputs['Color'], ramp.inputs['Fac'])
+    links.new(remap.outputs['Value'], ramp.inputs['Fac'])
     return ramp.outputs['Color']
 
 
