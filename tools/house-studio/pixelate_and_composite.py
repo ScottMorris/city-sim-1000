@@ -4,13 +4,17 @@ texture, reusing the same point-sample grass technique as the park/house-2D
 pipeline (app/scripts/build-park-assets.mjs), so the 3D-rendered house slots
 into the existing asset conventions instead of introducing a new look.
 """
-from PIL import Image, ImageOps
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageOps
+import random
 import sys
 
 SRC = sys.argv[1]
 OUT = sys.argv[2]
 PIXEL_GRID = int(sys.argv[3]) if len(sys.argv) > 3 else 60  # art-pixels across
 FINAL_PX = 160  # matches the game's 1x1 building sprite convention
+GRASS_PATH = Path(__file__).resolve().parents[2] / "app/public/assets/tiles/terrain/grass.png"
+random.seed(1)  # deterministic lawn jitter across re-runs
 
 render = Image.open(SRC).convert('RGBA')
 
@@ -46,18 +50,57 @@ rgb = ImageOps.posterize(rgb, 4)
 small = Image.merge('RGBA', (*rgb.split(), a))
 pixelated_full = small.resize((FINAL_PX, FINAL_PX), Image.NEAREST)
 
-# No grass/oval/lawn compositing for now -- nixed per feedback to keep the
-# pipeline focused on the house model itself while that's still in flux.
-# Shrink slightly so the house doesn't fill the canvas edge-to-edge, and
-# centre it, but otherwise just save the house alone on a transparent
-# canvas (no ground plane, no oval).
-HOUSE_SCALE = 0.9
+# Oval proportions, matching the existing building sprite convention
+# (res-house-*, school-*, park-*) -- measured off res-house-2.png (oval
+# spans ~x10-149, centred y~130, ry~20 of a 160 canvas).
+oval_cx, oval_cy, oval_rx, oval_ry = FINAL_PX * 0.5, FINAL_PX * 0.865, FINAL_PX * 0.4, FINAL_PX * 0.09
+
+# Shrink so the house's own width stays inside the oval's width (measured
+# off res-house-2.png: house ~125px vs oval ~128px of a 160px canvas) --
+# a higher scale has the house overshooting past the oval on both sides.
+HOUSE_SCALE = 0.93
 scaled_side = int(FINAL_PX * HOUSE_SCALE)
 house_scaled = pixelated_full.resize((scaled_side, scaled_side), Image.NEAREST)
 pixelated = Image.new('RGBA', (FINAL_PX, FINAL_PX), (0, 0, 0, 0))
 offset_x = (FINAL_PX - scaled_side) // 2
-offset_y = (FINAL_PX - scaled_side) // 2
+# Plant the house's own bottom edge into the oval instead of a fixed offset
+# -- a fixed offset leaves a gap of bare grass between the house and the
+# oval once HOUSE_SCALE shrinks the house (it no longer reaches down far
+# enough to actually sit on the lawn it's supposed to be standing on).
+offset_y = int(oval_cy + oval_ry * 0.4 - scaled_side)
 pixelated.alpha_composite(house_scaled, (offset_x, offset_y))
 
-pixelated.save(OUT)
+grass = Image.open(GRASS_PATH).convert('RGB')
+gw, gh = grass.size
+bg = Image.new('RGB', (FINAL_PX, FINAL_PX))
+for y in range(FINAL_PX):
+    for x in range(FINAL_PX):
+        bg.putpixel((x, y), grass.getpixel((x * gw // FINAL_PX, y * gh // FINAL_PX)))
+
+# Mowed-lawn fill: in the reference the oval isn't just a ring around plain
+# ambient grass -- the interior is a distinct tended lawn with faint mower
+# stripes, separating the kept yard from the wild dithered grass outside.
+# The reference's own banding is subtle and slightly irregular (it reads as
+# a lawn, not a barcode) -- low contrast between the two tones, jittered
+# per-pixel, rather than flat hard-edged bands.
+LAWN_LIGHT = (46, 89, 22)
+LAWN_DARK = (34, 73, 17)
+STRIPE_H = 6
+for y in range(max(0, int(oval_cy - oval_ry - 2)), min(FINAL_PX, int(oval_cy + oval_ry + 3))):
+    stripe_colour = LAWN_LIGHT if (y // STRIPE_H) % 2 == 0 else LAWN_DARK
+    for x in range(max(0, int(oval_cx - oval_rx - 2)), min(FINAL_PX, int(oval_cx + oval_rx + 3))):
+        if ((x - oval_cx) / oval_rx) ** 2 + ((y - oval_cy) / oval_ry) ** 2 <= 1:
+            jitter = random.randint(-3, 3)
+            bg.putpixel((x, y), tuple(max(0, min(255, c + jitter)) for c in stripe_colour))
+
+# Black-outlined oval border on top of the lawn fill.
+draw = ImageDraw.Draw(bg)
+draw.ellipse(
+    [oval_cx - oval_rx - 2, oval_cy - oval_ry - 2, oval_cx + oval_rx + 2, oval_cy + oval_ry + 2],
+    outline=(10, 20, 20), width=3,
+)
+
+bg = bg.convert('RGBA')
+bg.alpha_composite(pixelated)
+bg.convert('RGB').save(OUT)
 print(f"Wrote {OUT}")
