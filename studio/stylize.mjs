@@ -93,11 +93,14 @@ const SCENE_STYLES = {
   power: {
     // Wires are a top-down ground tile; the pole is a dimetric-rendered
     // billboard prop composited on top (same cheat as the hand-made
-    // sprites). Dropping the billboard 12 art cells (40 px) puts the
-    // crossarm at the wire-anchor height for both orientations.
+    // sprites). Offset accounts for the pole camera aiming at FOCUS_Z 0.7
+    // (which sinks the billboard 0.7*cos(26.57°)*40 ≈ 25 px): 13 px seats
+    // the crossarm (z 2.0 -> screen 46.5) on the upper wire anchor and the
+    // pole base (z 0 -> screen 118) at ~74% of the tile.
     ground: true,
     overlay: 'pole',
-    overlayOffsetY: 40,
+    overlayOffsetY: 13,
+    overlayBaseY: 118,
     palette: {},
     wallSpacing: 0.30,
     roofSpacing: 0.36,
@@ -652,7 +655,8 @@ async function main() {
       // pole base, consistent with the studio sun (from the screen's
       // upper-left) that shades every other asset.
       const cell = TILE / profile.grid;
-      const baseX = profile.grid / 2, baseY = profile.grid / 2 + (STYLE.overlayOffsetY ?? 0) / cell;
+      const baseX = profile.grid / 2;
+      const baseY = (STYLE.overlayBaseY ?? TILE / 2 + (STYLE.overlayOffsetY ?? 0)) / cell;
       bctx.fillStyle = 'rgba(10, 22, 16, 0.30)';
       for (let cy = 0; cy < profile.grid; cy++) {
         for (let cx = 0; cx < profile.grid; cx++) {
