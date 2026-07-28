@@ -24,11 +24,21 @@ def build(mats):
     # enough (0.17 ~ 2 art cells) that the wood material shows between its
     # ink outlines. Wood role — shaded two-tone by the studio sun.
     box(mats, 'tie', (0, 0, 1.35), (0.17, 0.17, 2.7))
-    # Single crossarm, oriented perpendicular to the camera azimuth so it
-    # reads horizontal, thick enough (0.14 ~ 1.7 art cells) that its wood
-    # core shows between the ink outlines like the pole's does. Both wires
-    # hang from its two ends. (Insulator nubs were tried and cut: sub-cell
-    # at this grid, they just added ink and mushed the junction.)
+    # Crossarms, thick enough (0.14 ~ 1.7 art cells) that the wood core shows
+    # between the ink outlines like the pole's does. (Insulator nubs were
+    # tried and cut: sub-cell at this grid, they just added ink and mushed
+    # the junction.)
+    #
+    # One arm, along world (-1, 1) so the fixed 45° azimuth reads it
+    # horizontal on screen, with its tips on the N-S wires.
+    #
+    # A second arm at right angles was tried, to give the E-W wires tips to
+    # land on too — physically what a junction pole has. It does not survive
+    # this projection: a bar along (1, 1) points away from the camera, so the
+    # 2:1 dimetric foreshortens 1.15 world units into a stub that merely
+    # thickens the first arm into a blob. E-W wires therefore pass the pole
+    # rather than visibly hanging from it; accepted, and cheaper to revisit in
+    # the stylizer than in geometry.
     box(mats, 'tie', (0, 0, 2.0), (1.15, 0.14, 0.11), (0, 0, math.radians(135)))
     # Transformer can on the pole, well below the arm so it stays clear of
     # the wire bundle (grey).

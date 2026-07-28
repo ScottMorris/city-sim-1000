@@ -98,11 +98,50 @@
     "rails/rail-road-crossing-ew.png": {
       "scene": "crossing-ew"
     },
-    "power/power-line-vertical.png": {
+    "power/power-line-ns.png": {
       "scene": "power-ns"
     },
-    "power/power-line-horizontal.png": {
+    "power/power-line-ew.png": {
       "scene": "power-ew"
+    },
+    "power/power-line-corner-ne.png": {
+      "scene": "power-corner-ne"
+    },
+    "power/power-line-corner-nw.png": {
+      "scene": "power-corner-nw"
+    },
+    "power/power-line-corner-se.png": {
+      "scene": "power-corner-se"
+    },
+    "power/power-line-corner-sw.png": {
+      "scene": "power-corner-sw"
+    },
+    "power/power-line-t-nes.png": {
+      "scene": "power-t-nes"
+    },
+    "power/power-line-t-esw.png": {
+      "scene": "power-t-esw"
+    },
+    "power/power-line-t-nsw.png": {
+      "scene": "power-t-nsw"
+    },
+    "power/power-line-t-new.png": {
+      "scene": "power-t-new"
+    },
+    "power/power-line-cross.png": {
+      "scene": "power-cross"
+    },
+    "power/power-line-end-n.png": {
+      "scene": "power-end-n"
+    },
+    "power/power-line-end-e.png": {
+      "scene": "power-end-e"
+    },
+    "power/power-line-end-s.png": {
+      "scene": "power-end-s"
+    },
+    "power/power-line-end-w.png": {
+      "scene": "power-end-w"
     },
     "buildings/res-house-5.png": {
       "scene": "house"

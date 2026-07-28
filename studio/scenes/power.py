@@ -1,13 +1,19 @@
-# Scene: hydro line ground tiles (wires only). The pole is a separate scene
-# (pole.py) rendered through the DIMETRIC camera and composited onto these
-# tiles by the stylizer — the same top-down-ground / elevation-pole cheat the
-# existing (liked) hand-made hydro sprites use.
+# Scene: hydro line ground tiles (wires only), all 15 connectivity variants.
+# The pole is a separate scene (pole.py) rendered through the DIMETRIC camera
+# and composited onto these tiles by the stylizer — the same top-down-ground /
+# elevation-pole cheat the hand-made hydro sprites use.
 #
-# Measured from those sprites, the two orientations use different cheats:
-# - vertical (ns): plan view — two dead-straight wires at ±0.53 world.
-# - horizontal (ew): elevation view — wires hang above centre (anchored at
-#   the pole's crossarm height) and sag toward the tile edges, kinking at
-#   each pole exactly like the reference.
+# PLAN VIEW THROUGHOUT. The first version of this scene drew `ns` in plan view
+# (straight parallel wires) but `ew` in elevation (a catenary sagging toward
+# the tile edges). Those two cheats cannot meet at a corner — a wire arriving
+# from the north as two parallel lines has nowhere to join a curve hanging in
+# elevation — which is why only the two straights and the four dead ends ever
+# had sprites, and every corner/T/cross fell through to a flat colour rect.
+# Unifying on plan view makes all 15 variants fall out of one parametric
+# scene, exactly like road.py and rail.py.
+#
+# Each variant is real rotated geometry — never a rotated sprite, which would
+# rotate the studio sun with it and break lighting consistency.
 #
 # (c) Copyright 2026 Liminal HQ, Scott Morris
 # SPDX-License-Identifier: MIT
@@ -15,37 +21,69 @@
 import math
 
 from studiolib import box
+from scenes.trackpath import CONNECTIVITY_VARIANTS
 
 TOP_DOWN = True
 ROTATION_DEG = 0
 
-VARIANTS = {'ns': None, 'ew': None}
-VARIANT = 'ns'
+VARIANTS = CONNECTIVITY_VARIANTS
+VARIANT = 'ns'  # overridden by the render driver
 
+HALF = 2.05          # overshoot the ±2.0 frame edge so neighbours meet cleanly
+OVERLAP = 0.08       # legs run just past centre so opposite legs join seamlessly
 WIRE_OFFSET = 0.56   # the pole's crossarm-tip gauge — wires attach there
-WIRE_W = 0.09
-# (anchor height at the pole, catenary dip at the tile edge). Both wires
-# attach at the crossarm — the upper on the bar, the lower at its underside —
-# but sag by different amounts, so the pair stays tight at the pole and fans
-# visibly apart toward the edges: attached AND clearly two wires.
-EW_WIRES = ((0.84, 0.20), (0.72, 0.34))
+WIRE_W = 0.09        # 1 art cell; anything thinner shreds when downsampled
+WIRE_Z = 0.06
+
+# Dead-end poles carry the whole pull of the line, so they're braced by guy
+# wires anchored on the far side. Two, splayed off the axis, the way real
+# terminal poles are guyed.
+GUY_LEN = 0.95
+GUY_TOP = 1.30       # attach height; only affects relief (wires are flat-shaded)
+GUY_SPLAY_DEG = 26
+
+# Unit vectors, in the top-down camera's north-up frame (+Y north, +X east).
+EDGE_DIR = {'n': (0.0, 1.0), 'e': (1.0, 0.0), 's': (0.0, -1.0), 'w': (-1.0, 0.0)}
+
+
+def _leg(mats, edge):
+    """A wire pair running from one tile edge in to just past the centre."""
+    ux, uy = EDGE_DIR[edge]
+    length = HALF + OVERLAP
+    mid = (HALF - OVERLAP) / 2
+    for side in (1, -1):
+        if ux == 0:                      # north/south leg — wires offset in X
+            loc = (WIRE_OFFSET * side, uy * mid, WIRE_Z)
+            scale = (WIRE_W, length, 0.04)
+        else:                            # east/west leg — wires offset in Y
+            loc = (ux * mid, WIRE_OFFSET * side, WIRE_Z)
+            scale = (length, WIRE_W, 0.04)
+        box(mats, 'wire', loc, scale)
+
+
+def _guy(mats, ux, uy):
+    """One guy wire: from the pole's upper trunk down to a ground anchor.
+
+    Modelled as a box elongated along +X, tilted about Y so it descends, then
+    spun about Z onto the compass bearing. Seen from the straight-down camera
+    it reads as a line radiating from the pole to its anchor.
+    """
+    span = math.hypot(GUY_LEN, GUY_TOP)
+    box(mats, 'wire',
+        (ux * GUY_LEN / 2, uy * GUY_LEN / 2, GUY_TOP / 2),
+        (span, WIRE_W * 0.8, 0.035),
+        (0, math.atan2(GUY_TOP, GUY_LEN), math.atan2(uy, ux)))
 
 
 def build(mats):
-    if VARIANT == 'ns':
-        for side in (1, -1):
-            box(mats, 'wire', (WIRE_OFFSET * side, 0, 0.06), (WIRE_W, 4.1, 0.04))
-    else:
-        # Sagging elevation-view wires: segmented along x, dipping toward the
-        # edges; adjacent tiles continue the curve, kinking at each pole.
-        segments = 16
-        for anchor, sag in EW_WIRES:
-            for i in range(segments):
-                x0 = -2.05 + 4.1 * i / segments
-                x1 = -2.05 + 4.1 * (i + 1) / segments
-                y0 = anchor - sag * (x0 / 2) ** 2
-                y1 = anchor - sag * (x1 / 2) ** 2
-                cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-                length = math.hypot(x1 - x0, y1 - y0)
-                box(mats, 'wire', (cx, cy, 0.06), (length + 0.02, WIRE_W, 0.04),
-                    (0, 0, math.atan2(y1 - y0, x1 - x0)))
+    edges = VARIANTS[VARIANT]
+    for edge in edges:
+        _leg(mats, edge)
+
+    # Dead end: brace the terminal pole against the single direction of pull.
+    if len(edges) == 1:
+        pull_x, pull_y = EDGE_DIR[next(iter(edges))]
+        base = math.atan2(-pull_y, -pull_x)          # anchor opposite the pull
+        for sign in (1, -1):
+            theta = base + sign * math.radians(GUY_SPLAY_DEG)
+            _guy(mats, math.cos(theta), math.sin(theta))
