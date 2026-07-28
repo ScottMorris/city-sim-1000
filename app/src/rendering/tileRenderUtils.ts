@@ -106,11 +106,21 @@ function pickHydroCrossingTexture(
   // names ('ew', 'end-e', ...) silently missed T-junctions and 4-ways, so a
   // line crossing a busy junction fell back to a pole in the carriageway
   // while the plain stretch either side got two — visibly inconsistent.
-  const [bn, be, bs, bw] = tile.railUnderlay
-    ? railNeighbourFlags(state, x, y)
-    : roadNeighbourFlags(state, x, y);
-  const crossesBeneath = hydro === 'ns' ? be || bw : bn || bs;
+  //
+  // Test BOTH substrates, not whichever one happens to be checked first. On a
+  // level crossing the road and the rail run on different axes by definition,
+  // so a line squarely crossing one runs along the other; picking rail and
+  // ignoring the road planted a pole in the roadway at every such tile.
+  const crossesBeneath =
+    (tile.railUnderlay ? crossesAxis(hydro, railNeighbourFlags(state, x, y)) : false) ||
+    (tile.roadUnderlay ? crossesAxis(hydro, roadNeighbourFlags(state, x, y)) : false);
   return crossesBeneath ? tileTextures.powerLineCrossing[hydro] : undefined;
+}
+
+/** Does a line on `hydro`'s axis run square across something laid out along
+ *  these N/E/S/W flags? */
+function crossesAxis(hydro: 'ns' | 'ew', [bn, be, bs, bw]: [boolean, boolean, boolean, boolean]): boolean {
+  return hydro === 'ns' ? be || bw : bn || bs;
 }
 
 /** The road or rail a hydro tile was laid over, if any. */
