@@ -24,10 +24,11 @@ VARIANT = 'ns'
 
 WIRE_OFFSET = 0.56   # the pole's crossarm-tip gauge — wires attach there
 WIRE_W = 0.09
-SAG = 0.22           # catenary dip at the tile edge (elevation-view wires)
-EW_ANCHORS = (0.84, 0.72)  # both wires hang from the single crossarm's two
-                           # ends — the upper lies on the arm bar (screen
-                           # ~46.5), the lower tucks at its underside
+# (anchor height at the pole, catenary dip at the tile edge). Both wires
+# attach at the crossarm — the upper on the bar, the lower at its underside —
+# but sag by different amounts, so the pair stays tight at the pole and fans
+# visibly apart toward the edges: attached AND clearly two wires.
+EW_WIRES = ((0.84, 0.20), (0.72, 0.34))
 
 
 def build(mats):
@@ -38,12 +39,12 @@ def build(mats):
         # Sagging elevation-view wires: segmented along x, dipping toward the
         # edges; adjacent tiles continue the curve, kinking at each pole.
         segments = 16
-        for anchor in EW_ANCHORS:
+        for anchor, sag in EW_WIRES:
             for i in range(segments):
                 x0 = -2.05 + 4.1 * i / segments
                 x1 = -2.05 + 4.1 * (i + 1) / segments
-                y0 = anchor - SAG * (x0 / 2) ** 2
-                y1 = anchor - SAG * (x1 / 2) ** 2
+                y0 = anchor - sag * (x0 / 2) ** 2
+                y1 = anchor - sag * (x1 / 2) ** 2
                 cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
                 length = math.hypot(x1 - x0, y1 - y0)
                 box(mats, 'wire', (cx, cy, 0.06), (length + 0.02, WIRE_W, 0.04),
