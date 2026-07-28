@@ -71,7 +71,7 @@ def build(mats):
     # massing reads through a squat window rather than a tall one).
     fx = WALL_W / 2
     win_z = WALL_H * 0.55
-    win_y = -0.22
+    win_y = -0.32
     face_box(mats, 'trim', fx, win_y, win_z, WIN_W + 0.16, WIN_H + 0.16, 0.02, 0.04)
     face_box(mats, 'window', fx, win_y, win_z, WIN_W, WIN_H, 0.05)
     face_box(mats, 'mullion', fx, win_y, win_z, WIN_W, 0.05, 0.065)
