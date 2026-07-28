@@ -51,6 +51,7 @@ A single-storey gable-roofed house, built as plain `bpy`/`bmesh` calls (no exter
 - Crops tight to the render's alpha bounding box, then **point-samples (`NEAREST`)** down to the target grid — not box-averaging. Box-filtering blends the black outline into its neighbours proportionally, which reads as a washed-out grey line rather than the solid black of hand-drawn pixel art. `NEAREST` keeps outline pixels solid black; the tradeoff is texture noise if the grid is too fine relative to the render's own detail frequency.
 - **Why 60?** Compared 40/60/80 directly: 40 is coarse enough that `NEAREST` sampling starts dropping thin lines (gaps in the outline), 80 resolves so much of the render's own micro-detail that it reads as noisy rather than deliberate, 60 is the sweet spot — solid unbroken linework without the higher grid's noise.
 - Binary alpha threshold at the silhouette (no antialiased edge fade) + a light posterize on RGB, so gradients read as a few deliberate flat tones rather than a smooth ramp.
+- Composites the house onto a manicured-lawn ground: an 8px block grid matching `grass.png`'s own patch scale, but far more uniform (a `PATCH_CHANCE` of only 12% per block, vs. the source texture's every-block-differs noise) plus sparse dandelion/violet flecks reusing the park sprites' flower convention. No oval ring and no mow-stripe banding — both were tried and dropped as not matching the desired look.
 
 ## Tuning
 
@@ -58,6 +59,5 @@ All the geometry/material knobs are named constants near the top of `build_house
 
 ## Known limitations / next steps
 
-- No grass/ground-plane compositing yet — output is the house alone on a transparent canvas. (In progress — see the branch this landed on.)
 - Only one gable end has window/door detail, so `BUILDING_ROTATION_DEG` values that face the *other* gable toward the camera show a blank wall.
 - Single house variant only; no recipe/variant system yet (contrast with `app/scripts/build-park-assets.mjs`, which composites pre-drawn SVG art rather than generating geometry).

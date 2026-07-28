@@ -17,11 +17,10 @@ ROOF_H = 1.15                              # was 1.0; 1.35 read roof-heavy vs re
 # no roof over it -- that's the "front of the house doesn't have a roof"
 # observation. Eaves (slope side) overhang more; gable rake (door side)
 # overhangs only a little.
-ROOF_OVERHANG_EAVE = 0.075   # Y -- the roof-slope face's eave (was 0.15,
-# halved per feedback). Extended back out now that the rake overhang
-# (below) exists -- testing whether the earlier gable-corner notch is still
-# a problem now that there's open air
-# past the gable end instead of a flush wall corner right at the roof edge.
+ROOF_OVERHANG_EAVE = 0.075   # Y -- the roof-slope face's eave. Kept modest:
+# the rake overhang (below) means the gable corner now has open air past
+# it instead of a flush wall edge, so a larger eave overhang no longer
+# reintroduces the notch/seam problems earlier attempts ran into there.
 ROOF_OVERHANG_RAKE = 0.15    # X -- overhang along the ridge direction, past
 # the gable ends. Since the slope's pitch only depends on Y (not X), this
 # extends the roof plane without touching its angle at all, and since
