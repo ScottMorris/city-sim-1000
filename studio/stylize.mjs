@@ -58,6 +58,14 @@ const REF_PNG = path.join(ROOT, 'app/public/assets/tiles', REFS[refKey] ?? REFS.
 const TILE = 160;          // game convention for a 1×1 sprite
 // Only the shipped profile gets an overlay twin; the rest exist for comparison.
 const OVERLAY_PROFILE = 'rich-pixel-48';
+// Hydro crossing a road/rail: two poles, shifted along the line's own axis so
+// they stand clear of the carriageway, rather than one in the middle of it.
+// +/-52 px is just past the road's shoulder on a 160 px tile.
+const CROSSING_SHIFT = 52;
+const CROSSING_PROP_OFFSETS = {
+  'power-ns': [{ dx: 0, dy: -CROSSING_SHIFT }, { dx: 0, dy: CROSSING_SHIFT }],
+  'power-ew': [{ dx: -CROSSING_SHIFT, dy: 0 }, { dx: CROSSING_SHIFT, dy: 0 }],
+};
 const HOUSE_SCALE = 0.84;  // fraction of the tile the house content occupies
 
 // Role palette — base colours per building part (sRGB). Light bands derive
@@ -875,16 +883,22 @@ async function main() {
   // `transparent` leaves cells with no geometry clear instead of filling them
   // with grass, which turns the result into an OVERLAY the game can composite
   // over a road, rail or zone rather than a ground tile that paints over it.
+  // Where the prop billboard is stamped, in tile px, relative to centre. One
+  // entry = one pole. A crossing tile uses two, shifted clear of the
+  // carriageway, because a pole planted in the middle of a road is nonsense —
+  // real spans are carried by poles standing either side of it.
   const composeTile = (profile, opts = {}) => {
     const canvas = renderProfile(profile, maps, crop, grassAt, opts);
     if (overlay) {
       const bctx = canvas.getContext('2d');
+      const propOffsets = opts.propOffsets ?? [{ dx: 0, dy: 0 }];
+      for (const { dx, dy } of propOffsets) {
       // Pole ground shadow: a small cell-aligned dark blob south-east of the
       // pole base, consistent with the studio sun (from the screen's
       // upper-left) that shades every other asset.
       const cell = TILE / profile.grid;
-      const baseX = profile.grid / 2;
-      const baseY = (STYLE.overlayBaseY ?? TILE / 2 + (STYLE.overlayOffsetY ?? 0)) / cell;
+      const baseX = profile.grid / 2 + dx / cell;
+      const baseY = ((STYLE.overlayBaseY ?? TILE / 2 + (STYLE.overlayOffsetY ?? 0)) + dy) / cell;
       bctx.fillStyle = 'rgba(10, 22, 16, 0.30)';
       for (let cy = 0; cy < profile.grid; cy++) {
         for (let cx = 0; cx < profile.grid; cx++) {
@@ -896,7 +910,8 @@ async function main() {
       }
       const ov = withPalette(overlay.palette, () =>
         renderProfile(profile, overlay.maps, overlay.crop, grassAt, { transparent: true }));
-      bctx.drawImage(ov, 0, STYLE.overlayOffsetY ?? 0);
+      bctx.drawImage(ov, dx, (STYLE.overlayOffsetY ?? 0) + dy);
+      }
     }
     return canvas;
   };
@@ -915,6 +930,18 @@ async function main() {
       const overlayFile = path.join(OUT_DIR, `look-${SCENE}-${profile.name}-overlay.png`);
       await fs.writeFile(overlayFile, overlayCanvas.toBuffer('image/png'));
       console.log(`Wrote ${overlayFile}`);
+
+      // Crossing twin: the same wires, but carried by two poles standing
+      // either side of the carriageway instead of one planted in it. Only
+      // meaningful for the two straight runs — a line turning a corner or
+      // branching inside a road tile has no clean "either side".
+      const crossingPoles = CROSSING_PROP_OFFSETS[SCENE];
+      if (crossingPoles) {
+        const crossingCanvas = composeTile(profile, { transparent: true, propOffsets: crossingPoles });
+        const crossingFile = path.join(OUT_DIR, `look-${SCENE}-${profile.name}-crossing.png`);
+        await fs.writeFile(crossingFile, crossingCanvas.toBuffer('image/png'));
+        console.log(`Wrote ${crossingFile}`);
+      }
     }
   }
 

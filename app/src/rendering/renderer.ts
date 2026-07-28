@@ -65,6 +65,7 @@ export class MapRenderer {
       powerPlant: {},
       powerLine: {},
       powerLineOverlay: {},
+      powerLineCrossing: {},
       residentialHouses: [],
       commercialBuildings: [],
       commercialGeminiBuildings: [],

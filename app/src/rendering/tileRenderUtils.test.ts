@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Texture } from 'pixi.js';
 import { createInitialState, getTile, setTile, TileKind } from '../game/gameState';
+import { PowerPlantType } from '../game/constants';
 import { resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
 import type { TileTextures } from './tileAtlas';
 
@@ -33,6 +34,7 @@ function makeTextures(): TileTextures {
       'corner-se': tex('ovl-corner-se'), 't-nes': tex('ovl-t-nes'),
       cross: tex('ovl-cross'), 'end-n': tex('ovl-end-n')
     },
+    powerLineCrossing: { ns: tex('xing-ns'), ew: tex('xing-ew') },
     residentialHouses: [tex('res-1')],
     commercialBuildings: [],
     commercialGeminiBuildings: [],
@@ -151,14 +153,26 @@ describe('hydro line sprite picking', () => {
     expect(spriteName(state, 4, 4, textures)).toBe('power-cross');
   });
 
-  it('treats roads and zones as connections, like the power grid does', () => {
-    // isPowerCarrier counts roads, rails, zones and buildings — so a line run
-    // beside built-up land hits the junction variants constantly.
+  it('does not reach out to an adjacent road', () => {
+    // Sprite choice must not use isPowerCarrier: power flows through roads,
+    // but wires are not strung to them. A line running beside a road used to
+    // grow a leg toward it on every tile, which looked goofy.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 2, 1, TileKind.PowerLine);
+    setTile(state, 2, 2, TileKind.PowerLine);
+    setTile(state, 2, 3, TileKind.PowerLine);
+    setTile(state, 3, 2, TileKind.Road);        // road running alongside
+    expect(spriteName(state, 2, 2, textures)).toBe('power-ns');
+  });
+
+  it('still connects to a power plant it runs into', () => {
     const state = createInitialState(8, 8);
     const textures = makeTextures();
     setTile(state, 2, 2, TileKind.PowerLine);
     setTile(state, 2, 1, TileKind.PowerLine);   // north
-    setTile(state, 3, 2, TileKind.Road);        // east
+    const plant = getTile(state, 3, 2)!;        // east
+    plant.powerPlantType = PowerPlantType.Coal;
     expect(spriteName(state, 2, 2, textures)).toBe('power-corner-ne');
   });
 
@@ -178,26 +192,31 @@ describe('hydro crossing road, rail and zones (issue #169)', () => {
   it('keeps the road visible and layers the wires over it', () => {
     const state = createInitialState(8, 8);
     const textures = makeTextures();
+    // Road runs E-W; hydro crosses it N-S. The centre tile carries both.
     for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
-    // Hydro laid along the road: kind becomes PowerLine, roadUnderlay is kept.
+    setTile(state, 2, 3, TileKind.PowerLine);
+    setTile(state, 2, 5, TileKind.PowerLine);
     setTile(state, 2, 4, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
     tile.roadUnderlay = true;
 
     expect(spriteName(state, 2, 4, textures)).toBe('road-ew');
-    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ew');
+    expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
   });
 
   it('keeps the rail visible under a hydro line', () => {
     const state = createInitialState(8, 8);
     const textures = makeTextures();
+    // Rail runs N-S; hydro crosses it E-W.
     for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.Rail);
+    setTile(state, 1, 4, TileKind.PowerLine);
+    setTile(state, 3, 4, TileKind.PowerLine);
     setTile(state, 2, 4, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
     tile.railUnderlay = true;
 
     expect(spriteName(state, 2, 4, textures)).toBe('rail-ns');
-    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ns');
+    expect(overlayName(state, 2, 4, textures)).toBe('xing-ew');
   });
 
   it('draws wires over a zone that only recorded powerOverlay', () => {
@@ -227,5 +246,27 @@ describe('hydro crossing road, rail and zones (issue #169)', () => {
 
     expect(spriteName(state, 2, 4, textures)).toBe('power-ns');
     expect(overlayName(state, 2, 4, textures)).toBeUndefined();
+  });
+});
+
+describe('hydro crossing poles', () => {
+  it('uses the two-pole twin only when the line crosses square', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
+    for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.PowerLine);
+    getTile(state, 2, 4)!.roadUnderlay = true;
+    expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
+  });
+
+  it('keeps a single pole when the line runs along the road', () => {
+    // Parallel run: dropping the pole would leave the wires unsupported for
+    // the whole stretch, so this keeps the ordinary one-pole overlay.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.PowerLine);
+    for (const t of [[1, 4], [2, 4], [3, 4]]) getTile(state, t[0], t[1])!.roadUnderlay = true;
+    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ew');
   });
 });

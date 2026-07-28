@@ -39,6 +39,9 @@ const PACK = [
   ...ROAD_VARIANTS.map((v) => [`power-${v}`, `power/power-line-${v}.png`]),
   // Transparent twins the renderer composites over road/rail/zone tiles.
   ...ROAD_VARIANTS.map((v) => [`power-${v}`, `power/power-line-${v}-overlay.png`, 'overlay']),
+  // Two-pole twins, for a line crossing a road/rail rather than running in it.
+  ['power-ns', 'power/power-line-ns-crossing.png', 'crossing'],
+  ['power-ew', 'power/power-line-ew-crossing.png', 'crossing'],
   ['house', 'buildings/res-house-5.png'],
   ['house2', 'buildings/res-house-6.png'],
   ['house3', 'buildings/res-house-7.png'],
@@ -58,13 +61,13 @@ const PACK = [
 const manifest = { profile: PROFILE, tileSize: 160, sprites: {} };
 let missing = 0;
 for (const [scene, dest, kind] of PACK) {
-  const suffix = kind === 'overlay' ? '-overlay' : '';
+  const suffix = kind === 'overlay' ? '-overlay' : kind === 'crossing' ? '-crossing' : '';
   const src = path.join(OUT, `look-${scene}-${PROFILE}${suffix}.png`);
   const destPath = path.join(DIST, dest);
   try {
     await fs.mkdir(path.dirname(destPath), { recursive: true });
     await fs.copyFile(src, destPath);
-    manifest.sprites[dest] = kind === 'overlay' ? { scene, overlay: true } : { scene };
+    manifest.sprites[dest] = kind ? { scene, [kind]: true } : { scene };
   } catch {
     console.error(`MISSING ${scene} (${src})`);
     missing++;

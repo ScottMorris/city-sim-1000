@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { Texture } from 'pixi.js';
-import { isPowerCarrier } from '../game/adjacency';
+
 import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
@@ -80,8 +80,35 @@ export function resolveTileSprite(
   const base = resolveBaseTileSprite(state, tile, x, y, tileTextures, buildingLookup);
   if (!tile || !base || 'skip' in base) return base;
   if (!carriesHydroOverlay(tile)) return base;
-  const overlayTexture = pickPowerLineTexture(state, x, y, tileTextures, true);
+  const overlayTexture =
+    pickHydroCrossingTexture(state, tile, x, y, tileTextures) ??
+    pickPowerLineTexture(state, x, y, tileTextures, true);
   return overlayTexture ? { ...base, overlayTexture } : base;
+}
+
+/** A line crossing a carriageway is carried by poles standing either side of
+ *  it, not by one planted in the middle. Only applies when the line runs
+ *  straight and square across what's beneath — a line turning a corner or
+ *  branching inside a road tile has no clean "either side", and a line
+ *  running *along* a road still needs its own pole or the wires float
+ *  unsupported for the whole stretch. */
+function pickHydroCrossingTexture(
+  state: GameState,
+  tile: NonNullable<ReturnType<typeof getTile>>,
+  x: number,
+  y: number,
+  tileTextures: TileTextures
+): Texture | undefined {
+  if (!tile.roadUnderlay && !tile.railUnderlay) return undefined;
+  const hydro = hydroVariant(state, x, y);
+  if (hydro !== 'ns' && hydro !== 'ew') return undefined;
+  const beneath = tile.railUnderlay
+    ? roadVariant(...railNeighbourFlags(state, x, y))
+    : roadNeighbourVariant(state, x, y);
+  const beneathIsPerpendicular =
+    (hydro === 'ns' && (beneath === 'ew' || beneath === 'end-e' || beneath === 'end-w')) ||
+    (hydro === 'ew' && (beneath === 'ns' || beneath === 'end-n' || beneath === 'end-s'));
+  return beneathIsPerpendicular ? tileTextures.powerLineCrossing[hydro] : undefined;
 }
 
 /** The road or rail a hydro tile was laid over, if any. */
@@ -337,6 +364,44 @@ function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTex
   return tileTextures.railCrossing[axis];
 }
 
+/** Does this neighbour visibly carry wires?
+ *
+ *  Deliberately NOT `isPowerCarrier`. That predicate answers a *simulation*
+ *  question — power flows through roads, rails, zones and buildings — and
+ *  using it to choose a sprite made every hydro tile grow a leg toward any
+ *  adjacent road, so a line running beside a road reached out and touched it
+ *  on every tile. Wires should only be drawn between things that actually
+ *  string wires: other hydro tiles, zones with a line over them, and plants. */
+function carriesWires(tile: ReturnType<typeof getTile>): boolean {
+  if (!tile) return false;
+  if (tile.kind === TileKind.PowerLine) return true;
+  if (tile.powerOverlay) return true;
+  return (tile.powerPlantType ?? tileKindToPowerPlantType(tile.kind)) !== undefined;
+}
+
+function hydroVariant(state: GameState, x: number, y: number): RoadVariant {
+  const connects = (tx: number, ty: number) => carriesWires(getTile(state, tx, ty));
+  return roadVariant(
+    y > 0 && connects(x, y - 1),
+    x < state.width - 1 && connects(x + 1, y),
+    y < state.height - 1 && connects(x, y + 1),
+    x > 0 && connects(x - 1, y)
+  );
+}
+
+function roadNeighbourVariant(state: GameState, x: number, y: number): RoadVariant {
+  const connects = (tx: number, ty: number) => {
+    const n = getTile(state, tx, ty);
+    return n?.kind === TileKind.Road || n?.roadUnderlay === true;
+  };
+  return roadVariant(
+    y > 0 && connects(x, y - 1),
+    x < state.width - 1 && connects(x + 1, y),
+    y < state.height - 1 && connects(x, y + 1),
+    x > 0 && connects(x - 1, y)
+  );
+}
+
 function pickPowerLineTexture(
   state: GameState,
   x: number,
@@ -344,19 +409,11 @@ function pickPowerLineTexture(
   tileTextures: TileTextures,
   overlay = false
 ): Texture | undefined {
-  const connectsToPower = (tx: number, ty: number) => isPowerCarrier(getTile(state, tx, ty));
-
-  const n = y > 0 && connectsToPower(x, y - 1);
-  const e = x < state.width  - 1 && connectsToPower(x + 1, y);
-  const s = y < state.height - 1 && connectsToPower(x, y + 1);
-  const w = x > 0 && connectsToPower(x - 1, y);
 
   // Hydro reuses the road set's 15-variant connectivity mapping. Previously
   // only straight runs and dead ends resolved, so corners, T-junctions and
   // crossings returned undefined and the renderer fell back to a flat colour
-  // rect — and because isPowerCarrier counts roads, rails, zones and
-  // buildings as connections, those cases are the norm in a built-up city,
-  // not an edge case.
+  // rect.
   const set = overlay ? tileTextures.powerLineOverlay : tileTextures.powerLine;
-  return set[roadVariant(n, e, s, w)];
+  return set[hydroVariant(state, x, y)];
 }

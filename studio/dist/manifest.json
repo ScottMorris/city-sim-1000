@@ -203,6 +203,14 @@
       "scene": "power-end-w",
       "overlay": true
     },
+    "power/power-line-ns-crossing.png": {
+      "scene": "power-ns",
+      "crossing": true
+    },
+    "power/power-line-ew-crossing.png": {
+      "scene": "power-ew",
+      "crossing": true
+    },
     "buildings/res-house-5.png": {
       "scene": "house"
     },

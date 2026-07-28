@@ -28,6 +28,9 @@ export interface TileTextures {
   powerLine: Partial<Record<RoadVariant, PIXI.Texture>>;
   /** Transparent twins, composited over the road/rail/zone a line crosses. */
   powerLineOverlay: Partial<Record<RoadVariant, PIXI.Texture>>;
+  /** Two-pole twins: a line crossing a carriageway is carried by poles either
+   *  side of it, not by one planted in the middle. */
+  powerLineCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
   residentialHouses: PIXI.Texture[];
   commercialBuildings: PIXI.Texture[];
   commercialGeminiBuildings: PIXI.Texture[];
@@ -166,6 +169,11 @@ const powerLineOverlayTexturePaths = Object.fromEntries(
   ])
 ) as Record<RoadVariant, string>;
 
+const powerLineCrossingTexturePaths = {
+  ns: assetPath('assets/tiles/power/power-line-ns-crossing.png'),
+  ew: assetPath('assets/tiles/power/power-line-ew-crossing.png')
+} as const;
+
 const schoolTexturePaths = {
   elementary: assetPath('assets/tiles/buildings/school-elementary.png'),
   high:       assetPath('assets/tiles/buildings/school-high.png')
@@ -231,6 +239,13 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
+  const powerLineCrossingEntries = await Promise.all(
+    (Object.entries(powerLineCrossingTexturePaths) as ['ns' | 'ew', string][]).map(async ([key, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [key, texture] as const;
+    })
+  );
+
   const residentialHouses = await Promise.all(
     residentialHouseTexturePaths.map(async (path) => PIXI.Assets.load<PIXI.Texture>(path))
   );
@@ -276,6 +291,7 @@ export async function loadTileTextures(): Promise<TileTextures> {
     powerPlant:             Object.fromEntries(powerPlantEntries),
     powerLine:              Object.fromEntries(powerLineEntries),
     powerLineOverlay:       Object.fromEntries(powerLineOverlayEntries),
+    powerLineCrossing:      Object.fromEntries(powerLineCrossingEntries),
     residentialHouses,
     commercialBuildings,
     commercialGeminiBuildings,
