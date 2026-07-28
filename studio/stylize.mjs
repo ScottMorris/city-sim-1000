@@ -27,6 +27,8 @@ const REFS = {
   house: 'buildings/res-house-2.png',
   shop: 'buildings/com-shop-1.png',
   factory: 'buildings/ind-factory-1.png',
+  factory2: 'buildings/ind-factory-2.png',
+  factory3: 'buildings/ind-factory-1.png',
   warehouse: 'buildings/ind-factory-2.png',
   hightech: 'buildings/ind-high-tech-1.png',
   rail: 'roads/road-ns.png',   // no rail sprites exist yet — roads are the neighbours to match
@@ -143,6 +145,30 @@ const SCENE_STYLES = {
       window: '#2e4a52',
     },
     wallSpacing: 0.22,
+    roofSpacing: 0.36,
+  },
+  factory2: {
+    // Concrete tilt-up factory — cool grey, distinct from factory's brick.
+    palette: {
+      wall: '#8f8c85',
+      roof: '#403f3c',
+      chimney: '#6e6c66',
+      door: '#3c4448',
+      window: '#3a4a3e',
+    },
+    wallSpacing: 0.34,
+    roofSpacing: 0.36,
+  },
+  factory3: {
+    // Corrugated teal-green heavy-industry shed.
+    palette: {
+      wall: '#5f766c',
+      roof: '#33403a',
+      chimney: '#4a4642',
+      door: '#2e3a34',
+      window: '#274040',
+    },
+    wallSpacing: 0.16,     // tight spacing reads as corrugated metal ribbing
     roofSpacing: 0.36,
   },
   warehouse: {

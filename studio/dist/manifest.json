@@ -130,6 +130,12 @@
     },
     "buildings/ind-high-tech-2.png": {
       "scene": "hightech"
+    },
+    "buildings/ind-factory-4.png": {
+      "scene": "factory2"
+    },
+    "buildings/ind-factory-5.png": {
+      "scene": "factory3"
     }
   }
 }
