@@ -22,6 +22,8 @@ cd studio && bun stylize.mjs <scene>                    # instant
 
 Always view the sprite at 4× (nearest-neighbour upscale) before judging detail, and always look at the contact sheet before declaring victory — the sprite must sit beside the existing game art, not just look good alone.
 
+Once an asset set is approved, `bun pack.mjs` copies its `rich-pixel-48` renders into `studio/dist/assets/tiles/` under game sprite names (the pack list lives in `pack.mjs`). Wiring `dist/` into `app/public/assets/` + the tile atlas is a separate, explicitly approved step.
+
 ## Invariants — never touch these
 
 The camera, sun, world lighting, render settings, and pass logic live in `studiolib.py` and are identical for every asset. That sameness is what makes a hundred sprites read as one game. If your building looks wrong, fix the *building* (geometry, proportions, rotation), never the camera or light.
