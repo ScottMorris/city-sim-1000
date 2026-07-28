@@ -103,6 +103,33 @@ const SCENE_STYLES = {
     wallSpacing: 0.22,     // tighter courses read as brick rather than siding
     roofSpacing: 0.36,     // flat roof: constant height -> no lines anyway
   },
+  shop2: {
+    // Blue-grey clapboard general store, green awning/sign — a cool wall
+    // tone keeps it from reading as another shade of shop/shop3's brick.
+    palette: {
+      wall: '#aebfc4',
+      roof: '#4a4640',
+      chimney: '#8a8478',
+      awning: '#2f6b47',
+      sign: '#e4dcc4',
+      door: '#2b3a4a',
+    },
+    wallSpacing: 0.30,
+    roofSpacing: 0.36,
+  },
+  shop3: {
+    // Narrow terracotta café, teal awning.
+    palette: {
+      wall: '#b5583a',
+      roof: '#403c38',
+      chimney: '#8a8478',
+      awning: '#1f6e6a',
+      sign: '#f0e6d0',
+      door: '#26433f',
+    },
+    wallSpacing: 0.24,
+    roofSpacing: 0.36,
+  },
   rail: {
     // Ground tile: fills the frame edge-to-edge (no crop/shrink), no lawn
     // oval; transparent cells become plain grass shoulders.

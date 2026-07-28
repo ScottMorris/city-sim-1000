@@ -112,6 +112,15 @@
     },
     "buildings/res-house-7.png": {
       "scene": "house3"
+    },
+    "buildings/com-shop-4.png": {
+      "scene": "shop"
+    },
+    "buildings/com-shop-5.png": {
+      "scene": "shop2"
+    },
+    "buildings/com-shop-6.png": {
+      "scene": "shop3"
     }
   }
 }

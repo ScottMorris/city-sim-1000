@@ -116,7 +116,11 @@ const residentialHouseTexturePaths = [
 const commercialBuildingTexturePaths = [
   assetPath('assets/tiles/buildings/com-shop-1.png'),
   assetPath('assets/tiles/buildings/com-shop-2.png'),
-  assetPath('assets/tiles/buildings/com-shop-3.png')
+  assetPath('assets/tiles/buildings/com-shop-3.png'),
+  // Asset Studio (rich-pixel-48) shops — studio/scenes/shop.py, shop2.py, shop3.py.
+  assetPath('assets/tiles/buildings/com-shop-4.png'),
+  assetPath('assets/tiles/buildings/com-shop-5.png'),
+  assetPath('assets/tiles/buildings/com-shop-6.png')
 ];
 
 const geminiCommercialTexturePaths = [assetPath('assets/tiles/buildings/com-1.png')];
