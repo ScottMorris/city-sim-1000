@@ -98,6 +98,14 @@ export class MapRenderer {
   }
 
   async init(resizeTo: HTMLElement) {
+    // MCP mode's screenshot tool reads the canvas back via toDataURL() from
+    // outside Pixi's own render loop (in response to an async WS message).
+    // WebGL clears/swaps its drawing buffer after presenting a frame by
+    // default, so without preserveDrawingBuffer that readback sees a
+    // blank buffer — solid black regardless of what was actually rendered.
+    // Only enabled in MCP mode: it costs an extra GPU buffer copy per
+    // frame, not worth paying in normal play.
+    const mcpMode = new URLSearchParams(window.location.search).has('mcp');
     await this.app.init({
       background: '#0b1424',
       resizeTo,
@@ -105,7 +113,8 @@ export class MapRenderer {
       // Cap device-pixel-ratio scaling at 2x — retina-sharp without paying
       // the full uncapped cost on DPR-3 mobile devices (Pixi v8 defaults to
       // window.devicePixelRatio with no cap).
-      resolution: Math.min(window.devicePixelRatio, 2)
+      resolution: Math.min(window.devicePixelRatio, 2),
+      preserveDrawingBuffer: mcpMode
     });
     this.parent.appendChild(this.app.canvas);
     this.app.stage.addChild(this.container);
