@@ -33,6 +33,7 @@ export class MapRenderer {
   readonly app: Application;
   private parent: HTMLElement;
   private spriteLayer: Container;
+  private overlaySpriteLayer: Container;
   private mapLayer: Graphics;
   private gridLayer: Graphics;
   private overlayLayer: Graphics;
@@ -44,6 +45,7 @@ export class MapRenderer {
   private palette: Record<TileKind, number>;
   private tileTextures: TileTextures;
   private tileSprites: Map<number, Sprite>;
+  private overlaySprites: Map<number, Sprite>;
   private indicatorSprites: Map<number, Sprite>;
   private tilesWithSprites: Set<number>;
   private camera: Camera;
@@ -62,6 +64,7 @@ export class MapRenderer {
       railCrossing: {},
       powerPlant: {},
       powerLine: {},
+      powerLineOverlay: {},
       residentialHouses: [],
       commercialBuildings: [],
       commercialGeminiBuildings: [],
@@ -78,6 +81,9 @@ export class MapRenderer {
     this.palette = palette;
     this.tileTextures = tileTextures;
     this.spriteLayer = new Container();
+    // Drawn above the tile sprites: infrastructure that crosses rather than
+    // replaces what is beneath it (hydro over a road, rail or zone).
+    this.overlaySpriteLayer = new Container();
     this.mapLayer = new Graphics();
     this.gridLayer = new Graphics();
     this.overlayLayer = new Graphics();
@@ -87,6 +93,7 @@ export class MapRenderer {
     this.container.addChild(
       this.mapLayer,
       this.spriteLayer,
+      this.overlaySpriteLayer,
       this.gridLayer,
       this.overlayLayer,
       this.indicatorLayer,
@@ -94,6 +101,7 @@ export class MapRenderer {
     );
     this.gridDrawer = new GridDrawer(this.gridLayer);
     this.tileSprites = new Map();
+    this.overlaySprites = new Map();
     this.indicatorSprites = new Map();
     this.tilesWithSprites = new Set();
     this.tileLabels = new Map();
@@ -150,7 +158,7 @@ export class MapRenderer {
         const idx = y * state.width + x;
         const spriteInfo = resolveTileSprite(state, tile, x, y, this.tileTextures, buildingLookup);
         if (spriteInfo && 'texture' in spriteInfo) {
-          const { texture, widthTiles, heightTiles, borderWidth = 0 } = spriteInfo;
+          const { texture, widthTiles, heightTiles, borderWidth = 0, overlayTexture } = spriteInfo;
           if (borderWidth > 0) {
             this.mapLayer
               .rect(
@@ -170,6 +178,17 @@ export class MapRenderer {
           sprite.height = spriteSize * heightTiles - borderWidth * 2;
           sprite.visible = true;
           sprite.alpha = surfaceAlpha;
+          if (overlayTexture) {
+            // Second layer: hydro strung over the road/rail/zone drawn above.
+            const overlaySprite = this.getOrCreateOverlaySprite(idx, overlayTexture);
+            overlaySprite.position.set(this.camera.x + x * size, this.camera.y + y * size);
+            overlaySprite.width = spriteSize * widthTiles;
+            overlaySprite.height = spriteSize * heightTiles;
+            overlaySprite.visible = true;
+            overlaySprite.alpha = surfaceAlpha;
+          } else {
+            this.hideOverlaySprite(idx);
+          }
           for (let dy = 0; dy < heightTiles; dy++) {
             for (let dx = 0; dx < widthTiles; dx++) {
               const coveredIdx = (y + dy) * state.width + (x + dx);
@@ -178,9 +197,11 @@ export class MapRenderer {
           }
         } else if (spriteInfo?.skip) {
           this.hideSprite(idx);
+          this.hideOverlaySprite(idx);
           this.tilesWithSprites.add(idx);
         } else {
           this.hideSprite(idx);
+          this.hideOverlaySprite(idx);
           const color = getTileColour(tile, this.palette);
           this.mapLayer
             .rect(
@@ -591,6 +612,27 @@ export class MapRenderer {
     this.tileSprites.set(idx, sprite);
     this.spriteLayer.addChild(sprite);
     return sprite;
+  }
+
+  private getOrCreateOverlaySprite(idx: number, texture: Texture): Sprite {
+    const existing = this.overlaySprites.get(idx);
+    if (existing) {
+      if (existing.texture !== texture) {
+        existing.texture = texture;
+      }
+      return existing;
+    }
+    const sprite = new Sprite(texture);
+    this.overlaySprites.set(idx, sprite);
+    this.overlaySpriteLayer.addChild(sprite);
+    return sprite;
+  }
+
+  private hideOverlaySprite(idx: number) {
+    const sprite = this.overlaySprites.get(idx);
+    if (sprite) {
+      sprite.visible = false;
+    }
   }
 
   private hideSprite(idx: number) {

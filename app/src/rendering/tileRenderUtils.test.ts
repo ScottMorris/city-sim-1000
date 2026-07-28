@@ -28,7 +28,12 @@ function makeTextures(): TileTextures {
       'corner-se': tex('power-corner-se'),
       't-nes': tex('power-t-nes'), cross: tex('power-cross'), 'end-n': tex('power-end-n')
     },
-    residentialHouses: [],
+    powerLineOverlay: {
+      ns: tex('ovl-ns'), ew: tex('ovl-ew'), 'corner-ne': tex('ovl-corner-ne'),
+      'corner-se': tex('ovl-corner-se'), 't-nes': tex('ovl-t-nes'),
+      cross: tex('ovl-cross'), 'end-n': tex('ovl-end-n')
+    },
+    residentialHouses: [tex('res-1')],
     commercialBuildings: [],
     commercialGeminiBuildings: [],
     industrialBuildings: [],
@@ -39,6 +44,12 @@ function makeTextures(): TileTextures {
 }
 
 const emptyLookup: BuildingLookup = new Map();
+
+function overlayName(state: ReturnType<typeof createInitialState>, x: number, y: number, textures: TileTextures) {
+  const info = resolveTileSprite(state, getTile(state, x, y), x, y, textures, emptyLookup);
+  const t = info && 'texture' in info ? info.overlayTexture : undefined;
+  return (t as unknown as { name: string } | undefined)?.name;
+}
 
 function spriteName(state: ReturnType<typeof createInitialState>, x: number, y: number, textures: TileTextures) {
   const info = resolveTileSprite(state, getTile(state, x, y), x, y, textures, emptyLookup);
@@ -157,5 +168,64 @@ describe('hydro line sprite picking', () => {
     setTile(state, 2, 2, TileKind.PowerLine);
     setTile(state, 2, 1, TileKind.PowerLine);
     expect(spriteName(state, 2, 2, textures)).toBe('power-end-n');
+  });
+});
+
+describe('hydro crossing road, rail and zones (issue #169)', () => {
+  // The wire sprites are opaque ground tiles, so drawing one over a road tile
+  // painted grass across the road. Crossings draw the infrastructure beneath
+  // and composite a transparent wire twin on top.
+  it('keeps the road visible and layers the wires over it', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
+    // Hydro laid along the road: kind becomes PowerLine, roadUnderlay is kept.
+    setTile(state, 2, 4, TileKind.PowerLine);
+    const tile = getTile(state, 2, 4)!;
+    tile.roadUnderlay = true;
+
+    expect(spriteName(state, 2, 4, textures)).toBe('road-ew');
+    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ew');
+  });
+
+  it('keeps the rail visible under a hydro line', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.Rail);
+    setTile(state, 2, 4, TileKind.PowerLine);
+    const tile = getTile(state, 2, 4)!;
+    tile.railUnderlay = true;
+
+    expect(spriteName(state, 2, 4, textures)).toBe('rail-ns');
+    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ns');
+  });
+
+  it('draws wires over a zone that only recorded powerOverlay', () => {
+    // Zones keep their own kind, so without compositing the wires never
+    // rendered in the base view at all.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 2, 4, TileKind.Residential);
+    const tile = getTile(state, 2, 4)!;
+    tile.buildingId = 1;
+    tile.powerOverlay = true;
+    setTile(state, 2, 3, TileKind.PowerLine);
+    setTile(state, 2, 5, TileKind.PowerLine);
+
+    expect(spriteName(state, 2, 4, textures)).toBe('res-1');
+    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ns');
+  });
+
+  it('does not double-draw wires on open ground', () => {
+    // A plain hydro tile keeps its opaque sprite, which already has wires;
+    // compositing again would draw them twice.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 2, 3, TileKind.PowerLine);
+    setTile(state, 2, 4, TileKind.PowerLine);
+    setTile(state, 2, 5, TileKind.PowerLine);
+
+    expect(spriteName(state, 2, 4, textures)).toBe('power-ns');
+    expect(overlayName(state, 2, 4, textures)).toBeUndefined();
   });
 });

@@ -143,6 +143,66 @@
     "power/power-line-end-w.png": {
       "scene": "power-end-w"
     },
+    "power/power-line-ns-overlay.png": {
+      "scene": "power-ns",
+      "overlay": true
+    },
+    "power/power-line-ew-overlay.png": {
+      "scene": "power-ew",
+      "overlay": true
+    },
+    "power/power-line-corner-ne-overlay.png": {
+      "scene": "power-corner-ne",
+      "overlay": true
+    },
+    "power/power-line-corner-nw-overlay.png": {
+      "scene": "power-corner-nw",
+      "overlay": true
+    },
+    "power/power-line-corner-se-overlay.png": {
+      "scene": "power-corner-se",
+      "overlay": true
+    },
+    "power/power-line-corner-sw-overlay.png": {
+      "scene": "power-corner-sw",
+      "overlay": true
+    },
+    "power/power-line-t-nes-overlay.png": {
+      "scene": "power-t-nes",
+      "overlay": true
+    },
+    "power/power-line-t-esw-overlay.png": {
+      "scene": "power-t-esw",
+      "overlay": true
+    },
+    "power/power-line-t-nsw-overlay.png": {
+      "scene": "power-t-nsw",
+      "overlay": true
+    },
+    "power/power-line-t-new-overlay.png": {
+      "scene": "power-t-new",
+      "overlay": true
+    },
+    "power/power-line-cross-overlay.png": {
+      "scene": "power-cross",
+      "overlay": true
+    },
+    "power/power-line-end-n-overlay.png": {
+      "scene": "power-end-n",
+      "overlay": true
+    },
+    "power/power-line-end-e-overlay.png": {
+      "scene": "power-end-e",
+      "overlay": true
+    },
+    "power/power-line-end-s-overlay.png": {
+      "scene": "power-end-s",
+      "overlay": true
+    },
+    "power/power-line-end-w-overlay.png": {
+      "scene": "power-end-w",
+      "overlay": true
+    },
     "buildings/res-house-5.png": {
       "scene": "house"
     },

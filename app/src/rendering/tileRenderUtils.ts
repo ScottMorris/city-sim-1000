@@ -18,7 +18,15 @@ export type BuildingLookupEntry = {
 export type BuildingLookup = Map<number, BuildingLookupEntry>;
 
 export type TileSpriteInfo =
-  | { texture: Texture; widthTiles: number; heightTiles: number; borderWidth?: number }
+  | {
+      texture: Texture;
+      widthTiles: number;
+      heightTiles: number;
+      borderWidth?: number;
+      /** Drawn on top of `texture`, for infrastructure that crosses rather
+       *  than replaces what is beneath it (hydro over a road, rail or zone). */
+      overlayTexture?: Texture;
+    }
   | { skip: true }
   | undefined;
 
@@ -49,7 +57,55 @@ export function createBuildingLookup(state: GameState) {
   return { buildingLookup, multiTileCoverage };
 }
 
+/** True when hydro is strung over this tile and must be drawn as a separate
+ *  layer: either a `PowerLine` tile that also carries road/rail, or a zone
+ *  that kept its own kind and only recorded `powerOverlay`. A `PowerLine` on
+ *  open ground is excluded — its opaque sprite already includes the wires,
+ *  and compositing again would double-draw them. */
+function carriesHydroOverlay(tile: NonNullable<ReturnType<typeof getTile>>): boolean {
+  if (tile.kind === TileKind.PowerLine) {
+    return tile.roadUnderlay === true || tile.railUnderlay === true;
+  }
+  return tile.powerOverlay === true;
+}
+
 export function resolveTileSprite(
+  state: GameState,
+  tile: ReturnType<typeof getTile>,
+  x: number,
+  y: number,
+  tileTextures: TileTextures,
+  buildingLookup: BuildingLookup
+): TileSpriteInfo {
+  const base = resolveBaseTileSprite(state, tile, x, y, tileTextures, buildingLookup);
+  if (!tile || !base || 'skip' in base) return base;
+  if (!carriesHydroOverlay(tile)) return base;
+  const overlayTexture = pickPowerLineTexture(state, x, y, tileTextures, true);
+  return overlayTexture ? { ...base, overlayTexture } : base;
+}
+
+/** The road or rail a hydro tile was laid over, if any. */
+function pickPowerUnderlayTexture(
+  state: GameState,
+  tile: NonNullable<ReturnType<typeof getTile>>,
+  x: number,
+  y: number,
+  tileTextures: TileTextures
+): Texture | undefined {
+  if (tile.roadUnderlay && tile.railUnderlay) {
+    return pickRailCrossingTexture(state, x, y, tileTextures);
+  }
+  if (tile.railUnderlay) return tileTextures.rail[roadVariant(...railNeighbourFlags(state, x, y))];
+  if (tile.roadUnderlay) return pickRoadTexture(state, x, y, tileTextures);
+  return undefined;
+}
+
+function railNeighbourFlags(state: GameState, x: number, y: number): [boolean, boolean, boolean, boolean] {
+  const { n, e, s, w } = railNeighbours(state, x, y);
+  return [n, e, s, w];
+}
+
+function resolveBaseTileSprite(
   state: GameState,
   tile: ReturnType<typeof getTile>,
   x: number,
@@ -172,6 +228,12 @@ export function resolveTileSprite(
     if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
   }
   if (tile.kind === TileKind.PowerLine) {
+    // Hydro crosses infrastructure rather than replacing it. When the tile
+    // also carries a road or rail, draw that here and let the caller
+    // composite the transparent wire twin on top; the opaque wire sprite is
+    // only correct on open ground.
+    const underlay = pickPowerUnderlayTexture(state, tile, x, y, tileTextures);
+    if (underlay) return { texture: underlay, widthTiles: 1, heightTiles: 1 };
     const powerTexture = pickPowerLineTexture(state, x, y, tileTextures);
     if (powerTexture) return { texture: powerTexture, widthTiles: 1, heightTiles: 1 };
   }
@@ -275,7 +337,13 @@ function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTex
   return tileTextures.railCrossing[axis];
 }
 
-function pickPowerLineTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
+function pickPowerLineTexture(
+  state: GameState,
+  x: number,
+  y: number,
+  tileTextures: TileTextures,
+  overlay = false
+): Texture | undefined {
   const connectsToPower = (tx: number, ty: number) => isPowerCarrier(getTile(state, tx, ty));
 
   const n = y > 0 && connectsToPower(x, y - 1);
@@ -289,5 +357,6 @@ function pickPowerLineTexture(state: GameState, x: number, y: number, tileTextur
   // rect — and because isPowerCarrier counts roads, rails, zones and
   // buildings as connections, those cases are the norm in a built-up city,
   // not an edge case.
-  return tileTextures.powerLine[roadVariant(n, e, s, w)];
+  const set = overlay ? tileTextures.powerLineOverlay : tileTextures.powerLine;
+  return set[roadVariant(n, e, s, w)];
 }

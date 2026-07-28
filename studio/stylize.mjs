@@ -56,6 +56,8 @@ const refKey = REFS[SCENE] ? SCENE : SCENE.split('-')[0];
 const REF_PNG = path.join(ROOT, 'app/public/assets/tiles', REFS[refKey] ?? REFS.house);
 
 const TILE = 160;          // game convention for a 1×1 sprite
+// Only the shipped profile gets an overlay twin; the rest exist for comparison.
+const OVERLAY_PROFILE = 'rich-pixel-48';
 const HOUSE_SCALE = 0.84;  // fraction of the tile the house content occupies
 
 // Role palette — base colours per building part (sRGB). Light bands derive
@@ -268,6 +270,9 @@ const SCENE_STYLES = {
     // the crossarm (z 2.0 -> screen 46.5) on the upper wire anchor and the
     // pole base (z 0 -> screen 118) at ~74% of the tile.
     ground: true,
+    // Hydro is laid *over* roads, rails and zones, so it also needs a
+    // transparent twin the renderer can composite (see issue #169).
+    emitOverlay: true,
     overlay: 'pole',
     overlayOffsetY: 13,
     overlayBaseY: 118,
@@ -866,8 +871,12 @@ async function main() {
   const ref = await loadImage(REF_PNG);
   panels.push({ label: 'reference (current game)', image: ref });
 
-  for (const profile of PROFILES) {
-    const canvas = renderProfile(profile, maps, crop, grassAt);
+  // Compose one tile: the ground pass, then any billboard prop on top.
+  // `transparent` leaves cells with no geometry clear instead of filling them
+  // with grass, which turns the result into an OVERLAY the game can composite
+  // over a road, rail or zone rather than a ground tile that paints over it.
+  const composeTile = (profile, opts = {}) => {
+    const canvas = renderProfile(profile, maps, crop, grassAt, opts);
     if (overlay) {
       const bctx = canvas.getContext('2d');
       // Pole ground shadow: a small cell-aligned dark blob south-east of the
@@ -889,10 +898,24 @@ async function main() {
         renderProfile(profile, overlay.maps, overlay.crop, grassAt, { transparent: true }));
       bctx.drawImage(ov, 0, STYLE.overlayOffsetY ?? 0);
     }
+    return canvas;
+  };
+
+  for (const profile of PROFILES) {
+    const canvas = composeTile(profile);
     const file = path.join(OUT_DIR, `look-${SCENE}-${profile.name}.png`);
     await fs.writeFile(file, canvas.toBuffer('image/png'));
     console.log(`Wrote ${file}`);
     panels.push({ label: profile.name, image: canvas });
+
+    // Overlay twin, for scenes the game composites rather than lays down.
+    // Only for the shipped profile — the others exist for comparison.
+    if (STYLE.emitOverlay && profile.name === OVERLAY_PROFILE) {
+      const overlayCanvas = composeTile(profile, { transparent: true });
+      const overlayFile = path.join(OUT_DIR, `look-${SCENE}-${profile.name}-overlay.png`);
+      await fs.writeFile(overlayFile, overlayCanvas.toBuffer('image/png'));
+      console.log(`Wrote ${overlayFile}`);
+    }
   }
 
   const SCALE = 2, PAD = 16, LABEL_H = 26;

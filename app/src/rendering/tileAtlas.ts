@@ -26,6 +26,8 @@ export interface TileTextures {
   railCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
   powerPlant: Partial<Record<PowerPlantType, PIXI.Texture>>;
   powerLine: Partial<Record<RoadVariant, PIXI.Texture>>;
+  /** Transparent twins, composited over the road/rail/zone a line crosses. */
+  powerLineOverlay: Partial<Record<RoadVariant, PIXI.Texture>>;
   residentialHouses: PIXI.Texture[];
   commercialBuildings: PIXI.Texture[];
   commercialGeminiBuildings: PIXI.Texture[];
@@ -155,6 +157,15 @@ const industrialBuildingTexturePaths = [
   assetPath('assets/tiles/buildings/ind-factory-5.png')
 ];
 
+// Transparent twins of the hydro set. Same 15 variants, grass fill omitted,
+// so the renderer can draw them over whatever the line crosses (issue #169).
+const powerLineOverlayTexturePaths = Object.fromEntries(
+  (Object.entries(powerLineTexturePaths) as [RoadVariant, string][]).map(([variant, p]) => [
+    variant,
+    p.replace(/\.png$/, '-overlay.png')
+  ])
+) as Record<RoadVariant, string>;
+
 const schoolTexturePaths = {
   elementary: assetPath('assets/tiles/buildings/school-elementary.png'),
   high:       assetPath('assets/tiles/buildings/school-high.png')
@@ -213,6 +224,13 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
+  const powerLineOverlayEntries = await Promise.all(
+    (Object.entries(powerLineOverlayTexturePaths) as [RoadVariant, string][]).map(async ([variant, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [variant, texture] as const;
+    })
+  );
+
   const residentialHouses = await Promise.all(
     residentialHouseTexturePaths.map(async (path) => PIXI.Assets.load<PIXI.Texture>(path))
   );
@@ -257,6 +275,7 @@ export async function loadTileTextures(): Promise<TileTextures> {
     railCrossing:           Object.fromEntries(railCrossingEntries),
     powerPlant:             Object.fromEntries(powerPlantEntries),
     powerLine:              Object.fromEntries(powerLineEntries),
+    powerLineOverlay:       Object.fromEntries(powerLineOverlayEntries),
     residentialHouses,
     commercialBuildings,
     commercialGeminiBuildings,
