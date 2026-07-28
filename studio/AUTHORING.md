@@ -97,6 +97,7 @@ Ground tiles are a second asset class: set `TOP_DOWN = True` in the scene and th
 - Relief still matters: model trackbeds/kerbs as *raised* boxes (0.05–0.2 units) so the fixed sun gives them form; a purely flat plane renders styleless.
 - Connectivity variant sets (the road/rail 15: `ns`, `ew`, 4×`corner-*`, 4×`t-*`, `cross`, 4×`end-*`) come from ONE parametric scene exposing a `VARIANTS` dict and a `VARIANT` module global; the driver renders each as `<scene>-<variant>`. Always build variants as rotated *geometry*, never rotate the finished sprite — sprite rotation would rotate the sun with it and break lighting consistency.
 - Render all variants in one Blender session: `... render-passes.py -- rail all`; stylize each with `bun stylize.mjs rail-<variant>`.
+- **Billboard props** (the hydro pole): tall standing objects on ground tiles are a separate scene rendered through the *dimetric* camera and composited by the stylizer (`SCENE_STYLES[x].overlay`), at 1:1 world scale so attachment points line up with ground geometry (crossarm tips ↔ wire lines). `overlayOffsetY` (in px, snapped to whole art cells) seats the prop vertically; a cell-aligned shadow blob is stamped under it, matching the studio sun.
 
 ## Stylizer knobs (per scene, in `stylize.mjs`)
 

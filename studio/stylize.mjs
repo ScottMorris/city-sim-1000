@@ -63,7 +63,7 @@ const ROLES = [
   { name: 'kerb', id: [64, 0, 0], colour: '#182323' },
   { name: 'shoulder', id: [192, 0, 192], colour: '#575d54' },
   { name: 'marking', id: [192, 192, 192], colour: '#cec0b4' },
-  { name: 'wire', id: [0, 192, 192], colour: '#20231f' },
+  { name: 'wire', id: [0, 192, 192], colour: '#131f1d' },
 ];
 
 // Per-scene palette overrides and surface-pattern spacings — the seed of the
@@ -92,15 +92,21 @@ const SCENE_STYLES = {
   crossing: { ground: true, palette: {}, wallSpacing: 0.30, roofSpacing: 0.36 },
   power: {
     // Wires are a top-down ground tile; the pole is a dimetric-rendered
-    // billboard prop composited on top (same cheat as the hand-made sprites).
+    // billboard prop composited on top (same cheat as the hand-made
+    // sprites). Dropping the billboard 12 art cells (40 px) puts the
+    // crossarm at the wire-anchor height for both orientations.
     ground: true,
     overlay: 'pole',
+    overlayOffsetY: 40,
     palette: {},
     wallSpacing: 0.30,
     roofSpacing: 0.36,
   },
   pole: {
-    palette: { tie: '#3a332c' },   // dark weathered wood, like the current sprites
+    palette: {
+      tie: '#4e3d2c',    // crafted wood, kin to doors and rail ties
+      step: '#5c6055',   // transformer can: dull metal grey, not bright stone
+    },
     wallSpacing: 0.30,
     roofSpacing: 0.36,
   },
@@ -641,9 +647,24 @@ async function main() {
   for (const profile of PROFILES) {
     const canvas = renderProfile(profile, maps, crop, grassAt);
     if (overlay) {
+      const bctx = canvas.getContext('2d');
+      // Pole ground shadow: a small cell-aligned dark blob south-east of the
+      // pole base, consistent with the studio sun (from the screen's
+      // upper-left) that shades every other asset.
+      const cell = TILE / profile.grid;
+      const baseX = profile.grid / 2, baseY = profile.grid / 2 + (STYLE.overlayOffsetY ?? 0) / cell;
+      bctx.fillStyle = 'rgba(10, 22, 16, 0.30)';
+      for (let cy = 0; cy < profile.grid; cy++) {
+        for (let cx = 0; cx < profile.grid; cx++) {
+          const du = (cx - baseX - 1.6) / 3.4, dv = (cy - baseY + 0.4) / 1.3;
+          if (du * du + dv * dv < 1) {
+            bctx.fillRect(Math.floor(cx * cell), Math.floor(cy * cell), Math.ceil(cell), Math.ceil(cell));
+          }
+        }
+      }
       const ov = withPalette(overlay.palette, () =>
         renderProfile(profile, overlay.maps, overlay.crop, grassAt, { transparent: true }));
-      canvas.getContext('2d').drawImage(ov, 0, 0);
+      bctx.drawImage(ov, 0, STYLE.overlayOffsetY ?? 0);
     }
     const file = path.join(OUT_DIR, `look-${SCENE}-${profile.name}.png`);
     await fs.writeFile(file, canvas.toBuffer('image/png'));
