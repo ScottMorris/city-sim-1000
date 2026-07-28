@@ -22,6 +22,8 @@ export type RoadVariant =
 export interface TileTextures {
   tiles: Partial<Record<TileKind, PIXI.Texture>>;
   road: Partial<Record<RoadVariant, PIXI.Texture>>;
+  rail: Partial<Record<RoadVariant, PIXI.Texture>>;
+  railCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
   powerPlant: Partial<Record<PowerPlantType, PIXI.Texture>>;
   powerLine: Partial<Record<'north' | 'east' | 'south' | 'west', PIXI.Texture>>;
   residentialHouses: PIXI.Texture[];
@@ -62,6 +64,31 @@ const roadTexturePaths: Record<RoadVariant, string> = {
   'end-s':      assetPath('assets/tiles/roads/road-end-s.png'),
   'end-w':      assetPath('assets/tiles/roads/road-end-w.png')
 };
+
+// Rail shares the road set's 15-variant connectivity naming; the two level
+// crossings are picked when a tile carries both rail and road.
+const railTexturePaths: Record<RoadVariant, string> = {
+  'ns':         assetPath('assets/tiles/rails/rail-ns.png'),
+  'ew':         assetPath('assets/tiles/rails/rail-ew.png'),
+  'corner-ne':  assetPath('assets/tiles/rails/rail-corner-ne.png'),
+  'corner-nw':  assetPath('assets/tiles/rails/rail-corner-nw.png'),
+  'corner-se':  assetPath('assets/tiles/rails/rail-corner-se.png'),
+  'corner-sw':  assetPath('assets/tiles/rails/rail-corner-sw.png'),
+  't-nes':      assetPath('assets/tiles/rails/rail-t-nes.png'),
+  't-new':      assetPath('assets/tiles/rails/rail-t-new.png'),
+  't-nsw':      assetPath('assets/tiles/rails/rail-t-nsw.png'),
+  't-esw':      assetPath('assets/tiles/rails/rail-t-esw.png'),
+  'cross':      assetPath('assets/tiles/rails/rail-cross.png'),
+  'end-n':      assetPath('assets/tiles/rails/rail-end-n.png'),
+  'end-e':      assetPath('assets/tiles/rails/rail-end-e.png'),
+  'end-s':      assetPath('assets/tiles/rails/rail-end-s.png'),
+  'end-w':      assetPath('assets/tiles/rails/rail-end-w.png')
+};
+
+const railCrossingTexturePaths = {
+  ns: assetPath('assets/tiles/rails/rail-road-crossing-ns.png'),
+  ew: assetPath('assets/tiles/rails/rail-road-crossing-ew.png')
+} as const;
 
 const powerPlantTexturePaths: Partial<Record<PowerPlantType, string>> = {
   [PowerPlantType.Hydro]: assetPath('assets/tiles/power/power-plant-hydro.png'),
@@ -126,6 +153,20 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
+  const railEntries = await Promise.all(
+    (Object.entries(railTexturePaths) as [RoadVariant, string][]).map(async ([variant, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [variant, texture] as const;
+    })
+  );
+
+  const railCrossingEntries = await Promise.all(
+    (Object.entries(railCrossingTexturePaths) as ['ns' | 'ew', string][]).map(async ([key, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [key, texture] as const;
+    })
+  );
+
   const powerPlantEntries = await Promise.all(
     Object.entries(powerPlantTexturePaths).map(async ([type, path]) => {
       const texture = await PIXI.Assets.load<PIXI.Texture>(path!);
@@ -184,6 +225,8 @@ export async function loadTileTextures(): Promise<TileTextures> {
   return {
     tiles:                  Object.fromEntries(tileEntries),
     road:                   Object.fromEntries(roadEntries),
+    rail:                   Object.fromEntries(railEntries),
+    railCrossing:           Object.fromEntries(railCrossingEntries),
     powerPlant:             Object.fromEntries(powerPlantEntries),
     powerLine:              powerLineTextures,
     residentialHouses,

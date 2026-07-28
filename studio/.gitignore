@@ -1,0 +1,4 @@
+node_modules/
+out/passes/
+out/inspect-*.png
+__pycache__/

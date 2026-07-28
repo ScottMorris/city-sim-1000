@@ -58,6 +58,8 @@ export class MapRenderer {
     tileTextures: TileTextures = {
       tiles: {},
       road: {},
+      rail: {},
+      railCrossing: {},
       powerPlant: {},
       powerLine: {},
       residentialHouses: [],

@@ -1,0 +1,108 @@
+{
+  "profile": "rich-pixel-48",
+  "tileSize": 160,
+  "sprites": {
+    "roads/road-ns.png": {
+      "scene": "road-ns"
+    },
+    "roads/road-ew.png": {
+      "scene": "road-ew"
+    },
+    "roads/road-corner-ne.png": {
+      "scene": "road-corner-ne"
+    },
+    "roads/road-corner-nw.png": {
+      "scene": "road-corner-nw"
+    },
+    "roads/road-corner-se.png": {
+      "scene": "road-corner-se"
+    },
+    "roads/road-corner-sw.png": {
+      "scene": "road-corner-sw"
+    },
+    "roads/road-t-nes.png": {
+      "scene": "road-t-nes"
+    },
+    "roads/road-t-esw.png": {
+      "scene": "road-t-esw"
+    },
+    "roads/road-t-nsw.png": {
+      "scene": "road-t-nsw"
+    },
+    "roads/road-t-new.png": {
+      "scene": "road-t-new"
+    },
+    "roads/road-cross.png": {
+      "scene": "road-cross"
+    },
+    "roads/road-end-n.png": {
+      "scene": "road-end-n"
+    },
+    "roads/road-end-e.png": {
+      "scene": "road-end-e"
+    },
+    "roads/road-end-s.png": {
+      "scene": "road-end-s"
+    },
+    "roads/road-end-w.png": {
+      "scene": "road-end-w"
+    },
+    "rails/rail-ns.png": {
+      "scene": "rail-ns"
+    },
+    "rails/rail-ew.png": {
+      "scene": "rail-ew"
+    },
+    "rails/rail-corner-ne.png": {
+      "scene": "rail-corner-ne"
+    },
+    "rails/rail-corner-nw.png": {
+      "scene": "rail-corner-nw"
+    },
+    "rails/rail-corner-se.png": {
+      "scene": "rail-corner-se"
+    },
+    "rails/rail-corner-sw.png": {
+      "scene": "rail-corner-sw"
+    },
+    "rails/rail-t-nes.png": {
+      "scene": "rail-t-nes"
+    },
+    "rails/rail-t-esw.png": {
+      "scene": "rail-t-esw"
+    },
+    "rails/rail-t-nsw.png": {
+      "scene": "rail-t-nsw"
+    },
+    "rails/rail-t-new.png": {
+      "scene": "rail-t-new"
+    },
+    "rails/rail-cross.png": {
+      "scene": "rail-cross"
+    },
+    "rails/rail-end-n.png": {
+      "scene": "rail-end-n"
+    },
+    "rails/rail-end-e.png": {
+      "scene": "rail-end-e"
+    },
+    "rails/rail-end-s.png": {
+      "scene": "rail-end-s"
+    },
+    "rails/rail-end-w.png": {
+      "scene": "rail-end-w"
+    },
+    "rails/rail-road-crossing-ns.png": {
+      "scene": "crossing-ns"
+    },
+    "rails/rail-road-crossing-ew.png": {
+      "scene": "crossing-ew"
+    },
+    "power/power-line-vertical.png": {
+      "scene": "power-ns"
+    },
+    "power/power-line-horizontal.png": {
+      "scene": "power-ew"
+    }
+  }
+}
