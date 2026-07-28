@@ -156,6 +156,17 @@ export function resolveTileSprite(
       }
     }
   }
+  // Level crossing: a tile carrying both rail and road (either order of
+  // construction) draws the crossing sprite, oriented by the rail axis.
+  if ((tile.kind === TileKind.Rail && tile.roadUnderlay) ||
+      (tile.kind === TileKind.Road && tile.railUnderlay)) {
+    const crossingTexture = pickRailCrossingTexture(state, x, y, tileTextures);
+    if (crossingTexture) return { texture: crossingTexture, widthTiles: 1, heightTiles: 1 };
+  }
+  if (tile.kind === TileKind.Rail) {
+    const railTexture = pickRailTexture(state, x, y, tileTextures);
+    if (railTexture) return { texture: railTexture, widthTiles: 1, heightTiles: 1 };
+  }
   if (tile.kind === TileKind.Road) {
     const roadTexture = pickRoadTexture(state, x, y, tileTextures);
     if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
@@ -233,6 +244,35 @@ function roadVariant(n: boolean, e: boolean, s: boolean, w: boolean): RoadVarian
     case 0b0001: return 'end-w';
     default:     return 'cross'; // isolated tile — no neighbours
   }
+}
+
+function connectsToRail(state: GameState, tx: number, ty: number): boolean {
+  const neighbour = getTile(state, tx, ty);
+  return neighbour?.kind === TileKind.Rail || neighbour?.railUnderlay === true;
+}
+
+function railNeighbours(state: GameState, x: number, y: number) {
+  return {
+    n: y > 0 && connectsToRail(state, x, y - 1),
+    e: x < state.width  - 1 && connectsToRail(state, x + 1, y),
+    s: y < state.height - 1 && connectsToRail(state, x, y + 1),
+    w: x > 0 && connectsToRail(state, x - 1, y)
+  };
+}
+
+function pickRailTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
+  const { n, e, s, w } = railNeighbours(state, x, y);
+  // Rail reuses the road set's 15-variant connectivity mapping.
+  return tileTextures.rail[roadVariant(n, e, s, w)];
+}
+
+function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
+  const { n, e, s, w } = railNeighbours(state, x, y);
+  // The crossing sprite's rail runs along one axis; pick it from the rail
+  // connectivity (road fills the other axis), defaulting isolated overlaps
+  // to a north-south track.
+  const axis = (n || s) ? 'ns' : (e || w) ? 'ew' : 'ns';
+  return tileTextures.railCrossing[axis];
 }
 
 function pickPowerLineTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
