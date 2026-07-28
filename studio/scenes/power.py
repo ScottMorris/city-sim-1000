@@ -25,9 +25,9 @@ VARIANT = 'ns'
 WIRE_OFFSET = 0.56   # the pole's crossarm-tip gauge — wires attach there
 WIRE_W = 0.09
 SAG = 0.22           # catenary dip at the tile edge (elevation-view wires)
-EW_ANCHORS = (0.79, 0.49)  # wire heights at the pole — each matches one of
-                           # the pole's two crossarm heights, so both wires
-                           # visually hang from an arm
+EW_ANCHORS = (0.79, 0.64)  # both wires hang from the single crossarm's two
+                           # ends — same height in reality, drawn with a
+                           # small gap so the near wire reads in front
 
 
 def build(mats):
