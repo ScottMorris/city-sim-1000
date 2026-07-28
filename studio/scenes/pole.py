@@ -25,13 +25,12 @@ def build(mats):
     # ink outlines. Wood role — shaded two-tone by the studio sun.
     box(mats, 'tie', (0, 0, 1.35), (0.17, 0.17, 2.7))
     # Single crossarm, oriented perpendicular to the camera azimuth so it
-    # reads horizontal. Both wires hang from its two ends — its height
-    # projects to the wire anchor line (0.894*z - overlay offset: z 2.0 ->
-    # +0.79). Porcelain insulators (trim) mark the attachment points.
-    box(mats, 'tie', (0, 0, 2.0), (1.15, 0.09, 0.08), (0, 0, math.radians(135)))
-    for side in (1, -1):
-        tip = 0.575 * side
-        box(mats, 'trim', (tip * -0.707, tip * 0.707, 2.11), (0.12, 0.12, 0.13))
-    # Transformer can hanging right of the pole below the arm (grey).
+    # reads horizontal, thick enough (0.14 ~ 1.7 art cells) that its wood
+    # core shows between the ink outlines like the pole's does. Both wires
+    # hang from its two ends. (Insulator nubs were tried and cut: sub-cell
+    # at this grid, they just added ink and mushed the junction.)
+    box(mats, 'tie', (0, 0, 2.0), (1.15, 0.14, 0.11), (0, 0, math.radians(135)))
+    # Transformer can on the pole, well below the arm so it stays clear of
+    # the wire bundle (grey).
     stub = 0.20
-    box(mats, 'step', (stub * 0.707, -stub * 0.707, 1.62), (0.14, 0.14, 0.32))
+    box(mats, 'step', (stub * 0.707, -stub * 0.707, 1.30), (0.14, 0.14, 0.32))
