@@ -21,24 +21,34 @@ ROTATION_DEG = 0
 VARIANTS = CONNECTIVITY_VARIANTS
 VARIANT = 'ns'  # overridden by the render driver
 
-# Matched against the existing road sprites: long dashes, short gaps, and a
-# fat line (~6px at their 128px scale). Period divides the 4.0-unit tile
-# evenly so dashes join across tile boundaries.
-DASH_PERIOD = 0.8
-DASH_LEN = 0.55
-DASH_W = 0.16
+# Measured from the existing road sprites (the liked reference): dashes are
+# 22x12 px at their 128 px scale -> 0.69 x 0.375 world, period 1.0 on
+# straights (4 bold blocks per tile, phase centring the edge gaps), and a
+# nearly-continuous fat line on corners (tiny ~0.1 notches, period pi/4 so
+# the quarter arc holds exactly 4 dashes).
+DASH_LEN = 0.69
+DASH_W = 0.375
+STRAIGHT_PERIOD = 1.0
+ARC_PERIOD = 0.72   # gap ~0.03 -> the corner line reads nearly continuous,
+                    # with flush partial dashes at both edges (matches the
+                    # reference's bold curved line with small notches)
 
 
-def _dashes(mats, points, phase=0.125):
+def _dashes(mats, points, period):
     total = arc_length_to(points, len(points) - 1)
-    s = phase
-    while s + DASH_LEN <= total + 0.01:
-        centre = s + DASH_LEN / 2
+    s = (period - DASH_LEN) / 2
+    while s < total - 0.05:
+        # Clip the final dash to the remaining path instead of dropping it —
+        # otherwise the line stops short of the tile edge and fails to join
+        # its neighbour (caught on the corner arcs, whose length is not a
+        # multiple of the period).
+        length = min(DASH_LEN, total - s)
+        centre = s + length / 2
         idx = index_at_length(points, centre)
         x, y = points[idx]
-        box(mats, 'marking', (x, y, 0.06), (DASH_LEN, DASH_W, 0.04),
+        box(mats, 'marking', (x, y, 0.06), (length, DASH_W, 0.04),
             (0, 0, tangent_at(points, idx)))
-        s += DASH_PERIOD
+        s += period
 
 
 def build(mats):
@@ -48,23 +58,27 @@ def build(mats):
     # asphalt edge-to-edge regardless of variant).
     box(mats, 'asphalt', (0, 0, 0.02), (4.1, 4.1, 0.04))
 
-    # Kerb lines along unconnected edges.
+    # Unconnected edges: a light grey shoulder strip with a dark hairline at
+    # the very edge (measured from the reference: ~0.22-wide #575d54 strip,
+    # 1 px near-black outer line).
     for edge, (dx, dy) in EDGE_POINTS.items():
         if edge in edges:
             continue
-        box(mats, 'kerb', (dx * 1.96, dy * 1.96, 0.05),
-            (0.09 if dx else 4.1, 0.09 if dy else 4.1, 0.05))
+        box(mats, 'shoulder', (dx * 1.86, dy * 1.86, 0.05),
+            (0.22 if dx else 4.1, 0.22 if dy else 4.1, 0.05))
+        box(mats, 'kerb', (dx * 2.01, dy * 2.01, 0.055),
+            (0.08 if dx else 4.1, 0.08 if dy else 4.1, 0.05))
 
     # Dashed centre-line markings.
     pair = adjacent_pair(edges)
     if edges in ({'n', 's'}, {'e', 'w'}):
         a, b = sorted(edges)
-        _dashes(mats, sample_full_straight(a, b))
+        _dashes(mats, sample_full_straight(a, b), STRAIGHT_PERIOD)
     elif pair:
-        _dashes(mats, sample_arc(*pair))
+        _dashes(mats, sample_arc(*pair), ARC_PERIOD)
     else:
         # Ends, tees, crossings: dash each connected half toward the centre;
-        # the half-length (2.0) cuts the third dash so junction cores stay
-        # clean automatically.
+        # the half-length (2.0) cuts the second full dash so junction cores
+        # stay clean automatically.
         for edge in sorted(edges):
-            _dashes(mats, list(reversed(sample_straight(edge, start=0.0))))
+            _dashes(mats, list(reversed(sample_straight(edge, start=0.0))), STRAIGHT_PERIOD)

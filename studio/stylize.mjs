@@ -60,7 +60,8 @@ const ROLES = [
   // Asphalt/marking measured from the existing road-ns.png (dark teal-grey
   // black-top, warm bone dashes) — the current road set is the liked target.
   { name: 'asphalt', id: [0, 0, 64], colour: '#323f3e' },
-  { name: 'kerb', id: [64, 0, 0], colour: '#20241f' },
+  { name: 'kerb', id: [64, 0, 0], colour: '#182323' },
+  { name: 'shoulder', id: [192, 0, 192], colour: '#575d54' },
   { name: 'marking', id: [192, 192, 192], colour: '#cec0b4' },
   { name: 'wire', id: [0, 192, 192], colour: '#20231f' },
 ];
@@ -109,16 +110,17 @@ for (const [name, colour] of Object.entries(STYLE.palette)) {
   ROLES.find((r) => r.name === name).colour = colour;
 }
 // Ink is placed on the lower-precedence side of a pair boundary.
-const INK_PRECEDENCE = ['asphalt', 'kerb', 'ballast', 'walkway', 'step', 'bush', 'marking', 'wire', 'tie', 'rail', 'wall', 'roof', 'chimney', 'awning', 'sign', 'trim', 'mullion', 'door', 'window', 'knob'];
+const INK_PRECEDENCE = ['asphalt', 'kerb', 'shoulder', 'ballast', 'walkway', 'step', 'bush', 'marking', 'wire', 'tie', 'rail', 'wall', 'roof', 'chimney', 'awning', 'sign', 'trim', 'mullion', 'door', 'window', 'knob'];
 // Roles that never get silhouette ink against open ground — thin dark
 // features (wires) or features whose own contrast is the outline.
-const NO_SILHOUETTE = new Set(['wire', 'marking', 'kerb']);
+const NO_SILHOUETTE = new Set(['wire', 'marking', 'kerb', 'shoulder']);
 // Boundaries that stay ink-free — colour contrast separates them instead, so
 // small parts (glass panes, knobs) aren't swallowed by their own outlines.
 const NO_INK_PAIRS = new Set(
   ['trim|window', 'door|trim', 'door|knob', 'step|walkway', 'door|step', 'mullion|window', 'mullion|trim',
     'rail|tie', 'rail|ballast', 'tie|ballast',   // inside the trackbed, contrast separates parts
-    'asphalt|marking', 'asphalt|kerb', 'asphalt|tie', 'asphalt|rail', 'kerb|marking', 'marking|tie']
+    'asphalt|marking', 'asphalt|kerb', 'asphalt|tie', 'asphalt|rail', 'kerb|marking', 'marking|tie',
+    'asphalt|shoulder', 'kerb|shoulder']
     .map((p) => p.split('|').sort().join('|')),
 );
 const inkAllowed = (a, b) => !NO_INK_PAIRS.has([ROLES[a].name, ROLES[b].name].sort().join('|'));
@@ -457,7 +459,7 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
   const darken = (hex, f) => {
     const [r2, g2, b2] = hexToRgb(hex);
     const [h2, s2, l2] = rgbToHsl(r2, g2, b2);
-    const [nr2, ng2, nb2] = hslToRgb(h2, s2, l2 * f);
+    const [nr2, ng2, nb2] = hslToRgb(h2, s2, Math.min(1, l2 * f));
     return rgbToHex(nr2, ng2, nb2);
   };
 
@@ -484,9 +486,10 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
           const above = cellRole[(cy - 1) * N + cx];
           if (above !== r && !ink[(cy - 1) * N + cx]) band = 2;
         }
-        // Wires are drawn flat — light-banding them made NS and EW powerlines
-        // render different shades of the same wire.
-        if (roleDef.name === 'wire') band = 1;
+        // Flat-shaded roles: wires (NS/EW must match) and road furniture —
+        // shoulders/kerbs/markings are painted features of the surface, and
+        // banding them turns cast shadows into blotches at strip crossings.
+        if (['wire', 'marking', 'shoulder', 'kerb'].includes(roleDef.name)) band = 1;
         // Grid-native window fittings: a stamped 1-cell sash cross at the
         // window's centre row/column, and a glint in the top-left pane.
         let sash = false;
@@ -531,8 +534,13 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
             colour = jitterColour(colour, `${profile.name}:b:${cx}:${cy}`, 0.09);
             stamped = true;
           } else if (roleDef.name === 'asphalt') {
-            // Asphalt mottle, matching the existing road sprites' texture.
-            colour = jitterColour(colour, `${profile.name}:a:${cx}:${cy}`, 0.06);
+            // Asphalt grain, matching the reference's near-smooth surface:
+            // sparse speckle over an almost-flat base, not uniform jitter
+            // (which read as coarse burlap).
+            const h = fnv1a(`${profile.name}:a:${cx}:${cy}`);
+            if (h % 9 === 0) colour = darken(colour, 0.90);
+            else if (h % 9 === 1) colour = darken(colour, 1.10);
+            else colour = jitterColour(colour, `${profile.name}:a2:${cx}:${cy}`, 0.015);
             stamped = true;
           } else if (roleDef.name === 'awning' && (cx & 3) < 2) {
             // Awning stripes: alternating screen-column bands, stamped on the
