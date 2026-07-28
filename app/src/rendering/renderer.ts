@@ -114,7 +114,7 @@ export class MapRenderer {
       // the full uncapped cost on DPR-3 mobile devices (Pixi v8 defaults to
       // window.devicePixelRatio with no cap).
       resolution: Math.min(window.devicePixelRatio, 2),
-      ...(mcpMode ? { preserveDrawingBuffer: true } : {})
+      preserveDrawingBuffer: mcpMode
     });
     this.parent.appendChild(this.app.canvas);
     this.app.stage.addChild(this.container);
