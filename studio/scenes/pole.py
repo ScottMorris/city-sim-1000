@@ -14,9 +14,12 @@ FOCUS_Z = 0.7
 
 
 def build(mats):
-    # The pole itself.
-    box(mats, 'tie', (0, 0, 0.7), (0.12, 0.12, 1.4))
+    # The pole itself — taller than real-world proportion, matching the
+    # exaggerated elevation-view pole of the existing sprites. The overlay is
+    # composited at 1:1 world scale with the wire tile, so the crossarm tips
+    # (±0.30 along the screen-horizontal) land exactly on the wire lines.
+    box(mats, 'tie', (0, 0, 1.1), (0.12, 0.12, 2.2))
     # Crossarms, oriented perpendicular to the camera azimuth (45°) so they
     # read as horizontal bars on screen.
-    for z in (1.28, 1.08):
-        box(mats, 'tie', (0, 0, z), (0.60, 0.09, 0.07), (0, 0, math.radians(135)))
+    for z in (2.0, 1.78):
+        box(mats, 'tie', (0, 0, z), (0.68, 0.09, 0.07), (0, 0, math.radians(135)))

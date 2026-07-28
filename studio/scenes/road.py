@@ -21,18 +21,22 @@ ROTATION_DEG = 0
 VARIANTS = CONNECTIVITY_VARIANTS
 VARIANT = 'ns'  # overridden by the render driver
 
-DASH_PERIOD = 0.8   # divides the 4.0-unit tile evenly -> dashes join across tiles
-DASH_LEN = 0.4
+# Matched against the existing road sprites: long dashes, short gaps, and a
+# fat line (~6px at their 128px scale). Period divides the 4.0-unit tile
+# evenly so dashes join across tile boundaries.
+DASH_PERIOD = 0.8
+DASH_LEN = 0.55
+DASH_W = 0.16
 
 
-def _dashes(mats, points, phase=0.2):
+def _dashes(mats, points, phase=0.125):
     total = arc_length_to(points, len(points) - 1)
     s = phase
     while s + DASH_LEN <= total + 0.01:
         centre = s + DASH_LEN / 2
         idx = index_at_length(points, centre)
         x, y = points[idx]
-        box(mats, 'marking', (x, y, 0.06), (DASH_LEN + 0.02, 0.09, 0.04),
+        box(mats, 'marking', (x, y, 0.06), (DASH_LEN, DASH_W, 0.04),
             (0, 0, tangent_at(points, idx)))
         s += DASH_PERIOD
 

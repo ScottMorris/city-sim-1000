@@ -24,10 +24,10 @@ def build(mats):
     # Full-tile asphalt slab (road convention — this tile joins road tiles).
     box(mats, 'asphalt', (0, 0, 0.02), (4.1, 4.1, 0.04))
 
-    # Road centre-line dashes, skipping the plank zone at the crossing.
+    # Road centre-line dashes (road.py's pattern), skipping the plank zone.
     for centre in (-1.6, -0.8, 0.8, 1.6):
         loc = (centre, 0, 0.06) if rail_ns else (0, centre, 0.06)
-        scale = (DASH_LEN + 0.02, 0.09, 0.04) if rail_ns else (0.09, DASH_LEN + 0.02, 0.04)
+        scale = (0.55, 0.16, 0.04) if rail_ns else (0.16, 0.55, 0.04)
         box(mats, 'marking', loc, scale)
 
     # Wooden planking strip carrying the rails across the road.
