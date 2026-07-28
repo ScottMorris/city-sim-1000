@@ -37,6 +37,11 @@ function makeTextures(): TileTextures {
     powerLineCrossing: { ns: tex('xing-ns'), ew: tex('xing-ew') },
     powerLineIsolated: tex('iso'),
     powerLineIsolatedOverlay: tex('iso-ovl'),
+    powerLineKerbside: {
+      'along-ns': { 'corner-ne': tex('kerb-ns-corner-ne') },
+      'along-ew': { ew: tex('kerb-ew-ew'), 'end-n': tex('kerb-ew-end-n') },
+      junction: { cross: tex('kerb-x-cross') }
+    },
     residentialHouses: [tex('res-1')],
     commercialBuildings: [],
     commercialGeminiBuildings: [],
@@ -261,15 +266,38 @@ describe('hydro crossing poles', () => {
     expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
   });
 
-  it('keeps a single pole when the line runs along the road', () => {
-    // Parallel run: dropping the pole would leave the wires unsupported for
-    // the whole stretch, so this keeps the ordinary one-pole overlay.
+  it('moves the pole to the kerb when the line runs along the road', () => {
+    // Parallel run: there is no "either side" to bracket, and dropping the
+    // pole would leave the wires unsupported for the whole stretch. So it
+    // keeps one pole but stands it on the verge instead of in the lane.
     const state = createInitialState(8, 8);
     const textures = makeTextures();
     for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
     for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.PowerLine);
     for (const t of [[1, 4], [2, 4], [3, 4]]) getTile(state, t[0], t[1])!.roadUnderlay = true;
-    expect(overlayName(state, 2, 4, textures)).toBe('ovl-ew');
+    expect(overlayName(state, 2, 4, textures)).toBe('kerb-ew-ew');
+  });
+
+  it('moves the pole to the kerb where a line dead-ends on a road', () => {
+    // The line arrives from the north and stops on the road tile — nothing to
+    // bracket, so the two-pole rule declines and the kerbside twin takes it.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
+    setTile(state, 2, 3, TileKind.PowerLine);
+    setTile(state, 2, 4, TileKind.PowerLine);
+    getTile(state, 2, 4)!.roadUnderlay = true;
+    expect(overlayName(state, 2, 4, textures)).toBe('kerb-ew-end-n');
+  });
+
+  it('tucks the pole into a quadrant on a tile with carriageway both ways', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
+    for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.Road);
+    for (const t of [[2, 3], [2, 5], [1, 4], [3, 4], [2, 4]]) setTile(state, t[0], t[1], TileKind.PowerLine);
+    for (const t of [[2, 3], [2, 5], [1, 4], [3, 4], [2, 4]]) getTile(state, t[0], t[1])!.roadUnderlay = true;
+    expect(overlayName(state, 2, 4, textures)).toBe('kerb-x-cross');
   });
 });
 

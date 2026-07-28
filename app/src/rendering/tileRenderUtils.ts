@@ -8,7 +8,7 @@ import type { Texture } from 'pixi.js';
 import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
-import type { RoadVariant, TileTextures } from './tileAtlas';
+import type { CarriagewayClass, HydroVariant, RoadVariant, TileTextures } from './tileAtlas';
 
 export type BuildingLookupEntry = {
   template: ReturnType<typeof getBuildingTemplate>;
@@ -82,8 +82,60 @@ export function resolveTileSprite(
   if (!carriesHydroOverlay(tile)) return base;
   const overlayTexture =
     pickHydroCrossingTexture(state, tile, x, y, tileTextures) ??
+    pickHydroKerbsideTexture(state, tile, x, y, tileTextures) ??
     pickPowerLineTexture(state, x, y, tileTextures, true);
   return overlayTexture ? { ...base, overlayTexture } : base;
+}
+
+/** Which carriageway situation a tile presents to the line above it, or
+ *  undefined if there is nothing beneath. Road and rail are the same problem
+ *  — both are full-width and neither wants a pole in it — so they're merged
+ *  by axis rather than kept apart by kind. */
+function carriagewayClass(
+  state: GameState,
+  tile: NonNullable<ReturnType<typeof getTile>>,
+  x: number,
+  y: number
+): CarriagewayClass | undefined {
+  if (!tile.roadUnderlay && !tile.railUnderlay) return undefined;
+  let ns = false;
+  let ew = false;
+  for (const flags of [
+    tile.roadUnderlay ? roadNeighbourFlags(state, x, y) : undefined,
+    tile.railUnderlay ? railNeighbourFlags(state, x, y) : undefined
+  ]) {
+    if (!flags) continue;
+    const [bn, be, bs, bw] = flags;
+    ns ||= bn || bs;
+    ew ||= be || bw;
+  }
+  if (ns && ew) return 'junction';
+  if (ns) return 'along-ns';
+  if (ew) return 'along-ew';
+  // A stub with no neighbours at all still has an axis in its own sprite, but
+  // nothing here can tell which; treat it as a north-south lane so the pole at
+  // least moves sideways off it rather than staying planted in the middle.
+  return 'along-ns';
+}
+
+/** The pole moved out to the kerb, for every case a two-pole crossing doesn't
+ *  cover: a line running along a carriageway, dead-ending on one, or turning
+ *  or branching on one. Without this the single-pole sprite was drawn as-is
+ *  and the pole stood in the traffic lane — 103 of the 128 (variant,
+ *  substrate) combinations, which is most of them. */
+function pickHydroKerbsideTexture(
+  state: GameState,
+  tile: NonNullable<ReturnType<typeof getTile>>,
+  x: number,
+  y: number,
+  tileTextures: TileTextures
+): Texture | undefined {
+  const cls = carriagewayClass(state, tile, x, y);
+  if (!cls) return undefined;
+  const variant: HydroVariant = hasAnyWireNeighbour(state, x, y)
+    ? hydroVariant(state, x, y)
+    : 'isolated';
+  return tileTextures.powerLineKerbside?.[cls]?.[variant];
 }
 
 /** A line crossing a carriageway is carried by poles standing either side of

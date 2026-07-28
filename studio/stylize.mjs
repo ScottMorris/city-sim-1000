@@ -15,7 +15,7 @@
  */
 
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -58,12 +58,20 @@ const REF_PNG = path.join(ROOT, 'app/public/assets/tiles', REFS[refKey] ?? REFS.
 const TILE = 160;          // game convention for a 1×1 sprite
 // Only the shipped profile gets an overlay twin; the rest exist for comparison.
 const OVERLAY_PROFILE = 'rich-pixel-48';
-// Hydro crossing a road/rail: two poles, shifted along the line's own axis so
-// they stand clear of the carriageway, rather than one in the middle of it.
-// Must match POLE_OFF in scenes/power.py (1.30 world x 40 px per unit), or the
-// wires will peak somewhere other than where the poles actually stand.
-const CROSSING_SHIFT = 52;
 const HOUSE_SCALE = 0.84;  // fraction of the tile the house content occupies
+
+/** Billboard prop placement, as recorded by the scene at render time.
+ *
+ *  Hydro tiles move the pole off the carriageway — two poles either side for
+ *  a square crossing, one out on the kerb for everything else — and the wires
+ *  are built to meet the arm wherever it ends up. Restating those offsets here
+ *  meant two files had to agree and eventually didn't, so the scene now writes
+ *  `props.json` beside its passes and this just reads it. */
+function propOffsetsFor(scene) {
+  const sidecar = path.join(ROOT, 'studio/out/passes', scene, 'props.json');
+  if (!existsSync(sidecar)) return null;
+  return JSON.parse(readFileSync(sidecar, 'utf8')).propOffsets ?? null;
+}
 
 // Role palette — base colours per building part (sRGB). Light bands derive
 // from these in HSL; the albedo pass is only used to recover lighting.
@@ -294,19 +302,11 @@ const SCENE_STYLES = {
     roofSpacing: 0.36,
   },
 };
-// Crossing tiles are their own scenes: the E-W wires are rebuilt to peak at
-// the two poles rather than at tile centre, so they cannot be produced by
-// re-stamping the straight scene's props.
-SCENE_STYLES['power-crossing-ns'] = {
-  ...SCENE_STYLES.power,
-  propOffsets: [{ dx: 0, dy: -CROSSING_SHIFT }, { dx: 0, dy: CROSSING_SHIFT }],
-};
-SCENE_STYLES['power-crossing-ew'] = {
-  ...SCENE_STYLES.power,
-  propOffsets: [{ dx: -CROSSING_SHIFT, dy: 0 }, { dx: CROSSING_SHIFT, dy: 0 }],
-};
-
+// Every hydro variant — the straights, the two-pole crossings and the whole
+// kerbside family — shares one style and differs only in where the pole is
+// composited, which the scene records in `props.json`.
 const STYLE = SCENE_STYLES[SCENE] ?? SCENE_STYLES[SCENE.split('-')[0]] ?? SCENE_STYLES.house;
+const PROP_OFFSETS = propOffsetsFor(SCENE) ?? STYLE.propOffsets ?? [{ dx: 0, dy: 0 }];
 for (const [name, colour] of Object.entries(STYLE.palette)) {
   ROLES.find((r) => r.name === name).colour = colour;
 }
@@ -900,8 +900,7 @@ async function main() {
     const canvas = renderProfile(profile, maps, crop, grassAt, opts);
     if (overlay) {
       const bctx = canvas.getContext('2d');
-      const propOffsets = STYLE.propOffsets ?? [{ dx: 0, dy: 0 }];
-      for (const { dx, dy } of propOffsets) {
+      for (const { dx, dy } of PROP_OFFSETS) {
       // Pole ground shadow: a small cell-aligned dark blob south-east of the
       // pole base, consistent with the studio sun (from the screen's
       // upper-left) that shades every other asset.

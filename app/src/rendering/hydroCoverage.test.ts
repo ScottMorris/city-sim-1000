@@ -7,7 +7,7 @@
 //   2. what it was laid over (open ground, a road, a rail, or a level
 //      crossing — each with its own axis).
 //
-// That product is 112 cases, and eyeballing screenshots has repeatedly missed
+// That product is 128 cases, and eyeballing screenshots has repeatedly missed
 // whole families of them. This file enumerates the lot, resolves each one
 // through the real renderer path, and classifies the outcome so a gap is a
 // failing assertion instead of something noticed later in a screenshot.
@@ -22,7 +22,8 @@ import { describe, it, expect } from 'vitest';
 import type { Texture } from 'pixi.js';
 import { createInitialState, getTile, setTile, TileKind, type GameState } from '../game/gameState';
 import { resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
-import type { TileTextures, RoadVariant } from './tileAtlas';
+import { CARRIAGEWAY_CLASSES, isSquareCrossing } from './tileAtlas';
+import type { TileTextures, RoadVariant, CarriagewayClass, HydroVariant } from './tileAtlas';
 
 const VARIANTS: RoadVariant[] = [
   'ns', 'ew',
@@ -47,7 +48,7 @@ const EDGES: Record<RoadVariant, ReadonlyArray<'n' | 'e' | 's' | 'w'>> = {
 const DELTA = { n: [0, -1], e: [1, 0], s: [0, 1], w: [-1, 0] } as const;
 
 /** Hydro connectivity cases: the 15 variants plus the no-neighbour pole. */
-type HydroCase = RoadVariant | 'isolated';
+type HydroCase = HydroVariant;
 const HYDRO_CASES: HydroCase[] = [...VARIANTS, 'isolated'];
 
 /** What the tile was laid over. `axis` is the substrate's own connectivity —
@@ -56,17 +57,19 @@ type Substrate = {
   readonly name: string;
   readonly road: ReadonlyArray<'n' | 'e' | 's' | 'w'> | null;
   readonly rail: ReadonlyArray<'n' | 'e' | 's' | 'w'> | null;
+  /** The carriageway situation this presents to the line above it. */
+  readonly cls: CarriagewayClass | null;
 };
 
 const SUBSTRATES: Substrate[] = [
-  { name: 'open-ground', road: null,             rail: null },
-  { name: 'road-ns',     road: ['n', 's'],       rail: null },
-  { name: 'road-ew',     road: ['e', 'w'],       rail: null },
-  { name: 'road-cross',  road: ['n','e','s','w'],rail: null },
-  { name: 'road-end-e',  road: ['e'],            rail: null },
-  { name: 'rail-ns',     road: null,             rail: ['n', 's'] },
-  { name: 'rail-ew',     road: null,             rail: ['e', 'w'] },
-  { name: 'level-xing',  road: ['e', 'w'],       rail: ['n', 's'] }
+  { name: 'open-ground', road: null,              rail: null,       cls: null },
+  { name: 'road-ns',     road: ['n', 's'],        rail: null,       cls: 'along-ns' },
+  { name: 'road-ew',     road: ['e', 'w'],        rail: null,       cls: 'along-ew' },
+  { name: 'road-cross',  road: ['n','e','s','w'], rail: null,       cls: 'junction' },
+  { name: 'road-end-e',  road: ['e'],             rail: null,       cls: 'along-ew' },
+  { name: 'rail-ns',     road: null,              rail: ['n', 's'], cls: 'along-ns' },
+  { name: 'rail-ew',     road: null,              rail: ['e', 'w'], cls: 'along-ew' },
+  { name: 'level-xing',  road: ['e', 'w'],        rail: ['n', 's'], cls: 'junction' }
 ];
 
 const tex = (name: string) => ({ name } as unknown as Texture);
@@ -88,6 +91,16 @@ function makeTextures(): TileTextures {
     powerLineCrossing: { ns: tex('two-pole-ns'), ew: tex('two-pole-ew') },
     powerLineIsolated: tex('power-isolated'),
     powerLineIsolatedOverlay: tex('ovl-isolated'),
+    powerLineKerbside: Object.fromEntries(
+      CARRIAGEWAY_CLASSES.map((cls) => [
+        cls,
+        Object.fromEntries(
+          ([...VARIANTS, 'isolated'] as HydroVariant[])
+            .filter((v) => !isSquareCrossing(cls, v))
+            .map((v) => [v, tex(`kerb-${cls}-${v}`)])
+        )
+      ])
+    ) as TileTextures['powerLineKerbside'],
     residentialHouses: [], commercialBuildings: [], commercialGeminiBuildings: [],
     industrialBuildings: [], schools: {}, parks: {}, indicators: {}
   };
@@ -144,31 +157,22 @@ function resolve(state: GameState, textures: TileTextures): Resolved {
   };
 }
 
-/** How a resolved case reads on screen. The only *failing* verdict is
- *  `no-sprite`; `pole-in-lane` is a real art gap, tracked explicitly below so
- *  it cannot quietly grow. */
-type Verdict = 'no-sprite' | 'ground' | 'two-pole' | 'pole-in-lane';
+/** How a resolved case reads on screen.
+ *
+ *  `pole-in-lane` means the plain single-pole overlay was drawn straight onto
+ *  a carriageway, i.e. the pole is standing in the traffic lane. It used to be
+ *  the outcome for 103 of the 128 cases; it should now never happen. */
+type Verdict = 'no-sprite' | 'ground' | 'two-pole' | 'kerbside' | 'pole-in-lane';
 
 function classify(sub: Substrate, r: Resolved): Verdict {
   if (!r.base) return 'no-sprite';
-  if (!sub.road && !sub.rail) return 'ground';
+  if (!sub.cls) return 'ground';
   if (!r.overlay) return 'no-sprite';         // over a carriageway with no wires drawn
-  return r.overlay.startsWith('two-pole') ? 'two-pole' : 'pole-in-lane';
+  if (r.overlay.startsWith('two-pole')) return 'two-pole';
+  return r.overlay.startsWith('kerb-') ? 'kerbside' : 'pole-in-lane';
 }
 
-/** Why the two-pole rule declined — the axis a new sprite would have to cover. */
-function gapReason(hydro: HydroCase, sub: Substrate): string {
-  if (hydro === 'isolated') return 'terminus: lone pole standing in the carriageway';
-  if (hydro.startsWith('end-')) return 'terminus: the run dead-ends on the carriageway';
-  if (hydro !== 'ns' && hydro !== 'ew') return 'junction: the line turns or branches on the carriageway';
-  const beneath = sub.rail ?? sub.road ?? [];
-  const crosses = hydro === 'ns' ? beneath.includes('e') || beneath.includes('w')
-                                 : beneath.includes('n') || beneath.includes('s');
-  return crosses ? 'UNEXPECTED: straight line squarely across, should be two-pole'
-                 : 'parallel: the line runs along the carriageway, pole in the lane';
-}
-
-type Row = { hydro: HydroCase; sub: string; verdict: Verdict; base?: string; overlay?: string; reason?: string };
+type Row = { hydro: HydroCase; sub: string; verdict: Verdict; base?: string; overlay?: string };
 
 function sweep(): Row[] {
   const textures = makeTextures();
@@ -176,11 +180,7 @@ function sweep(): Row[] {
   for (const hydro of HYDRO_CASES) {
     for (const sub of SUBSTRATES) {
       const r = resolve(buildCase(hydro, sub), textures);
-      const verdict = classify(sub, r);
-      rows.push({
-        hydro, sub: sub.name, verdict, base: r.base, overlay: r.overlay,
-        reason: verdict === 'pole-in-lane' ? gapReason(hydro, sub) : undefined
-      });
+      rows.push({ hydro, sub: sub.name, verdict: classify(sub, r), base: r.base, overlay: r.overlay });
     }
   }
   return rows;
@@ -225,33 +225,35 @@ describe('hydro sprite coverage matrix', () => {
     }
   });
 
-  // The remaining cases all resolve to a sprite, but it is the single-pole
-  // one — so the pole is drawn standing in the carriageway. Freezing the
-  // count means a change that widens the gap fails here rather than shipping.
-  it('records the cases still planting a pole in the carriageway', () => {
-    const gaps = rows.filter((r) => r.verdict === 'pole-in-lane');
-    const byReason = new Map<string, number>();
-    for (const g of gaps) byReason.set(g.reason!, (byReason.get(g.reason!) ?? 0) + 1);
+  it('never plants a pole in the carriageway', () => {
+    // This is the whole point of the kerbside families. Every case that isn't
+    // open ground and isn't a square crossing has to move the pole out of the
+    // traffic lane; anything left here is a sprite that wasn't built.
+    const inLane = rows.filter((r) => r.verdict === 'pole-in-lane');
+    expect(inLane.map((r) => `${r.hydro} over ${r.sub}`)).toEqual([]);
+  });
 
-    expect([...byReason.entries()].sort()).toEqual([
-      ['junction: the line turns or branches on the carriageway', 63],
-      ['parallel: the line runs along the carriageway, pole in the lane', 5],
-      ['terminus: lone pole standing in the carriageway', 7],
-      ['terminus: the run dead-ends on the carriageway', 28]
-    ]);
-    // No case should reach here by the two-pole rule misfiring on a genuine
-    // square crossing — that would be a logic bug, not an art gap.
-    expect(gaps.filter((g) => g.reason!.startsWith('UNEXPECTED'))).toEqual([]);
+  it('picks the kerbside twin matching the carriageway situation', () => {
+    for (const r of rows.filter((x) => x.verdict === 'kerbside')) {
+      const sub = SUBSTRATES.find((s) => s.name === r.sub)!;
+      expect(r.overlay, `${r.hydro} over ${r.sub}`).toBe(`kerb-${sub.cls}-${r.hydro}`);
+    }
+  });
+
+  it('leaves nothing but crossings and open ground outside the kerbside set', () => {
+    const counts = rows.reduce<Record<string, number>>(
+      (acc, r) => ({ ...acc, [r.verdict]: (acc[r.verdict] ?? 0) + 1 }), {});
+    expect(counts).toEqual({ ground: 16, 'two-pole': 9, kerbside: 103 });
   });
 
   it('prints the matrix', () => {
     const width = Math.max(...SUBSTRATES.map((s) => s.name.length));
     const glyph: Record<Verdict, string> = {
-      ground: '·', 'two-pole': '=', 'pole-in-lane': '!', 'no-sprite': 'X'
+      ground: '·', 'two-pole': '=', kerbside: '|', 'pole-in-lane': '!', 'no-sprite': 'X'
     };
     const lines = [
       '',
-      'HYDRO SPRITE COVERAGE  · open ground   = two-pole crossing   ! pole in lane   X no sprite',
+      'HYDRO SPRITE COVERAGE  · open ground  = two-pole crossing  | kerbside pole  ! pole in lane  X no sprite',
       ''.padEnd(12) + SUBSTRATES.map((s) => s.name.padEnd(width + 1)).join('')
     ];
     for (const hydro of HYDRO_CASES) {
@@ -265,7 +267,7 @@ describe('hydro sprite coverage matrix', () => {
     if (process.env.HYDRO_MATRIX) {
       for (const r of rows) {
         console.log(`${r.hydro.padEnd(11)} ${r.sub.padEnd(12)} ${r.verdict.padEnd(13)} ` +
-          `${(r.base ?? '-').padEnd(18)} ${(r.overlay ?? '-').padEnd(16)} ${r.reason ?? ''}`);
+          `${(r.base ?? '-').padEnd(18)} ${r.overlay ?? '-'}`);
       }
     }
     expect(lines.length).toBe(HYDRO_CASES.length + 3);

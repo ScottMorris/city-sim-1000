@@ -62,6 +62,7 @@ export class MapRenderer {
       road: {},
       rail: {},
       railCrossing: {},
+      powerLineKerbside: { 'along-ns': {}, 'along-ew': {}, junction: {} },
       powerPlant: {},
       powerLine: {},
       powerLineOverlay: {},
