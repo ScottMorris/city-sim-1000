@@ -47,8 +47,10 @@ const REFS = {
   rail: 'roads/road-ns.png',   // no rail sprites exist yet — roads are the neighbours to match
   road: 'roads/road-ns.png',
   crossing: 'roads/road-ns.png',
-  power: 'power/power-line-vertical.png',
-  pole: 'power/power-line-vertical.png',
+  // The old 2-sprite hydro set is gone; roads are the neighbours these
+  // ground tiles have to sit beside.
+  power: 'roads/road-ns.png',
+  pole: 'roads/road-ns.png',
 };
 const refKey = REFS[SCENE] ? SCENE : SCENE.split('-')[0];
 const REF_PNG = path.join(ROOT, 'app/public/assets/tiles', REFS[refKey] ?? REFS.house);

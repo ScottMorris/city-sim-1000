@@ -276,29 +276,18 @@ function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTex
 }
 
 function pickPowerLineTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
-  const connectsToPower = (tx: number, ty: number) => {
-    const neighbour = getTile(state, tx, ty);
-    return isPowerCarrier(neighbour);
-  };
+  const connectsToPower = (tx: number, ty: number) => isPowerCarrier(getTile(state, tx, ty));
 
-  const north = y > 0 && connectsToPower(x, y - 1);
-  const south = y < state.height - 1 && connectsToPower(x, y + 1);
-  const east = x < state.width - 1 && connectsToPower(x + 1, y);
-  const west = x > 0 && connectsToPower(x - 1, y);
+  const n = y > 0 && connectsToPower(x, y - 1);
+  const e = x < state.width  - 1 && connectsToPower(x + 1, y);
+  const s = y < state.height - 1 && connectsToPower(x, y + 1);
+  const w = x > 0 && connectsToPower(x - 1, y);
 
-  const powerTextures = tileTextures.powerLine;
-  const neighbours = [north, east, south, west].filter(Boolean).length;
-
-  if (neighbours === 2 && north && south && !east && !west) {
-    return powerTextures.north ?? powerTextures.south;
-  }
-  if (neighbours === 2 && east && west && !north && !south) {
-    return powerTextures.east ?? powerTextures.west;
-  }
-  if (neighbours === 1) {
-    if (north || south) return powerTextures.north ?? powerTextures.south;
-    if (east || west) return powerTextures.east ?? powerTextures.west;
-  }
-
-  return undefined;
+  // Hydro reuses the road set's 15-variant connectivity mapping. Previously
+  // only straight runs and dead ends resolved, so corners, T-junctions and
+  // crossings returned undefined and the renderer fell back to a flat colour
+  // rect — and because isPowerCarrier counts roads, rails, zones and
+  // buildings as connections, those cases are the norm in a built-up city,
+  // not an edge case.
+  return tileTextures.powerLine[roadVariant(n, e, s, w)];
 }

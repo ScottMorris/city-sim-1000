@@ -25,7 +25,7 @@ export interface TileTextures {
   rail: Partial<Record<RoadVariant, PIXI.Texture>>;
   railCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
   powerPlant: Partial<Record<PowerPlantType, PIXI.Texture>>;
-  powerLine: Partial<Record<'north' | 'east' | 'south' | 'west', PIXI.Texture>>;
+  powerLine: Partial<Record<RoadVariant, PIXI.Texture>>;
   residentialHouses: PIXI.Texture[];
   commercialBuildings: PIXI.Texture[];
   commercialGeminiBuildings: PIXI.Texture[];
@@ -97,10 +97,27 @@ const powerPlantTexturePaths: Partial<Record<PowerPlantType, string>> = {
   [PowerPlantType.Wind]:  assetPath('assets/tiles/power/power-plant-wind.png')
 };
 
-const powerLineTexturePaths = {
-  horizontal: assetPath('assets/tiles/power/power-line-horizontal.png'),
-  vertical:   assetPath('assets/tiles/power/power-line-vertical.png')
-} as const;
+// Hydro lines share the road set's 15-variant connectivity naming. Before
+// this set existed there were only two sprites (a vertical and a horizontal
+// run), so corners, T-junctions and crossings had nothing to draw and fell
+// through to a flat colour rect.
+const powerLineTexturePaths: Record<RoadVariant, string> = {
+  'ns':         assetPath('assets/tiles/power/power-line-ns.png'),
+  'ew':         assetPath('assets/tiles/power/power-line-ew.png'),
+  'corner-ne':  assetPath('assets/tiles/power/power-line-corner-ne.png'),
+  'corner-nw':  assetPath('assets/tiles/power/power-line-corner-nw.png'),
+  'corner-se':  assetPath('assets/tiles/power/power-line-corner-se.png'),
+  'corner-sw':  assetPath('assets/tiles/power/power-line-corner-sw.png'),
+  't-nes':      assetPath('assets/tiles/power/power-line-t-nes.png'),
+  't-new':      assetPath('assets/tiles/power/power-line-t-new.png'),
+  't-nsw':      assetPath('assets/tiles/power/power-line-t-nsw.png'),
+  't-esw':      assetPath('assets/tiles/power/power-line-t-esw.png'),
+  'cross':      assetPath('assets/tiles/power/power-line-cross.png'),
+  'end-n':      assetPath('assets/tiles/power/power-line-end-n.png'),
+  'end-e':      assetPath('assets/tiles/power/power-line-end-e.png'),
+  'end-s':      assetPath('assets/tiles/power/power-line-end-s.png'),
+  'end-w':      assetPath('assets/tiles/power/power-line-end-w.png')
+};
 
 const residentialHouseTexturePaths = [
   assetPath('assets/tiles/buildings/res-house-1.png'),
@@ -189,16 +206,12 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
-  const [powerLineHorizontal, powerLineVertical] = await Promise.all([
-    PIXI.Assets.load<PIXI.Texture>(powerLineTexturePaths.horizontal),
-    PIXI.Assets.load<PIXI.Texture>(powerLineTexturePaths.vertical)
-  ]);
-  const powerLineTextures: TileTextures['powerLine'] = {
-    east:  powerLineHorizontal,
-    west:  powerLineHorizontal,
-    north: powerLineVertical,
-    south: powerLineVertical
-  };
+  const powerLineEntries = await Promise.all(
+    (Object.entries(powerLineTexturePaths) as [RoadVariant, string][]).map(async ([variant, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [variant, texture] as const;
+    })
+  );
 
   const residentialHouses = await Promise.all(
     residentialHouseTexturePaths.map(async (path) => PIXI.Assets.load<PIXI.Texture>(path))
@@ -243,7 +256,7 @@ export async function loadTileTextures(): Promise<TileTextures> {
     rail:                   Object.fromEntries(railEntries),
     railCrossing:           Object.fromEntries(railCrossingEntries),
     powerPlant:             Object.fromEntries(powerPlantEntries),
-    powerLine:              powerLineTextures,
+    powerLine:              Object.fromEntries(powerLineEntries),
     residentialHouses,
     commercialBuildings,
     commercialGeminiBuildings,

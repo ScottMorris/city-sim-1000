@@ -23,7 +23,11 @@ function makeTextures(): TileTextures {
     },
     railCrossing: { ns: tex('crossing-ns'), ew: tex('crossing-ew') },
     powerPlant: {},
-    powerLine: {},
+    powerLine: {
+      ns: tex('power-ns'), ew: tex('power-ew'), 'corner-ne': tex('power-corner-ne'),
+      'corner-se': tex('power-corner-se'),
+      't-nes': tex('power-t-nes'), cross: tex('power-cross'), 'end-n': tex('power-end-n')
+    },
     residentialHouses: [],
     commercialBuildings: [],
     commercialGeminiBuildings: [],
@@ -101,5 +105,57 @@ describe('rail-road level crossings', () => {
     const textures = makeTextures();
     for (const x of [1, 2, 3]) setTile(state, x, 2, TileKind.Road);
     expect(spriteName(state, 2, 2, textures)).toBe('road-ew');
+  });
+});
+
+describe('hydro line sprite picking', () => {
+  // Before the 15-variant set existed only straight runs and dead ends
+  // resolved to a sprite; corners, T-junctions and crossings fell through to
+  // a flat colour rect. These lock in the full connectivity mapping.
+  it('picks connectivity variants from power-carrying neighbours', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    // Vertical run.
+    setTile(state, 2, 1, TileKind.PowerLine);
+    setTile(state, 2, 2, TileKind.PowerLine);
+    setTile(state, 2, 3, TileKind.PowerLine);
+    expect(spriteName(state, 2, 2, textures)).toBe('power-ns');
+
+    // Turning east at the top of the run makes that tile a corner (it
+    // connects south and east), not a tile with no sprite at all.
+    setTile(state, 3, 1, TileKind.PowerLine);
+    expect(spriteName(state, 2, 1, textures)).toBe('power-corner-se');
+  });
+
+  it('resolves T-junctions and crossings instead of falling through', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 4, 4, TileKind.PowerLine);
+    setTile(state, 4, 3, TileKind.PowerLine);   // north
+    setTile(state, 5, 4, TileKind.PowerLine);   // east
+    setTile(state, 4, 5, TileKind.PowerLine);   // south
+    expect(spriteName(state, 4, 4, textures)).toBe('power-t-nes');
+
+    setTile(state, 3, 4, TileKind.PowerLine);   // + west
+    expect(spriteName(state, 4, 4, textures)).toBe('power-cross');
+  });
+
+  it('treats roads and zones as connections, like the power grid does', () => {
+    // isPowerCarrier counts roads, rails, zones and buildings — so a line run
+    // beside built-up land hits the junction variants constantly.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 2, 2, TileKind.PowerLine);
+    setTile(state, 2, 1, TileKind.PowerLine);   // north
+    setTile(state, 3, 2, TileKind.Road);        // east
+    expect(spriteName(state, 2, 2, textures)).toBe('power-corner-ne');
+  });
+
+  it('gives an isolated pole a dead-end sprite when it has one neighbour', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 2, 2, TileKind.PowerLine);
+    setTile(state, 2, 1, TileKind.PowerLine);
+    expect(spriteName(state, 2, 2, textures)).toBe('power-end-n');
   });
 });
