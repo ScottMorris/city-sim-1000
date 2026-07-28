@@ -121,6 +121,21 @@
     },
     "buildings/com-shop-6.png": {
       "scene": "shop3"
+    },
+    "buildings/ind-factory-3.png": {
+      "scene": "factory"
+    },
+    "buildings/ind-warehouse-1.png": {
+      "scene": "warehouse"
+    },
+    "buildings/ind-high-tech-2.png": {
+      "scene": "hightech"
+    },
+    "buildings/ind-factory-4.png": {
+      "scene": "factory2"
+    },
+    "buildings/ind-factory-5.png": {
+      "scene": "factory3"
     }
   }
 }

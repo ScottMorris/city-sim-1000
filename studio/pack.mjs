@@ -44,6 +44,11 @@ const PACK = [
   ['shop', 'buildings/com-shop-4.png'],
   ['shop2', 'buildings/com-shop-5.png'],
   ['shop3', 'buildings/com-shop-6.png'],
+  ['factory', 'buildings/ind-factory-3.png'],
+  ['warehouse', 'buildings/ind-warehouse-1.png'],
+  ['hightech', 'buildings/ind-high-tech-2.png'],
+  ['factory2', 'buildings/ind-factory-4.png'],
+  ['factory3', 'buildings/ind-factory-5.png'],
 ];
 
 const manifest = { profile: PROFILE, tileSize: 160, sprites: {} };

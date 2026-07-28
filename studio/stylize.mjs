@@ -26,6 +26,11 @@ const GRASS_PNG = path.join(ROOT, 'app/public/assets/tiles/terrain/grass.png');
 const REFS = {
   house: 'buildings/res-house-2.png',
   shop: 'buildings/com-shop-1.png',
+  factory: 'buildings/ind-factory-1.png',
+  factory2: 'buildings/ind-factory-2.png',
+  factory3: 'buildings/ind-factory-1.png',
+  warehouse: 'buildings/ind-factory-2.png',
+  hightech: 'buildings/ind-high-tech-1.png',
   rail: 'roads/road-ns.png',   // no rail sprites exist yet — roads are the neighbours to match
   road: 'roads/road-ns.png',
   crossing: 'roads/road-ns.png',
@@ -128,6 +133,66 @@ const SCENE_STYLES = {
       door: '#26433f',
     },
     wallSpacing: 0.24,
+    roofSpacing: 0.36,
+  },
+  factory: {
+    // Weathered brick factory, dark roof, brick-toned smokestack.
+    palette: {
+      wall: '#8a6f5a',
+      roof: '#3a3632',
+      chimney: '#6b5648',
+      door: '#4a4038',
+      window: '#2e4a52',
+    },
+    wallSpacing: 0.22,
+    roofSpacing: 0.36,
+  },
+  factory2: {
+    // Concrete tilt-up factory — cool grey, distinct from factory's brick.
+    palette: {
+      wall: '#8f8c85',
+      roof: '#403f3c',
+      chimney: '#6e6c66',
+      door: '#3c4448',
+      window: '#3a4a3e',
+    },
+    wallSpacing: 0.34,
+    roofSpacing: 0.36,
+  },
+  factory3: {
+    // Corrugated teal-green heavy-industry shed.
+    palette: {
+      wall: '#5f766c',
+      roof: '#33403a',
+      chimney: '#4a4642',
+      door: '#2e3a34',
+      window: '#274040',
+    },
+    wallSpacing: 0.16,     // tight spacing reads as corrugated metal ribbing
+    roofSpacing: 0.36,
+  },
+  warehouse: {
+    // Corrugated steel warehouse, galvanized roof vents.
+    palette: {
+      wall: '#7d8791',
+      roof: '#33383c',
+      chimney: '#9aa0a6',
+      door: '#454b50',
+      window: '#2a4550',
+    },
+    wallSpacing: 0.16,     // tight spacing reads as corrugated metal ribbing
+    roofSpacing: 0.36,
+  },
+  hightech: {
+    // Clean light-panel plant, blue glass curtain wall.
+    palette: {
+      wall: '#d9dde0',
+      roof: '#454a4e',
+      chimney: '#c7ccd0',
+      door: '#333b42',
+      window: '#1f5f78',
+    },
+    wallSpacing: 0.34,
     roofSpacing: 0.36,
   },
   rail: {
