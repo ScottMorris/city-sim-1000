@@ -51,6 +51,18 @@ def _dashes(mats, points, period):
         s += period
 
 
+def _end_cap(mats, edge):
+    """Dead-end paint (measured from road-end-n.png): a standard first dash,
+    a second dash running long into a perpendicular crossbar just past the
+    tile centre — the T-shaped terminus marking."""
+    dx, dy = EDGE_POINTS[edge]
+    ang = math.atan2(dy, dx)
+    at = lambda s: (dx * (2 - s), dy * (2 - s), 0.06)
+    box(mats, 'marking', at(0.5), (DASH_LEN, DASH_W, 0.04), (0, 0, ang))       # dash
+    box(mats, 'marking', at(1.485), (0.66, DASH_W, 0.04), (0, 0, ang))         # stub
+    box(mats, 'marking', at(1.985), (0.34, 1.125, 0.04), (0, 0, ang))          # crossbar
+
+
 def build(mats):
     edges = VARIANTS[VARIANT]
 
@@ -76,9 +88,12 @@ def build(mats):
         _dashes(mats, sample_full_straight(a, b), STRAIGHT_PERIOD)
     elif pair:
         _dashes(mats, sample_arc(*pair), ARC_PERIOD)
+    elif len(edges) == 1:
+        # Dead end: dashes terminate in the T-shaped end cap.
+        _end_cap(mats, next(iter(edges)))
     else:
-        # Ends, tees, crossings: dash each connected half toward the centre;
-        # the half-length (2.0) cuts the second full dash so junction cores
-        # stay clean automatically.
+        # Tees, crossings: dash each connected half toward the centre; the
+        # half-length (2.0) cuts the second full dash so junction cores stay
+        # clean automatically.
         for edge in sorted(edges):
             _dashes(mats, list(reversed(sample_straight(edge, start=0.0))), STRAIGHT_PERIOD)
