@@ -31,6 +31,9 @@ const REFS = {
   factory3: 'buildings/ind-factory-1.png',
   warehouse: 'buildings/ind-factory-2.png',
   hightech: 'buildings/ind-high-tech-1.png',
+  office1: 'buildings/ind-high-tech-2.png',
+  office2: 'buildings/ind-high-tech-2.png',
+  office3: 'buildings/ind-high-tech-2.png',
   rail: 'roads/road-ns.png',   // no rail sprites exist yet — roads are the neighbours to match
   road: 'roads/road-ns.png',
   crossing: 'roads/road-ns.png',
@@ -193,6 +196,44 @@ const SCENE_STYLES = {
       window: '#1f5f78',
     },
     wallSpacing: 0.34,
+    roofSpacing: 0.36,
+  },
+  office1: {
+    // Cool-grey glass tower, vivid blue floor bands.
+    palette: {
+      wall: '#c7ccd2',
+      roof: '#3d4247',
+      chimney: '#9aa0a6',
+      awning: '#4a5560',
+      door: '#2c343a',
+      window: '#1a5f82',
+    },
+    wallSpacing: 0.34,
+    roofSpacing: 0.36,
+  },
+  office2: {
+    // Warm-beige panel mid-rise, muted blue-grey punch windows.
+    palette: {
+      wall: '#a9a79c',
+      roof: '#3a3835',
+      chimney: '#8a8478',
+      door: '#33302c',
+      window: '#355a68',
+    },
+    wallSpacing: 0.30,
+    roofSpacing: 0.36,
+  },
+  office3: {
+    // Cream boutique startup, deep-blue glass, bright teal accent sign.
+    palette: {
+      wall: '#e8e4d8',
+      roof: '#3f3b34',
+      chimney: '#8a8478',
+      door: '#26302c',
+      window: '#155f7a',
+      sign: '#2ec4b6',
+    },
+    wallSpacing: 0.30,
     roofSpacing: 0.36,
   },
   rail: {
