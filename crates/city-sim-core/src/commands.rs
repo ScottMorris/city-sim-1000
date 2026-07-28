@@ -106,9 +106,13 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
             state.tiles[idx].kind = TileKind::Road;
-            if had_rail {
-                state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, true);
-            }
+            // Set every structural flag explicitly, never conditionally. A
+            // road replaces whatever was here, so a hydro line that used to
+            // run through the tile must lose its overlay — leaving it set
+            // draws wires over a road the line no longer occupies.
+            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_rail);
+            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, false);
+            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, false);
             state.tile_revision += 1;
             CommandResult::ok()
         }
@@ -123,9 +127,9 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
             state.tiles[idx].kind = TileKind::Rail;
-            if had_road {
-                state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, true);
-            }
+            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_road);
+            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, false);
+            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, false);
             state.tile_revision += 1;
             CommandResult::ok()
         }
@@ -540,6 +544,33 @@ mod tests {
         );
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
         assert_eq!(s.tile_at(0, 0).unwrap().underground, None);
+    }
+
+    #[test]
+    fn road_and_rail_replace_a_hydro_line_completely() {
+        // Building over a line removes it, so its overlay flag must go too.
+        // Road/Rail only ever set flags, so the flag used to survive and the
+        // renderer kept drawing wires over the new road.
+        for tool in [Tool::Road, Tool::Rail] {
+            let mut s = gs(4, 4);
+            apply_tool(&mut s, Tool::PowerLine, 1, 1);
+            assert!(s.tile_at(1, 1).unwrap().has_power_overlay());
+
+            apply_tool(&mut s, tool, 1, 1);
+            let t = s.tile_at(1, 1).unwrap();
+            assert!(!t.has_power_overlay(), "{tool:?} left the power overlay set");
+        }
+    }
+
+    #[test]
+    fn rail_over_road_keeps_the_road_but_not_a_stale_rail_underlay() {
+        let mut s = gs(4, 4);
+        apply_tool(&mut s, Tool::Road, 1, 1);
+        apply_tool(&mut s, Tool::Rail, 1, 1);
+        let t = s.tile_at(1, 1).unwrap();
+        assert_eq!(t.kind, TileKind::Rail);
+        assert!(t.has_road_underlay(), "the road under the rail was lost");
+        assert!(!t.has_rail_underlay(), "rail recorded itself as its own underlay");
     }
 
     #[test]
