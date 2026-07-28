@@ -70,6 +70,29 @@ const ROLES = [
 // future recipe system. Roles keep one semantic meaning; scenes restyle them.
 const SCENE_STYLES = {
   house: { palette: {}, wallSpacing: 0.30, roofSpacing: 0.36 },
+  house2: {
+    // Warm cream bungalow, dark slate roof — distinct from house's blue-grey
+    // siding + red roof at a glance.
+    palette: {
+      wall: '#d8c9a3',
+      roof: '#3f4448',
+      door: '#5a3520',
+    },
+    wallSpacing: 0.30,
+    roofSpacing: 0.40,
+  },
+  house3: {
+    // Muted sage-green colonial, deep brown roof.
+    palette: {
+      wall: '#8a9878',
+      roof: '#4a3226',
+      door: '#2c2420',
+      trim: '#e8e2d0',
+      mullion: '#e8e2d0',
+    },
+    wallSpacing: 0.26,
+    roofSpacing: 0.34,
+  },
   shop: {
     palette: {
       wall: '#a8714a',     // brick
@@ -182,6 +205,11 @@ function hexToRgb(hex) {
 }
 function rgbToHex(r, g, b) {
   return '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+}
+function mixHex(a, b, t) {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
 }
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -461,7 +489,38 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
     }
     return box;
   };
-  const winBox = bboxOf('window');
+  // Windows are grouped per connected component (not one global bbox) so a
+  // scene with two separate windows gets two independent sash crosses
+  // instead of one cross straddling both (it reads as broken geometry, not
+  // panes) — see house3's stacked windows.
+  const componentsOf = (roleName) => {
+    const idx = ROLES.findIndex((r) => r.name === roleName);
+    const compId = new Int16Array(N * N).fill(-1);
+    const boxes = [];
+    for (let sy = 0; sy < N; sy++) {
+      for (let sx = 0; sx < N; sx++) {
+        if (cellRole[sy * N + sx] !== idx || compId[sy * N + sx] >= 0) continue;
+        const box = { x0: sx, y0: sy, x1: sx, y1: sy };
+        const stack = [[sx, sy]];
+        compId[sy * N + sx] = boxes.length;
+        while (stack.length) {
+          const [cx2, cy2] = stack.pop();
+          if (cx2 < box.x0) box.x0 = cx2; if (cx2 > box.x1) box.x1 = cx2;
+          if (cy2 < box.y0) box.y0 = cy2; if (cy2 > box.y1) box.y1 = cy2;
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const nx = cx2 + dx, ny = cy2 + dy;
+            if (nx < 0 || ny < 0 || nx >= N || ny >= N) continue;
+            if (cellRole[ny * N + nx] !== idx || compId[ny * N + nx] >= 0) continue;
+            compId[ny * N + nx] = boxes.length;
+            stack.push([nx, ny]);
+          }
+        }
+        boxes.push(box);
+      }
+    }
+    return { compId, boxes };
+  };
+  const winComponents = componentsOf('window');
   const doorBox = bboxOf('door');
   const winRole = ROLES.findIndex((r) => r.name === 'window');
 
@@ -500,16 +559,25 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
         // banding them turns cast shadows into blotches at strip crossings.
         if (['wire', 'marking', 'shoulder', 'kerb'].includes(roleDef.name)) band = 1;
         // Grid-native window fittings: a stamped 1-cell sash cross at the
-        // window's centre row/column, and a glint in the top-left pane.
+        // window's centre row/column, and a glint in the top-left pane. The
+        // cross is inset from the pane's own edges (never touches the
+        // outline) and tinted toward the glass colour rather than a
+        // contrasting hue — a full-bleed contrasting cross reads as a flag
+        // graphic, not a muntin bar.
         let sash = false;
-        if (profile.details && r === winRole && winBox.x1 >= 0) {
-          const midX = Math.round((winBox.x0 + winBox.x1) / 2);
-          const midY = Math.round((winBox.y0 + winBox.y1) / 2);
-          if (cx === midX || cy === midY) sash = true;
-          else if (cx < midX && cy < midY) band = 2;
+        if (profile.details && r === winRole) {
+          const ci = winComponents.compId[cy * N + cx];
+          const box = ci >= 0 ? winComponents.boxes[ci] : null;
+          if (box && box.x1 - box.x0 >= 2 && box.y1 - box.y0 >= 2) {
+            const midX = Math.round((box.x0 + box.x1) / 2);
+            const midY = Math.round((box.y0 + box.y1) / 2);
+            const inset = cx > box.x0 && cx < box.x1 && cy > box.y0 && cy < box.y1;
+            if (inset && (cx === midX || cy === midY)) sash = true;
+            else if (cx < midX && cy < midY) band = 2;
+          }
         }
         colour = sash
-          ? shadeRole(ROLES.find((d) => d.name === 'mullion').colour, 1)
+          ? mixHex(shadeRole(ROLES.find((d) => d.name === 'mullion').colour, 1), shadeRole(roleDef.colour, band), 0.55)
           : shadeRole(roleDef.colour, band);
         // Screen-space detail stamping: pattern drawn on the art grid via the
         // ID mask, so it's always crisp — no 3D texture aliasing to fight.

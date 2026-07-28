@@ -38,6 +38,9 @@ const PACK = [
   ['crossing-ew', 'rails/rail-road-crossing-ew.png'],
   ['power-ns', 'power/power-line-vertical.png'],
   ['power-ew', 'power/power-line-horizontal.png'],
+  ['house', 'buildings/res-house-5.png'],
+  ['house2', 'buildings/res-house-6.png'],
+  ['house3', 'buildings/res-house-7.png'],
 ];
 
 const manifest = { profile: PROFILE, tileSize: 160, sprites: {} };
