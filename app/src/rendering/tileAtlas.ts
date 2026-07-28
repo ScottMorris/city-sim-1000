@@ -78,7 +78,8 @@ const powerLineTexturePaths = {
 const residentialHouseTexturePaths = [
   assetPath('assets/tiles/buildings/res-house-1.png'),
   assetPath('assets/tiles/buildings/res-house-2.png'),
-  assetPath('assets/tiles/buildings/res-house-3.png')
+  assetPath('assets/tiles/buildings/res-house-3.png'),
+  assetPath('assets/tiles/buildings/res-house-4.png')
 ];
 
 const commercialBuildingTexturePaths = [
