@@ -347,6 +347,18 @@ fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
         state.tiles[idx].underground = None;
     } else {
         state.tiles[idx].kind = TileKind::Land;
+        // Clear the structural flags with the tile. They describe what was
+        // built here, not what the simulation derived: leaving them set makes
+        // a bulldozed tile keep rendering the thing that was removed. In
+        // particular FLAG_POWER_OVERLAY was set when a line was strung and
+        // never cleared anywhere, so hydro survived its own demolition once
+        // the renderer started drawing overlays. FLAG_POWERED / FLAG_WATERED
+        // are recomputed by the utility passes, so they are cleared too rather
+        // than left describing a tile that no longer exists.
+        state.tiles[idx].set_flag(
+            FLAG_ROAD_UNDERLAY | FLAG_RAIL_UNDERLAY | FLAG_POWER_OVERLAY | FLAG_ABANDONED,
+            false,
+        );
         state.tile_revision += 1;
     }
     CommandResult::ok()
@@ -528,6 +540,25 @@ mod tests {
         );
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
         assert_eq!(s.tile_at(0, 0).unwrap().underground, None);
+    }
+
+    #[test]
+    fn bulldoze_clears_structural_flags() {
+        // A hydro line laid over a road sets both the road underlay and the
+        // power overlay. Bulldozing must clear them, or the tile keeps
+        // rendering a road and wires that are no longer there.
+        let mut s = gs(4, 4);
+        apply_tool(&mut s, Tool::Road, 1, 1);
+        apply_tool(&mut s, Tool::PowerLine, 1, 1);
+        assert!(s.tile_at(1, 1).unwrap().has_road_underlay());
+        assert!(s.tile_at(1, 1).unwrap().has_power_overlay());
+
+        apply_tool(&mut s, Tool::Bulldoze, 1, 1);
+        let t = s.tile_at(1, 1).unwrap();
+        assert_eq!(t.kind, TileKind::Land);
+        assert!(!t.has_road_underlay(), "road underlay survived bulldoze");
+        assert!(!t.has_rail_underlay(), "rail underlay survived bulldoze");
+        assert!(!t.has_power_overlay(), "power overlay survived bulldoze");
     }
 
     #[test]

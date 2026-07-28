@@ -60,12 +60,9 @@ const TILE = 160;          // game convention for a 1×1 sprite
 const OVERLAY_PROFILE = 'rich-pixel-48';
 // Hydro crossing a road/rail: two poles, shifted along the line's own axis so
 // they stand clear of the carriageway, rather than one in the middle of it.
-// +/-52 px is just past the road's shoulder on a 160 px tile.
+// Must match POLE_OFF in scenes/power.py (1.30 world x 40 px per unit), or the
+// wires will peak somewhere other than where the poles actually stand.
 const CROSSING_SHIFT = 52;
-const CROSSING_PROP_OFFSETS = {
-  'power-ns': [{ dx: 0, dy: -CROSSING_SHIFT }, { dx: 0, dy: CROSSING_SHIFT }],
-  'power-ew': [{ dx: -CROSSING_SHIFT, dy: 0 }, { dx: CROSSING_SHIFT, dy: 0 }],
-};
 const HOUSE_SCALE = 0.84;  // fraction of the tile the house content occupies
 
 // Role palette — base colours per building part (sRGB). Light bands derive
@@ -297,6 +294,18 @@ const SCENE_STYLES = {
     roofSpacing: 0.36,
   },
 };
+// Crossing tiles are their own scenes: the E-W wires are rebuilt to peak at
+// the two poles rather than at tile centre, so they cannot be produced by
+// re-stamping the straight scene's props.
+SCENE_STYLES['power-crossing-ns'] = {
+  ...SCENE_STYLES.power,
+  propOffsets: [{ dx: 0, dy: -CROSSING_SHIFT }, { dx: 0, dy: CROSSING_SHIFT }],
+};
+SCENE_STYLES['power-crossing-ew'] = {
+  ...SCENE_STYLES.power,
+  propOffsets: [{ dx: -CROSSING_SHIFT, dy: 0 }, { dx: CROSSING_SHIFT, dy: 0 }],
+};
+
 const STYLE = SCENE_STYLES[SCENE] ?? SCENE_STYLES[SCENE.split('-')[0]] ?? SCENE_STYLES.house;
 for (const [name, colour] of Object.entries(STYLE.palette)) {
   ROLES.find((r) => r.name === name).colour = colour;
@@ -891,7 +900,7 @@ async function main() {
     const canvas = renderProfile(profile, maps, crop, grassAt, opts);
     if (overlay) {
       const bctx = canvas.getContext('2d');
-      const propOffsets = opts.propOffsets ?? [{ dx: 0, dy: 0 }];
+      const propOffsets = STYLE.propOffsets ?? [{ dx: 0, dy: 0 }];
       for (const { dx, dy } of propOffsets) {
       // Pole ground shadow: a small cell-aligned dark blob south-east of the
       // pole base, consistent with the studio sun (from the screen's
@@ -930,18 +939,6 @@ async function main() {
       const overlayFile = path.join(OUT_DIR, `look-${SCENE}-${profile.name}-overlay.png`);
       await fs.writeFile(overlayFile, overlayCanvas.toBuffer('image/png'));
       console.log(`Wrote ${overlayFile}`);
-
-      // Crossing twin: the same wires, but carried by two poles standing
-      // either side of the carriageway instead of one planted in it. Only
-      // meaningful for the two straight runs — a line turning a corner or
-      // branching inside a road tile has no clean "either side".
-      const crossingPoles = CROSSING_PROP_OFFSETS[SCENE];
-      if (crossingPoles) {
-        const crossingCanvas = composeTile(profile, { transparent: true, propOffsets: crossingPoles });
-        const crossingFile = path.join(OUT_DIR, `look-${SCENE}-${profile.name}-crossing.png`);
-        await fs.writeFile(crossingFile, crossingCanvas.toBuffer('image/png'));
-        console.log(`Wrote ${crossingFile}`);
-      }
     }
   }
 

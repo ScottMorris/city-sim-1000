@@ -102,13 +102,15 @@ function pickHydroCrossingTexture(
   if (!tile.roadUnderlay && !tile.railUnderlay) return undefined;
   const hydro = hydroVariant(state, x, y);
   if (hydro !== 'ns' && hydro !== 'ew') return undefined;
-  const beneath = tile.railUnderlay
-    ? roadVariant(...railNeighbourFlags(state, x, y))
-    : roadNeighbourVariant(state, x, y);
-  const beneathIsPerpendicular =
-    (hydro === 'ns' && (beneath === 'ew' || beneath === 'end-e' || beneath === 'end-w')) ||
-    (hydro === 'ew' && (beneath === 'ns' || beneath === 'end-n' || beneath === 'end-s'));
-  return beneathIsPerpendicular ? tileTextures.powerLineCrossing[hydro] : undefined;
+  // Test the AXIS of what's beneath, not its exact variant. Matching variant
+  // names ('ew', 'end-e', ...) silently missed T-junctions and 4-ways, so a
+  // line crossing a busy junction fell back to a pole in the carriageway
+  // while the plain stretch either side got two — visibly inconsistent.
+  const [bn, be, bs, bw] = tile.railUnderlay
+    ? railNeighbourFlags(state, x, y)
+    : roadNeighbourFlags(state, x, y);
+  const crossesBeneath = hydro === 'ns' ? be || bw : bn || bs;
+  return crossesBeneath ? tileTextures.powerLineCrossing[hydro] : undefined;
 }
 
 /** The road or rail a hydro tile was laid over, if any. */
@@ -379,6 +381,15 @@ function carriesWires(tile: ReturnType<typeof getTile>): boolean {
   return (tile.powerPlantType ?? tileKindToPowerPlantType(tile.kind)) !== undefined;
 }
 
+function hasAnyWireNeighbour(state: GameState, x: number, y: number): boolean {
+  return (
+    (y > 0 && carriesWires(getTile(state, x, y - 1))) ||
+    (x < state.width - 1 && carriesWires(getTile(state, x + 1, y))) ||
+    (y < state.height - 1 && carriesWires(getTile(state, x, y + 1))) ||
+    (x > 0 && carriesWires(getTile(state, x - 1, y)))
+  );
+}
+
 function hydroVariant(state: GameState, x: number, y: number): RoadVariant {
   const connects = (tx: number, ty: number) => carriesWires(getTile(state, tx, ty));
   return roadVariant(
@@ -389,17 +400,17 @@ function hydroVariant(state: GameState, x: number, y: number): RoadVariant {
   );
 }
 
-function roadNeighbourVariant(state: GameState, x: number, y: number): RoadVariant {
+function roadNeighbourFlags(state: GameState, x: number, y: number): [boolean, boolean, boolean, boolean] {
   const connects = (tx: number, ty: number) => {
     const n = getTile(state, tx, ty);
     return n?.kind === TileKind.Road || n?.roadUnderlay === true;
   };
-  return roadVariant(
+  return [
     y > 0 && connects(x, y - 1),
     x < state.width - 1 && connects(x + 1, y),
     y < state.height - 1 && connects(x, y + 1),
     x > 0 && connects(x - 1, y)
-  );
+  ];
 }
 
 function pickPowerLineTexture(
@@ -414,6 +425,11 @@ function pickPowerLineTexture(
   // only straight runs and dead ends resolved, so corners, T-junctions and
   // crossings returned undefined and the renderer fell back to a flat colour
   // rect.
+  if (!hasAnyWireNeighbour(state, x, y)) {
+    // A lone tile used to fall back to the 4-way cross, sprouting wires in
+    // every direction that reached to nothing.
+    return overlay ? tileTextures.powerLineIsolatedOverlay : tileTextures.powerLineIsolated;
+  }
   const set = overlay ? tileTextures.powerLineOverlay : tileTextures.powerLine;
   return set[hydroVariant(state, x, y)];
 }

@@ -204,12 +204,19 @@
       "overlay": true
     },
     "power/power-line-ns-crossing.png": {
-      "scene": "power-ns",
-      "crossing": true
+      "scene": "power-crossing-ns",
+      "overlay": true
     },
     "power/power-line-ew-crossing.png": {
-      "scene": "power-ew",
-      "crossing": true
+      "scene": "power-crossing-ew",
+      "overlay": true
+    },
+    "power/power-line-isolated.png": {
+      "scene": "power-isolated"
+    },
+    "power/power-line-isolated-overlay.png": {
+      "scene": "power-isolated",
+      "overlay": true
     },
     "buildings/res-house-5.png": {
       "scene": "house"

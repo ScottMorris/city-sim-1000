@@ -43,7 +43,16 @@ from scenes.trackpath import CONNECTIVITY_VARIANTS
 TOP_DOWN = True
 ROTATION_DEG = 0
 
-VARIANTS = CONNECTIVITY_VARIANTS
+# A pole with nothing attached yet. Without this, a lone tile fell back to the
+# 4-way cross and sprouted wires in every direction reaching to nothing.
+VARIANTS = {
+    **CONNECTIVITY_VARIANTS,
+    'isolated': set(),
+    # Crossing tiles: same connectivity as the straights, different span
+    # structure and pole placement (see POLE_OFF).
+    'crossing-ns': {'n', 's'},
+    'crossing-ew': {'e', 'w'},
+}
 VARIANT = 'ns'  # overridden by the render driver
 
 HALF = 2.05          # overshoot the ±2.0 frame edge so neighbours meet cleanly
@@ -86,6 +95,16 @@ EW_SEGMENTS = 18
 # the brace direction. Poles braced due north or south have no horizontal
 # component, so they default to the left rather than collapsing onto the
 # trunk and vanishing.
+# A crossing tile is carried by two poles standing clear of the carriageway
+# rather than one planted in it, so its span structure differs from every
+# other tile: peak at EACH pole, a shallow trough over the road between them,
+# and the usual trough at the tile edges so neighbours still meet.
+# POLE_OFF must match the stylizer's CROSSING_SHIFT (52 px / 40 px per unit).
+POLE_OFF = 1.30
+# Sag scales with span squared. The span between the two poles is 2*POLE_OFF
+# against a normal 4.0 between tile centres, so it sags (2.6/4)^2 as much.
+MID_SAG_RATIO = 0.42
+
 GUY_REACH = 1.05
 GUY_BASE_Y = -0.95     # the pole's foot on screen, from pole.py's framing
 GUY_ANCHOR = 0.14      # stub at the ground end, so the guy reads as tied down
@@ -121,6 +140,35 @@ def _sag_y(anchor, sag, x):
     return anchor - sag * (1.0 - (1.0 - t) ** 2)
 
 
+def _span_y(peak_y, drop, x, x_peak, x_trough):
+    """Height within one span: steepest at the tie, flat at the low point."""
+    denom = abs(x_trough - x_peak)
+    t = min(1.0, abs(x - x_peak) / denom) if denom else 1.0
+    return peak_y - drop * (1.0 - (1.0 - t) ** 2)
+
+
+def _crossing_y(anchor, sag, x):
+    """Height of an E-W wire on a crossing tile, across the whole width."""
+    ax = abs(x)
+    if ax >= POLE_OFF:
+        return _span_y(anchor, sag, ax, POLE_OFF, HALF)          # pole -> tile edge
+    return _span_y(anchor, sag * MID_SAG_RATIO, ax, POLE_OFF, 0.0)  # pole -> over the road
+
+
+def _ew_crossing(mats):
+    """E-W wires carried by two poles either side of the carriageway."""
+    segments = EW_SEGMENTS * 2
+    for anchor, sag in EW_WIRES:
+        for i in range(segments):
+            x0 = -HALF + 2 * HALF * i / segments
+            x1 = -HALF + 2 * HALF * (i + 1) / segments
+            y0, y1 = _crossing_y(anchor, sag, x0), _crossing_y(anchor, sag, x1)
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+            span = math.hypot(x1 - x0, y1 - y0)
+            box(mats, 'wire', (cx, cy, WIRE_Z), (span + 0.02, WIRE_W, 0.04),
+                (0, 0, math.atan2(y1 - y0, x1 - x0)))
+
+
 def _ew_leg(mats, sign_x):
     """Sagging wires from the arm out to the east or west edge."""
     for anchor, sag in EW_WIRES:
@@ -149,6 +197,14 @@ def _guy(mats, lateral):
 def build(mats):
     edges = VARIANTS[VARIANT]
 
+    # N-S wires are straight verticals, so moving the poles apart changes
+    # nothing about them; only the E-W span structure has to be rebuilt.
+    if VARIANT == 'crossing-ew':
+        _ew_crossing(mats)
+        return
+
+    # 'isolated' has no edges: no wires, and no guy either — nothing is
+    # pulling on the pole. The tile is just the composited billboard.
     for edge in edges:
         if edge == 'n':
             _ns_leg(mats, 1)

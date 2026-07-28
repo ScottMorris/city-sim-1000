@@ -40,8 +40,12 @@ const PACK = [
   // Transparent twins the renderer composites over road/rail/zone tiles.
   ...ROAD_VARIANTS.map((v) => [`power-${v}`, `power/power-line-${v}-overlay.png`, 'overlay']),
   // Two-pole twins, for a line crossing a road/rail rather than running in it.
-  ['power-ns', 'power/power-line-ns-crossing.png', 'crossing'],
-  ['power-ew', 'power/power-line-ew-crossing.png', 'crossing'],
+  // Their own scenes: the E-W spans are rebuilt to peak at the two poles.
+  ['power-crossing-ns', 'power/power-line-ns-crossing.png', 'overlay'],
+  ['power-crossing-ew', 'power/power-line-ew-crossing.png', 'overlay'],
+  // A pole with nothing attached, instead of a 4-way cross wired to nothing.
+  ['power-isolated', 'power/power-line-isolated.png'],
+  ['power-isolated', 'power/power-line-isolated-overlay.png', 'overlay'],
   ['house', 'buildings/res-house-5.png'],
   ['house2', 'buildings/res-house-6.png'],
   ['house3', 'buildings/res-house-7.png'],
@@ -61,7 +65,7 @@ const PACK = [
 const manifest = { profile: PROFILE, tileSize: 160, sprites: {} };
 let missing = 0;
 for (const [scene, dest, kind] of PACK) {
-  const suffix = kind === 'overlay' ? '-overlay' : kind === 'crossing' ? '-crossing' : '';
+  const suffix = kind === 'overlay' ? '-overlay' : '';
   const src = path.join(OUT, `look-${scene}-${PROFILE}${suffix}.png`);
   const destPath = path.join(DIST, dest);
   try {

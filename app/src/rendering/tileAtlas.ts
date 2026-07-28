@@ -31,6 +31,9 @@ export interface TileTextures {
   /** Two-pole twins: a line crossing a carriageway is carried by poles either
    *  side of it, not by one planted in the middle. */
   powerLineCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
+  /** A pole with nothing attached, for a tile with no wire neighbours. */
+  powerLineIsolated?: PIXI.Texture;
+  powerLineIsolatedOverlay?: PIXI.Texture;
   residentialHouses: PIXI.Texture[];
   commercialBuildings: PIXI.Texture[];
   commercialGeminiBuildings: PIXI.Texture[];
@@ -174,6 +177,9 @@ const powerLineCrossingTexturePaths = {
   ew: assetPath('assets/tiles/power/power-line-ew-crossing.png')
 } as const;
 
+const powerLineIsolatedPath = assetPath('assets/tiles/power/power-line-isolated.png');
+const powerLineIsolatedOverlayPath = assetPath('assets/tiles/power/power-line-isolated-overlay.png');
+
 const schoolTexturePaths = {
   elementary: assetPath('assets/tiles/buildings/school-elementary.png'),
   high:       assetPath('assets/tiles/buildings/school-high.png')
@@ -246,6 +252,11 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
+  const [powerLineIsolated, powerLineIsolatedOverlay] = await Promise.all([
+    PIXI.Assets.load<PIXI.Texture>(powerLineIsolatedPath),
+    PIXI.Assets.load<PIXI.Texture>(powerLineIsolatedOverlayPath)
+  ]);
+
   const residentialHouses = await Promise.all(
     residentialHouseTexturePaths.map(async (path) => PIXI.Assets.load<PIXI.Texture>(path))
   );
@@ -292,6 +303,8 @@ export async function loadTileTextures(): Promise<TileTextures> {
     powerLine:              Object.fromEntries(powerLineEntries),
     powerLineOverlay:       Object.fromEntries(powerLineOverlayEntries),
     powerLineCrossing:      Object.fromEntries(powerLineCrossingEntries),
+    powerLineIsolated,
+    powerLineIsolatedOverlay,
     residentialHouses,
     commercialBuildings,
     commercialGeminiBuildings,

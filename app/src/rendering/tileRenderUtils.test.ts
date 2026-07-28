@@ -35,6 +35,8 @@ function makeTextures(): TileTextures {
       cross: tex('ovl-cross'), 'end-n': tex('ovl-end-n')
     },
     powerLineCrossing: { ns: tex('xing-ns'), ew: tex('xing-ew') },
+    powerLineIsolated: tex('iso'),
+    powerLineIsolatedOverlay: tex('iso-ovl'),
     residentialHouses: [tex('res-1')],
     commercialBuildings: [],
     commercialGeminiBuildings: [],
@@ -268,5 +270,36 @@ describe('hydro crossing poles', () => {
     for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.PowerLine);
     for (const t of [[1, 4], [2, 4], [3, 4]]) getTile(state, t[0], t[1])!.roadUnderlay = true;
     expect(overlayName(state, 2, 4, textures)).toBe('ovl-ew');
+  });
+});
+
+describe('isolated hydro pole', () => {
+  it('draws a lone pole rather than a 4-way cross wired to nothing', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 3, 3, TileKind.PowerLine);
+    expect(spriteName(state, 3, 3, textures)).toBe('iso');
+  });
+
+  it('is not used once the line has a neighbour', () => {
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    setTile(state, 3, 3, TileKind.PowerLine);
+    setTile(state, 3, 2, TileKind.PowerLine);
+    expect(spriteName(state, 3, 3, textures)).toBe('power-end-n');
+  });
+});
+
+describe('crossing selection by axis', () => {
+  it('uses two poles even where the road beneath is a T-junction', () => {
+    // The old rule matched exact variant names, so a junction fell back to a
+    // single pole in the carriageway while the stretch either side got two.
+    const state = createInitialState(8, 8);
+    const textures = makeTextures();
+    for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
+    setTile(state, 2, 5, TileKind.Road);          // makes it a T
+    for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.PowerLine);
+    getTile(state, 2, 4)!.roadUnderlay = true;
+    expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
   });
 });
