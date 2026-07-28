@@ -1,0 +1,9 @@
+{
+  "name": "city-sim-studio",
+  "private": true,
+  "type": "module",
+  "description": "3D-to-sprite asset pipeline prototypes for City Sim 1000",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.83"
+  }
+}
