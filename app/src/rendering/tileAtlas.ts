@@ -106,7 +106,11 @@ const residentialHouseTexturePaths = [
   assetPath('assets/tiles/buildings/res-house-1.png'),
   assetPath('assets/tiles/buildings/res-house-2.png'),
   assetPath('assets/tiles/buildings/res-house-3.png'),
-  assetPath('assets/tiles/buildings/res-house-4.png')
+  assetPath('assets/tiles/buildings/res-house-4.png'),
+  // Asset Studio (rich-pixel-48) houses — studio/scenes/house.py, house2.py, house3.py.
+  assetPath('assets/tiles/buildings/res-house-5.png'),
+  assetPath('assets/tiles/buildings/res-house-6.png'),
+  assetPath('assets/tiles/buildings/res-house-7.png')
 ];
 
 const commercialBuildingTexturePaths = [

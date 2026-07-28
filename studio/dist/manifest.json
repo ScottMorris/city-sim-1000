@@ -103,6 +103,15 @@
     },
     "power/power-line-horizontal.png": {
       "scene": "power-ew"
+    },
+    "buildings/res-house-5.png": {
+      "scene": "house"
+    },
+    "buildings/res-house-6.png": {
+      "scene": "house2"
+    },
+    "buildings/res-house-7.png": {
+      "scene": "house3"
     }
   }
 }
