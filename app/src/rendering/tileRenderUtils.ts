@@ -87,6 +87,23 @@ export function resolveTileSprite(
   return overlayTexture ? { ...base, overlayTexture } : base;
 }
 
+/** Is there a road or rail on this tile, however it came to be recorded?
+ *
+ *  ORDER MUST NOT MATTER, and testing only the underlay flags meant it did.
+ *  String a line and then lay a road across it and the tile's *kind* becomes
+ *  the road, with the line reduced to a `powerOverlay` flag — the exact mirror
+ *  of laying the road first, which leaves kind `PowerLine` and a
+ *  `roadUnderlay` flag. Reading only the flags saw a carriageway in the second
+ *  case and nothing in the first, so the pole went back to standing in the
+ *  middle of the road. Neighbour detection already worked both ways; only the
+ *  tile's own test did not. */
+function carriagewayBeneath(tile: NonNullable<ReturnType<typeof getTile>>) {
+  return {
+    road: tile.roadUnderlay === true || tile.kind === TileKind.Road,
+    rail: tile.railUnderlay === true || tile.kind === TileKind.Rail
+  };
+}
+
 /** Which carriageway situation a tile presents to the line above it, or
  *  undefined if there is nothing beneath. Road and rail are the same problem
  *  — both are full-width and neither wants a pole in it — so they're merged
@@ -97,12 +114,13 @@ function carriagewayClass(
   x: number,
   y: number
 ): CarriagewayClass | undefined {
-  if (!tile.roadUnderlay && !tile.railUnderlay) return undefined;
+  const { road, rail } = carriagewayBeneath(tile);
+  if (!road && !rail) return undefined;
   let ns = false;
   let ew = false;
   for (const flags of [
-    tile.roadUnderlay ? roadNeighbourFlags(state, x, y) : undefined,
-    tile.railUnderlay ? railNeighbourFlags(state, x, y) : undefined
+    road ? roadNeighbourFlags(state, x, y) : undefined,
+    rail ? railNeighbourFlags(state, x, y) : undefined
   ]) {
     if (!flags) continue;
     const [bn, be, bs, bw] = flags;
@@ -151,7 +169,8 @@ function pickHydroCrossingTexture(
   y: number,
   tileTextures: TileTextures
 ): Texture | undefined {
-  if (!tile.roadUnderlay && !tile.railUnderlay) return undefined;
+  const { road, rail } = carriagewayBeneath(tile);
+  if (!road && !rail) return undefined;
   const hydro = hydroVariant(state, x, y);
   if (hydro !== 'ns' && hydro !== 'ew') return undefined;
   // Test the AXIS of what's beneath, not its exact variant. Matching variant
@@ -164,8 +183,8 @@ function pickHydroCrossingTexture(
   // so a line squarely crossing one runs along the other; picking rail and
   // ignoring the road planted a pole in the roadway at every such tile.
   const crossesBeneath =
-    (tile.railUnderlay ? crossesAxis(hydro, railNeighbourFlags(state, x, y)) : false) ||
-    (tile.roadUnderlay ? crossesAxis(hydro, roadNeighbourFlags(state, x, y)) : false);
+    (rail ? crossesAxis(hydro, railNeighbourFlags(state, x, y)) : false) ||
+    (road ? crossesAxis(hydro, roadNeighbourFlags(state, x, y)) : false);
   return crossesBeneath ? tileTextures.powerLineCrossing[hydro] : undefined;
 }
 

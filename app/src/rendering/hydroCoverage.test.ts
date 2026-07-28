@@ -3,12 +3,15 @@
 // Every hydro tile is the product of two independent things:
 //
 //   1. its own wire connectivity (16 cases: the 15 road-style variants plus
-//      `isolated`, a pole with nothing attached), and
+//      `isolated`, a pole with nothing attached),
 //   2. what it was laid over (open ground, a road, a rail, or a level
-//      crossing — each with its own axis).
+//      crossing — each with its own axis), and
+//   3. WHICH OF THE TWO WAS LAID SECOND, because that decides whether the sim
+//      recorded the tile as a line over a road or a road over a line. The same
+//      picture, two different tiles.
 //
-// That product is 128 cases, and eyeballing screenshots has repeatedly missed
-// whole families of them. This file enumerates the lot, resolves each one
+// That product is 240 cases, and eyeballing screenshots has repeatedly missed
+// whole families of them — including, twice, the whole of (3). This file enumerates the lot, resolves each one
 // through the real renderer path, and classifies the outcome so a gap is a
 // failing assertion instead of something noticed later in a screenshot.
 //
@@ -109,12 +112,28 @@ function makeTextures(): TileTextures {
 const emptyLookup: BuildingLookup = new Map();
 const CX = 3, CY = 3;
 
+/** Which of the two was laid second, and therefore owns the tile's `kind`.
+ *
+ *  THE SAME PHYSICAL TILE HAS TWO RECORDINGS. Lay the road first and the line
+ *  over it: kind `PowerLine`, `roadUnderlay` set. Lay the line first and the
+ *  road over it: kind `Road`, the line reduced to `powerOverlay`. The renderer
+ *  originally only understood the first, so the second put a pole back in the
+ *  middle of the road — and this matrix missed it entirely because it only
+ *  ever built tiles one way round.
+ *
+ *  Under current sim rules a road replaces the line outright, so the second
+ *  recording now only arrives from saves written before that fix. The renderer
+ *  should not depend on that: it draws what the tile says, whichever way round
+ *  the tile says it. */
+type Recording = 'line-last' | 'carriageway-last';
+const RECORDINGS: Recording[] = ['line-last', 'carriageway-last'];
+
 /** Build a 7×7 world with one hydro tile at the centre carrying `hydro`
  *  connectivity and laid over `sub`. Neighbours are given whatever kind makes
  *  the centre tile see the edges it needs — a neighbour that is both a wire
  *  and part of the substrate becomes a hydro tile with the matching underlay,
  *  exactly as the sim would record it. */
-function buildCase(hydro: HydroCase, sub: Substrate): GameState {
+function buildCase(hydro: HydroCase, sub: Substrate, rec: Recording = 'line-last'): GameState {
   const state = createInitialState(7, 7, 1);
   for (let y = 0; y < 7; y++) for (let x = 0; x < 7; x++) setTile(state, x, y, TileKind.Land);
 
@@ -122,10 +141,18 @@ function buildCase(hydro: HydroCase, sub: Substrate): GameState {
   const roadEdges = sub.road ?? [];
   const railEdges = sub.rail ?? [];
 
-  setTile(state, CX, CY, TileKind.PowerLine);
-  const centre = getTile(state, CX, CY)!;
-  if (sub.road) centre.roadUnderlay = true;
-  if (sub.rail) centre.railUnderlay = true;
+  if (rec === 'carriageway-last' && sub.cls) {
+    // The carriageway owns the kind; the line survives only as a flag.
+    setTile(state, CX, CY, sub.rail ? TileKind.Rail : TileKind.Road);
+    const laid = getTile(state, CX, CY)!;
+    if (sub.rail && sub.road) laid.roadUnderlay = true;
+    laid.powerOverlay = true;
+  } else {
+    setTile(state, CX, CY, TileKind.PowerLine);
+    const centre = getTile(state, CX, CY)!;
+    if (sub.road) centre.roadUnderlay = true;
+    if (sub.rail) centre.railUnderlay = true;
+  }
 
   for (const edge of ['n', 'e', 's', 'w'] as const) {
     const [dx, dy] = DELTA[edge];
@@ -161,7 +188,7 @@ function resolve(state: GameState, textures: TileTextures): Resolved {
  *
  *  `pole-in-lane` means the plain single-pole overlay was drawn straight onto
  *  a carriageway, i.e. the pole is standing in the traffic lane. It used to be
- *  the outcome for 103 of the 128 cases; it should now never happen. */
+ *  the outcome for 103 of the 128 recorded line-last; it should now never happen. */
 type Verdict = 'no-sprite' | 'ground' | 'two-pole' | 'kerbside' | 'pole-in-lane';
 
 function classify(sub: Substrate, r: Resolved): Verdict {
@@ -172,15 +199,23 @@ function classify(sub: Substrate, r: Resolved): Verdict {
   return r.overlay.startsWith('kerb-') ? 'kerbside' : 'pole-in-lane';
 }
 
-type Row = { hydro: HydroCase; sub: string; verdict: Verdict; base?: string; overlay?: string };
+type Row = {
+  hydro: HydroCase; sub: string; rec: Recording;
+  verdict: Verdict; base?: string; overlay?: string;
+};
 
 function sweep(): Row[] {
   const textures = makeTextures();
   const rows: Row[] = [];
   for (const hydro of HYDRO_CASES) {
     for (const sub of SUBSTRATES) {
-      const r = resolve(buildCase(hydro, sub), textures);
-      rows.push({ hydro, sub: sub.name, verdict: classify(sub, r), base: r.base, overlay: r.overlay });
+      for (const rec of RECORDINGS) {
+        // Open ground has only one recording — there is no carriageway to
+        // have been laid second.
+        if (rec === 'carriageway-last' && !sub.cls) continue;
+        const r = resolve(buildCase(hydro, sub, rec), textures);
+        rows.push({ hydro, sub: sub.name, rec, verdict: classify(sub, r), base: r.base, overlay: r.overlay });
+      }
     }
   }
   return rows;
@@ -189,8 +224,9 @@ function sweep(): Row[] {
 describe('hydro sprite coverage matrix', () => {
   const rows = sweep();
 
-  it('covers every connectivity against every substrate', () => {
-    expect(rows).toHaveLength(HYDRO_CASES.length * SUBSTRATES.length);
+  it('covers every connectivity against every substrate, both ways round', () => {
+    const withCarriageway = SUBSTRATES.filter((s) => s.cls).length;
+    expect(rows).toHaveLength(HYDRO_CASES.length * (SUBSTRATES.length + withCarriageway));
   });
 
   it('never falls through to the flat colour rect', () => {
@@ -198,12 +234,12 @@ describe('hydro sprite coverage matrix', () => {
     // coloured square, so a missing variant is a *visible* bug, not a silent
     // one. This is the assertion that caught 10 of the original 16.
     const missing = rows.filter((r) => r.verdict === 'no-sprite');
-    expect(missing.map((r) => `${r.hydro} over ${r.sub}`)).toEqual([]);
+    expect(missing.map((r) => `${r.hydro} over ${r.sub} (${r.rec})`)).toEqual([]);
   });
 
   it('carries a straight line squarely across a carriageway on two poles', () => {
     const crossings = rows.filter((r) => r.verdict === 'two-pole');
-    expect(crossings.map((r) => `${r.hydro}/${r.sub}`).sort()).toEqual([
+    expect([...new Set(crossings.map((r) => `${r.hydro}/${r.sub}`))].sort()).toEqual([
       'ew/level-xing', 'ew/rail-ns', 'ew/road-cross', 'ew/road-ns',
       'ns/level-xing', 'ns/rail-ew', 'ns/road-cross', 'ns/road-end-e', 'ns/road-ew'
     ]);
@@ -214,7 +250,7 @@ describe('hydro sprite coverage matrix', () => {
 
   it('draws the road or rail beneath, never replacing it', () => {
     for (const r of rows.filter((x) => x.sub !== 'open-ground')) {
-      expect(r.base, `${r.hydro} over ${r.sub}`).not.toMatch(/^(power|ovl)-/);
+      expect(r.base, `${r.hydro} over ${r.sub} (${r.rec})`).not.toMatch(/^(power|ovl)-/);
     }
   });
 
@@ -229,21 +265,22 @@ describe('hydro sprite coverage matrix', () => {
     // This is the whole point of the kerbside families. Every case that isn't
     // open ground and isn't a square crossing has to move the pole out of the
     // traffic lane; anything left here is a sprite that wasn't built.
+    // It must not depend on which of the two was laid second, either.
     const inLane = rows.filter((r) => r.verdict === 'pole-in-lane');
-    expect(inLane.map((r) => `${r.hydro} over ${r.sub}`)).toEqual([]);
+    expect(inLane.map((r) => `${r.hydro} over ${r.sub} (${r.rec})`)).toEqual([]);
   });
 
   it('picks the kerbside twin matching the carriageway situation', () => {
     for (const r of rows.filter((x) => x.verdict === 'kerbside')) {
       const sub = SUBSTRATES.find((s) => s.name === r.sub)!;
-      expect(r.overlay, `${r.hydro} over ${r.sub}`).toBe(`kerb-${sub.cls}-${r.hydro}`);
+      expect(r.overlay, `${r.hydro} over ${r.sub} (${r.rec})`).toBe(`kerb-${sub.cls}-${r.hydro}`);
     }
   });
 
   it('leaves nothing but crossings and open ground outside the kerbside set', () => {
     const counts = rows.reduce<Record<string, number>>(
       (acc, r) => ({ ...acc, [r.verdict]: (acc[r.verdict] ?? 0) + 1 }), {});
-    expect(counts).toEqual({ ground: 16, 'two-pole': 9, kerbside: 103 });
+    expect(counts).toEqual({ ground: 16, 'two-pole': 18, kerbside: 206 });
   });
 
   it('prints the matrix', () => {
