@@ -57,9 +57,11 @@ const ROLES = [
   { name: 'rail', id: [0, 128, 0], colour: '#9aa0ac' },
   { name: 'tie', id: [128, 64, 0], colour: '#6b4a2a' },
   { name: 'ballast', id: [64, 0, 128], colour: '#8d857a' },
-  { name: 'asphalt', id: [0, 0, 64], colour: '#3d4038' },
-  { name: 'kerb', id: [64, 0, 0], colour: '#23261f' },
-  { name: 'marking', id: [192, 192, 192], colour: '#d8d2c0' },
+  // Asphalt/marking measured from the existing road-ns.png (dark teal-grey
+  // black-top, warm bone dashes) — the current road set is the liked target.
+  { name: 'asphalt', id: [0, 0, 64], colour: '#323f3e' },
+  { name: 'kerb', id: [64, 0, 0], colour: '#20241f' },
+  { name: 'marking', id: [192, 192, 192], colour: '#cec0b4' },
   { name: 'wire', id: [0, 192, 192], colour: '#20231f' },
 ];
 
@@ -482,6 +484,9 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
           const above = cellRole[(cy - 1) * N + cx];
           if (above !== r && !ink[(cy - 1) * N + cx]) band = 2;
         }
+        // Wires are drawn flat — light-banding them made NS and EW powerlines
+        // render different shades of the same wire.
+        if (roleDef.name === 'wire') band = 1;
         // Grid-native window fittings: a stamped 1-cell sash cross at the
         // window's centre row/column, and a glint in the top-left pane.
         let sash = false;
@@ -527,7 +532,7 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
             stamped = true;
           } else if (roleDef.name === 'asphalt') {
             // Asphalt mottle, matching the existing road sprites' texture.
-            colour = jitterColour(colour, `${profile.name}:a:${cx}:${cy}`, 0.05);
+            colour = jitterColour(colour, `${profile.name}:a:${cx}:${cy}`, 0.06);
             stamped = true;
           } else if (roleDef.name === 'awning' && (cx & 3) < 2) {
             // Awning stripes: alternating screen-column bands, stamped on the
@@ -603,7 +608,10 @@ async function main() {
       imageData(path.join(dir, 'height.png')),
     ]);
     const oMaps = buildMaps(s2, a2, i2, h2);
-    overlay = { maps: oMaps, crop: contentCrop(oMaps), palette: SCENE_STYLES[STYLE.overlay]?.palette ?? {} };
+    // Full-frame mapping (not content-crop): the overlay then shares the
+    // ground tile's 1:1 world scale, so pole crossarm tips land exactly on
+    // the wire lines instead of overshooting at a magnified scale.
+    overlay = { maps: oMaps, crop: { x: 0, y: 0, side: oMaps.w }, palette: SCENE_STYLES[STYLE.overlay]?.palette ?? {} };
   }
 
   const withPalette = (palette, fn) => {
@@ -626,7 +634,7 @@ async function main() {
     const canvas = renderProfile(profile, maps, crop, grassAt);
     if (overlay) {
       const ov = withPalette(overlay.palette, () =>
-        renderProfile(profile, overlay.maps, overlay.crop, grassAt, { transparent: true, building: true }));
+        renderProfile(profile, overlay.maps, overlay.crop, grassAt, { transparent: true }));
       canvas.getContext('2d').drawImage(ov, 0, 0);
     }
     const file = path.join(OUT_DIR, `look-${SCENE}-${profile.name}.png`);

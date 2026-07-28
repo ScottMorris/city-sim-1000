@@ -224,9 +224,19 @@ def run(scene_name, scene_module):
         set_emission(mat, ROLES[role]['albedo'])
     render(f'{out_dir}/albedo.png')
 
+    # ID colours are defined as sRGB bytes; emission values are linear and the
+    # PNG encoder applies the sRGB transfer curve on save. Emitting the
+    # linear-decoded value makes the saved byte exactly equal the defined ID
+    # byte, so the stylizer's nearest-match is exact. (Emitting byte/255
+    # directly shifted mid-range channels — 64, 128 — enough to misclassify
+    # roles: asphalt matched ballast, kerb matched tie.)
+    def srgb_to_linear(b):
+        c = b / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
     for mat, role in registry:
         r, g, b = ROLES[role]['id']
-        set_emission(mat, (r / 255, g / 255, b / 255))
+        set_emission(mat, (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b)))
     render(f'{out_dir}/id.png')
 
     for mat, role in registry:

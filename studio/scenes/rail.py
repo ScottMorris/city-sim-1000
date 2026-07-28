@@ -23,7 +23,9 @@ TOP_DOWN = True
 ROTATION_DEG = 0
 
 GAUGE = 0.28         # rail offset from the path centreline
-TIE_SPACING = 0.4    # divides the 2.0-unit half-tile evenly -> seamless joins
+TIE_SPACING = 0.5    # divides the 2.0-unit half-tile evenly -> seamless joins;
+                     # wider than real-world proportion so ties render with
+                     # clear gaps between them at the 48-cell art grid
 BALLAST_W = 1.1
 
 VARIANTS = CONNECTIVITY_VARIANTS
@@ -39,7 +41,7 @@ def _lay_track(mats, points):
     # Ties: perpendicular sleepers at fixed world spacing (phase 0.2 so the
     # gap across a tile edge equals the in-tile spacing -> seamless).
     total = arc_length_to(points, len(points) - 1)
-    s = 0.2
+    s = TIE_SPACING / 2   # edge gap equals the in-tile gap -> seamless joins
     while s < total:
         idx = index_at_length(points, s)
         x, y = points[idx]
