@@ -14,7 +14,7 @@ ROTATION_DEG = 0
 VARIANTS = {'ns': None, 'ew': None}
 VARIANT = 'ns'
 
-GAUGE = 0.28
+GAUGE = 0.46   # must match rail.py's track gauge
 DASH_LEN = 0.4
 
 
@@ -31,12 +31,13 @@ def build(mats):
         scale = (0.69, 0.375, 0.04) if rail_ns else (0.375, 0.69, 0.04)
         box(mats, 'marking', loc, scale)
 
-    # Wooden planking strip carrying the rails across the road.
-    plank_scale = (1.0, 4.1, 0.05) if rail_ns else (4.1, 1.0, 0.05)
+    # Wooden planking strip carrying the rails across the road (matches the
+    # rail tiles' widened bed).
+    plank_scale = (1.9, 4.1, 0.05) if rail_ns else (4.1, 1.9, 0.05)
     box(mats, 'tie', (0, 0, 0.055), plank_scale)
 
     # The rails themselves, embedded in the planking.
     for side in (1, -1):
         loc = (GAUGE * side, 0, 0.095) if rail_ns else (0, GAUGE * side, 0.095)
-        scale = (0.10, 4.1, 0.06) if rail_ns else (4.1, 0.10, 0.06)
+        scale = (0.14, 4.1, 0.06) if rail_ns else (4.1, 0.14, 0.06)
         box(mats, 'rail', loc, scale)

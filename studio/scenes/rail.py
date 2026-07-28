@@ -22,11 +22,14 @@ from scenes.trackpath import (
 TOP_DOWN = True
 ROTATION_DEG = 0
 
-GAUGE = 0.28         # rail offset from the path centreline
+# Track cross-section sized against the road tiles (which fill their tile
+# edge-to-edge): the bed spans ~48% of the tile so rail reads as real
+# infrastructure beside a road, not a garden path.
+GAUGE = 0.46         # rail offset from the path centreline
 TIE_SPACING = 0.5    # divides the 2.0-unit half-tile evenly -> seamless joins;
                      # wider than real-world proportion so ties render with
                      # clear gaps between them at the 48-cell art grid
-BALLAST_W = 1.1
+BALLAST_W = 1.9
 
 VARIANTS = CONNECTIVITY_VARIANTS
 VARIANT = 'ns'  # overridden by the render driver
@@ -45,7 +48,7 @@ def _lay_track(mats, points):
     while s < total:
         idx = index_at_length(points, s)
         x, y = points[idx]
-        box(mats, 'tie', (x, y, 0.10), (0.16, 0.95, 0.05), (0, 0, tangent_at(points, idx)))
+        box(mats, 'tie', (x, y, 0.10), (0.20, 1.55, 0.05), (0, 0, tangent_at(points, idx)))
         s += TIE_SPACING
 
     # Rails: short segments at ±GAUGE, following the path tangent.
@@ -56,7 +59,7 @@ def _lay_track(mats, points):
         for side in (1, -1):
             box(mats, 'rail',
                 (x + nx * GAUGE * side, y + ny * GAUGE * side, 0.165),
-                (0.20, 0.10, 0.08), (0, 0, ang))
+                (0.20, 0.14, 0.08), (0, 0, ang))
 
 
 def build(mats):
@@ -75,4 +78,4 @@ def build(mats):
         edge = next(iter(edges))
         dx, dy = EDGE_POINTS[edge]
         ang = math.atan2(dy, dx)
-        box(mats, 'tie', (dx * 0.15, dy * 0.15, 0.12), (0.14, 0.75, 0.24), (0, 0, ang))
+        box(mats, 'tie', (dx * 0.15, dy * 0.15, 0.12), (0.16, 1.25, 0.26), (0, 0, ang))
