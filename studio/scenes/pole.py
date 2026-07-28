@@ -42,5 +42,12 @@ def build(mats):
     box(mats, 'tie', (0, 0, 2.0), (1.15, 0.14, 0.11), (0, 0, math.radians(135)))
     # Transformer can on the pole, well below the arm so it stays clear of
     # the wire bundle (grey).
+    #
+    # Shortened rather than narrowed. It read as a lot of transformer for a
+    # distribution pole, but the bulk was vertical: at 0.32 tall it ran nearly
+    # a third of the visible trunk. Slimming it to 0.11 instead put it at ~1.3
+    # art cells wide, under the 2-3 cells a part needs to hold its own colour,
+    # so the majority vote swallowed the grey and left an anonymous dark blob.
+    # Width carries legibility here; height carried the dominance.
     stub = 0.20
-    box(mats, 'step', (stub * 0.707, -stub * 0.707, 1.30), (0.14, 0.14, 0.32))
+    box(mats, 'step', (stub * 0.707, -stub * 0.707, 1.30), (0.14, 0.14, 0.22))

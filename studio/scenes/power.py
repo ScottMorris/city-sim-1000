@@ -50,9 +50,12 @@ HALF = 2.05          # overshoot the ±2.0 frame edge so neighbours meet cleanly
 WIRE_W = 0.09        # 1 art cell; anything thinner shreds when downsampled
 WIRE_Z = 0.06
 
-# Measured from pole.py's billboard once composited: the crossarm bar sits
-# ~31 px above tile centre (0.78 world) and its tips are at ±0.53.
-CROSSARM_Y = 0.78
+# Measured off the composited sprite, not estimated: the crossarm bar occupies
+# rows 43-49 of the 160 px tile, i.e. centred at 0.85 world with its underside
+# at 0.775, and its tips are at ±0.53. (An earlier estimate of 0.78 was the
+# bar's *underside* mistaken for its centre, which dragged every wire anchor
+# ~3 px low and left a visible gap between the wires and the arm.)
+CROSSARM_Y = 0.85
 GAUGE = 0.53
 
 # (anchor height at the arm, drop at the tile edge) for the two E-W wires.
@@ -68,7 +71,7 @@ GAUGE = 0.53
 # because their sag was shallow enough to hide it; at the exaggerated sag
 # this art wants, it is glaring. Peak at the tie, sag to the span's midpoint
 # — which is the tile edge, since poles stand at tile centres.
-EW_WIRES = ((0.76, 0.32), (0.62, 0.48))
+EW_WIRES = ((0.84, 0.34), (0.70, 0.50))
 EW_SEGMENTS = 18
 
 # Guys are drawn in SCREEN space, not plan space, and this is the one place
