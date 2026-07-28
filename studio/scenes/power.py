@@ -99,18 +99,33 @@ def _ns_leg(mats, sign_y):
         box(mats, 'wire', (side * GAUGE, mid, WIRE_Z), (WIRE_W, length, 0.04))
 
 
-def _ew_leg(mats, sign_x):
-    """Sagging wires from the arm out to the east or west edge.
+def _sag_y(anchor, sag, x):
+    """Height of a hanging span at horizontal distance x from the pole.
 
-    Segmented along X and displaced in screen-Y by a parabola: flat at the
-    pole, deepest at the tile edge.
+    THE VERTEX BELONGS AT THE TILE EDGE, NOT AT THE POLE. A cable is steepest
+    where it is tied — tension hauls it up to the crossarm — and flattest at
+    its lowest point, which is midspan, which is the tile edge because poles
+    stand at tile centres.
+
+    Getting this backwards (vertex at the pole) still descends, so it reads as
+    "sagging" at a glance, but it puts the flat part at the arm and the steep
+    part at the seam: a smooth hump over every pole and a sharp V-kink at
+    every tile boundary. Because the correct curve has zero slope at the edge,
+    two neighbouring tiles meet tangentially and a run reads as one continuous
+    wave — peak at each pole, trough at each seam — instead of scalloped arcs.
     """
+    t = min(1.0, abs(x) / HALF)
+    return anchor - sag * (1.0 - (1.0 - t) ** 2)
+
+
+def _ew_leg(mats, sign_x):
+    """Sagging wires from the arm out to the east or west edge."""
     for anchor, sag in EW_WIRES:
         for i in range(EW_SEGMENTS):
             x0 = sign_x * HALF * i / EW_SEGMENTS
             x1 = sign_x * HALF * (i + 1) / EW_SEGMENTS
-            y0 = anchor - sag * (x0 / 2.0) ** 2
-            y1 = anchor - sag * (x1 / 2.0) ** 2
+            y0 = _sag_y(anchor, sag, x0)
+            y1 = _sag_y(anchor, sag, x1)
             cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
             span = math.hypot(x1 - x0, y1 - y0)
             box(mats, 'wire', (cx, cy, WIRE_Z), (span + 0.02, WIRE_W, 0.04),
