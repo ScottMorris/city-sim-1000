@@ -7,8 +7,6 @@
 
 import math
 
-import bpy
-
 from studiolib import box, face_box
 
 WALL_W, WALL_D, WALL_H = 2.3, 1.8, 1.6

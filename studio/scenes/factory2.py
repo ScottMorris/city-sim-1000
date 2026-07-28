@@ -6,8 +6,6 @@
 # (c) Copyright 2026 Liminal HQ, Scott Morris
 # SPDX-License-Identifier: MIT
 
-import bpy
-
 from studiolib import box, face_box
 
 WALL_W, WALL_D, WALL_H = 2.5, 1.9, 1.1
@@ -60,4 +58,4 @@ def build(mats):
 
     # Loading apron.
     box(mats, 'step', (fx + 0.1, door_y, 0.025), (0.16, DOOR_W + 0.1, 0.05))
-    box(mats, 'walkway', (fx + 0.45, win_y, 0.008), (0.75, WIN_W * 0.7, 0.016))
+    box(mats, 'walkway', (fx + 0.45, door_y, 0.008), (0.75, DOOR_W * 0.7, 0.016))

@@ -136,6 +136,15 @@
     },
     "buildings/ind-factory-5.png": {
       "scene": "factory3"
+    },
+    "buildings/office-1.png": {
+      "scene": "office1"
+    },
+    "buildings/office-2.png": {
+      "scene": "office2"
+    },
+    "buildings/office-3.png": {
+      "scene": "office3"
     }
   }
 }
