@@ -9,13 +9,17 @@ import bpy
 
 from studiolib import box, face_box
 
-WALL_W, WALL_D, WALL_H = 1.7, 1.5, 1.35
-ROOF_H = 0.95
+# Height budget: ridge sits at WALL_H + ROOF_H and the chimney stacks on top
+# of that, so the ridge has to leave room for it — the whole stack must stay
+# under studiolib's Z_MAX (2.6), which the height pass normalizes over.
+# 1.20 + 0.80 ridge + a 0.38 chimney tops out at 2.30, in line with house.py.
+WALL_W, WALL_D, WALL_H = 1.7, 1.5, 1.20
+ROOF_H = 0.80
 ROOF_OVERHANG_EAVE = 0.075
 ROOF_OVERHANG_RAKE = 0.14
 WIN_W, WIN_H = 0.36, 0.38
 DOOR_W, DOOR_H = 0.38, 0.6
-CHIM_SIZE, CHIM_H = 0.24, 0.85
+CHIM_SIZE, CHIM_H = 0.24, 0.38
 
 ROTATION_DEG = 75
 FOCUS_Z = (WALL_H + ROOF_H) * 0.46

@@ -5,14 +5,15 @@
 # (c) Copyright 2026 Liminal HQ, Scott Morris
 # SPDX-License-Identifier: MIT
 
-import bpy
-
 from studiolib import box, face_box
 
 WALL_W, WALL_D, WALL_H = 2.4, 1.8, 1.3
 ROOF_INSET = 0.10
 ROOF_DROP = 0.08
-DOOR_W, DOOR_H = 0.9, 0.85
+# Door height is capped so its trim clears the clerestory row above it: the
+# window trim starts at 0.83, and a 0.68 door tops out at 0.73, leaving a
+# 1-cell wall band between them. A taller door merges the two outlines.
+DOOR_W, DOOR_H = 0.9, 0.68
 WIN_W, WIN_H = 0.26, 0.24
 CHIM_SIZE, CHIM_H = 0.32, 1.0
 

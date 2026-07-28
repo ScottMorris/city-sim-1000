@@ -23,17 +23,27 @@ const SCENE = process.argv[2] ?? 'house';
 const PASS_DIR = path.join(ROOT, 'studio/out/passes', SCENE);
 const OUT_DIR = path.join(ROOT, 'studio/out');
 const GRASS_PNG = path.join(ROOT, 'app/public/assets/tiles/terrain/grass.png');
+// The contact sheet's "reference (current game)" panel. Entries must name a
+// sprite that predates the studio — pointing one at studio output would both
+// mislabel the panel and make stylize.mjs depend on its own pack step having
+// already run (loadImage throws if the file is absent).
 const REFS = {
   house: 'buildings/res-house-2.png',
+  house2: 'buildings/res-house-2.png',
+  house3: 'buildings/res-house-2.png',
   shop: 'buildings/com-shop-1.png',
+  shop2: 'buildings/com-shop-2.png',
+  shop3: 'buildings/com-shop-3.png',
   factory: 'buildings/ind-factory-1.png',
   factory2: 'buildings/ind-factory-2.png',
   factory3: 'buildings/ind-factory-1.png',
   warehouse: 'buildings/ind-factory-2.png',
   hightech: 'buildings/ind-high-tech-1.png',
-  office1: 'buildings/ind-high-tech-2.png',
-  office2: 'buildings/ind-high-tech-2.png',
-  office3: 'buildings/ind-high-tech-2.png',
+  // No Office zone exists yet, so the legacy high-tech industrial sprite is
+  // the closest thing the game actually ships to compare against.
+  office1: 'buildings/ind-high-tech-1.png',
+  office2: 'buildings/ind-high-tech-1.png',
+  office3: 'buildings/ind-high-tech-1.png',
   rail: 'roads/road-ns.png',   // no rail sprites exist yet — roads are the neighbours to match
   road: 'roads/road-ns.png',
   crossing: 'roads/road-ns.png',
@@ -84,6 +94,7 @@ const SCENE_STYLES = {
     palette: {
       wall: '#d8c9a3',
       roof: '#3f4448',
+      chimney: '#96695a',  // muted brick — the default is a loud red beside a slate roof
       door: '#5a3520',
     },
     wallSpacing: 0.30,
@@ -94,6 +105,7 @@ const SCENE_STYLES = {
     palette: {
       wall: '#8a9878',
       roof: '#4a3226',
+      chimney: '#6b5344',  // muted brown — the default red fights the sage wall
       door: '#2c2420',
       trim: '#e8e2d0',
       mullion: '#e8e2d0',
@@ -701,11 +713,15 @@ function renderProfile(profile, maps, crop, grassAt, opts = {}) {
         if (profile.details && r === winRole) {
           const ci = winComponents.compId[cy * N + cx];
           const box = ci >= 0 ? winComponents.boxes[ci] : null;
-          if (box && box.x1 - box.x0 >= 2 && box.y1 - box.y0 >= 2) {
+          if (box) {
             const midX = Math.round((box.x0 + box.x1) / 2);
             const midY = Math.round((box.y0 + box.y1) / 2);
+            // A sash bar needs a pane at least 3 cells across to sit inside
+            // without touching the outline; the glint does not, so it stays
+            // ungated — small punch windows still catch the light.
+            const roomForSash = box.x1 - box.x0 >= 2 && box.y1 - box.y0 >= 2;
             const inset = cx > box.x0 && cx < box.x1 && cy > box.y0 && cy < box.y1;
-            if (inset && (cx === midX || cy === midY)) sash = true;
+            if (roomForSash && inset && (cx === midX || cy === midY)) sash = true;
             else if (cx < midX && cy < midY) band = 2;
           }
         }

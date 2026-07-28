@@ -84,9 +84,11 @@ def build(mats):
     # Stone step under the door.
     box(mats, 'step', (fx + 0.14, door_y, 0.035), (0.22, DOOR_W + 0.14, 0.07))
 
-    # Bush at the wall junction corner, opposite the window.
+    # Bush at the -Y wall corner. It must stay clear of the door (which sits
+    # at +Y with its step and walkway); at the +Y corner its 0.34 radius
+    # spills across the doorway and the walkway runs underneath it.
     bpy.ops.mesh.primitive_ico_sphere_add(
-        subdivisions=2, radius=0.34, location=(fx + 0.16, WALL_D / 2 + 0.05, 0.2))
+        subdivisions=2, radius=0.34, location=(fx + 0.16, -1.0, 0.2))
     bush = bpy.context.object
     bush.scale = (1.0, 1.0, 0.8)
     bush.data.materials.append(mats['bush'])

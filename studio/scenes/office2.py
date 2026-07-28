@@ -5,8 +5,6 @@
 # (c) Copyright 2026 Liminal HQ, Scott Morris
 # SPDX-License-Identifier: MIT
 
-import bpy
-
 from studiolib import box, face_box
 
 WALL_W, WALL_D, WALL_H = 2.1, 1.8, 1.6

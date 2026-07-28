@@ -129,7 +129,8 @@ const industrialBuildingTexturePaths = [
   assetPath('assets/tiles/buildings/ind-factory-1.png'),
   assetPath('assets/tiles/buildings/ind-factory-2.png'),
   assetPath('assets/tiles/buildings/ind-high-tech-1.png'),
-  // Asset Studio (rich-pixel-48) buildings — studio/scenes/factory.py, warehouse.py, hightech.py.
+  // Asset Studio (rich-pixel-48) buildings — studio/scenes/factory.py,
+  // warehouse.py, hightech.py, factory2.py, factory3.py.
   assetPath('assets/tiles/buildings/ind-factory-3.png'),
   assetPath('assets/tiles/buildings/ind-warehouse-1.png'),
   assetPath('assets/tiles/buildings/ind-high-tech-2.png'),
