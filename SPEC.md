@@ -132,7 +132,7 @@ Tiles include:
 
 * Tiles carry a `powered` flag.
 * Power sources: any building/tile with `powerPlantType` set (Hydro, Coal, Wind, Solar).
-* Network edges: `TileKind.PowerLine` tiles, Road, and Rail.
+* Network edges: any tile carrying a hydro line — whether the line owns the tile or rides it as an overlay (over a road or rail, or beneath trees or water painted on afterwards) — plus Road and Rail. If the wires are drawn, the tile conducts.
 * Connectivity: 4-directional BFS flood-fill from sources through power lines/roads/rail; reachable lines/plants are marked `powered: true`.
 * Production: `powerProduced` sums plant outputs from `BUILDING_TEMPLATES`.
 * Maintenance: per-tile upkeep plus per-plant maintenance from configs.
@@ -285,6 +285,9 @@ Bulldoze
 * Raise = height++
 * Lower = height-- (min 0)
 * Water = convert to water tile only
+* Regrading wipes the ground: a road, a rail or a zone tag on the tile is cleared by the brush, and it is cleared the same whether the road owns the tile or rides under a hydro line as an underlay.
+* Refused on a tile carrying a building — bulldoze first — because a regrade cannot remove the building behind it and would otherwise leave it running on ground that no longer holds it.
+* A hydro line overhead and a pipe below are untouched by a regrade and do not block one.
 
 #### Bulldoze
 

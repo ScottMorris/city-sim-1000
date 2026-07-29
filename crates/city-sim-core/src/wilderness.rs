@@ -5,17 +5,32 @@
 
 //! Computes the 0–100 Wilderness Score from the tile grid.
 //!
-//! Every surface tile contributes a base "eco value" from its `TileKind`.
-//! Strong nature tiles (`Tree`, `Park`) then receive neighbourhood
-//! adjustments: a patch bonus for contiguous clusters, a water-edge bonus,
-//! and a fragmentation penalty when isolated. Positive contributions sum to
-//! natural capital `P`, negative magnitudes to urban pressure `U`, and the
-//! score is `100 · P / (P + U + k)` — see `docs/features/wilderness-score.md`
-//! for the design rationale and locked decisions.
+//! Every tile contributes a base "eco value": the terrain's own credit plus
+//! **one contribution per occupant standing on it**. Strong nature tiles
+//! (`Tree`, `Park`) then receive neighbourhood adjustments: a patch bonus for
+//! contiguous clusters, a water-edge bonus, and a fragmentation penalty when
+//! isolated. Positive contributions sum to natural capital `P`, negative
+//! magnitudes to urban pressure `U`, and the score is `100 · P / (P + U + k)`
+//! — see `docs/features/wilderness-score.md` for the design rationale and
+//! locked decisions.
+//!
+//! **The base value is a Σ, not a lookup (#173).** It used to be
+//! `base_eco[tile.kind]` — one value per tile, with the structural flags never
+//! consulted — so a road carrying a hydro line scored the line's −1.0 and the
+//! road rode free. Stringing lines along your roads *raised* your wilderness
+//! score. Worse, the breakdown's `match kind` forced one category per tile, so
+//! the same tile moved its damage out of `transport` and into `power`: not
+//! merely under-counted, misattributed. Scoring runs over
+//! [`Tile::occupants`](crate::occupants) now, so a road with a line costs
+//! −2.0 + −1.0 and each half is filed on its own line.
 //!
 //! This module is Rust-first: its tests are the spec, and it is deliberately
 //! excluded from the TS parity oracle (`simulation.ts`).
 
+use crate::occupants::{
+    iter_set, occupant_category, occupant_eco, structure_category, structure_eco, EcoCategory,
+    Terrain,
+};
 use crate::state::GameState;
 use city_sim_protocol::commands::WildernessPolicy;
 use city_sim_protocol::tile_kind::TileKind;
@@ -160,6 +175,31 @@ pub struct WildernessBreakdown {
     pub civic: f32,
 }
 
+impl WildernessBreakdown {
+    /// File one eco contribution on the line its category names.
+    ///
+    /// [`EcoCategory::Neutral`] deliberately lands nowhere — buried pipes and
+    /// the reserved occupants score zero and belong on no line, which is what
+    /// the old `Water | WaterPipe => {}` arm expressed.
+    ///
+    /// `water_edge`, `patch` and `fragmentation` have no `EcoCategory`: they
+    /// are neighbourhood adjustments rather than per-occupant values, and are
+    /// still accumulated inline by `compute_wilderness`.
+    fn add(&mut self, category: EcoCategory, value: f32) {
+        match category {
+            EcoCategory::Forests => self.forests += value,
+            EcoCategory::Parks => self.parks += value,
+            EcoCategory::OpenLand => self.open_land += value,
+            EcoCategory::Zones => self.zones += value,
+            EcoCategory::Industry => self.industry += value,
+            EcoCategory::Transport => self.transport += value,
+            EcoCategory::Power => self.power += value,
+            EcoCategory::Civic => self.civic += value,
+            EcoCategory::Neutral => {}
+        }
+    }
+}
+
 /// Wilderness state stored on `GameState` — recomputed every
 /// `recompute_interval_ticks`, carried between recomputes.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -191,21 +231,18 @@ pub struct WildernessOutput {
 // Classification helpers
 // ---------------------------------------------------------------------------
 
-/// Strong nature: contributes to clusters, earns bonuses, risks fragmentation.
+/// Strong nature by `TileKind` alone — the pre-migration rule, kept as an
+/// independent oracle for the occupant model and **not** used to score.
 ///
-/// `pub(crate)` so `occupants.rs` can pin its derived answer against this rule
-/// itself rather than against a copy of the `matches!` — a copy would keep
-/// agreeing with itself while the two drifted apart.
+/// `compute_wilderness` asks [`Tile::is_strong_nature`](crate::occupants)
+/// instead, which sums over the tile's occupants and so answers for a tile
+/// whose canopy or park lives somewhere other than the `kind` slot. This
+/// `matches!` stays so `occupants.rs` can pin its derived answer against a
+/// rule written out longhand rather than against a copy of itself.
+#[cfg(test)]
 #[inline]
 pub(crate) fn is_strong_nature(kind: TileKind) -> bool {
     matches!(kind, TileKind::Tree | TileKind::Park | TileKind::ParkLarge)
-}
-
-/// Buildable tiles set the scale of the softening constant `k` so that
-/// water-heavy maps are not skewed.
-#[inline]
-fn is_buildable(kind: TileKind) -> bool {
-    kind != TileKind::Water
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +265,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
     let mut cluster_sizes: Vec<u32> = Vec::new();
     let mut stack: Vec<usize> = Vec::new();
     for start in 0..n {
-        if cluster_of[start] != usize::MAX || !is_strong_nature(state.tiles[start].kind) {
+        if cluster_of[start] != usize::MAX || !state.tiles[start].is_strong_nature() {
             continue;
         }
         let cluster_id = cluster_sizes.len();
@@ -240,7 +277,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
             let x = i % w;
             let y = i / w;
             let mut visit = |j: usize| {
-                if cluster_of[j] == usize::MAX && is_strong_nature(state.tiles[j].kind) {
+                if cluster_of[j] == usize::MAX && state.tiles[j].is_strong_nature() {
                     cluster_of[j] = cluster_id;
                     stack.push(j);
                 }
@@ -268,33 +305,45 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
     let mut buildable = 0u32;
 
     for i in 0..n {
-        let kind = state.tiles[i].kind;
-        if is_buildable(kind) {
+        let tile = &state.tiles[i];
+        // Buildable tiles set the scale of the softening constant `k` so that
+        // water-heavy maps are not skewed. `Terrain::Land` is exactly the old
+        // `kind != Water`.
+        if tile.terrain() == Terrain::Land {
             buildable += 1;
         }
-        let mut eco = t.base_eco[kind as usize];
 
-        // Accumulate the base value into its breakdown category.
-        match kind {
-            TileKind::Tree => breakdown.forests += eco,
-            TileKind::Park | TileKind::ParkLarge => breakdown.parks += eco,
-            TileKind::Land => breakdown.open_land += eco,
-            TileKind::Residential | TileKind::Commercial => breakdown.zones += eco,
-            TileKind::Industrial => breakdown.industry += eco,
-            TileKind::Road | TileKind::Rail => breakdown.transport += eco,
-            TileKind::PowerLine
-            | TileKind::HydroPlant
-            | TileKind::CoalPlant
-            | TileKind::WindTurbine
-            | TileKind::SolarFarm => breakdown.power += eco,
-            TileKind::WaterPump
-            | TileKind::WaterTower
-            | TileKind::ElementarySchool
-            | TileKind::HighSchool => breakdown.civic += eco,
-            TileKind::Water | TileKind::WaterPipe => {}
+        // Base value: the terrain's own credit, plus one contribution per
+        // occupant. This is `Tile::tile_eco` unrolled — the sum has to be
+        // taken term by term here so each term can be filed on its own
+        // breakdown line, which is the half of #173 that misattributed rather
+        // than merely under-counted.
+        let mut eco = tile.terrain_eco(t);
+        if let Some(category) = tile.terrain_category() {
+            breakdown.add(category, eco);
         }
+        for o in iter_set(tile.occupants()) {
+            // A `None` pair means the occupant tag cannot answer for itself —
+            // today only `Structure`, whose eco *and* line both come from the
+            // structure's kind (a park is +4.0 on `parks`, a coal plant −8.0
+            // on `power`).
+            let (value, category) = match (occupant_eco(o, t), occupant_category(o)) {
+                (Some(value), Some(category)) => (value, category),
+                _ => match tile.structure_kind() {
+                    Some(kind) => (structure_eco(kind, t), structure_category(kind)),
+                    None => (0.0, EcoCategory::Neutral),
+                },
+            };
+            eco += value;
+            breakdown.add(category, value);
+        }
+        debug_assert_eq!(
+            eco,
+            tile.tile_eco(t),
+            "the scoring loop must sum to Tile::tile_eco"
+        );
 
-        if is_strong_nature(kind) {
+        if tile.is_strong_nature() {
             let x = i % w;
             let y = i / w;
 
@@ -305,10 +354,11 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
             breakdown.patch += patch;
 
             // Water-edge bonus: any 4-neighbour is water.
-            let near_water = (x > 0 && state.tiles[i - 1].kind == TileKind::Water)
-                || (x + 1 < w && state.tiles[i + 1].kind == TileKind::Water)
-                || (y > 0 && state.tiles[i - w].kind == TileKind::Water)
-                || (y + 1 < h && state.tiles[i + w].kind == TileKind::Water);
+            let is_water = |j: usize| state.tiles[j].terrain() == Terrain::Water;
+            let near_water = (x > 0 && is_water(i - 1))
+                || (x + 1 < w && is_water(i + 1))
+                || (y > 0 && is_water(i - w))
+                || (y + 1 < h && is_water(i + w));
             if near_water {
                 eco += t.edge_bonus;
                 breakdown.water_edge += t.edge_bonus;
@@ -327,7 +377,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
                         && (nx as usize) < w
                         && ny >= 0
                         && (ny as usize) < h
-                        && is_strong_nature(state.tiles[ny as usize * w + nx as usize].kind)
+                        && state.tiles[ny as usize * w + nx as usize].is_strong_nature()
                     {
                         nature_neighbours += 1;
                     }
@@ -402,10 +452,10 @@ pub fn tourism_dividend(score: f32, population: u32, t: &WildernessTunables) -> 
 pub fn apply_happiness_drift(state: &mut GameState, score: f32, t: &WildernessTunables) {
     let target = 1.0 + (score - 50.0) / 50.0 * t.happiness_target_span;
     for tile in &mut state.tiles {
-        if matches!(
-            tile.kind,
-            TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-        ) {
+        // Only zoned land has residents to be happy or unhappy. Asked through
+        // the accessor rather than off `kind` so step 3 of #177 can narrow
+        // `kind` to terrain without freezing happiness city-wide.
+        if tile.zone_occupant().is_some() {
             tile.happiness += (target - tile.happiness) * t.happiness_drift_rate;
             tile.happiness = tile.happiness.clamp(0.0, 1.5);
         }
@@ -419,6 +469,9 @@ pub fn apply_happiness_drift(state: &mut GameState, score: f32, t: &WildernessTu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::apply_tool;
+    use crate::state::{FLAG_POWER_OVERLAY, FLAG_ROAD_UNDERLAY};
+    use city_sim_protocol::commands::Tool;
 
     fn grid(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -430,6 +483,23 @@ mod tests {
 
     fn score(state: &GameState) -> f32 {
         compute_wilderness(state, &WildernessTunables::default()).score
+    }
+
+    fn eco_at(state: &GameState, x: u32, y: u32) -> f32 {
+        let out = compute_wilderness(state, &WildernessTunables::default());
+        out.eco_field[state.tile_index(x, y).unwrap()]
+    }
+
+    /// Drive a row of tiles with the real tool handlers, so what is scored is
+    /// the recording `commands.rs` actually writes rather than one invented
+    /// here.
+    fn build_row(state: &mut GameState, tools: &[Tool], y: u32, len: u32) {
+        for tool in tools {
+            for x in 0..len {
+                let r = apply_tool(state, *tool, x, y);
+                assert!(r.success, "{tool:?} at ({x}, {y}) failed: {:?}", r.message);
+            }
+        }
     }
 
     // --- base weights ---
@@ -787,5 +857,199 @@ mod tests {
         // Now drifting toward 0.8 — must move down and stay in range.
         let h = s.tile_at(0, 0).unwrap().happiness;
         assert!((0.0..=1.5).contains(&h));
+    }
+
+    // --- one contribution per occupant (#173) ---
+
+    /// **The headline symptom of #173, and it must never come back.**
+    ///
+    /// Scoring read `base_eco[tile.kind]` once. A road carrying a hydro line
+    /// is recorded `kind = PowerLine` with a road underlay, so the road's
+    /// −2.0 vanished and the tile scored the line's −1.0 alone: ten roads with
+    /// lines scored *better* than ten bare roads, and the way to raise your
+    /// wilderness score was to build more infrastructure.
+    ///
+    /// Driven through `apply_tool` so it is the real recording being scored.
+    #[test]
+    fn issue_173_stringing_a_line_over_a_road_must_lower_the_score() {
+        const LEN: u32 = 10;
+
+        let mut bare = grid(16, 16);
+        build_row(&mut bare, &[Tool::Road], 8, LEN);
+        let roads_only = score(&bare);
+
+        let mut wired = grid(16, 16);
+        build_row(&mut wired, &[Tool::Road, Tool::PowerLine], 8, LEN);
+        let roads_and_lines = score(&wired);
+
+        assert!(
+            roads_and_lines < roads_only,
+            "adding a hydro line to every road must make the score WORSE, \
+             got {roads_and_lines} against {roads_only} for bare roads"
+        );
+
+        // Not merely "not better": the line costs its full −1.0 per tile, so
+        // the pressure grows by exactly `LEN`.
+        let u_of = |s: &GameState| -> f32 {
+            compute_wilderness(s, &WildernessTunables::default())
+                .eco_field
+                .iter()
+                .filter(|v| **v < 0.0)
+                .map(|v| -v)
+                .sum()
+        };
+        assert_eq!(u_of(&wired) - u_of(&bare), LEN as f32);
+
+        // Build order must not change the score: `Tool::Road` and
+        // `Tool::PowerLine` agree on one canonical recording, and the occupant
+        // set collapses the two spellings anyway.
+        let mut other_order = grid(16, 16);
+        build_row(&mut other_order, &[Tool::PowerLine, Tool::Road], 8, LEN);
+        assert_eq!(score(&other_order), roads_and_lines);
+    }
+
+    /// The other half of #173: the old breakdown `match kind` forced one
+    /// category per tile, so a road under a line moved its damage *out of*
+    /// `transport` and *into* `power`. Each occupant is filed on its own line
+    /// now.
+    #[test]
+    fn issue_173_each_occupant_is_filed_on_its_own_breakdown_line() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::Road, Tool::PowerLine], 4, 1);
+        let b = compute_wilderness(&s, &WildernessTunables::default()).breakdown;
+
+        // Before the fix: transport 0.0, power −1.0 — the road was invisible.
+        assert_eq!(b.transport, -2.0, "the road keeps its own line");
+        assert_eq!(b.power, -1.0, "the line keeps its own line");
+        // …and the tile has lost the open-land credit exactly once.
+        assert_eq!(b.open_land, 63.0, "63 of 64 tiles are still bare land");
+        assert_eq!(eco_at(&s, 0, 4), -3.0);
+    }
+
+    /// A level crossing carries two occupants and used to be billed for one.
+    #[test]
+    fn a_level_crossing_costs_both_the_road_and_the_rail() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::Rail, Tool::Road], 4, 1);
+        // Before the fix: −2.0, whichever of the two owned `kind`.
+        assert_eq!(eco_at(&s, 0, 4), -4.0);
+        let b = compute_wilderness(&s, &WildernessTunables::default()).breakdown;
+        assert_eq!(b.transport, -4.0, "both halves are transport");
+    }
+
+    /// A hydro line strung across a zone leaves the zone standing (the tile
+    /// keeps `kind = Residential` and records the line in `FLAG_POWER_OVERLAY`)
+    /// — the one spelling in which the line was completely invisible to
+    /// scoring, since no flag was ever consulted.
+    #[test]
+    fn a_line_across_a_zone_costs_the_line_as_well_as_the_zone() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::Residential, Tool::PowerLine], 4, 1);
+        let tile = s.tile_at(0, 4).unwrap();
+        assert_eq!(tile.kind, TileKind::Residential, "the zone survives");
+        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0, "…carrying the line");
+
+        // Before the fix: −1.0, all of it on `zones`.
+        assert_eq!(eco_at(&s, 0, 4), -2.0);
+        let b = compute_wilderness(&s, &WildernessTunables::default()).breakdown;
+        assert_eq!(b.zones, -1.0);
+        assert_eq!(b.power, -1.0);
+    }
+
+    /// `Tool::TerraformRaise` overwrites `kind` with `Land` and leaves the
+    /// structural flags alone, so a hydro line can end up recorded *only* in
+    /// `FLAG_POWER_OVERLAY`. That tile used to collect the +1.0 open-land
+    /// credit while still carrying — and still being billed for — a live line.
+    #[test]
+    fn a_line_recorded_only_in_a_flag_still_costs_and_forfeits_the_open_land_credit() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::PowerLine, Tool::TerraformRaise], 4, 1);
+        let tile = s.tile_at(0, 4).unwrap();
+        assert_eq!(tile.kind, TileKind::Land);
+        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0);
+
+        // Before the fix: +1.0, filed on `open_land`.
+        assert_eq!(eco_at(&s, 0, 4), -1.0);
+        let b = compute_wilderness(&s, &WildernessTunables::default()).breakdown;
+        assert_eq!(b.power, -1.0);
+        assert_eq!(b.open_land, 63.0, "the built tile forfeits its credit");
+    }
+
+    /// Trees over a hydro line: the canopy keeps its +6.0 and its strong-nature
+    /// standing (patch, water-edge and fragmentation passes all still see it),
+    /// and the conductors underneath are charged on top.
+    #[test]
+    fn a_tree_planted_over_a_line_keeps_its_nature_and_pays_for_the_line() {
+        let mut lone_tree = grid(8, 8);
+        set(&mut lone_tree, 4, 4, TileKind::Tree);
+        let plain = eco_at(&lone_tree, 4, 4);
+
+        let mut over_line = grid(8, 8);
+        build_row(&mut over_line, &[Tool::PowerLine, Tool::Tree], 4, 1);
+        let tile = over_line.tile_at(0, 4).unwrap();
+        assert_eq!(tile.kind, TileKind::Tree);
+        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0);
+
+        // Same neighbourhood adjustments (lone tree, no water, fragmented) on
+        // both grids, so the whole difference is the line's −1.0.
+        assert_eq!(eco_at(&over_line, 0, 4), plain - 1.0);
+        let b = compute_wilderness(&over_line, &WildernessTunables::default()).breakdown;
+        assert_eq!(b.forests, 6.0, "the canopy is still a forest");
+        assert_eq!(b.power, -1.0);
+        assert!(
+            b.fragmentation < 0.0,
+            "a lone tree is still strong nature, so it can still be fragmented"
+        );
+    }
+
+    /// The eco sum stays tunables-sourced, so the Green Industry programme
+    /// still reaches a zone tile that also carries a hydro line — a static
+    /// number in `OCCUPANT_DEFS` would have disabled the policy silently.
+    #[test]
+    fn green_industry_still_reaches_a_zone_that_carries_a_line() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::Industrial, Tool::PowerLine], 4, 1);
+        let tile = s.tile_at(0, 4).unwrap();
+        assert_eq!(tile.kind, TileKind::Industrial);
+        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0);
+
+        let base = WildernessTunables::default();
+        let green = base.effective(&WildernessPolicy {
+            nature_reserve: false,
+            green_industry: true,
+        });
+        let idx = s.tile_index(0, 4).unwrap();
+        // −5.0 industry + −1.0 line, softening to −2.0 + −1.0.
+        assert_eq!(compute_wilderness(&s, &base).eco_field[idx], -6.0);
+        assert_eq!(compute_wilderness(&s, &green).eco_field[idx], -3.0);
+        assert_eq!(compute_wilderness(&s, &green).breakdown.industry, -2.0);
+        assert_eq!(compute_wilderness(&s, &green).breakdown.power, -1.0);
+    }
+
+    /// The worst case the old scoring hid: road, rail and hydro line together.
+    #[test]
+    fn a_tile_carrying_road_rail_and_line_pays_for_all_three() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::Road, Tool::Rail, Tool::PowerLine], 4, 1);
+        let tile = s.tile_at(0, 4).unwrap();
+        assert_ne!(tile.flags & FLAG_ROAD_UNDERLAY, 0);
+
+        // Before the fix: −1.0 or −2.0 depending on which occupant owned `kind`.
+        assert_eq!(eco_at(&s, 0, 4), -5.0);
+        let b = compute_wilderness(&s, &WildernessTunables::default()).breakdown;
+        assert_eq!(b.transport, -4.0);
+        assert_eq!(b.power, -1.0);
+    }
+
+    /// A buried pipe is invisible to the score, and leaves the surface free to
+    /// keep its open-land credit — `WaterPipe` scores 0.0 and files on no line.
+    #[test]
+    fn a_buried_pipe_changes_nothing() {
+        let mut s = grid(8, 8);
+        let before = compute_wilderness(&s, &WildernessTunables::default());
+        build_row(&mut s, &[Tool::WaterPipe], 4, 8);
+        let after = compute_wilderness(&s, &WildernessTunables::default());
+        assert_eq!(after.score, before.score);
+        assert_eq!(after.breakdown, before.breakdown);
     }
 }

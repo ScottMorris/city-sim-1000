@@ -62,6 +62,8 @@ Wilderness is two sums blended into one score:
 
 Each tile contributes a base “eco value” (positive or negative), then receives neighbourhood adjustments. Positive results accumulate into P, negative into U (as a positive magnitude).
 
+The base value is the **sum over everything on the tile** — the terrain's own credit plus one contribution per occupant — not a single lookup on the tile's `kind`. A road carrying a hydro line is −2 + −1 = −3, and a level crossing −2 + −2 = −4. This is what #173 fixed: the original implementation scored `base_eco[tile.kind]` once, so whichever feature happened to own the `kind` slot was charged and every other feature on the tile rode free. Because a hydro line takes over the `kind` slot of the road it crosses, ten roads with lines scored *better* than ten bare roads — building infrastructure improved the score.
+
 **Base eco weights**, mapped to the real `TileKind` enum (starter values — tune in play):
 
 | `TileKind`         | Base Eco | Rationale |
@@ -89,8 +91,10 @@ Each tile contributes a base “eco value” (positive or negative), then receiv
 
 Notes:
 
-* All weights live in a central `WildernessTunables` struct so iteration is fast.
-* Only the surface `kind` is scored; the underground layer never contributes.
+* All weights live in a central `WildernessTunables` struct so iteration is fast. Scoring always reads the weights through the tunables, so the Green Industry programme's runtime patch of `base_eco[Industrial]` reaches every route into the score.
+* Only surface and overhead occupants are scored; the underground layer never contributes, and a buried pipe leaves the surface free to keep its +1 open-land credit.
+* The `Land` +1 credit belongs to the *terrain*, and a tile forfeits it as soon as it carries anything visible — so it is never paid alongside a road, a zone or a hydro line.
+* Scoring the occupants means the score is only as honest as the tools that maintain them. The terrain brushes used to rewrite `kind` unchecked, so lowering the ground under a coal plant erased its occupant — and its −8 — while the plant went on producing and billing. Raise, Lower, Water paint and Trees now refuse a tile carrying a building; over anything else they clear the ground as they always did, but they clear it the same whichever way it was recorded, so a road no longer survives a regrade just because a hydro line happened to be strung over it first.
 
 ### Neighbourhood Adjustments
 

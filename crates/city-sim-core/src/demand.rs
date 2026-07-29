@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::{get_building_template, BuildingStatus};
+use crate::occupants::Occupant;
 use crate::state::{DemandStats, GameState};
 use crate::wilderness::{demand_delta, WildernessTunables};
 use city_sim_protocol::tile_kind::TileKind;
@@ -166,27 +167,26 @@ fn count_city(state: &GameState) -> CityCounters {
         industrial_job_capacity: 0,
     };
 
+    // Zones are mutually exclusive, so "which zone is this?" has one answer —
+    // but it is answered through `zone_occupant()` rather than off `kind` so
+    // step 3 of #177 can narrow `kind` to terrain without silently zeroing the
+    // demand inputs.
     for tile in &state.tiles {
-        match tile.kind {
-            TileKind::Residential => {
-                c.residential_zones += 1;
-                if tile.building_id.is_some() {
-                    c.developed_residential_zones += 1;
-                }
+        let (zoned, developed) = match tile.zone_occupant() {
+            Some(Occupant::ZoneResidential) => {
+                (&mut c.residential_zones, &mut c.developed_residential_zones)
             }
-            TileKind::Commercial => {
-                c.commercial_zones += 1;
-                if tile.building_id.is_some() {
-                    c.developed_commercial_zones += 1;
-                }
+            Some(Occupant::ZoneCommercial) => {
+                (&mut c.commercial_zones, &mut c.developed_commercial_zones)
             }
-            TileKind::Industrial => {
-                c.industrial_zones += 1;
-                if tile.building_id.is_some() {
-                    c.developed_industrial_zones += 1;
-                }
+            Some(Occupant::ZoneIndustrial) => {
+                (&mut c.industrial_zones, &mut c.developed_industrial_zones)
             }
-            _ => {}
+            _ => continue,
+        };
+        *zoned += 1;
+        if tile.building_id.is_some() {
+            *developed += 1;
         }
     }
 

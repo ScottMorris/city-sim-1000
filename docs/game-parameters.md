@@ -118,6 +118,27 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
 - **Base eco weights**: Tree +6, Park (Small or Large, per tile) +4, Land +1, Water 0 (edge-bonus donor);
   Residential/schools/pumps/towers/power lines/wind/solar −1, Commercial/roads/rail/hydro −2,
   Industrial −5, Coal −8. Underground water pipes are excluded.
+- **One charge per feature the tile carries.** A tile scores the sum over everything standing
+  on it, not a single lookup: a road with a hydro line over it is −3 (−2 road, −1 line) and a
+  level crossing is −4, each half filed on its own breakdown line. The +1 open-land credit is
+  forfeited the moment a tile carries anything visible, including a hydro line recorded only
+  as an overlay flag. Before this fix (#173) each tile scored whichever single feature owned
+  its `kind`, so stringing lines along your roads *raised* the wilderness score.
+- **The terrain brushes clear the ground, and clear it the same both ways.** Raise, Lower, Water
+  paint and Trees wipe the surface of the tile they land on — road, rail or zone tag — and they
+  wipe it whether the feature owns the tile's `kind` or rides under a hydro line as an underlay
+  flag. Before this fix a bare road was erased by a regrade while the identical tile with a line
+  strung over it first kept its road, still billed and still scored −2: build order decided
+  whether terraforming destroyed your road. Terraforming has always wiped the ground, and
+  Bulldoze costs 1 against terraform's 10, so the fix is to make the wipe symmetric rather than
+  to refuse the click.
+- **What the brushes will not clear is a building.** All four are refused on a tile carrying one
+  — bulldoze first — because the brush cannot take the `BuildingInstance` with it. Until that
+  guard landed the brushes wrote `kind` unchecked, so lowering the ground under a coal plant left
+  the plant producing 80 MW and billing $300/day from a tile that no longer scored its −8 — ten
+  credits of terraforming bought off the penalty for good.
+- **Overhead and underground occupants** neither block a regrade nor are touched by one: a hydro
+  line spans the tile whatever the ground does under it, and a buried pipe is at depth.
 - **Ecosystem adjustments** (Tree/Park only): patch bonus up to +2 on a saturating curve
   (reference cluster size 32), water-edge bonus +2, fragmentation penalty −2 when a nature
   tile has fewer than 3 nature 8-neighbours. A Large Park's 2x2 footprint counts as four

@@ -253,7 +253,39 @@ impl Simulation {
 /// Compute a deterministic FNV-1-64 hash of the key simulation state fields.
 ///
 /// Used in the golden-hash regression test — if this value changes unexpectedly
-/// a determinism bug has been introduced.
+/// a determinism bug has been introduced. `history.rs` also asserts undo/redo
+/// fidelity with it, and `snapshot_restore_is_deterministic` below asserts the
+/// postcard round trip with it, which makes this function the oracle three
+/// separate suites trust to notice when a tile changed.
+///
+/// **It has to see the tile, then, and not just a census of `kind`.** Until
+/// step 2 of #177 the whole grid entered the hash as a one-byte kind histogram
+/// and nothing else, so two states differing by a structural flag —
+/// `FLAG_POWER_OVERLAY` on a `kind = Land` tile, which is every hydro line the
+/// player has terraformed under — hashed identically, at
+/// `0x6d3ea3b9c3ab333a` both, despite differing in `tile_upkeep_unfunded` and
+/// in `conducts(Network::Power)`. An undo, or a snapshot, that silently
+/// dropped the road, rail or power flags passed every one of those tests. The
+/// histogram was blind to position as well: swap a `Water` tile for a `Land`
+/// one somewhere else and the counts are unchanged.
+///
+/// So the grid now enters tile by tile, in index order — deterministic, and
+/// identical across a snapshot boundary because `tiles` is a `Vec` in
+/// row-major order, never a set. Per tile:
+///
+/// - `kind`, which subsumes the old histogram and adds position;
+/// - [`Tile::occupants`], the representation-independent view of what stands
+///   there. Deliberately the occupant set rather than the raw `flags` byte:
+///   the two spellings of one physical tile must hash alike, and step 3 moves
+///   these bits out of `kind` without changing what is on the ground;
+/// - `underground`, which the occupant set only reports as *pipe or no pipe*;
+/// - `building_id`, so a tile losing its link to a live `BuildingInstance` is
+///   visible — the state defect B of this pass was about.
+///
+/// The derived flags — `FLAG_POWERED`, `FLAG_WATERED`, `FLAG_ABANDONED` and
+/// the zone density bits — stay out on purpose. They are recomputed from the
+/// grid each tick, so hashing them would report a difference that the next
+/// step erases by itself.
 pub fn state_hash(state: &GameState) -> u64 {
     fn fnv(data: &[u8]) -> u64 {
         let mut h: u64 = 0xcbf29ce484222325;
@@ -263,7 +295,7 @@ pub fn state_hash(state: &GameState) -> u64 {
         h
     }
 
-    let mut buf: Vec<u8> = Vec::with_capacity(64);
+    let mut buf: Vec<u8> = Vec::with_capacity(64 + state.tiles.len() * 6);
     buf.extend_from_slice(&state.tick.to_le_bytes());
     buf.extend_from_slice(&state.day.to_le_bytes());
     buf.extend_from_slice(&state.population.to_le_bytes());
@@ -272,16 +304,16 @@ pub fn state_hash(state: &GameState) -> u64 {
     buf.extend_from_slice(&state.utilities.power.to_le_bytes());
     buf.extend_from_slice(&state.utilities.water.to_le_bytes());
     buf.extend_from_slice(&(state.buildings.len() as u32).to_le_bytes());
-    // Tile-kind histogram
-    let mut kind_counts = [0u32; 64];
+    // Grid shape, so a 4×16 city and a 16×4 one with the same tile vector are
+    // not the same state.
+    buf.extend_from_slice(&state.width.to_le_bytes());
+    buf.extend_from_slice(&state.height.to_le_bytes());
+    // The grid, tile by tile in index order.
     for tile in &state.tiles {
-        let k = tile.kind as u8 as usize;
-        if k < kind_counts.len() {
-            kind_counts[k] += 1;
-        }
-    }
-    for c in kind_counts {
-        buf.extend_from_slice(&c.to_le_bytes());
+        buf.push(tile.kind as u8);
+        buf.extend_from_slice(&tile.occupants().to_le_bytes());
+        buf.push(tile.underground.map_or(0xFF, |k| k as u8));
+        buf.extend_from_slice(&tile.building_id.unwrap_or(u16::MAX).to_le_bytes());
     }
     // Demand (quantised to i32 for stability)
     buf.extend_from_slice(&(state.demand.residential as i32).to_le_bytes());
@@ -304,7 +336,12 @@ mod tests {
     /// If this test fails, a determinism regression has been introduced.
     /// To re-commit after intentional sim changes, run:
     ///   REGEN=1 cargo test -p sim_core golden_hash 2>&1 | grep "new hash"
-    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0xcd7650b68c9bc99c;
+    ///
+    /// Re-cut in step 2 of #177: [`state_hash`] stopped reducing the grid to a
+    /// histogram of `kind` and started hashing each tile's occupant set,
+    /// `underground` and `building_id`, so the same city hashes to a new — and
+    /// far more discriminating — value.
+    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0x755543fc50a48521;
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;
@@ -367,6 +404,66 @@ mod tests {
         assert_eq!(
             hash, GOLDEN_HASH_SEED42_8X8_100TICKS,
             "golden hash mismatch — run with REGEN=1 to update after intentional sim change"
+        );
+    }
+
+    /// The hole step 2 of #177 found in the oracle itself: the grid used to
+    /// enter [`state_hash`] as a one-byte histogram of `kind`, so a structural
+    /// flag was invisible to it. Two states differing only by
+    /// `FLAG_POWER_OVERLAY` on a `kind = Land` tile hashed the same
+    /// (`0x6d3ea3b9c3ab333a` both) even though one billed `MAINT_POWER_LINE`
+    /// every day and conducted power and the other did neither — so an undo or
+    /// a snapshot round trip that dropped the flag passed silently.
+    ///
+    /// Each flag is checked on its own, because each is a different occupant,
+    /// and `underground` and `building_id` with them.
+    #[test]
+    fn a_structural_flag_changes_the_hash() {
+        use crate::occupants::Occupant;
+        use crate::state::{FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY};
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let base = Simulation::new(4, 4, 1);
+        let base_hash = state_hash(&base.state);
+
+        for (flag, occupant) in [
+            (FLAG_ROAD_UNDERLAY, Occupant::Road),
+            (FLAG_RAIL_UNDERLAY, Occupant::Rail),
+            (FLAG_POWER_OVERLAY, Occupant::PowerLine),
+        ] {
+            let mut other = Simulation::new(4, 4, 1);
+            other.state.tiles[5].kind = TileKind::Land;
+            other.state.tiles[5].flags |= flag;
+            assert!(other.state.tiles[5].has_occupant(occupant));
+            assert_ne!(
+                state_hash(&other.state),
+                base_hash,
+                "{occupant:?} on a Land tile is invisible to the hash"
+            );
+        }
+
+        // The same for the two tile fields the occupant set cannot fully
+        // report: a buried pipe, and the link to a live building.
+        let mut piped = Simulation::new(4, 4, 1);
+        piped.state.tiles[5].underground = Some(TileKind::WaterPipe);
+        assert_ne!(state_hash(&piped.state), base_hash, "a buried pipe");
+
+        let mut built = Simulation::new(4, 4, 1);
+        built.state.tiles[5].building_id = Some(7);
+        assert_ne!(state_hash(&built.state), base_hash, "a building link");
+
+        // And position, which a histogram of `kind` cannot see: the same two
+        // kinds, swapped between two tiles, is a different city.
+        let mut moved = Simulation::new(4, 4, 1);
+        moved.state.tiles[5].kind = TileKind::Water;
+        moved.state.tiles[6].kind = TileKind::Land;
+        let mut swapped = Simulation::new(4, 4, 1);
+        swapped.state.tiles[5].kind = TileKind::Land;
+        swapped.state.tiles[6].kind = TileKind::Water;
+        assert_ne!(
+            state_hash(&moved.state),
+            state_hash(&swapped.state),
+            "a kind histogram cannot tell two layouts apart"
         );
     }
 

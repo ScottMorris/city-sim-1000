@@ -3,7 +3,9 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-//! The occupant model, step 1 of the strangler migration tracked in #177.
+//! The occupant model, step 1 of the strangler migration tracked in #177. The
+//! design note it implements is `docs/tile-model.md`; "the design note" below
+//! always means that file.
 //!
 //! Today a tile records its infrastructure in two places — the single-valued
 //! `Tile::kind` and the structural flags `FLAG_ROAD_UNDERLAY`,
@@ -341,8 +343,9 @@ pub const OVERHEAD_MASK: OccupantSet = B_POWER_LINE | B_TREES;
 /// click removes nothing visible. Use this mask for what is drawn, not for what
 /// a tool reaches.
 pub const VISIBLE_MASK: OccupantSet = SURFACE_MASK | OVERHEAD_MASK;
-/// The three zone tags. Reserved for step 2 — [`Tile::zone_occupant`] is the
-/// accessor to reach for today, and it is what the tests pin.
+/// The three zone tags. Used by `commands.rs` to refuse a zone or a structure
+/// over land already zoned; [`Tile::zone_occupant`] is the accessor for asking
+/// *which* zone, since a tile carries at most one.
 pub const ZONE_MASK: OccupantSet = B_ZONE_R | B_ZONE_C | B_ZONE_I;
 
 /// All occupant bits currently in use. Bits 11–15 are spare — **note** that
@@ -525,11 +528,11 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
         ledger: LedgerLine::Untracked,
         conducts: NET_NONE, // conducts through `development`, not the tag
         // Cross-stratum exception: a line through a power plant or a school.
-        // Only ONE of the two guards enforces it today — `Tool::PowerLine`
-        // refuses a tile with a `building_id`, but the converse guard in
-        // `place_footprint_building` never asks `has_power_overlay()`, so a
-        // structure CAN still be stamped over a live line. See
-        // `known_defect_a_structure_is_stamped_over_a_live_hydro_line`.
+        // Enforced from both sides since step 2 of #177 — `Tool::PowerLine`
+        // refuses a tile with a `building_id`, and `place_footprint_building`
+        // now asks the occupant set rather than `kind`, so it sees a line in
+        // either of its two spellings. See
+        // `a_structure_is_refused_over_a_live_hydro_line`.
         conflicts: (SURFACE_MASK & !B_STRUCTURE) | B_POWER_LINE,
         category: None,      // see `structure_category`
         strong_nature: None, // see `structure_is_strong_nature`
@@ -588,7 +591,7 @@ pub static COMPAT_EXCEPTIONS: [CompatException; 2] = [
         a: Occupant::Structure,
         b: Occupant::PowerLine,
         coexist: false,
-        why: "cross-stratum, but a line strung through a school or a power plant is not a tile the model admits: Tool::PowerLine refuses a tile that already carries a building. The converse guard is INCOMPLETE today — place_footprint_building rejects kind Road/Rail/PowerLine and both underlays but never asks has_power_overlay(), so any tile whose line lives in that flag rather than in kind takes a structure on top of a live, still-billed line (zone, then string a line; or string a line, then TerraformRaise). This exception therefore states the target rule, not today's reachable set; see known_defect_a_structure_is_stamped_over_a_live_hydro_line, closed by step 2 of #177",
+        why: "cross-stratum, but a line strung through a school or a power plant is not a tile the model admits: Tool::PowerLine refuses a tile that already carries a building, and place_footprint_building refuses a tile that already carries a line. The second half of that was missing until step 2 of #177 — the guard enumerated kind Road/Rail/PowerLine and the two underlay flags but never asked has_power_overlay(), so any tile whose line lived in the flag rather than in kind (zone, then string a line; or string a line, then TerraformRaise) took a structure on top of live, still-billed conductors. It asks the occupant set now, which answers the same for both spellings; see a_structure_is_refused_over_a_live_hydro_line",
     },
 ];
 
@@ -643,28 +646,31 @@ pub fn pair_conflicts(a: Occupant, b: Occupant) -> bool {
 
 /// Check a set against the compatibility table.
 ///
-/// **This describes the TARGET model, not the set of tiles today's game can
-/// build.** The table says what an occupant set *ought* to be allowed to look
-/// like once step 2 has tightened the tool guards; `commands.rs` does not yet
-/// enforce it, so an ordinary sequence of clicks can produce a set this
-/// function rejects. Two such sequences exist today, both inventoried as
-/// known defects and both fixed in step 2 of #177:
+/// **This describes the TARGET model, and today's game can still build one
+/// tile it rejects.** Step 2 of #177 converted the placement guards in
+/// `commands.rs` to ask the occupant set, which closed the structure route —
+/// `Residential` → `PowerLine` → `Park` is refused now, in either spelling.
+/// One producible violation survives:
 ///
-/// - `Residential` → `PowerLine` → `Park` stamps a structure over a live
-///   hydro line, because `place_footprint_building` never asks
-///   `has_power_overlay()` — `known_defect_a_structure_is_stamped_over_a_live_hydro_line`.
 /// - `PowerLine` → `Tree` plants a canopy through the conductors, because
-///   `set_kind` rewrites `kind` and leaves `FLAG_POWER_OVERLAY` set —
-///   `known_defect_trees_are_planted_through_a_live_hydro_line`.
+///   `Tool::Tree` rewrites `kind` and clears only the *surface*, leaving
+///   `FLAG_POWER_OVERLAY` set —
+///   `known_defect_trees_are_planted_through_a_live_hydro_line`. This one is
+///   not a guard that reads the wrong field, so converting the guards did not
+///   reach it. Nor is it the two-spellings asymmetry: a line always sets the
+///   overlay flag, so both its recordings survive a canopy alike. Refusing it
+///   would also have to answer for `Tool::Water`, which flows through the same
+///   overlay flag on purpose — a line over water is a pylon span — so it stays
+///   a gameplay decision of its own.
 ///
 /// `producible_conflicts_are_inventoried` closes the single-tile state space
-/// under `apply_tool` and pins that list at exactly those two, so a third one
-/// cannot appear unnoticed.
+/// under `apply_tool` and pins that list at exactly that one, so neither a
+/// regression of the structure route nor a third defect can appear unnoticed.
 ///
 /// **Advisory only.** Never panic on this result — log it, count it, or
 /// `debug_assert` it, but let the save load. Saves in the wild already contain
-/// violating tiles, and `Tool::TerraformLower` can leave `building_id` set on
-/// a tile that has become water besides.
+/// violating tiles, including ones written before `regrade_refusal` stopped
+/// the terrain brushes from drowning a live building.
 pub fn validate_set(set: OccupantSet) -> Result<(), (Occupant, Occupant)> {
     let present: Vec<Occupant> = iter_set(set).collect();
     for (i, &a) in present.iter().enumerate() {
@@ -818,8 +824,10 @@ pub const fn is_structure_kind(kind: TileKind) -> bool {
 // ---------------------------------------------------------------------------
 
 impl Tile {
-    /// What the ground is. `Terrain::Land` is exactly `wilderness::is_buildable`
-    /// (which is `kind != Water`); `Terrain::Water` is its complement.
+    /// What the ground is. `Terrain::Land` is exactly the old
+    /// `wilderness::is_buildable` (which was `kind != Water`) — that helper is
+    /// gone, and `compute_wilderness` counts buildable tiles through this
+    /// accessor. `Terrain::Water` is its complement.
     ///
     /// Reads today's `kind` slot, so it is not yet durable — see [`Terrain`].
     #[inline]
@@ -1000,11 +1008,10 @@ impl Tile {
     /// the terrain contributes to no line.
     ///
     /// The only producer of [`EcoCategory::OpenLand`], and the reason that
-    /// variant exists: the `TileKind::Land` arm of the breakdown `match` in
-    /// `wilderness::compute_wilderness` credits a bare `Land` tile +1.0 to
-    /// `breakdown.open_land`, and nothing an *occupant* can do earns that line.
-    /// Water is `None` — `wilderness.rs` matches `Water | WaterPipe => {}` and
-    /// files their (zero) value nowhere.
+    /// variant exists: `wilderness::compute_wilderness` credits a bare `Land`
+    /// tile +1.0 to `breakdown.open_land`, and nothing an *occupant* can do
+    /// earns that line. Water is `None` — its (zero) value is filed nowhere,
+    /// which is what the old `Water | WaterPipe => {}` arm expressed.
     ///
     /// Gated on the visible set exactly as `terrain_eco` is, so the pair stay
     /// consistent: a `Some` category always accompanies the open-land credit
@@ -1026,11 +1033,13 @@ impl Tile {
     /// Base eco value of the tile: terrain plus the sum over its occupants.
     ///
     /// The `Σ` is the point — a fifth network is one table row and every
-    /// consumer that sums picks it up for free. Note this intentionally
-    /// differs from today's `base_eco[kind]` on multi-occupant tiles: a road
-    /// carrying a line scores −3.0 here against −1.0 or −2.0 today depending
-    /// on which spelling it happens to have. That is the open `wilderness.rs`
-    /// bug, and converting that module is deliberately the last step.
+    /// consumer that sums picks it up for free. This is what
+    /// `wilderness::compute_wilderness` scores (#173): a road carrying a line
+    /// is −3.0, against the −1.0 or −2.0 the old `base_eco[kind]` lookup gave
+    /// depending on which spelling the tile happened to have. That function
+    /// unrolls the sum rather than calling this, because it also has to file
+    /// each term on its own breakdown line; the two are pinned equal by a
+    /// `debug_assert` in its scoring loop.
     pub fn tile_eco(&self, t: &WildernessTunables) -> f32 {
         let mut eco = self.terrain_eco(t);
         for o in iter_set(self.occupants()) {
@@ -1070,7 +1079,6 @@ mod tests {
     use crate::adjacency::has_road_access;
     use crate::commands::apply_tool;
     use crate::state::{GameState, FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
-    use crate::utilities::{is_power_carrier_pub, is_water_carrier_pub};
     use city_sim_protocol::commands::Tool;
 
     // --- helpers ---------------------------------------------------------
@@ -1122,9 +1130,9 @@ mod tests {
     /// instead of quietly agreeing with a stale copy of it.
     ///
     /// The probe tunables score `kind` at exactly 1.0 and every other kind at
-    /// 0.0, on a grid of one `kind` tile surrounded by water — a filler that
-    /// files its value on no line at all (`Water | WaterPipe => {}`, so a
-    /// surface pipe would serve equally well). The three
+    /// 0.0, on a grid of one `kind` tile surrounded by water — a filler whose
+    /// terrain has no [`EcoCategory`] at all, so it files its value on no
+    /// line. The three
     /// neighbourhood adjustments are zeroed because they have breakdown lines
     /// of their own, so the sole thing that can move a category line is the
     /// base value of the probe tile. Whichever line comes back holding 1.0 is
@@ -1477,35 +1485,35 @@ mod tests {
         assert!(validate_set(t.occupants()).is_err());
     }
 
-    // --- known defects: tiles the game builds and the table forbids ---------
+    // --- placement: the table enforced, and what still escapes it -----------
     //
-    // Everything in this section asserts what the game does **today**, not
-    // what it should do. Each one is a real bug of exactly the class this
-    // module exists to close, and each is fixed in step 2 of #177 by
-    // tightening `commands.rs`. That makes these tests deliberately upside
-    // down: they are written to go RED the moment the fix lands, which is the
-    // point — the fix must not be able to slip in without someone coming back
-    // here, deleting the defect and moving the assertion to the correct side.
-    // Step 1 changes no behaviour, so none of it can be fixed here.
+    // The first test here was a known defect until step 2 of #177 and is now a
+    // regression test; the second is still a known defect and asserts what the
+    // game does **today**, not what it should do. A known-defect test is
+    // written to go RED the moment its fix lands, which is the point — the fix
+    // must not be able to slip in without someone coming back here and moving
+    // the assertion to the correct side.
 
-    /// **Known defect.** Three ordinary tool clicks stamp a structure over a
-    /// live hydro line, producing `{Structure, PowerLine}` — a pair
-    /// [`COMPAT_EXCEPTIONS`] declares impossible.
+    /// **Regression, step 2 of #177.** Three ordinary tool clicks used to stamp
+    /// a structure over a live hydro line, producing `{Structure, PowerLine}` —
+    /// a pair [`COMPAT_EXCEPTIONS`] declares impossible. The third click is
+    /// refused now.
     ///
-    /// `place_footprint_building` (`commands.rs` ~336–346) rejects a tile whose
-    /// `kind` is `Road`, `Rail` or `PowerLine`, and rejects `has_road_underlay()`
-    /// and `has_rail_underlay()` — but it never asks `has_power_overlay()`. A
-    /// line strung across a *zoned* tile records itself in that flag and leaves
-    /// `kind` on the zone, so the guard looks at `Residential`, sees nothing it
-    /// objects to, and lets a park land on top of the conductors.
+    /// `place_footprint_building` used to reject a tile whose `kind` was
+    /// `Road`, `Rail` or `PowerLine` plus `has_road_underlay()` and
+    /// `has_rail_underlay()` — but it never asked `has_power_overlay()`. A line
+    /// strung across a *zoned* tile records itself in that flag and leaves
+    /// `kind` on the zone, so the guard looked at `Residential`, saw nothing it
+    /// objected to, and let a park land on top of the conductors. The line then
+    /// survived as a flag: still drawn, still conducting power, still billed
+    /// `MAINT_POWER_LINE` every day, and unreachable by the bulldozer except
+    /// through the building on top of it.
     ///
-    /// The line survives as a flag: still drawn, still conducting power, still
-    /// billed `MAINT_POWER_LINE` every day, and now unreachable by the
-    /// bulldozer except through the building. Step 2 adds the missing
-    /// `has_power_overlay()` clause, at which point the third click fails and
-    /// this test goes red — rewrite it then, do not weaken it.
+    /// The guard asks `occupants()` now, so both spellings of a line answer the
+    /// same. Two routes are checked, because the flag-only spelling is reached
+    /// two ways and only the occupant set covers both.
     #[test]
-    fn known_defect_a_structure_is_stamped_over_a_live_hydro_line() {
+    fn a_structure_is_refused_over_a_live_hydro_line() {
         let mut s = GameState::new(4, 4, 0);
         assert!(apply_tool(&mut s, Tool::Residential, 2, 2).success);
         assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2).success);
@@ -1518,65 +1526,118 @@ mod tests {
         assert_eq!(t.occupants(), B_ZONE_R | B_POWER_LINE);
         assert_eq!(validate_set(t.occupants()), Ok(()));
 
-        // The third click is the defect. It succeeds — and it should not.
+        // The third click is refused — the line is in the flag, not in `kind`,
+        // and the guard reads the occupant set.
+        let money = s.money;
         let r = apply_tool(&mut s, Tool::Park, 2, 2);
-        assert!(
-            r.success,
-            "step 2 has tightened place_footprint_building — good. Delete this \
-             known defect and assert the rejection instead."
-        );
+        assert!(!r.success, "a park landed on top of live conductors");
+        assert_eq!(s.money, money, "a refused placement must not charge");
+        assert!(s.buildings.is_empty(), "a refused placement built nothing");
 
+        // The tile is untouched: still a zone, still carrying its line.
         let t = s.tiles[s.tile_index(2, 2).unwrap()].clone();
-        assert_eq!(t.kind, TileKind::Park);
-        assert!(t.building_id.is_some(), "a real park, not a ghost");
-        assert!(
-            t.has_power_overlay(),
-            "the line is still there — it was never cleared, only built over"
-        );
-        assert_eq!(t.occupants(), B_STRUCTURE | B_POWER_LINE);
-        assert_eq!(
-            validate_set(t.occupants()),
-            Err((Occupant::Structure, Occupant::PowerLine)),
-            "the table calls this pair impossible and the game just built it"
-        );
+        assert_eq!(t.kind, TileKind::Residential);
+        assert_eq!(t.occupants(), B_ZONE_R | B_POWER_LINE);
+        assert!(t.building_id.is_none());
 
-        // Not a cosmetic leftover: the buried line still conducts and is still
-        // billed, which is what makes this a defect rather than a stale bit.
-        assert!(t.conducts(Network::Power));
-        assert!(
-            (t.tile_upkeep_unfunded() - MAINT_POWER_LINE).abs() < 1e-6,
-            "the city keeps paying for a line it can no longer see or remove"
+        // Bulldozing the line clears the way, so the refusal is a "clear it
+        // first", not a tile the player can never build on.
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Park, 2, 2).success);
+        assert_eq!(
+            s.tiles[s.tile_index(2, 2).unwrap()].occupants(),
+            B_STRUCTURE
         );
 
         // Zoning is not the only way in. Anything that moves the line out of
-        // `kind` and into the flag opens the same hole: `Tool::TerraformRaise`
-        // writes `kind = Land` and leaves the overlay standing, after which the
-        // guard sees a bare land tile. `producible_conflicts_are_inventoried`
-        // finds this route on its own; it is spelled out here so the fix is
-        // understood as "the guard is missing a clause", not "zoning is odd".
+        // `kind` and into the flag used to open the same hole:
+        // `Tool::TerraformRaise` writes `kind = Land` and leaves the overlay
+        // standing — correctly, a regrade does not take down a span — after
+        // which the old guard saw a bare land tile.
         let mut s = GameState::new(4, 4, 0);
         assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
         assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1).success);
         let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
         assert_eq!(t.kind, TileKind::Land);
         assert!(t.has_power_overlay());
-        assert!(apply_tool(&mut s, Tool::HydroPlant, 1, 1).success);
         assert_eq!(
-            s.tiles[s.tile_index(1, 1).unwrap()].occupants(),
-            B_STRUCTURE | B_POWER_LINE
+            t.occupants(),
+            B_POWER_LINE,
+            "the regrade must preserve the overhead stratum"
         );
+        assert!(t.conducts(Network::Power));
+        assert!((t.tile_upkeep_unfunded() - MAINT_POWER_LINE).abs() < 1e-6);
+        assert!(
+            !apply_tool(&mut s, Tool::HydroPlant, 1, 1).success,
+            "a terraformed line is still a line"
+        );
+
+        // A footprint larger than one tile is guarded on every tile it covers,
+        // not just its origin: the line here is at (2, 2), the 2×2 plant at
+        // (1, 1).
+        let mut s = GameState::new(4, 4, 0);
+        assert!(apply_tool(&mut s, Tool::Residential, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2).success);
+        assert!(
+            !apply_tool(&mut s, Tool::HydroPlant, 1, 1).success,
+            "the footprint's far corner sits on a line"
+        );
+    }
+
+    /// A *ghost* structure — the `kind` `remove_building` leaves standing so a
+    /// zone lot can regrow — must not start refusing placements now that the
+    /// guards read the occupant set. It carries `Occupant::Structure` but no
+    /// `building_id`, and the bulldozer clears it in one click, so treating it
+    /// as an obstacle would strand every bulldozed park behind a second
+    /// bulldoze.
+    #[test]
+    fn a_ghost_structure_blocks_nothing() {
+        for tool in [Tool::Residential, Tool::Road, Tool::Rail, Tool::PowerLine] {
+            let mut s = GameState::new(4, 4, 0);
+            assert!(apply_tool(&mut s, Tool::Park, 1, 1).success);
+            // `remove_building` keeps the kind; only the development goes.
+            let bid = s.tiles[s.tile_index(1, 1).unwrap()].building_id.unwrap();
+            crate::commands::remove_building(&mut s, bid as u32);
+            let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
+            assert!(t.has_ghost_structure(), "{tool:?}: not a ghost after all");
+            assert!(
+                apply_tool(&mut s, tool, 1, 1).success,
+                "{tool:?} was refused by a ghost"
+            );
+        }
     }
 
     /// **Known defect.** Two tool clicks plant a canopy through live
     /// conductors, producing `{Trees, PowerLine}` — a straight overhead-stratum
     /// conflict, no exception needed.
     ///
-    /// `Tool::Tree` goes through `set_kind`, which rewrites `kind` and leaves
-    /// every structural flag alone, so `FLAG_POWER_OVERLAY` outlives the line
-    /// that set it. Same shape as the structure defect above: the line is
-    /// invisible to `kind`, still conducting and still billed. Step 2 makes
-    /// `Tool::Tree` clear the overlay (or refuse the tile); this test goes red
-    /// then, by design.
+    /// `Tool::Tree` goes through `set_kind_clearing_surface`, which rewrites
+    /// `kind` and clears the surface underlays but leaves the overhead flag
+    /// alone, so `FLAG_POWER_OVERLAY` outlives the line that set it. The line
+    /// is invisible to `kind`, still conducting and still billed.
+    ///
+    /// **Step 2 of #177 did not reach this one, deliberately.** It looks like
+    /// the structure defect above and is not: that one was a *guard* reading
+    /// one of a line's two spellings, so converting the guard to the occupant
+    /// set closed it. Nor is it the build-order asymmetry that
+    /// `set_kind_clearing_surface` closes, because a line always records itself
+    /// in `FLAG_POWER_OVERLAY` — both its spellings survive a canopy alike,
+    /// which is the same outcome whichever way you clicked.
+    ///
+    /// What is left is a straight gameplay decision, and `Tool::Water` is the
+    /// same code path producing a tile the model *wants* (a line over water is
+    /// the pylon span `docs/tile-model.md` names as a variant), so "clear the
+    /// overlay too" would be wrong. Plant refused under a line, versus canopy
+    /// silently destroying a span the player paid for, belongs with its own
+    /// message and a manual update rather than inside a guard conversion.
+    /// Whoever takes it: this test goes red then, by design.
+    ///
+    /// Note what step 2 *did* reach: `Tool::Tree` now refuses a tile carrying a
+    /// live `building_id`, because a canopy planted over a coal plant erased
+    /// the `Structure` occupant while the plant kept producing and billing —
+    /// state corruption rather than a gameplay call. See
+    /// `planting_refuses_a_tile_carrying_a_live_building`. A hydro line has no
+    /// `building_id`, so this route is untouched.
     #[test]
     fn known_defect_trees_are_planted_through_a_live_hydro_line() {
         let mut s = GameState::new(4, 4, 0);
@@ -1590,7 +1651,10 @@ mod tests {
 
         let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
         assert_eq!(t.kind, TileKind::Tree);
-        assert!(t.has_power_overlay(), "set_kind never touches the flags");
+        assert!(
+            t.has_power_overlay(),
+            "planting clears the surface, never the overhead flag"
+        );
         assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
         assert_eq!(
             validate_set(t.occupants()),
@@ -1601,8 +1665,8 @@ mod tests {
     }
 
     /// Exhaustive search for tiles the game can build that the compatibility
-    /// table calls impossible — so the two known defects above are a complete
-    /// inventory rather than the two somebody happened to notice.
+    /// table calls impossible — so the known defect above is a complete
+    /// inventory rather than the one somebody happened to notice.
     ///
     /// Closes the single-tile state space under `apply_tool`: every tool,
     /// applied at one spot, from every distinct grid state reached so far, to a
@@ -1610,9 +1674,14 @@ mod tests {
     /// click, so neither path length nor funds can hide a reachable state.
     ///
     /// Any pair found here is producible by clicking, which means either the
-    /// table is wrong about it or the game is. The answer is pinned, so a third
-    /// defect appearing — or one of these two being fixed — lands as a failing
-    /// test rather than as silence.
+    /// table is wrong about it or the game is. The answer is pinned, so a
+    /// second defect appearing — or the last one being fixed — lands as a
+    /// failing test rather than as silence.
+    ///
+    /// It is also the regression test for the structure route that step 2 of
+    /// #177 closed, and a stronger one than
+    /// `a_structure_is_refused_over_a_live_hydro_line`: that test names the two
+    /// click sequences we know about, this one proves there is no third.
     #[test]
     fn producible_conflicts_are_inventoried() {
         use std::collections::{HashSet, VecDeque};
@@ -1695,13 +1764,13 @@ mod tests {
         pairs.sort_by_key(|(a, b)| (*a as u8, *b as u8));
         assert_eq!(
             pairs,
-            vec![
-                (Occupant::Structure, Occupant::PowerLine),
-                (Occupant::PowerLine, Occupant::Trees),
-            ],
+            vec![(Occupant::PowerLine, Occupant::Trees)],
             "the producible-conflict inventory changed. A new pair means a new \
-             defect of the same class; a missing pair means step 2 fixed one, in \
-             which case delete its known-defect test above and this entry."
+             defect of the same class — in particular (Structure, PowerLine) \
+             coming back means a placement guard has gone back to reading \
+             `kind`. A missing pair means a defect was fixed, in which case \
+             rewrite its known-defect test above as a regression test and drop \
+             this entry."
         );
     }
 
@@ -1994,10 +2063,16 @@ mod tests {
 
     // --- upkeep -----------------------------------------------------------
 
-    /// `tile_upkeep_unfunded` must reproduce the four independent `if`s in
-    /// `compute_daily_budget` exactly, over the whole (kind, flags,
+    /// `tile_upkeep_unfunded` must reproduce the four independent `if`s that
+    /// `compute_daily_budget` used to hand-write, over the whole (kind, flags,
     /// underground) space — at 100% funding, where the multipliers are all 1.0.
     /// Non-default funding is `tile_upkeep_is_funded_per_department` below.
+    ///
+    /// Step 2 of #177 deleted those `if`s from `economy.rs`, which is exactly
+    /// why the copy below stays: it is now the *independent* oracle, deriving
+    /// the bill straight from `kind`, the flags and `underground` with no help
+    /// from the table the accessor is built on. Delete it and the two sides of
+    /// the comparison become the same code.
     #[test]
     fn tile_upkeep_matches_the_economy_ledger() {
         let mut cases = 0usize;
@@ -2005,7 +2080,7 @@ mod tests {
             for flags in structural_flag_combos() {
                 for underground in [None, Some(TileKind::WaterPipe)] {
                     let t = tile(kind, flags, underground);
-                    // Verbatim copy of the economy.rs loop body.
+                    // The pre-conversion economy.rs loop body, verbatim.
                     let mut expected = 0.0_f32;
                     if t.kind == TileKind::Road || t.has_road_underlay() {
                         expected += MAINT_ROAD;
@@ -2265,14 +2340,55 @@ mod tests {
 
     // --- conducts ---------------------------------------------------------
 
-    /// `conducts(Water)` must be byte-identical to `is_water_carrier`, and
-    /// `conducts(Power)` must be identical to `is_power_carrier` *except* on
-    /// tiles that carry a hydro line only through `FLAG_POWER_OVERLAY` while
-    /// nothing else conducts — the same "checked `kind`, forgot the flag" bug
-    /// this module exists to close. That divergence set is pinned here so
-    /// step 2 signs up for it knowingly.
+    /// The pre-migration `is_power_carrier` from `utilities.rs`, kept longhand
+    /// as an independent oracle now that the real one is gone. It is the
+    /// *before* side of the step-2 conversion: transcribing it here rather
+    /// than deriving it from `OCCUPANT_DEFS` is the point, because a copy that
+    /// tracked the table could no longer show the diff.
+    ///
+    /// Note the missing `has_power_overlay()` — that omission is the bug.
+    fn pre_migration_is_power_carrier(tile: &Tile) -> bool {
+        use TileKind::*;
+        tile.power_plant_mw > 0
+            || tile.building_id.is_some()
+            || tile.kind == PowerLine
+            || tile.kind == Road
+            || tile.has_road_underlay()
+            || tile.kind == Rail
+            || tile.has_rail_underlay()
+            || matches!(tile.kind, Residential | Commercial | Industrial)
+    }
+
+    /// The pre-migration `is_water_carrier`. Unlike its power counterpart it
+    /// already read every fallback, which is why water converts with an empty
+    /// diff.
+    fn pre_migration_is_water_carrier(tile: &Tile) -> bool {
+        use TileKind::*;
+        tile.underground == Some(WaterPipe)
+            || tile.building_id.is_some()
+            || tile.kind == Road
+            || tile.has_road_underlay()
+            || tile.kind == Rail
+            || tile.has_rail_underlay()
+            || matches!(tile.kind, Residential | Commercial | Industrial)
+    }
+
+    /// What step 2 actually moved, measured against the predicates it
+    /// replaced.
+    ///
+    /// - **Water**: empty diff, as promised in step 1.
+    /// - **Power**: `conducts(Power)` is a strict superset — 28 tiles whose
+    ///   only conductor is a hydro line recorded in `FLAG_POWER_OVERLAY`.
+    ///   Those tiles used to sever the grid while still being billed
+    ///   `MAINT_POWER_LINE`; they now conduct. The count is unchanged from
+    ///   step 1, which pinned it as *pending*; what changed is that
+    ///   `utilities.rs` now sits on the fixed side of it, which
+    ///   `the_live_carrier_predicate_is_conducts` below is what proves.
+    /// - **Traffic**: converged. Step 1 pinned 32 divergent tiles, every one a
+    ///   bare hydro line that `adjacency::has_road_access` counted as a road.
+    ///   Step 2 deleted that clause, so the count is now zero.
     #[test]
-    fn conducts_versus_todays_carrier_predicates() {
+    fn conducts_versus_the_predicates_it_replaced() {
         let mut power_divergences = 0usize;
         // Recorded rather than asserted case by case: an `assert_eq!` inside
         // the loop would panic before the count below could ever be read, so
@@ -2280,7 +2396,7 @@ mod tests {
         // itself. Collecting first makes that assertion the real check, and
         // the failure message still names every offending tile.
         let mut water_divergences: Vec<String> = Vec::new();
-        let mut traffic_divergences = 0usize;
+        let mut traffic_divergences: Vec<String> = Vec::new();
         let mut cases = 0usize;
 
         // A two-tile probe city for `adjacency::has_road_access`, which is a
@@ -2305,7 +2421,7 @@ mod tests {
                             cases += 1;
 
                             // --- water: no divergence permitted ---
-                            if t.conducts(Network::Water) != is_water_carrier_pub(&t) {
+                            if t.conducts(Network::Water) != pre_migration_is_water_carrier(&t) {
                                 water_divergences.push(format!(
                                     "{kind:?} flags={flags:#010b} ug={underground:?} \
                                      bid={building_id:?} mw={mw}"
@@ -2320,7 +2436,8 @@ mod tests {
                                 && t.zone_occupant().is_none()
                                 && building_id.is_none()
                                 && mw == 0;
-                            let diverged = t.conducts(Network::Power) != is_power_carrier_pub(&t);
+                            let diverged =
+                                t.conducts(Network::Power) != pre_migration_is_power_carrier(&t);
                             assert_eq!(
                                 diverged, ghost_line,
                                 "power: {kind:?} flags={flags:#010b} ug={underground:?} \
@@ -2328,7 +2445,10 @@ mod tests {
                                  when a line is recorded only in FLAG_POWER_OVERLAY"
                             );
                             if diverged {
-                                assert!(t.conducts(Network::Power) && !is_power_carrier_pub(&t));
+                                assert!(
+                                    t.conducts(Network::Power)
+                                        && !pre_migration_is_power_carrier(&t)
+                                );
                                 power_divergences += 1;
                             }
 
@@ -2337,19 +2457,19 @@ mod tests {
                                 t.conducts(Network::Traffic),
                                 kind == TileKind::Road || t.has_road_underlay()
                             );
-                            // `adjacency::has_road_access` also accepts a bare
-                            // PowerLine tile — compensation for hydro owning
-                            // `kind` on a road tile, not a claim that lines
-                            // carry traffic. Rewriting it is a behaviour change.
-                            // The real function is called, not a copy of its
-                            // condition, so that widening or narrowing it shows
-                            // up here as a changed divergence count.
+                            // The real `adjacency::has_road_access` is called,
+                            // not a copy of its condition, so that widening or
+                            // narrowing it shows up here as a changed
+                            // divergence count. Step 1 measured 32 — bare
+                            // hydro lines it counted as roads. Step 2 removed
+                            // that clause; the count below is now zero.
                             probe.tiles[0] = t.clone();
                             let adjacency_says = has_road_access(&probe, 1, 0);
                             if t.conducts(Network::Traffic) != adjacency_says {
-                                traffic_divergences += 1;
-                                assert_eq!(kind, TileKind::PowerLine);
-                                assert!(!t.has_road_underlay());
+                                traffic_divergences.push(format!(
+                                    "{kind:?} flags={flags:#010b} ug={underground:?} \
+                                     bid={building_id:?} mw={mw}"
+                                ));
                             }
                         }
                     }
@@ -2366,14 +2486,62 @@ mod tests {
         );
         assert_eq!(
             power_divergences, 28,
-            "tiles whose only conductor is a FLAG_POWER_OVERLAY line: 14 kinds \
-             (all but Road, Rail, the three zones and PowerLine itself) × 2 \
+            "tiles the old BFS severed and the new one carries: 14 kinds (all \
+             but Road, Rail, the three zones and PowerLine itself) × 2 \
              underground states, with the overlay as the only structural flag"
         );
-        assert_eq!(
-            traffic_divergences, 32,
-            "bare PowerLine tiles that adjacency.rs treats as road access"
+        assert!(
+            traffic_divergences.is_empty(),
+            "has_road_access has converged on conducts(Traffic) — {} tiles \
+             disagreed: {:?}",
+            traffic_divergences.len(),
+            traffic_divergences
         );
+    }
+
+    /// The utility BFS asks [`Tile::conducts`] and nothing else.
+    ///
+    /// `conducts_versus_the_predicates_it_replaced` measures the diff against
+    /// a transcribed *copy* of the old rule, which by itself would keep
+    /// passing if `utilities.rs` quietly grew a third predicate. This calls
+    /// the live `is_carrier` — the exact function the flood fill runs — over
+    /// the same tile space, so the conversion cannot be undone without a
+    /// failure here.
+    #[test]
+    fn the_live_carrier_predicate_is_conducts() {
+        use crate::utilities::{is_carrier, UtilityKind};
+        let mut cases = 0usize;
+        for &kind in TileKind::ALL {
+            for flags in structural_flag_combos() {
+                for underground in [None, Some(TileKind::WaterPipe)] {
+                    for building_id in [None, Some(1u16)] {
+                        for mw in [0i32, 100] {
+                            let t = Tile {
+                                kind,
+                                flags,
+                                underground,
+                                building_id,
+                                power_plant_mw: mw,
+                                ..Tile::land()
+                            };
+                            cases += 1;
+                            for (utility, network) in [
+                                (UtilityKind::Power, Network::Power),
+                                (UtilityKind::Water, Network::Water),
+                            ] {
+                                assert_eq!(
+                                    is_carrier(&t, utility),
+                                    t.conducts(network),
+                                    "{utility:?}: {kind:?} flags={flags:#010b} \
+                                     ug={underground:?} bid={building_id:?} mw={mw}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(cases, TileKind::ALL.len() * 8 * 2 * 2 * 2);
     }
 
     #[test]
@@ -2420,6 +2588,61 @@ mod tests {
         assert_eq!(validate_set(lot.occupants()), Ok(()));
         assert_eq!(lot.zone_occupant(), Some(Occupant::ZoneResidential));
         assert_eq!(lot.structure_kind(), None);
+    }
+
+    /// Step 2 of #177 rewrote the same three-armed `matches!(tile.kind,
+    /// Residential | Commercial | Industrial)` in `demand.rs`, `zones.rs`,
+    /// `education.rs`, `economy.rs` and `wilderness.rs` as `zone_occupant()`.
+    /// Six consumers now rest on that being the *same question*, so it is
+    /// pinned here over the whole (kind, flags, underground) space rather than
+    /// left to five separate readings of the diff.
+    ///
+    /// The flags matter: a zone carrying a hydro line spells the line into
+    /// `FLAG_POWER_OVERLAY` and keeps `kind = Commercial`, so the tile must
+    /// still count as commercial for revenue, demand and school catchment
+    /// while also being billed for the line.
+    #[test]
+    fn zone_occupant_is_the_old_three_armed_kind_match() {
+        let mut zoned = 0usize;
+        for &kind in TileKind::ALL {
+            for flags in structural_flag_combos() {
+                for underground in [None, Some(TileKind::WaterPipe)] {
+                    let t = tile(kind, flags, underground);
+                    let old = matches!(
+                        kind,
+                        TileKind::Residential | TileKind::Commercial | TileKind::Industrial
+                    );
+                    assert_eq!(
+                        t.zone_occupant().is_some(),
+                        old,
+                        "{kind:?} flags={flags:#010b} underground={underground:?}"
+                    );
+                    // And the tag names the right zone.
+                    assert_eq!(
+                        t.zone_occupant(),
+                        match kind {
+                            TileKind::Residential => Some(Occupant::ZoneResidential),
+                            TileKind::Commercial => Some(Occupant::ZoneCommercial),
+                            TileKind::Industrial => Some(Occupant::ZoneIndustrial),
+                            _ => None,
+                        }
+                    );
+                    // A zone is exactly one bit of ZONE_MASK, never two.
+                    assert_eq!(
+                        (t.occupants() & ZONE_MASK).count_ones(),
+                        old as u32,
+                        "{kind:?} must carry exactly {} zone bit(s)",
+                        old as u32
+                    );
+                    zoned += old as usize;
+                }
+            }
+        }
+        assert_eq!(
+            zoned,
+            3 * 8 * 2,
+            "three zone kinds over 16 flag/pipe states"
+        );
     }
 
     // --- eco --------------------------------------------------------------
@@ -2576,8 +2799,11 @@ mod tests {
     #[test]
     fn strong_nature_matches_the_wilderness_rule() {
         for &kind in TileKind::ALL {
-            // The rule itself, not a copy of it: a local `matches!` would go on
-            // agreeing with itself after `wilderness.rs` changed.
+            // `wilderness::compute_wilderness` asks `Tile::is_strong_nature`
+            // now, so this is the *pre-migration* kind-level rule, kept
+            // longhand as an independent oracle: it cannot drift with
+            // `OCCUPANT_DEFS` the way a local `matches!` copied from the table
+            // would.
             let expected = crate::wilderness::is_strong_nature(kind);
             assert_eq!(
                 tile(kind, 0, None).is_strong_nature(),
@@ -2647,8 +2873,8 @@ mod tests {
     #[test]
     fn every_occupant_and_structure_kind_has_a_pinned_breakdown_category() {
         let expected: [(Occupant, Option<EcoCategory>); OCCUPANT_COUNT] = [
-            // A buried pipe files nowhere: `wilderness.rs` matches
-            // `Water | WaterPipe => {}`.
+            // A buried pipe scores 0.0 and files nowhere — `Neutral` is the
+            // line the old `Water | WaterPipe => {}` arm sent it to.
             (Occupant::Pipe, Some(EcoCategory::Neutral)),
             // Reserved: no tool, no TileKind, so nothing can file them at all.
             (Occupant::Subway, Some(EcoCategory::Neutral)),
@@ -2769,9 +2995,11 @@ mod tests {
             if kind == TileKind::WaterPipe {
                 // The one divergence, and it is deliberate. A *surface*
                 // WaterPipe derives to the empty occupant set (no tool has
-                // ever written one; only `import.rs` can produce it), so the
-                // occupant model hands it the open-land credit while
-                // `wilderness.rs` files its 0.0 nowhere. Same divergence
+                // ever written one; only `import.rs` can produce it), so it is
+                // scored as open land. `breakdown_line_for` still measures
+                // `Neutral`, because the probe tunables put 1.0 on `WaterPipe`
+                // and 0.0 on `Land`, so the credit it earns is 0.0 and no line
+                // visibly moves. Same divergence
                 // `tile_eco_matches_base_eco_on_single_occupant_tiles` pins.
                 assert_eq!(derived, EcoCategory::OpenLand);
                 assert_eq!(measured, EcoCategory::Neutral);
@@ -2808,7 +3036,9 @@ mod tests {
         assert_eq!(piped.terrain_eco(&t), 1.0);
 
         // Anything visible takes the credit away — including a hydro line that
-        // only exists as a flag, which is the spelling `wilderness.rs` misses.
+        // only exists as a flag, the spelling `wilderness.rs` used to miss
+        // entirely, handing a tile with live conductors on it the full +1.0
+        // open-land credit.
         let flagged = tile(TileKind::Land, FLAG_POWER_OVERLAY, None);
         assert_eq!(flagged.terrain_category(), None);
         assert_eq!(flagged.terrain_eco(&t), 0.0);
@@ -2879,9 +3109,11 @@ mod tests {
 
     #[test]
     fn terrain_survives_its_occupants() {
-        // `Tool::TerraformLower` leaves `building_id` set on a tile that has
-        // become water, so a Water tile can carry occupants today. Terrain is
-        // still Water, and it contributes no bit.
+        // A Water tile can carry occupants. No tool builds this exact one any
+        // more — `set_kind_clearing_surface` takes the road underlay with the
+        // regrade, in either spelling — but saves written before that landed
+        // carry both it and a `building_id` on drowned ground. Terrain is still
+        // Water, and it contributes no bit.
         let drowned = Tile {
             kind: TileKind::Water,
             flags: FLAG_ROAD_UNDERLAY,

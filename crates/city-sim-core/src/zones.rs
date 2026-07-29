@@ -7,6 +7,7 @@ use crate::adjacency::{
     has_road_access, is_frontier_zone, tile_has_power, tile_has_water, zone_has_road_path,
 };
 use crate::buildings::BuildingInstance;
+use crate::occupants::Occupant;
 use crate::rng::SeededRng;
 use crate::state::{GameState, FLAG_ABANDONED};
 use city_sim_protocol::tile_kind::TileKind;
@@ -48,10 +49,7 @@ impl ZoneGrowthSim {
             if tile.building_id.is_some() {
                 continue;
             }
-            if matches!(
-                tile.kind,
-                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-            ) {
+            if tile.zone_occupant().is_some() {
                 self.vacant.insert(idx);
             }
         }
@@ -88,14 +86,14 @@ impl ZoneGrowthSim {
                 self.vacant.remove(&idx);
                 continue;
             }
-            if !matches!(
-                tile.kind,
-                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-            ) {
+            // Re-checked because the cache is only invalidated by
+            // `tile_revision`: a zone bulldozed since the last refresh is
+            // still in `vacant` and must be dropped rather than grown.
+            let Some(zone) = tile.zone_occupant() else {
                 self.timers.remove(&idx);
                 self.vacant.remove(&idx);
                 continue;
-            }
+            };
 
             let x = (idx as u32) % state.width;
             let y = (idx as u32) / state.width;
@@ -118,29 +116,19 @@ impl ZoneGrowthSim {
 
             let has_power = tile_has_power(state, x, y);
             let has_water = tile_has_water(state, x, y);
-            let kind = tile.kind;
-            match kind {
-                TileKind::Residential => residential.push(Candidate {
-                    idx,
-                    x,
-                    y,
-                    has_power,
-                    has_water,
-                }),
-                TileKind::Commercial => commercial.push(Candidate {
-                    idx,
-                    x,
-                    y,
-                    has_power,
-                    has_water,
-                }),
-                TileKind::Industrial => industrial.push(Candidate {
-                    idx,
-                    x,
-                    y,
-                    has_power,
-                    has_water,
-                }),
+            let candidate = Candidate {
+                idx,
+                x,
+                y,
+                has_power,
+                has_water,
+            };
+            match zone {
+                Occupant::ZoneResidential => residential.push(candidate),
+                Occupant::ZoneCommercial => commercial.push(candidate),
+                Occupant::ZoneIndustrial => industrial.push(candidate),
+                // `zone_occupant` returns nothing else, and the guard above
+                // already dropped the tile if it returned `None`.
                 _ => {}
             }
         }
@@ -265,7 +253,11 @@ fn grow_zone_type(
 }
 
 /// Place a zone building: set tile.building_id, add to state.buildings, bump counters.
-fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool {
+///
+/// `pub(crate)` so `commands.rs` can grow a lot without stepping the whole sim:
+/// a developed lot is the second way a tile comes to carry a `building_id`, and
+/// the regrade guard has to refuse it too.
+pub(crate) fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool {
     let Some(idx) = state.tile_index(x, y) else {
         return false;
     };
@@ -274,6 +266,12 @@ fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool {
     }
 
     let bid = state.next_building_id;
+    // Left reading `kind` deliberately. This is not a land-use question but a
+    // template lookup — `BuildingInstance::kind` is the key
+    // `get_building_template` is indexed by, and `Occupant` has no mapping
+    // back to a `TileKind`. Step 3 of #177 has to give the three zone
+    // occupants their template kind before this line can move; the compiler
+    // will stop here when `kind` narrows to terrain, which is the point.
     let kind = state.tiles[idx].kind;
     state.next_building_id += 1;
     state.tile_revision += 1;

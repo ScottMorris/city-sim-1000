@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::BuildingStatus;
+use crate::occupants::Network;
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
-use city_sim_protocol::tile_kind::TileKind;
 use std::collections::VecDeque;
 
 /// Which utility network to recompute.
@@ -19,58 +19,27 @@ pub enum UtilityKind {
     Water,
 }
 
+impl UtilityKind {
+    /// The [`Network`] this utility propagates along.
+    ///
+    /// Two enums for what looks like one concept, because they answer
+    /// different questions: `UtilityKind` names a *pass* (which flag to clear,
+    /// which sources to seed, which `utilities` fields to update), `Network`
+    /// names a *property of a tile* (does anything here conduct). Adding
+    /// sewage means a variant here, a `Network` variant, and a column in
+    /// `OCCUPANT_DEFS::conducts` — no new BFS and no new carrier predicate.
+    #[inline]
+    pub fn network(self) -> Network {
+        match self {
+            UtilityKind::Power => Network::Power,
+            UtilityKind::Water => Network::Water,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Carrier / source predicates
 // ---------------------------------------------------------------------------
-
-/// Mirrors `isPowerCarrier()` in `app/src/game/adjacency.ts`.
-/// Public alias for use by `adjacency.rs`.
-pub fn is_power_carrier_pub(tile: &Tile) -> bool {
-    is_power_carrier(tile)
-}
-
-fn is_power_carrier(tile: &Tile) -> bool {
-    use TileKind::*;
-    if tile.power_plant_mw > 0 {
-        return true;
-    }
-    if tile.building_id.is_some() {
-        return true;
-    }
-    if tile.kind == PowerLine {
-        return true;
-    }
-    if tile.kind == Road || tile.has_road_underlay() {
-        return true;
-    }
-    if tile.kind == Rail || tile.has_rail_underlay() {
-        return true;
-    }
-    matches!(tile.kind, Residential | Commercial | Industrial)
-}
-
-/// Mirrors `isWaterCarrier()` in `app/src/game/adjacency.ts`.
-/// Public alias for use by `adjacency.rs`.
-pub fn is_water_carrier_pub(tile: &Tile) -> bool {
-    is_water_carrier(tile)
-}
-
-fn is_water_carrier(tile: &Tile) -> bool {
-    use TileKind::*;
-    if tile.underground == Some(WaterPipe) {
-        return true;
-    }
-    if tile.building_id.is_some() {
-        return true;
-    }
-    if tile.kind == Road || tile.has_road_underlay() {
-        return true;
-    }
-    if tile.kind == Rail || tile.has_rail_underlay() {
-        return true;
-    }
-    matches!(tile.kind, Residential | Commercial | Industrial)
-}
 
 fn is_source(tile: &Tile, kind: UtilityKind) -> bool {
     match kind {
@@ -79,11 +48,28 @@ fn is_source(tile: &Tile, kind: UtilityKind) -> bool {
     }
 }
 
-fn is_carrier(tile: &Tile, kind: UtilityKind) -> bool {
-    match kind {
-        UtilityKind::Power => is_power_carrier(tile),
-        UtilityKind::Water => is_water_carrier(tile),
-    }
+/// Whether the network flows *through* this tile.
+///
+/// Step 2 of the tile-model migration (#177, design note `docs/tile-model.md`):
+/// this used to be two hand-written predicates, `is_power_carrier` and
+/// `is_water_carrier`, each re-deriving "what is on this tile?" from `kind`
+/// with a partial list of flag fallbacks.
+/// The power one asked `tile.kind == PowerLine` and never asked
+/// `has_power_overlay()`, so a hydro line was only visible to the BFS when it
+/// happened to own the contested `kind` slot.
+///
+/// **That was a live bug, and converting to [`Tile::conducts`] fixes it.**
+/// `Tool::Tree` and the terrain brushes rewrite `kind` and leave
+/// `FLAG_POWER_OVERLAY` standing: plant a tree on a hydro line, or flood it,
+/// and the tile kept charging `MAINT_POWER_LINE` every day while silently
+/// severing the grid. Two spellings of the same physical tile —
+/// `kind = PowerLine` and `kind = Tree` + overlay — now conduct alike, which
+/// is the whole point of the occupant model.
+///
+/// Water converts with an empty diff: `is_water_carrier` already read the
+/// buried pipe out of `underground` and both underlays out of the flags.
+pub(crate) fn is_carrier(tile: &Tile, kind: UtilityKind) -> bool {
+    tile.conducts(kind.network())
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +244,10 @@ fn sum_output_water(state: &GameState) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{Tile, FLAG_ROAD_UNDERLAY};
+    use crate::commands::apply_tool;
+    use crate::state::{Tile, FLAG_POWER_OVERLAY, FLAG_ROAD_UNDERLAY};
+    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::tile_kind::TileKind;
 
     fn grid(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -266,6 +255,14 @@ mod tests {
 
     fn place(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
         state.tile_at_mut(x, y).unwrap().kind = kind;
+    }
+
+    fn is_power_carrier(tile: &Tile) -> bool {
+        is_carrier(tile, UtilityKind::Power)
+    }
+
+    fn is_water_carrier(tile: &Tile) -> bool {
+        is_carrier(tile, UtilityKind::Water)
     }
 
     // --- carrier predicate tests ---
@@ -317,6 +314,49 @@ mod tests {
             ..Tile::land()
         };
         assert!(is_power_carrier(&t));
+    }
+
+    /// **Behaviour change, step 2 of #177.** A hydro line recorded only in
+    /// `FLAG_POWER_OVERLAY` is a carrier. The old `is_power_carrier` asked
+    /// `kind == PowerLine` and nothing else, so every one of these tiles broke
+    /// the grid while still being billed `MAINT_POWER_LINE` a day.
+    ///
+    /// Every kind is exercised, not just the reachable ones, because the flag
+    /// is orthogonal to `kind` in storage and step 3 has to keep it that way.
+    #[test]
+    fn a_line_in_the_overlay_flag_alone_carries_power() {
+        for &kind in TileKind::ALL {
+            let t = Tile {
+                kind,
+                flags: FLAG_POWER_OVERLAY,
+                ..Tile::land()
+            };
+            assert!(
+                is_power_carrier(&t),
+                "{kind:?} + FLAG_POWER_OVERLAY must carry power"
+            );
+        }
+    }
+
+    /// The overlay carries power; it does not carry water. A line is a line —
+    /// `OCCUPANT_DEFS[PowerLine].conducts` is `NET_POWER` only, and a road
+    /// under a line carries water because it is a road.
+    #[test]
+    fn a_line_in_the_overlay_flag_alone_does_not_carry_water() {
+        let bare = Tile {
+            kind: TileKind::Tree,
+            flags: FLAG_POWER_OVERLAY,
+            ..Tile::land()
+        };
+        assert!(is_power_carrier(&bare));
+        assert!(!is_water_carrier(&bare));
+
+        let paved = Tile {
+            kind: TileKind::PowerLine,
+            flags: FLAG_POWER_OVERLAY | FLAG_ROAD_UNDERLAY,
+            ..Tile::land()
+        };
+        assert!(is_water_carrier(&paved), "the road under the line carries");
     }
 
     #[test]
@@ -404,6 +444,52 @@ mod tests {
         place(&mut g, 1, 0, TileKind::Residential);
         recompute_utility_network(&mut g, UtilityKind::Power);
         assert!(g.tile_at(1, 0).unwrap().is_powered());
+    }
+
+    /// The bug this conversion closes, built with the real tools rather than
+    /// hand-set flags: string a line, then plant a tree on it (or flood it).
+    /// Both tools rewrite `kind` and leave `FLAG_POWER_OVERLAY` standing, so
+    /// before step 2 the grid went dark from that tile onward while the daily
+    /// budget kept charging `MAINT_POWER_LINE` for the very span that had
+    /// stopped conducting.
+    ///
+    /// Both tools are exercised because both rewrite `kind` over a tile whose
+    /// line lives only in the flag — the water brush by design, since a line
+    /// over water is a pylon span, and the tree by the blindness
+    /// `known_defect_trees_are_planted_through_a_live_hydro_line` describes.
+    /// The two terraform tools reach the same tile the same way. What neither
+    /// leaves standing is the *surface*: `set_kind_clearing_surface` takes a
+    /// road or rail underlay with it, which is why this test strings its line
+    /// over bare ground.
+    #[test]
+    fn a_line_buried_under_a_tree_or_flooded_still_carries_power() {
+        for tool in [Tool::Tree, Tool::Water] {
+            let mut g = grid(5, 1);
+            g.money = 10_000;
+            g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+            g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+            for x in 1..=3 {
+                apply_tool(&mut g, Tool::PowerLine, x, 0);
+            }
+            apply_tool(&mut g, tool, 2, 0);
+
+            let mid = g.tile_at(2, 0).unwrap();
+            assert_ne!(mid.kind, TileKind::PowerLine, "{tool:?} rewrote kind");
+            assert!(
+                mid.has_power_overlay(),
+                "{tool:?} left the line in the flag — the premise of this test"
+            );
+
+            recompute_utility_network(&mut g, UtilityKind::Power);
+            assert!(
+                g.tile_at(2, 0).unwrap().is_powered(),
+                "{tool:?}: the tile still carries a billed line"
+            );
+            assert!(
+                g.tile_at(3, 0).unwrap().is_powered(),
+                "{tool:?}: the span beyond it must not go dark"
+            );
+        }
     }
 
     #[test]

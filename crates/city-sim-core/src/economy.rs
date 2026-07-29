@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::get_building_template;
+use crate::occupants::{LedgerLine, Occupant, LEDGER_LINE_COUNT};
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
 use crate::wilderness::{tourism_dividend, WildernessTunables};
 use city_sim_protocol::commands::BudgetPolicy;
@@ -46,18 +47,19 @@ pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 /// Lighting-bylaw scaling of civic/zone maintenance is stubbed to 1.0 until
 /// bylaws are ported (P3-9+).
 pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
-    let mut maint_roads = 0.0_f32;
-    let mut maint_rail = 0.0_f32;
-    let mut maint_power_lines = 0.0_f32;
-    let mut maint_pipes = 0.0_f32;
+    // Per-tile upkeep, accumulated per `BudgetStats` line and before funding.
+    let mut upkeep = [0.0_f32; LEDGER_LINE_COUNT];
     let mut commercial_zones = 0_u32;
     let mut industrial_zones = 0_u32;
 
     for tile in &state.tiles {
-        // Zone revenue counters (all commercial/industrial tiles, developed or not)
-        match tile.kind {
-            TileKind::Commercial => commercial_zones += 1,
-            TileKind::Industrial => industrial_zones += 1,
+        // Zone revenue counters (all commercial/industrial tiles, developed or
+        // not). A genuinely single-valued question — a tile has at most one
+        // zone — asked through the accessor rather than off `kind` so that
+        // step 3 of #177 can narrow `kind` to terrain.
+        match tile.zone_occupant() {
+            Some(Occupant::ZoneCommercial) => commercial_zones += 1,
+            Some(Occupant::ZoneIndustrial) => industrial_zones += 1,
             _ => {}
         }
 
@@ -77,24 +79,24 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         // one and the guard did nothing for them — but a zone can develop a
         // lot *under* an existing line, and that line is still real
         // infrastructure somebody has to maintain.
-        if tile.kind == TileKind::Road || tile.has_road_underlay() {
-            maint_roads += MAINT_ROAD;
-        }
-        if tile.kind == TileKind::Rail || tile.has_rail_underlay() {
-            maint_rail += MAINT_RAIL;
-        }
-        if tile.kind == TileKind::PowerLine || tile.has_power_overlay() {
-            maint_power_lines += MAINT_POWER_LINE;
-        }
-
-        // Water pipes are only ever recorded underground — no tool has ever
-        // set `kind` to `WaterPipe`, so the arm of the old match that looked
-        // for it was dead, and would have double-billed a tile that somehow
-        // had both.
-        if tile.underground == Some(TileKind::WaterPipe) {
-            maint_pipes += MAINT_WATER_PIPE;
+        //
+        // Fixing that (#172) left four hand-written `kind == X || flag`
+        // branches here, one per ledger line, plus a fifth reading
+        // `underground` for the pipe. Step 2 of #177 replaces the lot with the
+        // occupant table: `tile_upkeep_by_line` charges every occupant present
+        // to the line its `OccupantDef` names, so a fifth billable occupant is
+        // a table row and a `LedgerLine` variant — never a branch someone
+        // forgets to add here. The funding multipliers stay below, because the
+        // table carries the department tag, not the policy.
+        for (line, add) in upkeep.iter_mut().zip(tile.tile_upkeep_by_line()) {
+            *line += add;
         }
     }
+
+    let mut maint_roads = upkeep[LedgerLine::Roads as usize];
+    let mut maint_rail = upkeep[LedgerLine::Rail as usize];
+    let mut maint_power_lines = upkeep[LedgerLine::PowerLines as usize];
+    let mut maint_pipes = upkeep[LedgerLine::Pipes as usize];
 
     // Building maintenance — all buildings in state.buildings, accumulated
     // per type so the budget screen can show coal vs wind vs hydro etc.

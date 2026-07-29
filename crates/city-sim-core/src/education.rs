@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::{get_building_template, BuildingStatus};
+use crate::occupants::Occupant;
 use crate::state::{EducationStats, GameState, ServiceKind};
 use city_sim_protocol::tile_kind::TileKind;
 use std::cmp::Reverse;
@@ -145,11 +146,13 @@ fn reachable_zone_candidates(
         let y = (idx as u32) / state.width;
         let tile = &state.tiles[idx];
 
-        let is_road = tile.kind == TileKind::Road || tile.has_road_underlay();
-        let is_zone = matches!(
-            tile.kind,
-            TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-        );
+        // "Is there a road here?" is a multi-valued question — a level
+        // crossing and a road under a hydro line both carry one without owning
+        // `kind` — so it goes through the occupant set. The BFS already asked
+        // it correctly by hand; the accessor is what keeps it correct once
+        // step 3 of #177 narrows `kind` to terrain.
+        let is_road = tile.has_occupant(Occupant::Road);
+        let is_zone = tile.zone_occupant().is_some();
 
         if is_zone {
             reachable
@@ -174,11 +177,8 @@ fn reachable_zone_candidates(
                 continue;
             }
             let ntile = &state.tiles[nidx];
-            let n_road = ntile.kind == TileKind::Road || ntile.has_road_underlay();
-            let n_zone = matches!(
-                ntile.kind,
-                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-            );
+            let n_road = ntile.has_occupant(Occupant::Road);
+            let n_zone = ntile.zone_occupant().is_some();
             if n_road || n_zone {
                 heap.push(Reverse((nd, nidx)));
             }
@@ -230,10 +230,7 @@ pub fn recompute_education(state: &mut GameState) {
     let mut elementary_load = 0.0_f32;
     let mut high_load = 0.0_f32;
     for (idx, tile) in state.tiles.iter().enumerate() {
-        if !matches!(
-            tile.kind,
-            TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-        ) {
+        if tile.zone_occupant().is_none() {
             continue;
         }
         elementary_load += loads.population.get(&idx).copied().unwrap_or(0.0);
@@ -293,11 +290,10 @@ pub fn recompute_education(state: &mut GameState) {
             if used >= capacity {
                 break;
             }
-            let tile_kind = state.tiles[cidx].kind;
-            if !matches!(
-                tile_kind,
-                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-            ) {
+            // Redundant — `reachable_zone_candidates` files only zoned tiles —
+            // but kept because `education.ts` re-checks here too and the two
+            // are held to parity.
+            if state.tiles[cidx].zone_occupant().is_none() {
                 continue;
             }
             let load = if svc == ServiceKind::EducationElementary {
