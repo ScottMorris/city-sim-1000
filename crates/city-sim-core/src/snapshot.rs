@@ -14,8 +14,9 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// gained `revenue_tourism`.
 /// v5: #177 step 3 — `Tile` was stratified. `kind: TileKind` + `underground:
 /// Option<TileKind>` + three structural bits inside `flags` became `terrain:
-/// Terrain` + `underground: Underground` + `surface: Surface` + `overhead:
-/// Overhead` + `density: ZoneDensity`.
+/// Terrain` + `underground: StratumSet<Underground>` + `surface:
+/// StratumSet<Surface>` + `overhead: StratumSet<Overhead>` + `density:
+/// ZoneDensity`.
 ///
 /// **The three stratum fields landed inside v5, not in a v6.** v5 has never
 /// been released — `origin/main` and `main` both read `VERSION = 4` — so it was
@@ -32,8 +33,8 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// written by an earlier commit *on this branch* no longer loads. The exposure
 /// is a `.citysim` download or an IndexedDB save made while dev-running the
 /// branch between the first stratum commit and this one, and nothing else. The
-/// failure is loud rather than silent — the hand-written `Deserialize` on the
-/// stratum newtypes rejects a foreign bit pattern outright, which is what
+/// failure is loud rather than silent — the hand-written `Deserialize` on
+/// `StratumSet` rejects a foreign bit pattern outright, which is what
 /// `tests::a_snapshot_with_a_cross_stratum_bit_is_refused` covers — so such a
 /// save errors instead of decoding into a wrong city.
 ///
@@ -401,7 +402,7 @@ mod tests {
     /// A snapshot whose `surface` field carries an overhead bit is **refused**,
     /// end to end, by [`from_bytes`] — not masked, not logged, not loaded.
     ///
-    /// The reasoning is in the `Deserialize` impl the stratum newtypes share:
+    /// The reasoning is in the one `Deserialize` impl every stratum set shares:
     /// the invariant is unrepresentable in the running program, so no build of
     /// this engine can have written such a tile, and postcard is positional
     /// with nothing to resynchronise against — a stratum holding a foreign bit
@@ -411,7 +412,8 @@ mod tests {
     /// to end.
     ///
     /// The forgery is done in bytes because there is no other way to do it:
-    /// `Surface(1 << 9)` does not compile outside `occupants::strata`.
+    /// `StratumSet::<Surface>(1 << 9, PhantomData)` does not compile outside
+    /// `occupants::strata`.
     #[test]
     fn a_snapshot_with_a_cross_stratum_bit_is_refused() {
         use crate::occupants::{occupant_bit, Occupant, OccupantSet};

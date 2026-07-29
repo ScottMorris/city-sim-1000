@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::BuildingInstance;
-use crate::occupants::{Occupant, Overhead, Stratum, Surface, Terrain, Underground};
+use crate::occupants::{Occupant, Overhead, Stratum, StratumSet, Surface, Terrain, Underground};
 use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
 use city_sim_protocol::commands::Policies;
@@ -89,16 +89,17 @@ pub struct Tile {
     ///
     /// Three sibling fields, in physical order, because *where a thing sits* is
     /// a property of the tile and should be answerable by looking at it rather
-    /// than by masking a word. They are distinct newtypes rather than three
-    /// `OccupantSet`s so that the shape costs nothing in safety: the inner
+    /// than by masking a word. Each is a [`StratumSet`] tagged with the
+    /// [`Layer`](crate::occupants::Layer) it belongs to, rather than a bare
+    /// `OccupantSet`, so that the shape costs nothing in safety: the inner
     /// field is private and only `occupants::strata` can write one, so a
     /// surface field holding an overhead bit is unrepresentable rather than
     /// merely unwritten. [`Tile::occupants`] unions them for free.
-    pub underground: Underground,
+    pub underground: StratumSet<Underground>,
     /// What stands on the ground: road, rail, land use, structures.
-    pub surface: Surface,
+    pub surface: StratumSet<Surface>,
     /// What passes overhead: conductors and canopy.
-    pub overhead: Overhead,
+    pub overhead: StratumSet<Overhead>,
     /// The design note's `development`: the `BuildingInstance` this tile
     /// belongs to, and — with [`Occupant::Structure`] being one flat tag — the
     /// only thing that knows *which* structure stands here. Resolve it through
@@ -138,9 +139,9 @@ impl Tile {
     pub fn land() -> Self {
         Self {
             terrain: Terrain::Land,
-            underground: Underground::EMPTY,
-            surface: Surface::EMPTY,
-            overhead: Overhead::EMPTY,
+            underground: StratumSet::EMPTY,
+            surface: StratumSet::EMPTY,
+            overhead: StratumSet::EMPTY,
             building_id: None,
             elevation: 0,
             density: ZoneDensity::Low,
