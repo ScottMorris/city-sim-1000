@@ -24,12 +24,29 @@
 //! `Tile::occupants` now, so a road with a line costs −2.0 + −1.0 and each
 //! half is filed on its own line.
 //!
+//! **Three concepts, three tables.** Those values used to share one dense
+//! `base_eco[TileKind]` array, which meant the terrain's open-land credit, an
+//! occupant's cost and a structure's cost were all looked up by the same key —
+//! and so `TileKind` stayed an engine-internal lookup key long after it had
+//! stopped describing a tile. [`WildernessTunables`] now carries
+//! [`terrain_eco`](WildernessTunables::terrain_eco) keyed by [`Terrain`],
+//! [`occupant_eco`](WildernessTunables::occupant_eco) keyed by [`Occupant`],
+//! and [`structure_eco`](WildernessTunables::structure_eco) keyed by
+//! `TileKind` — the last legitimately so, because that is the building
+//! template key and it is what identifies *which* structure. Every value stayed
+//! exactly where it was on the number line; only its address changed.
+//!
+//! All three are **tables, not constants**, and that is a requirement rather
+//! than a habit: the Green Industry programme rewrites the industrial row at
+//! runtime through [`WildernessTunables::effective`], so an eco value baked
+//! into a static `OccupantDef` would be a second copy no policy could reach.
+//!
 //! This module is Rust-first: its tests are the spec, and it is deliberately
 //! excluded from the TS parity oracle (`simulation.ts`).
 
 use crate::occupants::{
     is_strong_nature, iter_set, occupant_category, occupant_eco, structure_category, structure_eco,
-    tile_eco, EcoCategory, StructureLookup, Terrain,
+    tile_eco, EcoCategory, Occupant, StructureLookup, Terrain, OCCUPANT_COUNT, TERRAIN_COUNT,
 };
 use crate::state::GameState;
 use city_sim_protocol::commands::WildernessPolicy;
@@ -43,8 +60,25 @@ use city_sim_protocol::tile_kind::TileKind;
 /// Starter values follow the weight table in the design doc.
 #[derive(Debug, Clone)]
 pub struct WildernessTunables {
-    /// Base eco value indexed by `TileKind as u8`.
-    pub base_eco: [f32; 20],
+    /// Eco credit of the ground itself, indexed by `Terrain as usize`. Read by
+    /// [`Tile::terrain_eco`](crate::state::Tile::terrain_eco), which gates the
+    /// `Land` credit on the tile being visibly empty.
+    pub terrain_eco: [f32; TERRAIN_COUNT],
+    /// Eco value of one occupant's presence, indexed by `Occupant as usize`.
+    /// Read by [`occupant_eco`], once per occupant standing on the tile.
+    ///
+    /// The `Structure` row is never read and is held at `0.0`: a structure's
+    /// value is per kind, so
+    /// [`EcoSource::PerStructureKind`](crate::occupants::EcoSource::PerStructureKind)
+    /// sends that one occupant to [`Self::structure_eco`] instead. See
+    /// `the_structure_row_of_the_occupant_table_is_never_read`.
+    pub occupant_eco: [f32; OCCUPANT_COUNT],
+    /// Eco value of a structure, indexed by `TileKind as usize` — the building
+    /// template key, which is what identifies *which* structure. Read by
+    /// [`structure_eco`]; only the
+    /// [`is_structure_kind`](crate::occupants::is_structure_kind) rows are ever
+    /// live, and the rest stay `0.0`.
+    pub structure_eco: [f32; TileKind::COUNT],
     /// Patch bonus ceiling per strong-nature tile (saturating curve).
     pub patch_bonus_cap: f32,
     /// Cluster size at which the patch bonus reaches ~63% of its cap.
@@ -96,7 +130,11 @@ impl WildernessTunables {
             t.fragmentation_penalty = self.reserve_fragmentation_penalty;
         }
         if policy.green_industry {
-            t.base_eco[TileKind::Industrial as usize] = self.green_industry_eco;
+            // The occupant table, not a constant in `OCCUPANT_DEFS`: this is
+            // the patch that forces every eco value to stay tunable at
+            // runtime. A number baked into the static def would be a second
+            // copy that the programme could never reach.
+            t.occupant_eco[Occupant::ZoneIndustrial as usize] = self.green_industry_eco;
         }
         t
     }
@@ -104,32 +142,44 @@ impl WildernessTunables {
 
 impl Default for WildernessTunables {
     fn default() -> Self {
-        let mut base_eco = [0.0_f32; 20];
-        base_eco[TileKind::Land as usize] = 1.0;
-        base_eco[TileKind::Water as usize] = 0.0;
-        base_eco[TileKind::Tree as usize] = 6.0;
-        base_eco[TileKind::Road as usize] = -2.0;
-        base_eco[TileKind::Rail as usize] = -2.0;
-        base_eco[TileKind::Residential as usize] = -1.0;
-        base_eco[TileKind::Commercial as usize] = -2.0;
-        base_eco[TileKind::Industrial as usize] = -5.0;
-        base_eco[TileKind::PowerLine as usize] = -1.0;
-        base_eco[TileKind::HydroPlant as usize] = -2.0;
-        base_eco[TileKind::WaterPump as usize] = -1.0;
-        base_eco[TileKind::WaterTower as usize] = -1.0;
-        // WaterPipe is an underground kind — nature above a buried pipe is
-        // still nature. It only appears as a surface kind while unburied,
-        // where it is neutral.
-        base_eco[TileKind::WaterPipe as usize] = 0.0;
-        base_eco[TileKind::ElementarySchool as usize] = -1.0;
-        base_eco[TileKind::HighSchool as usize] = -1.0;
-        base_eco[TileKind::Park as usize] = 4.0;
-        base_eco[TileKind::ParkLarge as usize] = 4.0;
-        base_eco[TileKind::CoalPlant as usize] = -8.0;
-        base_eco[TileKind::WindTurbine as usize] = -1.0;
-        base_eco[TileKind::SolarFarm as usize] = -1.0;
+        // --- the ground itself ---
+        let mut terrain_eco = [0.0_f32; TERRAIN_COUNT];
+        terrain_eco[Terrain::Land as usize] = 1.0;
+        terrain_eco[Terrain::Water as usize] = 0.0;
+
+        // --- one row per occupant standing on it ---
+        let mut occupant_eco = [0.0_f32; OCCUPANT_COUNT];
+        // Nature above a buried pipe is still nature, so a pipe scores nothing
+        // — and neither do the two reserved occupants, which stay at 0.0.
+        occupant_eco[Occupant::Pipe as usize] = 0.0;
+        occupant_eco[Occupant::Road as usize] = -2.0;
+        occupant_eco[Occupant::Rail as usize] = -2.0;
+        occupant_eco[Occupant::ZoneResidential as usize] = -1.0;
+        occupant_eco[Occupant::ZoneCommercial as usize] = -2.0;
+        // Patched by the Green Industry programme — see `effective`.
+        occupant_eco[Occupant::ZoneIndustrial as usize] = -5.0;
+        occupant_eco[Occupant::PowerLine as usize] = -1.0;
+        occupant_eco[Occupant::Trees as usize] = 6.0;
+        // `Occupant::Structure` deliberately has no value: which structure it
+        // is decides, and that is the table below.
+
+        // --- one row per structure, keyed by its building template ---
+        let mut structure_eco = [0.0_f32; TileKind::COUNT];
+        structure_eco[TileKind::HydroPlant as usize] = -2.0;
+        structure_eco[TileKind::WaterPump as usize] = -1.0;
+        structure_eco[TileKind::WaterTower as usize] = -1.0;
+        structure_eco[TileKind::ElementarySchool as usize] = -1.0;
+        structure_eco[TileKind::HighSchool as usize] = -1.0;
+        structure_eco[TileKind::Park as usize] = 4.0;
+        structure_eco[TileKind::ParkLarge as usize] = 4.0;
+        structure_eco[TileKind::CoalPlant as usize] = -8.0;
+        structure_eco[TileKind::WindTurbine as usize] = -1.0;
+        structure_eco[TileKind::SolarFarm as usize] = -1.0;
+
         Self {
-            base_eco,
+            terrain_eco,
+            occupant_eco,
+            structure_eco,
             patch_bonus_cap: 2.0,
             patch_reference_size: 32.0,
             edge_bonus: 2.0,
@@ -329,7 +379,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
         if let Some(category) = tile.terrain_category() {
             breakdown.add(category, eco);
         }
-        for o in iter_set(tile.occupants) {
+        for o in iter_set(tile.occupants()) {
             // A `None` pair means the occupant tag cannot answer for itself —
             // today only `Structure`, whose eco *and* line both come from the
             // structure's kind (a park is +4.0 on `parks`, a coal plant −8.0
@@ -476,9 +526,9 @@ pub fn apply_happiness_drift(state: &mut GameState, score: f32, t: &WildernessTu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::apply_tool;
+    use crate::commands::{apply_tool, tool_cost};
     use crate::migrate::set_v4_kind;
-    use crate::occupants::Occupant;
+    use crate::occupants::{Occupant, ALL_OCCUPANTS};
     use city_sim_protocol::commands::Tool;
 
     fn grid(w: u32, h: u32) -> GameState {
@@ -563,16 +613,233 @@ mod tests {
         );
     }
 
+    /// **The score half of #177 step 4 — the bulldozer stops filling lakes in.**
+    ///
+    /// `buildable` is `terrain != Water`, and it is the only thing the softening
+    /// constant `k` is scaled by, so anything that turns water into land moves
+    /// the score twice over: `P` gains the +1.0 open-land credit, `k` gains
+    /// 0.5, and every strong-nature tile that was on the shoreline loses its
+    /// +2.0 water-edge bonus. Until now the bulldozer did all three for 1
+    /// credit a tile.
+    ///
+    /// Measured on the 16×16 city below — three urban rows, two forest rows,
+    /// and a 4×4 lake carved directly beneath the forest — bulldozing the whole
+    /// lake used to move it like this:
+    ///
+    /// | | score | P | U | k | buildable |
+    /// | --- | --- | --- | --- | --- | --- |
+    /// | lake intact | 66.6920 | 400.456 | 80.0 | 120.0 | 240 |
+    /// | bulldozed, old rule | 66.2587 | 408.456 | 80.0 | 128.0 | 256 |
+    ///
+    /// `P` rose by 8.0, not 16.0: sixteen tiles gained the +1.0 land credit and
+    /// the four forest tiles that had been on the shore lost 2.0 each. `k` rose
+    /// by the full 8.0. Sixteen credits of bulldozing therefore cost 0.4332 of
+    /// wilderness score — and cost it for the *right* reason, filling in a
+    /// lake, at a twelfth of the 192 credits the water brush charges to dig
+    /// one back out.
+    ///
+    /// The sign flips with the city. The score is `100·P/(P+U+k)`, so filling a
+    /// tile with no nature on its shore adds 1.0 to the numerator and 1.5 to
+    /// the denominator: it *raises* the score of any city scoring under 66.67
+    /// and lowers it above. A dirty city was the profitable case. On a 16×16
+    /// map with eight industrial rows, a road row under them and a 4×8 lake
+    /// nowhere near nature, thirty-two bulldozer clicks — 32 credits, no
+    /// industry removed — took the score from 9.2593 to 12.2807. Filling in a
+    /// lake bought three points of wilderness.
+    ///
+    /// Now the bulldozer moves neither term, because it no longer touches
+    /// terrain. The lake is still there after the click.
+    ///
+    /// **What that did not do is close the exploit — it made it 6× dearer.**
+    /// `regrade_at` still writes `Terrain::Land`, and every building tool calls
+    /// it, so the same thirty-two tiles drain for 192 credits as `Tool::Road`
+    /// followed by `Tool::Bulldoze`. Measured on the same 16×16 map without the
+    /// road row: 11.3208 → 14.2857, the same three points. Whoever prices
+    /// bridges and docks (`Terrain`'s note in `occupants.rs`) inherits that;
+    /// `commands::tests::building_over_water_and_razing_it_is_the_cheapest_regrade`
+    /// pins the price meanwhile so no doc can claim the brushes are the only
+    /// way to drain a lake.
+    #[test]
+    fn bulldozing_a_lake_no_longer_fills_it_in_or_moves_the_score() {
+        let mut s = grid(16, 16);
+        s.money = 1_000_000;
+        build_row(&mut s, &[Tool::Road], 2, 16);
+        build_row(&mut s, &[Tool::Residential], 3, 16);
+        build_row(&mut s, &[Tool::Commercial], 4, 16);
+        build_row(&mut s, &[Tool::Tree], 10, 16);
+        build_row(&mut s, &[Tool::Tree], 11, 16);
+        for y in 12..16 {
+            for x in 0..4 {
+                assert!(apply_tool(&mut s, Tool::Water, x, y).success);
+            }
+        }
+
+        let buildable = |s: &GameState| {
+            s.tiles
+                .iter()
+                .filter(|t| t.terrain() == Terrain::Land)
+                .count()
+        };
+        let (before_score, before_buildable) = (score(&s), buildable(&s));
+        assert_eq!(before_buildable, 240, "the lake is 16 of the 256 tiles");
+
+        for y in 12..16 {
+            for x in 0..4 {
+                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y).success);
+            }
+        }
+
+        assert_eq!(
+            buildable(&s),
+            before_buildable,
+            "the bulldozer opened {} tiles of buildable land for 16 credits",
+            buildable(&s) - before_buildable
+        );
+        assert_eq!(
+            score(&s),
+            before_score,
+            "the bulldozer moved the wilderness score by changing the terrain"
+        );
+        // And the shoreline forest keeps the bonus it was drawing from the lake.
+        assert!(
+            eco_at(&s, 0, 11) > eco_at(&s, 8, 11),
+            "the waterfront trees lost their edge bonus to the bulldozer"
+        );
+    }
+
+    /// **The lake-filling exploit is 6× dearer, not gone.**
+    ///
+    /// The companion to the test above, and the reason its closing claim is
+    /// "the bulldozer moves neither term" rather than "the lake cannot be
+    /// drained". `regrade_at` writes `Terrain::Land` and every building tool
+    /// calls it, so `Tool::Road` followed by `Tool::Bulldoze` buys the same
+    /// terrain the 1-credit click used to, at 6 credits a tile.
+    ///
+    /// Measured on a dirty 16×16 — eight industrial rows and a 4×8 lake well
+    /// clear of them, the shape the doc comment above uses to describe the old
+    /// exploit — draining the lake still moves the score by the full three
+    /// points:
+    ///
+    /// | | score | buildable |
+    /// | --- | --- | --- |
+    /// | lake intact | 11.3208 | 224 |
+    /// | drained, 32 × (Road + Bulldoze) | 14.2857 | 256 |
+    ///
+    /// 192 credits against the 384 the water brush charges to dig it back out,
+    /// so the round trip is still a loss — which is the only thing standing
+    /// between the score and a pump. Pricing that properly is bridges and docks
+    /// (see `Terrain` in `occupants.rs`); this test exists so nobody documents
+    /// the exploit as closed while the numbers say otherwise.
+    #[test]
+    fn a_builder_and_a_bulldozer_still_drain_a_lake_and_move_the_score() {
+        let mut s = grid(16, 16);
+        s.money = 1_000_000;
+        for y in 0..8 {
+            build_row(&mut s, &[Tool::Industrial], y, 16);
+        }
+        for y in 8..16 {
+            for x in 0..4 {
+                assert!(apply_tool(&mut s, Tool::Water, x, y).success);
+            }
+        }
+        let buildable = |s: &GameState| {
+            s.tiles
+                .iter()
+                .filter(|t| t.terrain() == Terrain::Land)
+                .count()
+        };
+        assert_eq!(buildable(&s), 224, "the lake is 32 of the 256 tiles");
+        let before = score(&s);
+
+        let money_before = s.money;
+        for y in 8..16 {
+            for x in 0..4 {
+                assert!(apply_tool(&mut s, Tool::Road, x, y).success);
+                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y).success);
+            }
+        }
+
+        assert_eq!(buildable(&s), 256, "the lake survived a road laid over it");
+        assert_eq!(
+            money_before - s.money,
+            32 * (tool_cost(Tool::Road) + tool_cost(Tool::Bulldoze)),
+            "the drain cost something other than 32 build-and-raze pairs"
+        );
+        assert!(
+            score(&s) > before,
+            "draining a lake in a dirty city no longer pays ({} → {})",
+            before,
+            score(&s)
+        );
+        assert!(
+            money_before - s.money < 32 * tool_cost(Tool::Water),
+            "the round trip through the brush must still cost more than the drain"
+        );
+    }
+
     // --- base weights ---
 
+    /// Each eco table is exactly as long as its own key's domain — which is
+    /// the whole point of the split. One `base_eco[TileKind]` array used to
+    /// answer for terrain, occupants and structures alike, so `TileKind` was
+    /// the key to three questions it only really answers one of.
     #[test]
-    fn every_tile_kind_has_a_weight_entry() {
+    fn each_eco_table_is_indexed_by_its_own_key() {
         let t = WildernessTunables::default();
-        // The array must cover every TileKind discriminant.
-        for &kind in TileKind::ALL {
-            let _ = t.base_eco[kind as usize];
+        assert_eq!(t.terrain_eco.len(), Terrain::ALL.len());
+        assert_eq!(t.occupant_eco.len(), ALL_OCCUPANTS.len());
+        assert_eq!(t.structure_eco.len(), TileKind::ALL.len());
+        for terrain in Terrain::ALL {
+            let _ = t.terrain_eco[terrain as usize];
         }
-        assert_eq!(t.base_eco.len(), TileKind::ALL.len());
+        for o in ALL_OCCUPANTS {
+            let _ = t.occupant_eco[o as usize];
+        }
+        for &kind in TileKind::ALL {
+            let _ = t.structure_eco[kind as usize];
+        }
+    }
+
+    /// The structure table's live rows are exactly the structure kinds. Every
+    /// other `TileKind` row is `0.0` and stays that way: a road's −2.0 moved
+    /// *out* of the `TileKind`-keyed table when the split happened, rather
+    /// than being copied into a second home where the two could drift.
+    #[test]
+    fn only_structure_kinds_carry_a_structure_eco() {
+        let t = WildernessTunables::default();
+        for &kind in TileKind::ALL {
+            assert_eq!(
+                t.structure_eco[kind as usize] != 0.0,
+                crate::occupants::is_structure_kind(kind),
+                "{kind:?}: only structures belong in the structure eco table"
+            );
+        }
+    }
+
+    /// `Occupant::Structure` is the one occupant with no value of its own, and
+    /// its row must stay unread rather than merely unused — a `0.0` returned
+    /// from the occupant table would flatten a park and a coal plant into each
+    /// other exactly as the pre-`EcoSource` `Option<TileKind>` did.
+    #[test]
+    fn the_structure_row_of_the_occupant_table_is_never_read() {
+        let mut t = WildernessTunables::default();
+        assert_eq!(t.occupant_eco[Occupant::Structure as usize], 0.0);
+        // Poison the row: nothing may notice.
+        t.occupant_eco[Occupant::Structure as usize] = 999.0;
+        assert_eq!(occupant_eco(Occupant::Structure, &t), None);
+        assert_eq!(structure_eco(TileKind::CoalPlant, &t), -8.0);
+
+        // …and no route into the score may notice either.
+        let mut s = grid(8, 8);
+        set(&mut s, 3, 3, TileKind::CoalPlant);
+        let honest = compute_wilderness(&s, &WildernessTunables::default());
+        let poisoned = compute_wilderness(&s, &t);
+        assert_eq!(
+            poisoned.score, honest.score,
+            "a structure read its occupant row instead of its structure row"
+        );
+        assert_eq!(poisoned.breakdown.power, honest.breakdown.power);
+        assert_eq!(poisoned.breakdown, honest.breakdown);
     }
 
     #[test]
@@ -612,22 +879,29 @@ mod tests {
     #[test]
     fn water_pipe_and_water_are_neutral() {
         let t = WildernessTunables::default();
-        assert_eq!(t.base_eco[TileKind::WaterPipe as usize], 0.0);
-        assert_eq!(t.base_eco[TileKind::Water as usize], 0.0);
+        // The buried pipe is an occupant; water is terrain. One array used to
+        // hold both, which is exactly the conflation the split undid.
+        assert_eq!(t.occupant_eco[Occupant::Pipe as usize], 0.0);
+        assert_eq!(t.terrain_eco[Terrain::Water as usize], 0.0);
+        // The reserved occupants score nothing either — a value, not a hole.
+        assert_eq!(t.occupant_eco[Occupant::Subway as usize], 0.0);
+        assert_eq!(t.occupant_eco[Occupant::Fibre as usize], 0.0);
     }
 
     #[test]
     fn coal_is_worse_than_wind_and_solar() {
         let t = WildernessTunables::default();
         assert!(
-            t.base_eco[TileKind::CoalPlant as usize] < t.base_eco[TileKind::HydroPlant as usize]
+            t.structure_eco[TileKind::CoalPlant as usize]
+                < t.structure_eco[TileKind::HydroPlant as usize]
         );
         assert!(
-            t.base_eco[TileKind::HydroPlant as usize] < t.base_eco[TileKind::WindTurbine as usize]
+            t.structure_eco[TileKind::HydroPlant as usize]
+                < t.structure_eco[TileKind::WindTurbine as usize]
         );
         assert_eq!(
-            t.base_eco[TileKind::WindTurbine as usize],
-            t.base_eco[TileKind::SolarFarm as usize]
+            t.structure_eco[TileKind::WindTurbine as usize],
+            t.structure_eco[TileKind::SolarFarm as usize]
         );
     }
 
@@ -694,7 +968,7 @@ mod tests {
         let idx = s.tile_index(4, 4).unwrap();
         // Base 6, small patch bonus, minus fragmentation penalty — must be
         // below base+patch by exactly the penalty.
-        assert!(out.eco_field[idx] < t.base_eco[TileKind::Tree as usize]);
+        assert!(out.eco_field[idx] < t.occupant_eco[Occupant::Trees as usize]);
         assert!(out.breakdown.fragmentation < 0.0);
     }
 
@@ -710,7 +984,7 @@ mod tests {
         let t = WildernessTunables::default();
         let centre = s.tile_index(4, 4).unwrap();
         // Centre tile: base + patch bonus, no penalty, no edge bonus.
-        let expected_min = t.base_eco[TileKind::Tree as usize];
+        let expected_min = t.occupant_eco[Occupant::Trees as usize];
         assert!(
             out.eco_field[centre] > expected_min,
             "interior tile should exceed base eco (got {})",
@@ -891,10 +1165,9 @@ mod tests {
         let same = base.effective(&WildernessPolicy::default());
         assert_eq!(same.patch_bonus_cap, base.patch_bonus_cap);
         assert_eq!(same.fragmentation_penalty, base.fragmentation_penalty);
-        assert_eq!(
-            same.base_eco[TileKind::Industrial as usize],
-            base.base_eco[TileKind::Industrial as usize]
-        );
+        assert_eq!(same.terrain_eco, base.terrain_eco);
+        assert_eq!(same.occupant_eco, base.occupant_eco);
+        assert_eq!(same.structure_eco, base.structure_eco);
     }
 
     #[test]
@@ -1089,6 +1362,53 @@ mod tests {
         assert_eq!(compute_wilderness(&s, &green).eco_field[idx], -3.0);
         assert_eq!(compute_wilderness(&s, &green).breakdown.industry, -2.0);
         assert_eq!(compute_wilderness(&s, &green).breakdown.power, -1.0);
+    }
+
+    /// Green Industry patches the **occupant** table now, and it must still
+    /// reach a plain industrial tile.
+    ///
+    /// The programme used to rewrite `base_eco[TileKind::Industrial]`, a row of
+    /// the one array that also held the terrain credits and the per-structure
+    /// values. Splitting that array by concept is only behaviour-preserving if
+    /// the patch lands on the row the industrial *occupant* reads — so this
+    /// pins both halves: exactly one row moves, and the tile's score follows.
+    #[test]
+    fn green_industry_reaches_an_industrial_tile_through_the_occupant_table() {
+        let mut s = grid(8, 8);
+        build_row(&mut s, &[Tool::Industrial], 4, 1);
+        let idx = s.tile_index(0, 4).unwrap();
+        assert_eq!(
+            s.tile_at(0, 4).unwrap().zone_occupant(),
+            Some(Occupant::ZoneIndustrial)
+        );
+
+        let base = WildernessTunables::default();
+        let green = base.effective(&WildernessPolicy {
+            nature_reserve: false,
+            green_industry: true,
+        });
+
+        // One row moves, and it is the industrial occupant's.
+        assert_eq!(base.occupant_eco[Occupant::ZoneIndustrial as usize], -5.0);
+        assert_eq!(green.occupant_eco[Occupant::ZoneIndustrial as usize], -2.0);
+        assert_eq!(green.terrain_eco, base.terrain_eco);
+        assert_eq!(green.structure_eco, base.structure_eco);
+        for o in ALL_OCCUPANTS {
+            if o == Occupant::ZoneIndustrial {
+                continue;
+            }
+            assert_eq!(
+                green.occupant_eco[o as usize], base.occupant_eco[o as usize],
+                "{o:?}: Green Industry moved a row it has no business touching"
+            );
+        }
+
+        // …and the tile reads it, through the accessor and through the score.
+        assert_eq!(occupant_eco(Occupant::ZoneIndustrial, &green), Some(-2.0));
+        assert_eq!(compute_wilderness(&s, &base).eco_field[idx], -5.0);
+        assert_eq!(compute_wilderness(&s, &green).eco_field[idx], -2.0);
+        assert_eq!(compute_wilderness(&s, &base).breakdown.industry, -5.0);
+        assert_eq!(compute_wilderness(&s, &green).breakdown.industry, -2.0);
     }
 
     /// The worst case the old scoring hid: road, rail and hydro line together.

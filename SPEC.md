@@ -291,7 +291,9 @@ Bulldoze
 
 #### Bulldoze
 
-* Removes everything **except** base land/water
+* Clears what stands on the tile and leaves the terrain as the land or water it was. Bulldozing a lake does not fill it in.
+* One click removes one layer, in this order: a building if there is one; otherwise anything buried (pipes); otherwise everything at and above ground level — roads, rail, zone tags, power lines and trees together. So razing a developed lot leaves the zoning behind for it to regrow on, and a hydro line over that lot survives the same click; a second click clears them.
+* The terrain brushes — Raise, Lower and Water paint — are the tools *for* changing what the ground is, priced at 10, 10 and 12 against Bulldoze's 1. They are not the only way to change it: every building tool fills water in as it builds over the tile, so Road (5) then Bulldoze (1) drains a water tile for 6.
 * Does not modify height
 
 #### Zoning

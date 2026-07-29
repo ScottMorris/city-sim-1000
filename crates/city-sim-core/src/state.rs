@@ -4,9 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::BuildingInstance;
-use crate::occupants::{
-    occupant_bit, stratum_mask, Occupant, OccupantSet, Stratum, Terrain, VISIBLE_MASK, ZONE_MASK,
-};
+use crate::occupants::{Occupant, Overhead, Stratum, Surface, Terrain, Underground};
 use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
 use city_sim_protocol::commands::Policies;
@@ -61,31 +59,46 @@ pub enum ServiceKind {
 // ---------------------------------------------------------------------------
 
 /// One grid cell. The model is stratified: the ground itself is `terrain`, and
-/// everything standing on, over or under it is a bit in `occupants`. Nothing
-/// competes for a slot any more, so no consumer has to check two places — the
-/// bug class catalogued in `docs/tile-model.md`.
+/// everything standing on, over or under it is a bit in one of the three
+/// strata. Nothing competes for a slot any more, so no consumer has to check
+/// two places — the bug class catalogued in `docs/tile-model.md`.
+///
+/// The accessors over the strata (`occupants`, `occupants_in`, `has_occupant`,
+/// `set_occupant`, `clear_stratum`, …) live in `occupants.rs`, next to the
+/// table they answer from and inside the only module that can write a stratum.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
     // ---- AUTHORED — what the player built. This is what the snapshot persists.
     /// What the ground is, `Land` | `Water`. Its own field, so it is no longer
     /// destroyed by whatever is built on top.
     ///
-    /// **A field of its own, but not yet honoured by behaviour.** Every tool
-    /// that overwrote `kind` today still writes `Terrain::Land` here (see
-    /// `regrade` in `commands.rs`), and `bulldoze` still writes `Land` rather
-    /// than restoring water. Making terrain survive construction changes the
-    /// wilderness `buildable` count and therefore the score, so it is a
-    /// gameplay change (#177 step 4), not part of making the strata canonical.
-    pub terrain: Terrain,
-    /// Everything physically present, all three strata in one bitset.
+    /// **The bulldozer no longer flattens it (#177 step 4).** Clearing a tile
+    /// restores it to its terrain — a bulldozed lake is still a lake — so the
+    /// one-credit click is no longer a terraformer.
     ///
-    /// One field, not three. [`Occupant`]'s discriminants are already absolute
-    /// bit positions grouped by stratum, so three sibling fields would be three
-    /// legal spellings of the same bit. With one field `UNDERGROUND_MASK` /
-    /// `SURFACE_MASK` / `OVERHEAD_MASK` are the single definition of "which
-    /// stratum" and [`Tile::occupants_in`] stays one AND. Stratum-scoped writes
-    /// go through [`Tile::clear_stratum`] / [`Tile::set_occupant`].
-    pub occupants: OccupantSet,
+    /// It is not the only way to move terrain, though, and the brushes are not
+    /// either. Every tool that *builds* still regrades to `Terrain::Land` first
+    /// (see `regrade_at` in `commands.rs`), because construction over water is
+    /// bridges and docks — a feature of its own, not a leftover — so a road
+    /// laid across a lake and then razed leaves land behind for 6 credits,
+    /// under the brushes' 10 and 12. The brushes are the only tools *for*
+    /// terraforming; they are not the only ones that end up doing it. See
+    /// `commands::tests::building_over_water_and_razing_it_is_the_cheapest_regrade`.
+    pub terrain: Terrain,
+    /// What is buried here: pipes, and the reserved subway/fibre tags.
+    ///
+    /// Three sibling fields, in physical order, because *where a thing sits* is
+    /// a property of the tile and should be answerable by looking at it rather
+    /// than by masking a word. They are distinct newtypes rather than three
+    /// `OccupantSet`s so that the shape costs nothing in safety: the inner
+    /// field is private and only `occupants::strata` can write one, so a
+    /// surface field holding an overhead bit is unrepresentable rather than
+    /// merely unwritten. [`Tile::occupants`] unions them for free.
+    pub underground: Underground,
+    /// What stands on the ground: road, rail, land use, structures.
+    pub surface: Surface,
+    /// What passes overhead: conductors and canopy.
+    pub overhead: Overhead,
     /// The design note's `development`: the `BuildingInstance` this tile
     /// belongs to, and — with [`Occupant::Structure`] being one flat tag — the
     /// only thing that knows *which* structure stands here. Resolve it through
@@ -125,7 +138,9 @@ impl Tile {
     pub fn land() -> Self {
         Self {
             terrain: Terrain::Land,
-            occupants: 0,
+            underground: Underground::EMPTY,
+            surface: Surface::EMPTY,
+            overhead: Overhead::EMPTY,
             building_id: None,
             elevation: 0,
             density: ZoneDensity::Low,
@@ -148,26 +163,12 @@ impl Tile {
     }
 
     // --- occupant accessors ---
-
-    /// The occupants of one stratum.
-    #[inline]
-    pub fn occupants_in(&self, stratum: Stratum) -> OccupantSet {
-        self.occupants & stratum_mask(stratum)
-    }
-
-    /// Whether one specific occupant is present.
-    #[inline]
-    pub fn has_occupant(&self, occupant: Occupant) -> bool {
-        self.occupants & occupant_bit(occupant) != 0
-    }
-
-    /// Surface + overhead: what the player sees and what the bulldozer clears.
-    /// Underground occupants are excluded — they are only reachable from the
-    /// underground view.
-    #[inline]
-    pub fn visible_occupants(&self) -> OccupantSet {
-        self.occupants & VISIBLE_MASK
-    }
+    //
+    // `occupants`, `occupants_in`, `has_occupant`, `visible_occupants`,
+    // `zone_occupant`, `set_occupant` and `clear_stratum` are in `occupants.rs`.
+    // `set_occupant` has to be: it is the sole writer into a stratum set, and
+    // the function it delegates to is private to the module that defines those
+    // types. The rest follow it so the group stays together.
 
     /// What the ground is. `Terrain::Land` is exactly the old
     /// `wilderness::is_buildable` (which was `kind != Water`).
@@ -177,33 +178,6 @@ impl Tile {
     #[inline]
     pub fn terrain(&self) -> Terrain {
         self.terrain
-    }
-
-    /// The tile's land use, if it is zoned. Zones are mutually exclusive.
-    #[inline]
-    pub fn zone_occupant(&self) -> Option<Occupant> {
-        match self.occupants & ZONE_MASK {
-            x if x == occupant_bit(Occupant::ZoneResidential) => Some(Occupant::ZoneResidential),
-            x if x == occupant_bit(Occupant::ZoneCommercial) => Some(Occupant::ZoneCommercial),
-            x if x == occupant_bit(Occupant::ZoneIndustrial) => Some(Occupant::ZoneIndustrial),
-            _ => None,
-        }
-    }
-
-    /// Set or clear one occupant. The only write path into the bitset.
-    #[inline]
-    pub fn set_occupant(&mut self, occupant: Occupant, on: bool) {
-        if on {
-            self.occupants |= occupant_bit(occupant);
-        } else {
-            self.occupants &= !occupant_bit(occupant);
-        }
-    }
-
-    /// Clear a whole stratum — a regrade wants exactly `Stratum::Surface`.
-    #[inline]
-    pub fn clear_stratum(&mut self, stratum: Stratum) {
-        self.occupants &= !stratum_mask(stratum);
     }
 
     // --- flag accessors ---
@@ -615,7 +589,7 @@ mod tests {
         assert!(g
             .tiles
             .iter()
-            .all(|t| t.terrain == Terrain::Land && t.occupants == 0));
+            .all(|t| t.terrain == Terrain::Land && t.occupants() == 0));
     }
 
     #[test]

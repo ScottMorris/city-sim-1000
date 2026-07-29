@@ -139,6 +139,20 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
   credits of terraforming bought off the penalty for good.
 - **Overhead and underground occupants** neither block a regrade nor are touched by one: a hydro
   line spans the tile whatever the ground does under it, and a buried pipe is at depth.
+- **The bulldozer does not terraform.** It clears what stands on a tile and leaves the ground as
+  the land or water it was, so a bulldozed lake is still a lake. `k = 0.5 × buildable tiles` counts
+  tiles whose terrain is `Land`, and the bulldozer no longer moves that count. Before this fix
+  the bulldozer wrote `Land` unconditionally: at 1 credit a tile it undid a 12-credit dig, and
+  filling a tile added +1.0 to `P`, +0.5 to `k`, and took the +2.0 water-edge bonus off any
+  shoreline nature tile. The net favoured filling wherever the city scored under 66.67 — on a 16×16
+  map of eight industrial rows, a road row and a 4×8 lake away from any nature, 32 credits of
+  bulldozing took the score from 9.2593 to 12.2807 with no industry removed.
+- **Construction still fills water in**, and that is what the fix did not change. Every building
+  tool regrades to `Land` before it lays anything down, and the tile stays filled once the building
+  is razed, so Road (5) + Bulldoze (1) drains a tile for 6 — cheaper than either brush. The same 32
+  tiles above still drain for 192 credits and still buy the same 3 points; digging them back out
+  costs 384, so the round trip is a loss. Pricing building-over-water is bridges and docks, a
+  feature of its own.
 - **Ecosystem adjustments** (Tree/Park only): patch bonus up to +2 on a saturating curve
   (reference cluster size 32), water-edge bonus +2, fragmentation penalty −2 when a nature
   tile has fewer than 3 nature 8-neighbours. A Large Park's 2x2 footprint counts as four

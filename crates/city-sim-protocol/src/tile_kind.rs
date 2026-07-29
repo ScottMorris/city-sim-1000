@@ -92,6 +92,10 @@ impl TileKind {
         Self::ParkLarge,
     ];
 
+    /// Number of variants — the length of any table keyed by `TileKind as
+    /// usize`. Mirrors `TILE_KIND_COUNT` in `src/game/protocol/tileKind.ts`.
+    pub const COUNT: usize = Self::ALL.len();
+
     /// Canonical string name — matches the TS `TileKind` string-enum value.
     pub fn ts_string(self) -> &'static str {
         match self {
@@ -145,6 +149,7 @@ mod tests {
     fn count_matches_ts_mirror() {
         // Keep in sync with src/game/protocol/tileKind.ts TILE_KIND_COUNT.
         assert_eq!(TileKind::ALL.len(), 20);
+        assert_eq!(TileKind::COUNT, TileKind::ALL.len());
     }
 
     /// Emit the parity JSON so CI can diff it against the committed fixture.

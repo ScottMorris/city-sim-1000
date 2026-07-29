@@ -23,7 +23,7 @@
 //! `{Road, PowerLine}` here, which is what makes the decode into the strata
 //! lossless in the direction that matters.
 
-use crate::occupants::{is_structure_kind, Occupant, OccupantSet, Terrain};
+use crate::occupants::{is_structure_kind, Occupant, Terrain};
 use crate::state::{GameState, Tile, ZoneDensity, DERIVED_FLAG_MASK};
 use city_sim_protocol::tile_buffer::flags as wire_flags;
 use city_sim_protocol::tile_kind::TileKind;
@@ -31,12 +31,6 @@ use city_sim_protocol::tile_kind::TileKind;
 /// Zone density lived in flags bits 6–7 before it became a field.
 const V4_ZONE_DENSITY_MASK: u8 = 0b1100_0000;
 const V4_ZONE_DENSITY_SHIFT: u8 = 6;
-
-/// Branch-free "set this bit when the predicate holds".
-#[inline]
-const fn bit_when(present: bool, o: Occupant) -> OccupantSet {
-    (present as OccupantSet) << (o as u8)
-}
 
 /// Rebuild the stratified [`Tile`] a v4 `(kind, flags, underground,
 /// building_id)` quadruple described.
@@ -62,38 +56,53 @@ pub fn tile_from_v4(
     building_id: Option<u16>,
 ) -> Tile {
     let f = flags;
-    let occupants =
-        // Underground
-        bit_when(matches!(underground, Some(TileKind::WaterPipe)), Occupant::Pipe)
-        // Surface
-        | bit_when(kind == TileKind::Road || f & wire_flags::ROAD_UNDERLAY != 0, Occupant::Road)
-        | bit_when(kind == TileKind::Rail || f & wire_flags::RAIL_UNDERLAY != 0, Occupant::Rail)
-        | bit_when(kind == TileKind::Residential, Occupant::ZoneResidential)
-        | bit_when(kind == TileKind::Commercial, Occupant::ZoneCommercial)
-        | bit_when(kind == TileKind::Industrial, Occupant::ZoneIndustrial)
-        | bit_when(is_structure_kind(kind) && building_id.is_some(), Occupant::Structure)
-        // Overhead
-        | bit_when(kind == TileKind::PowerLine || f & wire_flags::POWER_OVERLAY != 0, Occupant::PowerLine)
-        | bit_when(kind == TileKind::Tree, Occupant::Trees);
-
     let density = match (f & V4_ZONE_DENSITY_MASK) >> V4_ZONE_DENSITY_SHIFT {
         1 => ZoneDensity::Medium,
         2 => ZoneDensity::High,
         _ => ZoneDensity::Low,
     };
 
-    Tile {
+    let mut tile = Tile {
         terrain: if kind == TileKind::Water {
             Terrain::Water
         } else {
             Terrain::Land
         },
-        occupants,
         building_id,
         density,
         flags: f & DERIVED_FLAG_MASK,
         ..Tile::land()
-    }
+    };
+
+    // The two-spellings collapse: v4 could record a road either in `kind` or in
+    // `ROAD_UNDERLAY`, and the same for rail and for a hydro line. Either
+    // spelling decodes to the same occupant, which is what makes the decode
+    // lossless in the direction that matters.
+    let has_pipe = matches!(underground, Some(TileKind::WaterPipe));
+    let has_road = kind == TileKind::Road || f & wire_flags::ROAD_UNDERLAY != 0;
+    let has_rail = kind == TileKind::Rail || f & wire_flags::RAIL_UNDERLAY != 0;
+    let has_line = kind == TileKind::PowerLine || f & wire_flags::POWER_OVERLAY != 0;
+    let has_structure = is_structure_kind(kind) && building_id.is_some();
+
+    // One call per occupant, each routed to its own stratum by
+    // `Tile::set_occupant` — the decode names no stratum, so it cannot file an
+    // occupant in the wrong one. The grouping is for the reader; the `Occupant`
+    // is what actually decides.
+    //
+    // Underground
+    tile.set_occupant(Occupant::Pipe, has_pipe);
+    // Surface
+    tile.set_occupant(Occupant::Road, has_road);
+    tile.set_occupant(Occupant::Rail, has_rail);
+    tile.set_occupant(Occupant::ZoneResidential, kind == TileKind::Residential);
+    tile.set_occupant(Occupant::ZoneCommercial, kind == TileKind::Commercial);
+    tile.set_occupant(Occupant::ZoneIndustrial, kind == TileKind::Industrial);
+    tile.set_occupant(Occupant::Structure, has_structure);
+    // Overhead
+    tile.set_occupant(Occupant::PowerLine, has_line);
+    tile.set_occupant(Occupant::Trees, kind == TileKind::Tree);
+
+    tile
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +251,9 @@ pub(crate) fn v4_to_v5(old: v4::GameState) -> GameState {
 pub fn set_v4(tile: &mut Tile, kind: TileKind, flags: u8, underground: Option<TileKind>) {
     let v4 = tile_from_v4(kind, flags, underground, tile.building_id);
     tile.terrain = v4.terrain;
-    tile.occupants = v4.occupants;
+    tile.underground = v4.underground;
+    tile.surface = v4.surface;
+    tile.overhead = v4.overhead;
     tile.density = v4.density;
 }
 
@@ -361,8 +372,8 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(road_first.occupants, set(&[Road, PowerLine]));
-        assert_eq!(line_first.occupants, road_first.occupants);
+        assert_eq!(road_first.occupants(), set(&[Road, PowerLine]));
+        assert_eq!(line_first.occupants(), road_first.occupants());
         assert_eq!(road_first.terrain, Terrain::Land);
     }
 
@@ -370,38 +381,38 @@ mod tests {
     fn both_v4_spellings_of_a_level_crossing_agree() {
         let road_last = tile_from_v4(TileKind::Road, wire_flags::RAIL_UNDERLAY, None, None);
         let rail_last = tile_from_v4(TileKind::Rail, wire_flags::ROAD_UNDERLAY, None, None);
-        assert_eq!(road_last.occupants, set(&[Road, Rail]));
-        assert_eq!(rail_last.occupants, road_last.occupants);
+        assert_eq!(road_last.occupants(), set(&[Road, Rail]));
+        assert_eq!(rail_last.occupants(), road_last.occupants());
     }
 
     #[test]
     fn water_is_terrain_and_a_pylon_span_survives_it() {
         let t = tile_from_v4(TileKind::Water, wire_flags::POWER_OVERLAY, None, None);
         assert_eq!(t.terrain, Terrain::Water);
-        assert_eq!(t.occupants, set(&[PowerLine]));
+        assert_eq!(t.occupants(), set(&[PowerLine]));
     }
 
     #[test]
     fn a_v4_ghost_structure_converts_to_bare_ground() {
         let live = tile_from_v4(TileKind::Park, 0, None, Some(3));
-        assert_eq!(live.occupants, set(&[Structure]));
+        assert_eq!(live.occupants(), set(&[Structure]));
 
         // Same kind byte, no development behind it — a bulldozed park.
         let ghost = tile_from_v4(TileKind::Park, 0, None, None);
-        assert_eq!(ghost.occupants, 0, "a ghost keeps no occupant");
+        assert_eq!(ghost.occupants(), 0, "a ghost keeps no occupant");
         assert_eq!(ghost.terrain, Terrain::Land);
     }
 
     #[test]
     fn an_unproducible_underground_byte_is_dropped() {
         let t = tile_from_v4(TileKind::Land, 0, Some(TileKind::CoalPlant), None);
-        assert_eq!(t.occupants, 0);
+        assert_eq!(t.occupants(), 0);
     }
 
     #[test]
     fn a_pipe_is_underground_and_leaves_the_ground_bare() {
         let t = tile_from_v4(TileKind::Land, 0, Some(TileKind::WaterPipe), None);
-        assert_eq!(t.occupants, set(&[Pipe]));
+        assert_eq!(t.occupants(), set(&[Pipe]));
         assert_eq!(t.visible_occupants(), 0);
     }
 
@@ -419,7 +430,7 @@ mod tests {
             wire_flags::POWERED,
             "only the derived flags survive into storage"
         );
-        assert_eq!(t.occupants, set(&[ZoneResidential, Road]));
+        assert_eq!(t.occupants(), set(&[ZoneResidential, Road]));
     }
 
     /// Every producible v4 spelling decodes to a set whose occupants all belong
@@ -433,11 +444,11 @@ mod tests {
             for f in 0u8..64 {
                 let t = tile_from_v4(kind, f, Some(TileKind::WaterPipe), Some(1));
                 assert_eq!(
-                    t.occupants & !crate::occupants::ALL_MASK,
+                    t.occupants() & !crate::occupants::ALL_MASK,
                     0,
                     "{kind:?}/{f} decoded an undeclared bit"
                 );
-                assert!(iter_set(t.occupants).count() <= 11);
+                assert!(iter_set(t.occupants()).count() <= 11);
             }
         }
     }

@@ -257,7 +257,7 @@ mod tests {
             .enumerate()
         {
             assert_eq!(a.terrain, b.terrain, "tile {i} terrain");
-            assert_eq!(a.occupants, b.occupants, "tile {i} occupants");
+            assert_eq!(a.occupants(), b.occupants(), "tile {i} occupants");
             assert_eq!(a.flags, b.flags, "tile {i} flags");
             assert_eq!(a.building_id, b.building_id, "tile {i} building id");
             assert_eq!(a.power_plant_mw, b.power_plant_mw, "tile {i} plant MW");

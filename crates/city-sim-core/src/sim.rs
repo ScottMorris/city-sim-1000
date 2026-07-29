@@ -277,7 +277,9 @@ impl Simulation {
 ///   old histogram and adds position. Derived from the strata since step 3, so
 ///   this hash not moving when the derivation reversed is the proof the
 ///   projection is byte-neutral;
-/// - `Tile::occupants`, what actually stands there. Deliberately the occupant
+/// - [`Tile::occupants`], what actually stands there — the union of the three
+///   strata, which is what keeps this hash stable across the tile gaining
+///   three fields. Deliberately the occupant
 ///   set rather than the raw `flags` byte: the two spellings one physical tile
 ///   used to have hash alike;
 /// - the wire `underground` byte, which the occupant set only reports as
@@ -318,7 +320,7 @@ pub fn state_hash(state: &GameState) -> u64 {
     // The grid, tile by tile in index order.
     for tile in &state.tiles {
         buf.push(crate::display::wire_kind(tile, &lookup) as u8);
-        buf.extend_from_slice(&tile.occupants.to_le_bytes());
+        buf.extend_from_slice(&tile.occupants().to_le_bytes());
         buf.push(crate::display::wire_underground(tile));
         buf.extend_from_slice(&tile.building_id.unwrap_or(u16::MAX).to_le_bytes());
     }

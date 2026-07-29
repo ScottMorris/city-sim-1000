@@ -15,16 +15,23 @@
 //! was found in `economy.rs`, `wilderness.rs`, `tileRenderUtils.ts` and
 //! `commands.rs` while `kind` was still canonical.
 //!
-//! Now `Tile::terrain` holds the ground and `Tile::occupants` holds everything
-//! standing on, over or under it, one bit per [`Occupant`]. There is one
+//! Now `Tile::terrain` holds the ground and three sibling fields —
+//! [`Underground`], [`Surface`] and [`Overhead`] — hold everything standing on,
+//! over or under it, one bit per [`Occupant`]. There is one
 //! spelling, no precedence, and nothing to reconcile. `TileKind` no longer
-//! describes a tile at all, but it survives as three other things — the last
-//! of which is still canonical, for the structure rather than for the tile:
-//! the *wire vocabulary* (the
-//! `kind` byte of the SoA tile buffer — see `display.rs`), the *building
-//! template key* (`BuildingInstance::kind`), and the *wilderness tunables key*
-//! (`WildernessTunables::base_eco[kind]`, which [`EcoSource::Kind`] indirects
-//! through so Green Industry keeps working).
+//! describes a tile at all, and it survives as exactly two other things: the
+//! *wire vocabulary* (the `kind` byte of the SoA tile buffer — see
+//! `display.rs`), and the *building template key* (`BuildingInstance::kind`),
+//! which is still canonical — for the structure, not for the tile.
+//!
+//! It was three until the wilderness eco tunables were split by concept. One
+//! dense `base_eco[TileKind]` array held terrain credits, occupant values and
+//! per-structure values side by side, and `EcoSource::Kind` pointed each
+//! occupant at its row — which is what kept `TileKind` alive as an
+//! engine-internal lookup key. There are three tables now, keyed by
+//! [`Terrain`], [`Occupant`] and `TileKind` respectively, and the surviving
+//! `TileKind` key is the building template key doing its own job: saying
+//! *which structure* stands there.
 //!
 //! Three strata, stacked the way the world is:
 //!
@@ -34,6 +41,9 @@
 //! | surface     | Road, Rail, Zone{R,C,I}, Structure         | conflict |
 //! | overhead    | PowerLine, Trees                           | conflict |
 //!
+//! Three strata, three fields, three types — see the `strata` module note below
+//! for why they are newtypes and not three bare `u16`s.
+//!
 //! (* reserved — no tool and no way to build them yet. The bits are claimed so
 //! the underground mask stays stable now that the set is persisted.)
 //!
@@ -41,12 +51,17 @@
 //! contributes no occupant bit, so a bare land tile and a water tile both have
 //! an empty set.
 //!
-//! Terrain is stored but not yet what the design note describes. It wants
-//! terrain to be the thing the bulldozer restores a tile to and the thing that
-//! survives terraforming; the second holds by construction now, the first does
-//! not — `bulldoze` still writes `Land`, and every tool that used to overwrite
-//! `kind` still forces `Terrain::Land`. Teaching those tools to leave terrain
-//! alone moves the wilderness buildable count, so it is step 4.
+//! The design note asks two things of terrain: that it survive terraforming,
+//! and that it be the thing the bulldozer restores a tile to. The first holds
+//! by construction — terrain is not an occupant, so nothing built on the tile
+//! can reach it. The second is `bulldoze`, which since step 4 clears the
+//! surface and overhead strata and leaves terrain exactly as it found it: a
+//! bulldozed lake is still a lake.
+//!
+//! What still forces `Terrain::Land` is every tool that *builds* — a road laid
+//! across a lake fills the lake in as it goes, exactly as `kind = Road` did.
+//! Water needing to survive construction is bridges and docks, which is a
+//! feature, not a leftover.
 //!
 //! **Precedence disappears.** `commands.rs` used to run a zone > hydro >
 //! road/rail precedence purely to decide who owned the contested `kind` slot.
@@ -86,9 +101,13 @@ impl Stratum {
 /// data (which structure, which building) lives on the `BuildingInstance` that
 /// `Tile::building_id` points at.
 ///
-/// Discriminants are the bit positions in an [`OccupantSet`] and are grouped by
-/// stratum so [`stratum_mask`] is a compile-time constant and a per-stratum
-/// query is a single AND. **Never reorder them** — step 3 persists this set.
+/// Discriminants are the bit positions in an [`OccupantSet`], **absolute** and
+/// never rebased per stratum — that is what makes [`Tile::occupants`] a plain
+/// OR of the three strata with nothing shifted. They are grouped by stratum so
+/// [`stratum_mask`] is a compile-time constant, but nothing depends on the
+/// grouping any more: the strata are three separate fields and each occupant's
+/// destination comes from `OCCUPANT_DEFS`, not from its bit's position.
+/// **Never reorder them** — step 3 persists this set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Occupant {
@@ -135,11 +154,18 @@ pub type OccupantSet = u16;
 /// occupying it.
 ///
 /// Its own stored field on [`Tile`] since step 3, so it is no longer destroyed
-/// by whatever is built on top. Behaviour has not caught up to it: every
-/// tool that used to overwrite `kind` still writes `Terrain::Land`, and
-/// `bulldoze` still writes `Land` rather than restoring water. Making terrain
-/// survive construction moves the wilderness `buildable` count, so it is a
-/// gameplay change of its own (#177 step 4).
+/// by whatever is built on top, and since step 4 the bulldozer leaves it alone:
+/// clearing a tile restores it *to its terrain*, which is what the design note
+/// has always asked for.
+///
+/// The terrain brushes — `TerraformRaise`, `TerraformLower`, `Tool::Water` —
+/// are the tools *for* changing it, and are priced for it at 10, 10 and 12.
+/// They are not the only tools that change it: every tool that builds still
+/// regrades to `Terrain::Land` first, so a road across a lake fills it in, and
+/// razing that road afterwards leaves the land behind for a total of 6. That
+/// pairing is deliberate — building over water is bridges and docks, a feature
+/// of its own — but it does mean the cheapest regrade on the palette is a
+/// builder plus a bulldozer, not a brush.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
 )]
@@ -148,6 +174,18 @@ pub enum Terrain {
     #[default]
     Land = 0,
     Water = 1,
+}
+
+/// Number of terrains — the length of any table keyed by `Terrain as usize`,
+/// [`WildernessTunables::terrain_eco`](crate::wilderness::WildernessTunables)
+/// being the one that exists.
+pub const TERRAIN_COUNT: usize = 2;
+
+impl Terrain {
+    /// Every terrain, in discriminant order. Same purpose as [`Stratum::ALL`]:
+    /// a third terrain is a table row and a loop iteration, never a forgotten
+    /// branch.
+    pub const ALL: [Terrain; TERRAIN_COUNT] = [Terrain::Land, Terrain::Water];
 }
 
 /// A network an occupant may conduct.
@@ -286,24 +324,33 @@ pub const ALL_LEDGER_LINES: [LedgerLine; LEDGER_LINE_COUNT] = [
 
 /// Where an occupant's eco value comes from.
 ///
-/// A plain `Option<TileKind>` was not enough: it collapsed "scores nothing"
-/// and "cannot be answered from the tag alone" into one `None`, and the
-/// accessor turned both into `0.0`. That silently flattened the ten structure
-/// kinds — a coal plant (−8.0) and a large park (+4.0) scoring the same.
+/// Two answers, because there are exactly two: the occupant owns its value, or
+/// it is one flat tag over ten different structures and cannot answer at all.
+/// It used to be three, and the third — `Kind(TileKind)` — was the last thing
+/// making `TileKind` an engine-internal lookup key. `WildernessTunables` held
+/// one dense `base_eco[TileKind]` array doing three unrelated jobs at once
+/// (terrain credit, occupant value, structure value), so `Occupant::Road` did
+/// not own its −2.0; it owned a *pointer* to the row of a `TileKind`-indexed
+/// array that happened to hold it. The array is now three tables keyed by the
+/// three concepts, `Occupant::Road` reads its own row, and only the structure
+/// table is still keyed by `TileKind` — where the key is the building template
+/// key, which is canonical for structure identity.
+///
+/// What is **not** on this enum is a number. Eco values are tunable at
+/// runtime: the Green Industry programme rewrites the industrial row while the
+/// game runs. A literal in a static [`OccupantDef`] would be a second copy the
+/// programme could never reach, and no test would see it go stale — so the def
+/// says *where to look*, and `WildernessTunables` says *what is there*.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EcoSource {
-    /// Scores `WildernessTunables::base_eco[kind]`.
-    ///
-    /// The indirection through a `TileKind` rather than a literal is
-    /// load-bearing: the Green Industry programme rewrites
-    /// `base_eco[Industrial]` at runtime, and a static number here would
-    /// disable the policy with no test noticing.
-    Kind(TileKind),
-    /// Scores nothing, under any tunables — the reserved occupants, which have
-    /// no `TileKind` at all.
-    Zero,
+    /// The occupant's own row of `WildernessTunables::occupant_eco`, indexed by
+    /// `Occupant as usize`. The reserved occupants take this route too — their
+    /// row is `0.0`, which is a value like any other and not a special case.
+    Own,
     /// Not answerable from the occupant tag: resolve with [`structure_eco`]
-    /// against the tile's `structure_kind()`.
+    /// against the tile's `structure_kind()`. `Structure` is one flat tag over
+    /// ten kinds spanning +4.0 (park) to −8.0 (coal plant), so no row of the
+    /// occupant table could hold an honest answer.
     PerStructureKind,
 }
 
@@ -329,6 +376,14 @@ const B_STRUCTURE: OccupantSet = occupant_bit(Occupant::Structure);
 const B_POWER_LINE: OccupantSet = occupant_bit(Occupant::PowerLine);
 const B_TREES: OccupantSet = occupant_bit(Occupant::Trees);
 
+// The three stratum masks are **documentation and a test oracle, not a
+// mechanism**. Nothing masks a write: `Tile::underground`, `Tile::surface` and
+// `Tile::overhead` are separate fields whose only writer routes by the
+// occupant's own declared stratum. What the masks are for is stating the
+// partition where a reader can see it, and giving
+// `each_stratum_set_only_ever_holds_bits_in_its_own_mask` something independent
+// of `OCCUPANT_DEFS` to check the placements against.
+
 /// Bits 0–2. Reserved headroom: none — Subway and Fibre already claim the
 /// spare slots.
 pub const UNDERGROUND_MASK: OccupantSet = B_PIPE | B_SUBWAY | B_FIBRE;
@@ -337,7 +392,9 @@ pub const SURFACE_MASK: OccupantSet =
     B_ROAD | B_RAIL | B_ZONE_R | B_ZONE_C | B_ZONE_I | B_STRUCTURE;
 /// Bits 9–10.
 pub const OVERHEAD_MASK: OccupantSet = B_POWER_LINE | B_TREES;
-/// Everything the player can see on the map.
+/// Everything the player can see on the map — the two strata
+/// [`Tile::visible_occupants`] unions, spelled as a mask for tests that want to
+/// name it.
 ///
 /// Not the same as "what the bulldozer clears": `bulldoze` also clears
 /// `underground`, and clears it *first*, so on a road carrying a pipe the first
@@ -354,6 +411,202 @@ pub const ZONE_MASK: OccupantSet = B_ZONE_R | B_ZONE_C | B_ZONE_I;
 /// those bits become persisted data in step 3. Widen a stratum's range before
 /// it is persisted, not after.
 pub const ALL_MASK: OccupantSet = UNDERGROUND_MASK | SURFACE_MASK | OVERHEAD_MASK;
+
+// ---------------------------------------------------------------------------
+// The three strata
+// ---------------------------------------------------------------------------
+
+/// The three stratum sets, and the only code in the program that may put a bit
+/// into one.
+///
+/// The design note's `Tile` has three sibling fields, and this module is what
+/// makes three fields safe. Three bare `OccupantSet`s would not be: the
+/// [`Occupant`] discriminants are *absolute* bit positions, so `surface` could
+/// legally hold bit 9 — two spellings of one fact, which is the exact bug class
+/// the whole model exists to end. Collapsing the three into one bitset also
+/// ends it, but by deleting the shape rather than by defending it, and it
+/// leaves "which stratum is this?" a bitwise question when it should be a
+/// question about where the data sits.
+///
+/// So the fields are three distinct newtypes over `OccupantSet` whose inner
+/// field is private, in a module that is itself private. Outside this module
+/// there is no `Surface(1 << 9)`, no `.0`, no `From<u16>` and no transparent
+/// `Deserialize`. What exists instead:
+///
+/// | to obtain one | what stops a foreign bit |
+/// | --- | --- |
+/// | [`Underground::EMPTY`] / `Default` | it is empty |
+/// | copying an existing value | it was already checked |
+/// | [`place`] | it picks the destination itself, from the occupant |
+/// | `Deserialize` | it rejects the payload — see the impl below |
+///
+/// [`place`] is the interesting one. It takes all three sets and is told none:
+/// the destination is read off `occupant_def(occupant).stratum`, the occupant's
+/// own declaration. A caller cannot pass the wrong field because a caller does
+/// not pass a field. That is the whole enforcement mechanism, and it is four
+/// lines long.
+///
+/// Note what is *not* the mechanism: [`UNDERGROUND_MASK`], [`SURFACE_MASK`] and
+/// [`OVERHEAD_MASK`]. Nothing here masks a write. The masks survive as a
+/// derivation *check* — `each_stratum_set_only_ever_holds_bits_in_its_own_mask`
+/// places every occupant and asserts where it landed — so they document the
+/// partition without being load-bearing for it.
+mod strata {
+    use super::{iter_set, occupant_bit, occupant_def, Occupant, OccupantSet, Stratum};
+
+    /// The bits of `bits` that belong to no occupant of `stratum` — including
+    /// bits belonging to no occupant at all.
+    ///
+    /// Derived from `OCCUPANT_DEFS` rather than from a stratum mask, so the
+    /// occupant's own declared stratum stays the single fact and the masks stay
+    /// a cached restatement of it.
+    fn foreign_bits(bits: OccupantSet, stratum: Stratum) -> OccupantSet {
+        let mut mine: OccupantSet = 0;
+        for o in iter_set(bits) {
+            if occupant_def(o).stratum == stratum {
+                mine |= occupant_bit(o);
+            }
+        }
+        bits & !mine
+    }
+
+    macro_rules! stratum_set {
+        ($(#[$attr:meta])* $name:ident = $stratum:expr) => {
+            $(#[$attr])*
+            ///
+            /// A newtype over [`OccupantSet`] with a private inner field, in a
+            /// private module: see the module note for why, and for the four
+            /// ways a value can come into existence.
+            #[derive(
+                Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize,
+            )]
+            #[serde(transparent)]
+            pub struct $name(OccupantSet);
+
+            impl $name {
+                /// The stratum whose occupants this set may hold.
+                pub const STRATUM: Stratum = $stratum;
+
+                /// Nothing here.
+                pub const EMPTY: Self = Self(0);
+
+                /// The occupant bits, at their **absolute** [`Occupant`]
+                /// positions. That is what keeps the union free:
+                /// `underground.bits() | surface.bits() | overhead.bits()` is
+                /// the whole tile, with nothing shifted into place.
+                #[inline]
+                pub const fn bits(self) -> OccupantSet {
+                    self.0
+                }
+
+                /// Whether the stratum is empty. There is deliberately no
+                /// `contains` beside it: "is this occupant present?" is
+                /// [`Tile::has_occupant`]'s question and it does not need a
+                /// stratum, because the occupant already carries one.
+                #[inline]
+                pub const fn is_empty(self) -> bool {
+                    self.0 == 0
+                }
+            }
+
+            /// **Rejects the payload** when a bit does not belong to this
+            /// stratum. Not masked-and-logged, and the choice is not close.
+            ///
+            /// The invariant is unrepresentable in the running program, so a
+            /// violation cannot have been *written* by any build of this
+            /// engine — not by a tool, not by [`super::strata::place`], not by
+            /// the v4 decode, which goes through the same path. The only way to
+            /// see one is a payload that is corrupt or forged. And postcard is
+            /// non-self-describing: fields are positional, with no names, no
+            /// lengths and nothing to resynchronise against, so a stratum
+            /// holding a foreign bit is far likelier to mean *the reader and
+            /// the writer disagree about where the fields are* than to mean
+            /// one tile is slightly wrong. Every byte after it is then suspect
+            /// too.
+            ///
+            /// Masking would launder that into a city which loads and is
+            /// quietly wrong — the failure mode this model exists to end.
+            /// Refusing costs a legitimate save nothing, because no legitimate
+            /// save can contain one.
+            ///
+            /// This is a *different* question from [`super::validate_set`],
+            /// which stays advisory: that one asks whether two occupants
+            /// should share a tile, and saves in the wild genuinely do contain
+            /// tiles it dislikes. This one asks whether the bytes are the
+            /// struct they claim to be.
+            impl<'de> serde::Deserialize<'de> for $name {
+                fn deserialize<D>(d: D) -> Result<Self, D::Error>
+                where
+                    D: serde::Deserializer<'de>,
+                {
+                    let bits = <OccupantSet as serde::Deserialize>::deserialize(d)?;
+                    let foreign = foreign_bits(bits, Self::STRATUM);
+                    if foreign != 0 {
+                        return Err(serde::de::Error::custom(format!(
+                            "{} carries {foreign:#013b}, which is no {:?} occupant — \
+                             no build of this engine can write that, so the payload is \
+                             not the struct it claims to be",
+                            stringify!($name),
+                            Self::STRATUM,
+                        )));
+                    }
+                    Ok(Self(bits))
+                }
+            }
+        };
+    }
+
+    stratum_set! {
+        /// What is buried under the tile: [`Occupant::Pipe`], and the reserved
+        /// `Subway` and `Fibre` tags. Depth is free, so this is the one stratum
+        /// whose occupants coexist by default.
+        Underground = Stratum::Underground
+    }
+
+    stratum_set! {
+        /// What stands on the ground: road, rail, the three zone tags and
+        /// [`Occupant::Structure`]. The scarce stratum — conflict is the
+        /// default, and the level crossing is the single exception.
+        Surface = Stratum::Surface
+    }
+
+    stratum_set! {
+        /// What passes over the tile: [`Occupant::PowerLine`] and
+        /// [`Occupant::Trees`]. Conductors and canopy fight, so conflict is the
+        /// default here too.
+        Overhead = Stratum::Overhead
+    }
+
+    /// Set or clear `occupant` across a tile's three stratum sets. **The only
+    /// write path into any of them.**
+    ///
+    /// It takes all three and is told none. The destination comes from
+    /// `occupant_def(occupant).stratum` — construction goes through
+    /// [`Occupant`], which knows where it belongs — so there is no argument for
+    /// a caller to get wrong, and the `match` is exhaustive, so a fourth
+    /// stratum stops the build rather than silently dropping its writes.
+    #[inline]
+    pub fn place(
+        underground: &mut Underground,
+        surface: &mut Surface,
+        overhead: &mut Overhead,
+        occupant: Occupant,
+        on: bool,
+    ) {
+        let slot = match occupant_def(occupant).stratum {
+            Stratum::Underground => &mut underground.0,
+            Stratum::Surface => &mut surface.0,
+            Stratum::Overhead => &mut overhead.0,
+        };
+        if on {
+            *slot |= occupant_bit(occupant);
+        } else {
+            *slot &= !occupant_bit(occupant);
+        }
+    }
+}
+
+pub use strata::{Overhead, Surface, Underground};
 
 // ---------------------------------------------------------------------------
 // The occupant table
@@ -411,8 +664,8 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::Pipe,
         stratum: Stratum::Underground,
-        // Nature above a buried pipe is still nature: base_eco[WaterPipe] = 0.0.
-        eco: EcoSource::Kind(TileKind::WaterPipe),
+        // Nature above a buried pipe is still nature: its row is 0.0.
+        eco: EcoSource::Own,
         upkeep_unfunded: MAINT_WATER_PIPE,
         funding: FundingDept::Civic, // economy.rs: `maint_pipes *= fund_civic`
         ledger: LedgerLine::Pipes,
@@ -424,7 +677,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::Subway,
         stratum: Stratum::Underground,
-        eco: EcoSource::Zero,
+        eco: EcoSource::Own,
         upkeep_unfunded: 0.0,
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
@@ -436,7 +689,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::Fibre,
         stratum: Stratum::Underground,
-        eco: EcoSource::Zero,
+        eco: EcoSource::Own,
         upkeep_unfunded: 0.0,
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
@@ -449,7 +702,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::Road,
         stratum: Stratum::Surface,
-        eco: EcoSource::Kind(TileKind::Road),
+        eco: EcoSource::Own,
         upkeep_unfunded: MAINT_ROAD,
         funding: FundingDept::Transport, // `maint_roads *= fund_transport`
         ledger: LedgerLine::Roads,
@@ -461,7 +714,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::Rail,
         stratum: Stratum::Surface,
-        eco: EcoSource::Kind(TileKind::Rail),
+        eco: EcoSource::Own,
         upkeep_unfunded: MAINT_RAIL,
         funding: FundingDept::Transport, // `maint_rail *= fund_transport`
         ledger: LedgerLine::Rail,
@@ -475,7 +728,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::ZoneResidential,
         stratum: Stratum::Surface,
-        eco: EcoSource::Kind(TileKind::Residential),
+        eco: EcoSource::Own,
         // An undeveloped zone tile costs nothing; a developed lot is billed
         // through its BuildingInstance (economy.rs) on the `maint_zones` line,
         // which no funding slider touches — zone upkeep is private-sector.
@@ -490,7 +743,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::ZoneCommercial,
         stratum: Stratum::Surface,
-        eco: EcoSource::Kind(TileKind::Commercial),
+        eco: EcoSource::Own,
         upkeep_unfunded: 0.0,
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
@@ -502,8 +755,8 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::ZoneIndustrial,
         stratum: Stratum::Surface,
-        // Runtime-tunable: Green Industry rewrites base_eco[Industrial].
-        eco: EcoSource::Kind(TileKind::Industrial),
+        // Runtime-tunable: Green Industry rewrites this occupant's row.
+        eco: EcoSource::Own,
         upkeep_unfunded: 0.0,
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
@@ -536,7 +789,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::PowerLine,
         stratum: Stratum::Overhead,
-        eco: EcoSource::Kind(TileKind::PowerLine),
+        eco: EcoSource::Own,
         upkeep_unfunded: MAINT_POWER_LINE,
         funding: FundingDept::Power, // `maint_power_lines *= fund_power`
         ledger: LedgerLine::PowerLines,
@@ -550,7 +803,7 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
     OccupantDef {
         occupant: Occupant::Trees,
         stratum: Stratum::Overhead,
-        eco: EcoSource::Kind(TileKind::Tree),
+        eco: EcoSource::Own,
         upkeep_unfunded: 0.0,
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
@@ -600,8 +853,10 @@ pub fn occupant_def(o: Occupant) -> &'static OccupantDef {
     &OCCUPANT_DEFS[o as usize]
 }
 
-/// Every bit belonging to one stratum. Compile-time constant, so a
-/// per-stratum query is one AND.
+/// Every bit belonging to one stratum. A compile-time constant, and — since the
+/// strata became three fields — a *statement* about the partition rather than
+/// the thing that enforces it. [`Tile::occupants_in`] is a field access now, not
+/// an AND against this.
 #[inline]
 pub const fn stratum_mask(s: Stratum) -> OccupantSet {
     match s {
@@ -739,8 +994,7 @@ pub fn set_conducts(set: OccupantSet, network: Network) -> bool {
 /// The reserved occupants return `Some(0.0)`: they really do score nothing.
 pub fn occupant_eco(o: Occupant, t: &WildernessTunables) -> Option<f32> {
     match occupant_def(o).eco {
-        EcoSource::Kind(kind) => Some(t.base_eco[kind as usize]),
-        EcoSource::Zero => Some(0.0),
+        EcoSource::Own => Some(t.occupant_eco[o as usize]),
         EcoSource::PerStructureKind => None,
     }
 }
@@ -770,7 +1024,7 @@ pub fn structure_eco(kind: TileKind, t: &WildernessTunables) -> f32 {
         is_structure_kind(kind),
         "structure_eco called with a non-structure kind"
     );
-    t.base_eco[kind as usize]
+    t.structure_eco[kind as usize]
 }
 
 /// Wilderness breakdown line for a specific structure kind.
@@ -895,6 +1149,82 @@ impl StructureLookup {
 // ---------------------------------------------------------------------------
 
 impl Tile {
+    /// Everything on, over and under the tile, in one set: the union of the
+    /// three strata.
+    ///
+    /// Free — `u | s | o`, nothing shifted — because the [`Occupant`]
+    /// discriminants are absolute bit positions. This is the question almost
+    /// every consumer asks, and it is why splitting the tile into three fields
+    /// moved so little: `economy.rs`, `wilderness.rs` and `education.rs` all
+    /// still ask it, and still get the same answer.
+    ///
+    /// Ask [`Tile::occupants_in`] instead when the *stratum* is the point.
+    #[inline]
+    pub fn occupants(&self) -> OccupantSet {
+        self.underground.bits() | self.surface.bits() | self.overhead.bits()
+    }
+
+    /// The occupants of one stratum — a field access, not a masked read.
+    #[inline]
+    pub fn occupants_in(&self, stratum: Stratum) -> OccupantSet {
+        match stratum {
+            Stratum::Underground => self.underground.bits(),
+            Stratum::Surface => self.surface.bits(),
+            Stratum::Overhead => self.overhead.bits(),
+        }
+    }
+
+    /// Whether one specific occupant is present, in whichever stratum it lives.
+    #[inline]
+    pub fn has_occupant(&self, occupant: Occupant) -> bool {
+        self.occupants() & occupant_bit(occupant) != 0
+    }
+
+    /// Surface + overhead: what the player sees and what the bulldozer clears.
+    /// Underground occupants are excluded — they are only reachable from the
+    /// underground view.
+    #[inline]
+    pub fn visible_occupants(&self) -> OccupantSet {
+        self.surface.bits() | self.overhead.bits()
+    }
+
+    /// The tile's land use, if it is zoned. Zones are mutually exclusive, and
+    /// all three are surface occupants.
+    #[inline]
+    pub fn zone_occupant(&self) -> Option<Occupant> {
+        match self.surface.bits() & ZONE_MASK {
+            x if x == occupant_bit(Occupant::ZoneResidential) => Some(Occupant::ZoneResidential),
+            x if x == occupant_bit(Occupant::ZoneCommercial) => Some(Occupant::ZoneCommercial),
+            x if x == occupant_bit(Occupant::ZoneIndustrial) => Some(Occupant::ZoneIndustrial),
+            _ => None,
+        }
+    }
+
+    /// Set or clear one occupant. The only write path into the strata, and it
+    /// names no stratum: [`strata::place`] routes by the occupant's own
+    /// declaration, which is what makes a cross-stratum bit unwritable rather
+    /// than merely unwritten.
+    #[inline]
+    pub fn set_occupant(&mut self, occupant: Occupant, on: bool) {
+        strata::place(
+            &mut self.underground,
+            &mut self.surface,
+            &mut self.overhead,
+            occupant,
+            on,
+        );
+    }
+
+    /// Clear a whole stratum — a regrade wants exactly `Stratum::Surface`.
+    #[inline]
+    pub fn clear_stratum(&mut self, stratum: Stratum) {
+        match stratum {
+            Stratum::Underground => self.underground = Underground::EMPTY,
+            Stratum::Surface => self.surface = Surface::EMPTY,
+            Stratum::Overhead => self.overhead = Overhead::EMPTY,
+        }
+    }
+
     /// Whether the tile carries a network.
     ///
     /// Reads `building_id` / `power_plant_mw` directly on top of the occupant
@@ -902,7 +1232,7 @@ impl Tile {
     /// that is a property of the development, not of any occupant.
     #[inline]
     pub fn conducts(&self, network: Network) -> bool {
-        let set = self.occupants;
+        let set = self.occupants();
         match network {
             Network::Power => {
                 self.power_plant_mw > 0
@@ -918,7 +1248,7 @@ impl Tile {
     /// `BudgetStats` maintenance lines and before funding.
     #[inline]
     pub fn tile_upkeep_by_line(&self) -> [f32; LEDGER_LINE_COUNT] {
-        set_upkeep_by_line(self.occupants)
+        set_upkeep_by_line(self.occupants())
     }
 
     /// Per-day upkeep for the tile's own infrastructure at 100% funding.
@@ -936,7 +1266,7 @@ impl Tile {
     /// wilderness programme costs.
     #[inline]
     pub fn tile_upkeep_unfunded(&self) -> f32 {
-        set_upkeep_unfunded(self.occupants)
+        set_upkeep_unfunded(self.occupants())
     }
 
     /// Per-day upkeep for the tile's own infrastructure under `policy`, each
@@ -944,22 +1274,24 @@ impl Tile {
     /// maintenance is still billed separately off `state.buildings`.
     #[inline]
     pub fn tile_upkeep_funded(&self, policy: &BudgetPolicy) -> f32 {
-        set_upkeep_funded(self.occupants, policy)
+        set_upkeep_funded(self.occupants(), policy)
     }
 
-    /// Eco contribution of the terrain alone.
+    /// Eco contribution of the terrain alone, read from the terrain table —
+    /// the concept's own table since the eco tunables were split, keyed by
+    /// [`Terrain`] and nothing else.
     ///
-    /// `base_eco[Land] = 1.0` is the open-land credit, which a built tile
+    /// `terrain_eco[Land] = 1.0` is the open-land credit, which a built tile
     /// loses entirely — so it is gated on the *visible* set. A buried pipe
-    /// under open land keeps the credit, which is what today's `kind`-based
-    /// scoring does too.
+    /// under open land keeps the credit, which is what the old `kind`-based
+    /// scoring did too.
     #[inline]
     pub fn terrain_eco(&self, t: &WildernessTunables) -> f32 {
         match self.terrain() {
-            Terrain::Water => t.base_eco[TileKind::Water as usize],
+            Terrain::Water => t.terrain_eco[Terrain::Water as usize],
             Terrain::Land => {
                 if self.visible_occupants() == 0 {
-                    t.base_eco[TileKind::Land as usize]
+                    t.terrain_eco[Terrain::Land as usize]
                 } else {
                     0.0
                 }
@@ -1009,7 +1341,7 @@ impl Tile {
 /// [`StructureLookup`] as well.
 pub fn tile_eco(tile: &Tile, lookup: &StructureLookup, t: &WildernessTunables) -> f32 {
     let mut eco = tile.terrain_eco(t);
-    for o in iter_set(tile.occupants) {
+    for o in iter_set(tile.occupants()) {
         // `None` means "the tag cannot answer" — today only `Structure`,
         // whose value comes from its kind.
         eco += match occupant_eco(o, t) {
@@ -1029,7 +1361,7 @@ pub fn tile_eco(tile: &Tile, lookup: &StructureLookup, t: &WildernessTunables) -
 /// nature and a coal plant is not, and both are [`Occupant::Structure`].
 #[inline]
 pub fn is_strong_nature(tile: &Tile, lookup: &StructureLookup) -> bool {
-    iter_set(tile.occupants).any(|o| match occupant_is_strong_nature(o) {
+    iter_set(tile.occupants()).any(|o| match occupant_is_strong_nature(o) {
         Some(strong) => strong,
         None => lookup
             .structure_kind(tile)
@@ -1119,48 +1451,46 @@ mod tests {
         }
     }
 
-    /// Which `WildernessBreakdown` line the real `compute_wilderness` files a
-    /// tile of `kind` on — *measured* out of the function rather than
-    /// transcribed from its `match`, so the pins below track `wilderness.rs`
-    /// instead of quietly agreeing with a stale copy of it.
+    /// Probe tunables: every eco table zeroed, and the three neighbourhood
+    /// adjustments off.
     ///
-    /// The probe tunables score `kind` at exactly 1.0 and every other kind at
-    /// 0.0, on a grid of one `kind` tile surrounded by water — a filler whose
-    /// terrain has no [`EcoCategory`] at all, so it files its value on no
-    /// line. The three
-    /// neighbourhood adjustments are zeroed because they have breakdown lines
-    /// of their own, so the sole thing that can move a category line is the
-    /// base value of the probe tile. Whichever line comes back holding 1.0 is
-    /// the arm `match kind` took; no line moving is [`EcoCategory::Neutral`].
-    fn breakdown_line_for(kind: TileKind) -> EcoCategory {
-        let mut base_eco = [0.0_f32; 20];
-        base_eco[kind as usize] = 1.0;
-        let t = WildernessTunables {
-            base_eco,
+    /// The caller writes exactly one `1.0` into exactly one row, so the sole
+    /// thing that can move a breakdown line is that one value. The
+    /// adjustments are zeroed because they have breakdown lines of their own.
+    fn zeroed_eco_tunables() -> WildernessTunables {
+        WildernessTunables {
+            terrain_eco: [0.0; TERRAIN_COUNT],
+            occupant_eco: [0.0; OCCUPANT_COUNT],
+            structure_eco: [0.0; TileKind::COUNT],
             patch_bonus_cap: 0.0,
             edge_bonus: 0.0,
             fragmentation_penalty: 0.0,
             ..WildernessTunables::default()
-        };
+        }
+    }
 
+    /// Which breakdown line `compute_wilderness` moves for a 3×3 grid — one
+    /// probe tile in the centre, water everywhere else.
+    ///
+    /// Water filler is deliberate: its terrain has no [`EcoCategory`] at all,
+    /// so it files its value on no line whatever the tunables say. Whichever
+    /// line comes back non-zero is the arm the real function took; no line
+    /// moving is [`EcoCategory::Neutral`].
+    ///
+    /// *Measured* out of `wilderness.rs` rather than transcribed from it, so
+    /// the pins below track the game instead of quietly agreeing with a stale
+    /// copy of it.
+    fn measure_breakdown_line(
+        t: &WildernessTunables,
+        centre: impl FnOnce(&mut GameState),
+    ) -> EcoCategory {
         let mut s = GameState::new(3, 3, 0);
         for tl in &mut s.tiles {
             *tl = crate::state::Tile::water();
         }
-        // A structure's eco comes from its development, so the probe needs a
-        // `BuildingInstance` behind it or it is scored as bare ground.
-        if is_structure_kind(kind) {
-            s.tiles[4] = crate::state::Tile::land();
-            s.tiles[4].set_occupant(Occupant::Structure, true);
-            s.tiles[4].building_id = Some(1);
-            s.buildings
-                .push(crate::buildings::BuildingInstance::new(1, kind, (1, 1)));
-            s.next_building_id = 2;
-        } else {
-            set_v4_kind(&mut s.tiles[4], kind);
-        }
+        centre(&mut s);
 
-        let b = crate::wilderness::compute_wilderness(&s, &t).breakdown;
+        let b = crate::wilderness::compute_wilderness(&s, t).breakdown;
         let lines = [
             (EcoCategory::Forests, b.forests),
             (EcoCategory::Parks, b.parks),
@@ -1184,9 +1514,78 @@ mod tests {
             .collect();
         assert!(
             hit.len() <= 1,
-            "{kind:?} moved more than one breakdown line: {hit:?}"
+            "the probe moved more than one line: {hit:?}"
         );
         hit.first().copied().unwrap_or(EcoCategory::Neutral)
+    }
+
+    /// Which line the real `compute_wilderness` files *one occupant* on,
+    /// measured by scoring it at 1.0 and everything else at 0.0.
+    ///
+    /// The occupant-keyed half of the probe, and it exists because the eco
+    /// tunables are keyed by concept now: an occupant's value is read from its
+    /// own row, so the probe asks the question in the same vocabulary the
+    /// answer is stored in. It used to have to go through the occupant's
+    /// `EcoSource::Kind(TileKind)` to reach a row of `base_eco`.
+    fn breakdown_line_for_occupant(o: Occupant) -> EcoCategory {
+        let mut t = zeroed_eco_tunables();
+        t.occupant_eco[o as usize] = 1.0;
+        measure_breakdown_line(&t, |s| {
+            s.tiles[4] = crate::state::Tile::land();
+            s.tiles[4].set_occupant(o, true);
+        })
+    }
+
+    /// Which line the real `compute_wilderness` files *one structure kind* on.
+    /// A structure's eco comes from its development, so the probe tile needs a
+    /// `BuildingInstance` behind it or it is scored as bare ground.
+    fn breakdown_line_for_structure(kind: TileKind) -> EcoCategory {
+        let mut t = zeroed_eco_tunables();
+        t.structure_eco[kind as usize] = 1.0;
+        measure_breakdown_line(&t, |s| {
+            s.tiles[4] = crate::state::Tile::land();
+            s.tiles[4].set_occupant(Occupant::Structure, true);
+            s.tiles[4].building_id = Some(1);
+            s.buildings
+                .push(crate::buildings::BuildingInstance::new(1, kind, (1, 1)));
+            s.next_building_id = 2;
+        })
+    }
+
+    /// Which line a tile spelled in the old v4 `kind` vocabulary is filed on.
+    ///
+    /// Routes `kind` to whichever of the three eco tables its value used to
+    /// live in back when they were one `base_eco[TileKind]` array — terrain
+    /// for `Land`/`Water`, the pipe occupant for `WaterPipe`, the structure
+    /// table for a structure kind, and otherwise the row of whatever occupant
+    /// the kind derives. Same probe, same answers; only the address of the
+    /// `1.0` changed.
+    fn breakdown_line_for(kind: TileKind) -> EcoCategory {
+        match kind {
+            TileKind::Land | TileKind::Water => {
+                let mut t = zeroed_eco_tunables();
+                t.terrain_eco[tile(kind, 0, None).terrain() as usize] = 1.0;
+                measure_breakdown_line(&t, |s| set_v4_kind(&mut s.tiles[4], kind))
+            }
+            // `WaterPipe` is the buried pipe's kind, so its old row is the
+            // Pipe occupant's row. Both probes answer `Neutral`: a pipe files
+            // on no line, and a *surface* `WaterPipe` derives to the empty set
+            // so the old probe had nothing to score at all.
+            TileKind::WaterPipe => breakdown_line_for_occupant(Occupant::Pipe),
+            k if is_structure_kind(k) => breakdown_line_for_structure(k),
+            k => {
+                let mut occupants = iter_set(tile(k, 0, None).occupants());
+                let o = occupants
+                    .next()
+                    .unwrap_or_else(|| panic!("{k:?} derives no occupant to probe"));
+                assert_eq!(
+                    occupants.count(),
+                    0,
+                    "{k:?}: a bare tile must derive at most one occupant to probe"
+                );
+                breakdown_line_for_occupant(o)
+            }
+        }
     }
 
     /// Branch-free "set this bit when the predicate holds".
@@ -1258,6 +1657,119 @@ mod tests {
                 occupant_bit(o),
                 "{o:?} is not inside its own stratum mask"
             );
+        }
+    }
+
+    // --- the three strata ------------------------------------------------
+
+    /// **The stratum masks survive as a check, not as the mechanism.**
+    ///
+    /// Nothing in the write path consults `UNDERGROUND_MASK`, `SURFACE_MASK` or
+    /// `OVERHEAD_MASK`: `strata::place` routes by `occupant_def(o).stratum` and
+    /// the newtypes' inner field is private, so a mask cannot be what keeps a
+    /// bit in its own stratum. This is what keeps the masks honest anyway —
+    /// every occupant, placed on a fresh tile, must land in exactly one stratum
+    /// set, and that set's bits must sit inside that stratum's mask.
+    ///
+    /// It is also the test that would fail if someone gave [`Occupant`] a
+    /// discriminant outside its stratum's bit range: the placement would
+    /// succeed (the table still says which stratum it belongs to) and the mask
+    /// assertion would catch the disagreement.
+    #[test]
+    fn each_stratum_set_only_ever_holds_bits_in_its_own_mask() {
+        for o in ALL_OCCUPANTS {
+            let mut t = Tile::land();
+            t.set_occupant(o, true);
+
+            let sets = [
+                (Stratum::Underground, t.underground.bits(), UNDERGROUND_MASK),
+                (Stratum::Surface, t.surface.bits(), SURFACE_MASK),
+                (Stratum::Overhead, t.overhead.bits(), OVERHEAD_MASK),
+            ];
+            for (stratum, bits, mask) in sets {
+                assert_eq!(bits & !mask, 0, "{o:?} put a foreign bit in {stratum:?}");
+                assert_eq!(
+                    bits != 0,
+                    occupant_def(o).stratum == stratum,
+                    "{o:?} belongs to {:?} but {stratum:?} holds {bits:#013b}",
+                    occupant_def(o).stratum
+                );
+                assert_eq!(t.occupants_in(stratum), bits, "occupants_in is the field");
+            }
+
+            // Absolute bit positions: the union is a plain OR, nothing shifted.
+            assert_eq!(t.occupants(), occupant_bit(o));
+            assert!(t.has_occupant(o));
+
+            t.set_occupant(o, false);
+            assert_eq!(t.occupants(), 0, "{o:?} did not clear");
+        }
+    }
+
+    /// The union really is `u | s | o`, on a tile carrying one occupant from
+    /// each stratum at once.
+    #[test]
+    fn the_union_is_the_or_of_the_three_strata() {
+        let mut t = Tile::land();
+        for o in [Occupant::Pipe, Occupant::Road, Occupant::PowerLine] {
+            t.set_occupant(o, true);
+        }
+        assert_eq!(t.underground.bits(), B_PIPE);
+        assert_eq!(t.surface.bits(), B_ROAD);
+        assert_eq!(t.overhead.bits(), B_POWER_LINE);
+        assert_eq!(t.occupants(), B_PIPE | B_ROAD | B_POWER_LINE);
+        assert_eq!(t.visible_occupants(), B_ROAD | B_POWER_LINE);
+
+        // And a stratum clears without touching its neighbours.
+        t.clear_stratum(Stratum::Surface);
+        assert_eq!(t.occupants(), B_PIPE | B_POWER_LINE);
+    }
+
+    /// A stratum set refuses a bit belonging to another stratum, or to no
+    /// occupant at all, **on deserialisation** — the one door left open.
+    ///
+    /// `Surface(1 << 9)` does not compile here either: the inner field is
+    /// private and `occupants::strata` is not exported, so bytes are the only
+    /// way to attempt it. That is why the check lives in `Deserialize` and why
+    /// it rejects rather than masks — see the impl for the argument.
+    #[test]
+    fn a_stratum_set_refuses_a_bit_that_is_not_its_own() {
+        // A hydro line is overhead. Offered to `Surface`, it is refused; offered
+        // to `Overhead`, it is exactly right.
+        let line = postcard::to_allocvec(&B_POWER_LINE).unwrap();
+        assert!(
+            postcard::from_bytes::<Surface>(&line).is_err(),
+            "Surface must refuse an overhead bit"
+        );
+        assert!(
+            postcard::from_bytes::<Underground>(&line).is_err(),
+            "Underground must refuse an overhead bit"
+        );
+        assert_eq!(
+            postcard::from_bytes::<Overhead>(&line).unwrap().bits(),
+            B_POWER_LINE,
+            "Overhead must accept its own bit"
+        );
+
+        // Bit 11 is spare headroom — no occupant claims it, so no stratum does.
+        let spare = postcard::to_allocvec(&(1u16 << OCCUPANT_COUNT)).unwrap();
+        for name in ["Underground", "Surface", "Overhead"] {
+            let refused = match name {
+                "Underground" => postcard::from_bytes::<Underground>(&spare).is_err(),
+                "Surface" => postcard::from_bytes::<Surface>(&spare).is_err(),
+                _ => postcard::from_bytes::<Overhead>(&spare).is_err(),
+            };
+            assert!(refused, "{name} must refuse a bit belonging to no occupant");
+        }
+
+        // Every legal set of every stratum round-trips. Driven off the table so
+        // a new occupant is covered by existing.
+        for o in ALL_OCCUPANTS {
+            let mut t = Tile::land();
+            t.set_occupant(o, true);
+            let bytes = postcard::to_allocvec(&t).unwrap();
+            let back: Tile = postcard::from_bytes(&bytes).unwrap();
+            assert_eq!(back.occupants(), t.occupants(), "{o:?} did not round-trip");
         }
     }
 
@@ -1496,8 +2008,8 @@ mod tests {
         // flag set. Validation must report it, not panic on it. Built through
         // the real tools in `known_defect_trees_are_planted_through_a_live_hydro_line`.
         let t = tile(TileKind::Tree, FLAG_POWER_OVERLAY, None);
-        assert_eq!(t.occupants, B_TREES | B_POWER_LINE);
-        assert!(validate_set(t.occupants).is_err());
+        assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
+        assert!(validate_set(t.occupants()).is_err());
     }
 
     // --- placement: the table enforced, and what still escapes it -----------
@@ -1538,8 +2050,8 @@ mod tests {
         let t = s.tiles[s.tile_index(2, 2).unwrap()].clone();
         assert_eq!(t.zone_occupant(), Some(Occupant::ZoneResidential));
         assert!(t.has_occupant(Occupant::PowerLine));
-        assert_eq!(t.occupants, B_ZONE_R | B_POWER_LINE);
-        assert_eq!(validate_set(t.occupants), Ok(()));
+        assert_eq!(t.occupants(), B_ZONE_R | B_POWER_LINE);
+        assert_eq!(validate_set(t.occupants()), Ok(()));
 
         // The third click is refused — the line is in the flag, not in `kind`,
         // and the guard reads the occupant set.
@@ -1552,14 +2064,17 @@ mod tests {
         // The tile is untouched: still a zone, still carrying its line.
         let t = s.tiles[s.tile_index(2, 2).unwrap()].clone();
         assert_eq!(t.zone_occupant(), Some(Occupant::ZoneResidential));
-        assert_eq!(t.occupants, B_ZONE_R | B_POWER_LINE);
+        assert_eq!(t.occupants(), B_ZONE_R | B_POWER_LINE);
         assert!(t.building_id.is_none());
 
         // Bulldozing the line clears the way, so the refusal is a "clear it
         // first", not a tile the player can never build on.
         assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
         assert!(apply_tool(&mut s, Tool::Park, 2, 2).success);
-        assert_eq!(s.tiles[s.tile_index(2, 2).unwrap()].occupants, B_STRUCTURE);
+        assert_eq!(
+            s.tiles[s.tile_index(2, 2).unwrap()].occupants(),
+            B_STRUCTURE
+        );
 
         // Zoning is not the only way in. Anything that moves the line out of
         // `kind` and into the flag used to open the same hole:
@@ -1573,7 +2088,8 @@ mod tests {
         assert_eq!(t.terrain(), Terrain::Land);
         assert!(t.has_occupant(Occupant::PowerLine));
         assert_eq!(
-            t.occupants, B_POWER_LINE,
+            t.occupants(),
+            B_POWER_LINE,
             "the regrade must preserve the overhead stratum"
         );
         assert!(t.conducts(Network::Power));
@@ -1624,7 +2140,7 @@ mod tests {
                 !t.has_occupant(Occupant::Structure),
                 "{tool:?}: a ghost structure survived"
             );
-            assert_eq!(t.occupants, 0, "{tool:?}: bare ground is what is left");
+            assert_eq!(t.occupants(), 0, "{tool:?}: bare ground is what is left");
             assert!(
                 apply_tool(&mut s, tool, 1, 1).success,
                 "{tool:?} was refused by a demolished park"
@@ -1699,9 +2215,9 @@ mod tests {
             t.has_occupant(Occupant::PowerLine),
             "planting regrades the ground, never the span above it"
         );
-        assert_eq!(t.occupants, B_TREES | B_POWER_LINE);
+        assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
         assert_eq!(
-            validate_set(t.occupants),
+            validate_set(t.occupants()),
             Err((Occupant::PowerLine, Occupant::Trees))
         );
         assert!(t.conducts(Network::Power));
@@ -1746,7 +2262,7 @@ mod tests {
                 .map(|t| {
                     (
                         t.terrain() as u8,
-                        t.occupants,
+                        t.occupants(),
                         t.flags,
                         t.building_id.is_some(),
                     )
@@ -1780,7 +2296,7 @@ mod tests {
                 next_path.push(tool);
 
                 for t in &next.tiles {
-                    let set = t.occupants;
+                    let set = t.occupants();
                     for a in iter_set(set) {
                         for b in iter_set(set) {
                             if (a as u8) < (b as u8)
@@ -1837,7 +2353,7 @@ mod tests {
             (TileKind::WaterPump, Terrain::Land, B_STRUCTURE),
             (TileKind::WaterTower, Terrain::Land, B_STRUCTURE),
             // A surface WaterPipe derives to nothing, deliberately: no tool has
-            // ever written it, base_eco is 0.0 and it has no breakdown
+            // ever written it, it scores nothing and has no breakdown
             // category, but `import.rs` accepts the byte — so the empty answer
             // must be on purpose rather than by accident.
             (TileKind::WaterPipe, Terrain::Land, 0),
@@ -1865,17 +2381,17 @@ mod tests {
                 set_string(*set)
             );
             assert_eq!(t.terrain(), *terrain, "{kind:?} terrain");
-            assert_eq!(t.occupants, *set, "{kind:?} occupants");
+            assert_eq!(t.occupants(), *set, "{kind:?} occupants");
             // A bare tile occupies at most one stratum's worth of surface.
             assert!(
-                validate_set(t.occupants).is_ok(),
+                validate_set(t.occupants()).is_ok(),
                 "{kind:?} is self-inconsistent"
             );
         }
 
         // The two spellings of a pipe: underground (real) and surface (import only).
         assert_eq!(
-            tile(TileKind::Land, 0, Some(TileKind::WaterPipe)).occupants,
+            tile(TileKind::Land, 0, Some(TileKind::WaterPipe)).occupants(),
             B_PIPE
         );
         assert_eq!(
@@ -1890,7 +2406,7 @@ mod tests {
         for &kind in TileKind::ALL {
             for flags in structural_flag_combos() {
                 for underground in [None, Some(TileKind::WaterPipe)] {
-                    produced |= tile(kind, flags, underground).occupants;
+                    produced |= tile(kind, flags, underground).occupants();
                 }
             }
         }
@@ -1914,7 +2430,8 @@ mod tests {
                 None,
             );
             assert_eq!(
-                bare.occupants, noisy.occupants,
+                bare.occupants(),
+                noisy.occupants(),
                 "{kind:?}: derived state, density and abandonment must not change occupants"
             );
         }
@@ -1996,7 +2513,7 @@ mod tests {
 
                         let sets: Vec<OccupantSet> = spellings
                             .iter()
-                            .map(|&(k, f)| tile(k, f, None).occupants)
+                            .map(|&(k, f)| tile(k, f, None).occupants())
                             .collect();
 
                         let distinct_spellings = spellings.len();
@@ -2027,7 +2544,7 @@ mod tests {
                         // exactly one bit to every spelling.
                         for &(k, f) in &spellings {
                             assert_eq!(
-                                tile(k, f, Some(TileKind::WaterPipe)).occupants,
+                                tile(k, f, Some(TileKind::WaterPipe)).occupants(),
                                 expected | B_PIPE
                             );
                         }
@@ -2059,7 +2576,7 @@ mod tests {
             for &t in order {
                 apply_tool(&mut s, t, 1, 1);
             }
-            s.tiles[s.tile_index(1, 1).unwrap()].occupants
+            s.tiles[s.tile_index(1, 1).unwrap()].occupants()
         }
 
         // Road, rail and line — all six orderings give the level crossing
@@ -2287,7 +2804,7 @@ mod tests {
             Some(TileKind::WaterPipe),
         );
         assert_eq!(
-            s.tiles[0].occupants,
+            s.tiles[0].occupants(),
             B_ROAD | B_RAIL | B_POWER_LINE | B_PIPE
         );
 
@@ -2631,9 +3148,9 @@ mod tests {
         // is set. If that derived `Structure` as well, the
         // Zone-conflicts-Structure rule would fire on every grown lot.
         let lot = tile_from_v4(TileKind::Residential, 0, None, Some(3));
-        assert_eq!(lot.occupants, B_ZONE_R);
+        assert_eq!(lot.occupants(), B_ZONE_R);
         assert!(!lot.has_occupant(Occupant::Structure));
-        assert_eq!(validate_set(lot.occupants), Ok(()));
+        assert_eq!(validate_set(lot.occupants()), Ok(()));
         assert_eq!(lot.zone_occupant(), Some(Occupant::ZoneResidential));
 
         // …and the lookup agrees: the lot's `BuildingInstance` is a
@@ -2692,7 +3209,7 @@ mod tests {
                     );
                     // A zone is exactly one bit of ZONE_MASK, never two.
                     assert_eq!(
-                        (t.occupants & ZONE_MASK).count_ones(),
+                        (t.occupants() & ZONE_MASK).count_ones(),
                         old as u32,
                         "{kind:?} must carry exactly {} zone bit(s)",
                         old as u32
@@ -2710,19 +3227,59 @@ mod tests {
 
     // --- eco --------------------------------------------------------------
 
-    /// The eco sum reproduces `base_eco[kind]` on every single-occupant tile.
+    /// `WildernessTunables::base_eco` as it stood before the eco tunables were
+    /// split by concept: one dense array indexed by `TileKind as usize`, doing
+    /// three unrelated jobs at once — the terrain credit for `Land`/`Water`,
+    /// the occupant value for a road or a zone, the per-structure value for a
+    /// coal plant.
+    ///
+    /// Kept here as a literal, deliberately. The split has to be checked
+    /// against the twenty numbers it started with, not against the three
+    /// tables it produced — derive the oracle from `terrain_eco`,
+    /// `occupant_eco` and `structure_eco` and it would agree with them by
+    /// construction, including about a value that moved.
+    fn pre_split_base_eco(kind: TileKind) -> f32 {
+        match kind {
+            TileKind::Land => 1.0,
+            TileKind::Water => 0.0,
+            TileKind::Tree => 6.0,
+            TileKind::Road => -2.0,
+            TileKind::Rail => -2.0,
+            TileKind::Residential => -1.0,
+            TileKind::Commercial => -2.0,
+            TileKind::Industrial => -5.0,
+            TileKind::PowerLine => -1.0,
+            TileKind::HydroPlant => -2.0,
+            TileKind::WaterPump => -1.0,
+            TileKind::WaterTower => -1.0,
+            TileKind::WaterPipe => 0.0,
+            TileKind::ElementarySchool => -1.0,
+            TileKind::HighSchool => -1.0,
+            TileKind::Park => 4.0,
+            TileKind::CoalPlant => -8.0,
+            TileKind::WindTurbine => -1.0,
+            TileKind::SolarFarm => -1.0,
+            TileKind::ParkLarge => 4.0,
+        }
+    }
+
+    /// The eco sum reproduces the pre-split `base_eco[kind]` on every
+    /// single-occupant tile — so splitting one `TileKind`-indexed array into a
+    /// terrain, an occupant and a structure table moved no number, only its
+    /// address.
+    ///
     /// Exactly one kind diverges, deliberately, and it is named in the loop:
     /// a surface `WaterPipe` keeps the bare-land credit because its occupant
     /// set is empty.
     #[test]
-    fn tile_eco_matches_base_eco_on_single_occupant_tiles() {
+    fn tile_eco_matches_the_pre_split_base_eco_on_single_occupant_tiles() {
         let t = WildernessTunables::default();
-        println!("\nTileKind → tile_eco vs base_eco[kind]");
+        println!("\nTileKind → tile_eco vs pre-split base_eco[kind]");
         for &kind in TileKind::ALL {
             let got = eco_of(kind, 0, None, &t);
-            let today = t.base_eco[kind as usize];
+            let today = pre_split_base_eco(kind);
             println!(
-                "  {:<16} {got:>6.1}   (today {today:>6.1})",
+                "  {:<16} {got:>6.1}   (pre-split {today:>6.1})",
                 kind.ts_string()
             );
             if kind == TileKind::WaterPipe {
@@ -2755,7 +3312,7 @@ mod tests {
             FLAG_ROAD_UNDERLAY | FLAG_POWER_OVERLAY,
             None,
         );
-        assert_eq!(road_with_line.occupants, line_over_road.occupants);
+        assert_eq!(road_with_line.occupants(), line_over_road.occupants());
         assert_eq!(eco_of(TileKind::Road, FLAG_POWER_OVERLAY, None, &t), -3.0);
         assert_eq!(
             eco_of(
@@ -2766,11 +3323,12 @@ mod tests {
             ),
             -3.0
         );
-        // Today the two spellings score differently — that is the bug.
-        assert_eq!(t.base_eco[TileKind::Road as usize], -2.0);
-        assert_eq!(t.base_eco[TileKind::PowerLine as usize], -1.0);
+        // The single lookup scored the two spellings differently — that is
+        // the bug, and the two rows the Σ now adds are the same two numbers.
+        assert_eq!(t.occupant_eco[Occupant::Road as usize], -2.0);
+        assert_eq!(t.occupant_eco[Occupant::PowerLine as usize], -1.0);
 
-        // Level crossing: -4.0 against today's -2.0.
+        // Level crossing: -4.0 against the single lookup's -2.0.
         assert_eq!(eco_of(TileKind::Rail, FLAG_ROAD_UNDERLAY, None, &t), -4.0);
     }
 
@@ -2862,7 +3420,7 @@ mod tests {
             eco_of(TileKind::Park, 0, None, &t) - eco_of(TileKind::CoalPlant, 0, None, &t),
             12.0
         );
-        assert_eq!(park.occupants, coal.occupants, "same tag, same bit");
+        assert_eq!(park.occupants(), coal.occupants(), "same tag, same bit");
     }
 
     #[test]
@@ -2982,12 +3540,10 @@ mod tests {
                 "{o:?}: OCCUPANT_DEFS disagrees with the pinned category"
             );
 
-            // The pin itself, checked against the game: whichever `TileKind`
-            // the occupant derives its eco from is the kind `wilderness.rs`
-            // would be looking at.
+            // The pin itself, checked against the game: score this one
+            // occupant at 1.0 and see which line `wilderness.rs` moves.
             let measured = match occupant_def(o).eco {
-                EcoSource::Kind(kind) => Some(breakdown_line_for(kind)),
-                EcoSource::Zero => Some(EcoCategory::Neutral),
+                EcoSource::Own => Some(breakdown_line_for_occupant(o)),
                 EcoSource::PerStructureKind => None,
             };
             println!(
@@ -3036,7 +3592,7 @@ mod tests {
             assert_eq!(structure_category(kind), want, "{kind:?}");
             assert_eq!(
                 want,
-                breakdown_line_for(kind),
+                breakdown_line_for_structure(kind),
                 "{kind:?}: the pinned category is not the line wilderness.rs uses"
             );
         }
@@ -3050,7 +3606,7 @@ mod tests {
             let derived = if is_structure_kind(kind) {
                 structure_category(kind)
             } else {
-                let mut present = iter_set(tl.occupants);
+                let mut present = iter_set(tl.occupants());
                 let first = present.next();
                 assert_eq!(
                     present.count(),
@@ -3072,10 +3628,10 @@ mod tests {
                 // WaterPipe derives to the empty occupant set (no tool has
                 // ever written one; only `import.rs` can produce it), so it is
                 // scored as open land. `breakdown_line_for` still measures
-                // `Neutral`, because the probe tunables put 1.0 on `WaterPipe`
-                // and 0.0 on `Land`, so the credit it earns is 0.0 and no line
-                // visibly moves. Same divergence
-                // `tile_eco_matches_base_eco_on_single_occupant_tiles` pins.
+                // `Neutral`, because it probes `WaterPipe` through the Pipe
+                // occupant, which files on no line. Same divergence
+                // `tile_eco_matches_the_pre_split_base_eco_on_single_occupant_tiles`
+                // pins.
                 assert_eq!(derived, EcoCategory::OpenLand);
                 assert_eq!(measured, EcoCategory::Neutral);
                 continue;
@@ -3101,7 +3657,7 @@ mod tests {
         // does with its `Water | WaterPipe => {}` arm. The sweep below reads
         // "no credit" off a zero eco, which is only sound while water scores
         // zero — so pin that.
-        assert_eq!(t.base_eco[TileKind::Water as usize], 0.0);
+        assert_eq!(t.terrain_eco[Terrain::Water as usize], 0.0);
         assert_eq!(Tile::water().terrain_category(), None);
         assert_eq!(Tile::water().terrain_eco(&t), 0.0);
 
@@ -3150,7 +3706,7 @@ mod tests {
             FLAG_POWER_OVERLAY,
             Some(TileKind::WaterPipe),
         );
-        assert_eq!(t.occupants, B_PIPE | B_ROAD | B_POWER_LINE);
+        assert_eq!(t.occupants(), B_PIPE | B_ROAD | B_POWER_LINE);
         assert_eq!(t.visible_occupants(), B_ROAD | B_POWER_LINE);
         assert_eq!(t.occupants_in(Stratum::Underground), B_PIPE);
         assert_eq!(t.occupants_in(Stratum::Surface), B_ROAD);
@@ -3159,7 +3715,7 @@ mod tests {
             t.occupants_in(Stratum::Underground)
                 | t.occupants_in(Stratum::Surface)
                 | t.occupants_in(Stratum::Overhead),
-            t.occupants
+            t.occupants()
         );
     }
 
@@ -3190,10 +3746,10 @@ mod tests {
         // drowned ground. Terrain is still Water, and it contributes no bit.
         let drowned = tile_from_v4(TileKind::Water, FLAG_ROAD_UNDERLAY, None, Some(2));
         assert_eq!(drowned.terrain(), Terrain::Water);
-        assert_eq!(drowned.occupants, B_ROAD);
+        assert_eq!(drowned.occupants(), B_ROAD);
         assert_eq!(Tile::land().terrain(), Terrain::Land);
         assert_eq!(Tile::water().terrain(), Terrain::Water);
-        assert_eq!(Tile::land().occupants, 0);
-        assert_eq!(Tile::water().occupants, 0, "terrain is not an occupant");
+        assert_eq!(Tile::land().occupants(), 0);
+        assert_eq!(Tile::water().occupants(), 0, "terrain is not an occupant");
     }
 }

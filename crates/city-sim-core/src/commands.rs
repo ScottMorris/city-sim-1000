@@ -57,7 +57,7 @@ pub fn tool_cost(tool: Tool) -> i64 {
 // rejected `kind == PowerLine` but never asked `has_power_overlay()`, so a line
 // recorded in the flag — which is every line strung across a zone, and every
 // line that has since been terraformed — was invisible to it. The guards ask
-// `Tile::occupants` and consult `pair_conflicts` instead, and since step 3
+// `Tile::occupants()` and consult `pair_conflicts` instead, and since step 3
 // there is only one spelling for them to see.
 
 /// The first occupant standing on `tile` that refuses `incoming`, in bit order.
@@ -69,7 +69,7 @@ pub fn tool_cost(tool: Tool) -> i64 {
 /// refusal needs a guard, so each caller names the conflicts it resolves by
 /// *displacement* in `displaces` and everything left over is refused.
 ///
-/// Reads `tile.occupants` directly. It used to have to filter out a *ghost*
+/// Reads `tile.occupants()` directly. It used to have to filter out a *ghost*
 /// structure first — a structure `kind` [`remove_building`] left standing over
 /// a cleared `building_id` — because letting one refuse a placement stranded
 /// every bulldozed park behind a second bulldoze. Ghosts no longer exist:
@@ -81,7 +81,7 @@ pub fn tool_cost(tool: Tool) -> i64 {
 /// developed residential lot carries a `building_id` while its occupant stays a
 /// zone tag, so it has no `Structure` bit to find.
 fn refused_by(tile: &Tile, incoming: Occupant, displaces: OccupantSet) -> Option<Occupant> {
-    let standing = tile.occupants & !displaces;
+    let standing = tile.occupants() & !displaces;
     iter_set(standing).find(|&o| pair_conflicts(o, incoming))
 }
 
@@ -367,8 +367,11 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
 /// `terraforming_regrades_the_ground_and_leaves_the_strata_above_and_below`
 /// pins that, and it is why `PowerLine` → `TerraformRaise` is legal play.
 ///
-/// Every tool that builds calls this first, which is also why terrain is not
-/// yet durable in behaviour: they all pass `Terrain::Land`.
+/// Every tool that builds calls this first, and they all pass `Terrain::Land`
+/// — so construction still fills in water. That is the one place terrain is
+/// not durable, and it is deliberate: building over water is bridges and
+/// docks, a feature of its own. [`bulldoze`] is the other side of it and does
+/// not come through here at all, because clearing a tile is not a regrade.
 fn regrade_at(state: &mut GameState, x: u32, y: u32, terrain: Terrain) {
     let idx = state.tile_index(x, y).unwrap();
     let tile = &mut state.tiles[idx];
@@ -510,25 +513,58 @@ fn place_footprint_building(
     CommandResult::ok()
 }
 
-/// Bulldoze the tile at (x, y): remove any building, or revert to Land.
+/// Bulldoze the tile at (x, y): remove any building, or clear what stands on
+/// the ground — leaving the ground itself exactly as it was.
+///
+/// **Terrain is not the bulldozer's to change (#177 step 4).** Until now this
+/// function wrote `Terrain::Land` unconditionally, so one click at a cost of 1
+/// filled in a lake that cost 12 to dig and 10 to raise back out: the cheapest
+/// tool on the palette was also the most powerful terraformer. It was the one
+/// function that most needed terrain to be durable, and it was the last one
+/// still overwriting it — giving terrain a field of its own and then flattening
+/// it here would have been doing the work and discarding the result.
+///
+/// The design note has said so from the start: the bulldozer restores a tile
+/// *to its terrain*. So a bulldozed lake stays a lake, and the terrain brushes
+/// — `TerraformRaise`, `TerraformLower`, `Tool::Water` — are the tools *for*
+/// changing what the ground is. That is their job, and it is what they charge
+/// 10, 10 and 12 for.
+///
+/// **They are not the only tools that change it.** [`regrade_at`] writes
+/// `Terrain::Land`, and every building tool calls it to wipe the surface
+/// before it lays anything down, so a lake is still drainable: pave it, raze
+/// the pavement, and the ground stays where the road left it — 6 credits with
+/// `Tool::Road`, under either brush. Filling water in as you build over it is
+/// deliberate and predates #177 (building over water is bridges and docks, a
+/// feature of its own), so what step 4 removed is the 1-credit regrade, not
+/// every cheap one. See
+/// `tests::building_over_water_and_razing_it_is_the_cheapest_regrade`.
+///
+/// A tile carrying water *and* something built on it is therefore a real
+/// arrangement, reached in two ordinary clicks: `regrade_at` takes the surface
+/// stratum and the canopy but deliberately leaves the overhead line and the
+/// buried pipe standing, so `PowerLine` then `Tool::Water` — or `WaterPipe`
+/// then `Tool::Water` — is water with something on it. The rule reads
+/// correctly on those: what stands goes, the water stays. Water carrying a
+/// *road* is the unreachable case, because the brush clears the stratum a road
+/// lives in; `bulldoze` still has to be total over it, because [`set_v4`] can
+/// build one out of a loaded save and `Tile` can hold one.
+///
+/// [`set_v4`]: crate::migrate::set_v4
 fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
     state.money -= cost;
     let idx = state.tile_index(x, y).unwrap();
     if let Some(bid) = state.tiles[idx].building_id {
         remove_building(state, bid as u32);
-    } else if state.tiles[idx].occupants_in(Stratum::Underground) != 0 {
+    } else if !state.tiles[idx].underground.is_empty() {
         state.tiles[idx].clear_stratum(Stratum::Underground);
     } else {
         // The bulldozer works on what you can see: surface and overhead
         // together. Underground is reached on its own click, above, because it
         // is only editable from the underground view.
         //
-        // The terrain goes back to `Land` rather than to what was there
-        // before. That is today's behaviour preserved, not a modelling
-        // statement — restoring water is the point of making terrain durable
-        // and it belongs to step 4.
+        // `terrain` is deliberately absent from this list — see above.
         let tile = &mut state.tiles[idx];
-        tile.terrain = Terrain::Land;
         tile.clear_stratum(Stratum::Surface);
         tile.clear_stratum(Stratum::Overhead);
         // FLAG_POWERED / FLAG_WATERED are recomputed by the utility passes;
@@ -704,6 +740,278 @@ mod tests {
         assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Land);
     }
 
+    /// **The bulldozer clears the tile and leaves the ground (#177 step 4).**
+    ///
+    /// Both directions, because "restores the tile to its terrain" is only a
+    /// rule if it holds for water as well as for land — a bulldozer that
+    /// always leaves `Land` is not restoring anything, it is terraforming for
+    /// 1 credit.
+    ///
+    /// The water half is built through [`set_v4`], because water carrying a
+    /// *road* is the one arrangement `apply_tool` cannot reach: every tool
+    /// that builds calls `regrade_at(.., Terrain::Land)` first, and the road
+    /// lives in the very stratum the water brush clears, so laying a road
+    /// across a lake fills the lake in as it goes. `bulldoze` still has to be
+    /// total over the tile, because `Tile` can hold one and [`set_v4`] builds
+    /// one out of what loads. The rule reads correctly on it: the road goes,
+    /// the water stays.
+    ///
+    /// Water carrying an overhead line or a buried pipe *is* reachable, in two
+    /// ordinary clicks — that half is
+    /// `the_water_brush_leaves_the_line_and_the_pipe_standing_over_the_lake`.
+    #[test]
+    fn the_bulldozer_clears_the_tile_and_leaves_the_ground_alone() {
+        // Dry land, built on through the tools.
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::Road, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        let t = s.tile_at(1, 1).unwrap();
+        assert_eq!(t.terrain(), Terrain::Land, "bulldozing land drowned it");
+        assert_eq!(t.occupants(), 0, "something outlived the bulldozer");
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
+
+        // Water, carrying the road a v4 save could leave standing on it.
+        let mut s = gs(4, 4);
+        crate::migrate::set_v4(
+            s.tile_at_mut(2, 2).unwrap(),
+            TileKind::Water,
+            flags::ROAD_UNDERLAY,
+            None,
+        );
+        assert!(s.tile_at(2, 2).unwrap().has_occupant(Occupant::Road));
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
+        let t = s.tile_at(2, 2).unwrap();
+        assert_eq!(
+            t.terrain(),
+            Terrain::Water,
+            "the bulldozer filled the lake in for 1 credit"
+        );
+        assert!(
+            !t.has_occupant(Occupant::Road),
+            "the road outlived the click"
+        );
+        assert_eq!(t.occupants(), 0);
+        assert_eq!(wire_kind_at(&s, 2, 2), TileKind::Water);
+    }
+
+    /// The terrain brushes are the tools *for* changing what the ground is,
+    /// and they are priced for it: `Tool::Water` costs 12 and `TerraformRaise`
+    /// 10, against the bulldozer's 1. While `bulldoze` wrote `Terrain::Land`
+    /// the cheapest tool on the palette was also the most powerful
+    /// terraformer — it undid a 12-credit dig for a twelfth of the price, on a
+    /// tile with nothing on it to bulldoze.
+    ///
+    /// A *builder* plus a bulldozer still regrades, for 6; that is
+    /// `building_over_water_and_razing_it_is_the_cheapest_regrade`. What this
+    /// test pins is narrower and is the thing step 4 changed: the bulldozer
+    /// alone, on open water, no longer moves the ground at all.
+    #[test]
+    fn bulldozing_open_water_is_not_a_cheap_regrade() {
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::Water, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Water);
+
+        // …and the brush that *is* priced for it still works.
+        assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1).success);
+        assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Land);
+        assert!(
+            tool_cost(Tool::TerraformRaise) > tool_cost(Tool::Bulldoze),
+            "raising ground must cost more than clearing it"
+        );
+    }
+
+    /// **Construction is a terraformer too, and it always was.**
+    ///
+    /// Step 4 stopped the *bulldozer* writing terrain. It did not — and was
+    /// never meant to — stop `regrade_at`, which every building tool calls to
+    /// wipe the surface before it lays anything down, and which writes
+    /// `Terrain::Land` while it is there. So a lake is still drainable: pave
+    /// it, then raze the pavement. The ground stays where the road left it.
+    ///
+    /// That pairing costs 6 credits a tile against the water brush's 12 and
+    /// `TerraformRaise`'s 10, so the cheapest regrade on the palette is a road
+    /// and a bulldozer, not a brush. Six times dearer than the 1-credit click
+    /// step 4 removed, and one credit short of `PowerLine` + `Bulldoze` at 7 —
+    /// but "the brushes are the only tools that change the ground" is not what
+    /// the code says, and the docs must not say it either.
+    ///
+    /// Filling water in as you build over it is deliberate: it is what v4 did,
+    /// it is what makes a causeway across a lake a two-click move rather than
+    /// a refusal, and `regrade_at`'s own comment has described it that way from
+    /// the start. This test pins the price so the claim in `SPEC.md`,
+    /// `docs/game-parameters.md` and `docs/features/wilderness-score.md` stays
+    /// honest about which tools move terrain.
+    #[test]
+    fn building_over_water_and_razing_it_is_the_cheapest_regrade() {
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::Water, 1, 1).success);
+        assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
+
+        let before = s.money;
+        assert!(apply_tool(&mut s, Tool::Road, 1, 1).success);
+        assert_eq!(
+            s.tile_at(1, 1).unwrap().terrain(),
+            Terrain::Land,
+            "the road did not fill the lake in as it crossed it"
+        );
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+
+        let t = s.tile_at(1, 1).unwrap();
+        assert_eq!(
+            t.terrain(),
+            Terrain::Land,
+            "razing the road put the lake back"
+        );
+        assert_eq!(t.occupants(), 0, "something outlived the bulldozer");
+        assert_eq!(
+            before - s.money,
+            tool_cost(Tool::Road) + tool_cost(Tool::Bulldoze),
+            "the build-and-raze regrade is not priced as one"
+        );
+        assert!(
+            tool_cost(Tool::Road) + tool_cost(Tool::Bulldoze) < tool_cost(Tool::TerraformRaise),
+            "a builder plus a bulldozer must be documented as cheaper than the brush"
+        );
+
+        // `Tool::Road` is named in the docs as the cheap one, so check that it
+        // still is: `WaterPipe` is cheaper but is not a regrade — it sets the
+        // `Pipe` bit and never calls `regrade_at` — and everything else that
+        // does regrade costs more than a road.
+        let mut pipe = gs(4, 4);
+        assert!(apply_tool(&mut pipe, Tool::Water, 1, 1).success);
+        assert!(apply_tool(&mut pipe, Tool::WaterPipe, 1, 1).success);
+        assert_eq!(
+            pipe.tile_at(1, 1).unwrap().terrain(),
+            Terrain::Water,
+            "a buried main filled the lake in above it"
+        );
+        for cheaper in [Tool::Tree, Tool::PowerLine, Tool::Rail, Tool::Park] {
+            assert!(
+                tool_cost(cheaper) > tool_cost(Tool::Road),
+                "{cheaper:?} undercuts the road as the cheapest regrade; the 6-credit \
+                 figure in `SPEC.md`, `docs/game-parameters.md` and \
+                 `docs/features/wilderness-score.md` needs revisiting"
+            );
+        }
+    }
+
+    /// **Water *and* something built on it is reachable through `apply_tool`.**
+    ///
+    /// [`regrade_at`] takes the surface stratum and the canopy; the overhead
+    /// line and the buried pipe are deliberately left standing, because a
+    /// hydro span crosses a lake on pylons and a main runs under one. So two
+    /// ordinary clicks — build, then paint water — produce exactly the tile
+    /// `bulldoze`'s rule has to be total over, with no legacy save involved.
+    ///
+    /// Road, rail and tree over water genuinely are unreachable: the brush
+    /// clears the surface stratum they live in.
+    #[test]
+    fn the_water_brush_leaves_the_line_and_the_pipe_standing_over_the_lake() {
+        let mut s = gs(4, 4);
+
+        // Overhead: a hydro span, then a lake painted under it.
+        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Water, 2, 2).success);
+        let t = s.tile_at(2, 2).unwrap();
+        assert_eq!(t.terrain(), Terrain::Water);
+        assert!(
+            t.has_occupant(Occupant::PowerLine),
+            "the water brush cut the span it should have crossed under"
+        );
+
+        // Underground: a main, then a lake painted over it.
+        assert!(apply_tool(&mut s, Tool::WaterPipe, 3, 3).success);
+        assert!(apply_tool(&mut s, Tool::Water, 3, 3).success);
+        let t = s.tile_at(3, 3).unwrap();
+        assert_eq!(t.terrain(), Terrain::Water);
+        assert!(
+            t.has_occupant(Occupant::Pipe),
+            "the water brush dug the main up"
+        );
+
+        // And the bulldozer reads correctly on both: what stands goes, the
+        // water stays. The pipe takes its own click, because underground is
+        // only editable from the underground view.
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
+        let t = s.tile_at(2, 2).unwrap();
+        assert_eq!(t.terrain(), Terrain::Water);
+        assert_eq!(t.occupants(), 0);
+
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 3, 3).success);
+        let t = s.tile_at(3, 3).unwrap();
+        assert_eq!(t.terrain(), Terrain::Water);
+        assert_eq!(t.occupants(), 0);
+    }
+
+    /// **Bulldozing a developed lot takes the building and nothing else.**
+    ///
+    /// `bulldoze` is a three-way branch, and the building branch returns as
+    /// soon as [`remove_building`] has run. That function clears
+    /// `building_id`, the derived caches and the `Structure` tag — it never
+    /// touches the zone tag, by design, because "bulldoze the house, keep the
+    /// zoning, let it regrow" is the behaviour the zone tools have always had.
+    /// The overhead line survives for the same reason the strata exist at all:
+    /// it was never part of the lot.
+    ///
+    /// So one click on a developed lot leaves a vacant zone with a line over
+    /// it, and a second click clears those. That is deliberate and unchanged
+    /// by #177; the test exists because `SPEC.md` claimed a single click took
+    /// the zone tag and the line with it.
+    #[test]
+    fn bulldozing_a_developed_lot_leaves_the_zone_tag_and_the_line() {
+        use crate::rng::SeededRng;
+        use crate::state::FLAG_POWERED;
+        use crate::zones::ZoneGrowthSim;
+
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::Road, 1, 0).success);
+        assert!(apply_tool(&mut s, Tool::Residential, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
+        s.tile_at_mut(1, 0).unwrap().set_flag(FLAG_POWERED, true);
+        s.tile_at_mut(1, 1).unwrap().set_flag(FLAG_POWERED, true);
+        s.demand.residential = 100.0;
+        s.utilities.power = 100;
+        s.utilities.water = 100;
+
+        let mut zg = ZoneGrowthSim::new();
+        let mut rng = SeededRng::new(0);
+        let mut grew = false;
+        for _ in 0..50 {
+            if zg.tick(&mut s, &mut rng, 1) {
+                grew = true;
+                break;
+            }
+        }
+        assert!(grew, "the lot never developed");
+        let t = s.tile_at(1, 1).unwrap();
+        assert!(t.building_id.is_some());
+        assert!(t.has_occupant(Occupant::ZoneResidential));
+        assert!(t.has_occupant(Occupant::PowerLine));
+
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        let t = s.tile_at(1, 1).unwrap();
+        assert!(t.building_id.is_none(), "the house outlived the click");
+        assert!(
+            !t.has_occupant(Occupant::Structure),
+            "a razed lot left its `Structure` tag behind"
+        );
+        assert!(
+            t.has_occupant(Occupant::ZoneResidential),
+            "one click took the zoning as well as the house"
+        );
+        assert!(
+            t.has_occupant(Occupant::PowerLine),
+            "one click took the hydro line as well as the house"
+        );
+
+        // The second click is what clears them.
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert_eq!(s.tile_at(1, 1).unwrap().occupants(), 0);
+    }
+
     #[test]
     fn bulldoze_removes_building_and_clears_tiles() {
         let mut s = gs(4, 4);
@@ -831,8 +1139,8 @@ mod tests {
                 "{first:?} then {second:?} disagreed on the wire bytes"
             );
             assert_eq!(
-                forward.tile_at(1, 1).unwrap().occupants,
-                reverse.tile_at(1, 1).unwrap().occupants,
+                forward.tile_at(1, 1).unwrap().occupants(),
+                reverse.tile_at(1, 1).unwrap().occupants(),
                 "{first:?} then {second:?} disagreed on the occupant set"
             );
         }
@@ -1122,8 +1430,6 @@ mod tests {
     /// The line itself is *not* wiped in either spelling — it is overhead.
     #[test]
     fn terraforming_clears_a_road_or_rail_in_either_spelling() {
-        use crate::occupants::{OVERHEAD_MASK, SURFACE_MASK};
-
         for surface in [Tool::Road, Tool::Rail] {
             for line_first in [false, true] {
                 let mut s = gs(4, 4);
@@ -1133,7 +1439,7 @@ mod tests {
                 }
                 let before = s.tile_at(1, 1).unwrap().clone();
                 assert!(
-                    before.occupants & SURFACE_MASK != 0,
+                    !before.surface.is_empty(),
                     "{surface:?} (line_first={line_first}): nothing on the ground \
                      to clear — the premise of this test"
                 );
@@ -1157,17 +1463,15 @@ mod tests {
                     Terrain::Land,
                     "{surface:?} (line_first={line_first}): ground not regraded"
                 );
-                assert_eq!(
-                    after.occupants & SURFACE_MASK,
-                    0,
+                assert!(
+                    after.surface.is_empty(),
                     "{surface:?} (line_first={line_first}): the {} spelling \
                      survived a regrade that erased the other",
                     if line_first { "underlay" } else { "kind" }
                 );
                 assert!(!after.has_occupant(Occupant::Road) && !after.has_occupant(Occupant::Rail));
                 assert_eq!(
-                    after.occupants & OVERHEAD_MASK,
-                    before.occupants & OVERHEAD_MASK,
+                    after.overhead, before.overhead,
                     "{surface:?} (line_first={line_first}): the span crosses the \
                      tile whatever the ground does"
                 );
@@ -1190,7 +1494,7 @@ mod tests {
         assert_eq!(s.money, before_money - tool_cost(Tool::TerraformLower));
         assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Water);
         assert_eq!(
-            s.tile_at(1, 1).unwrap().occupants,
+            s.tile_at(1, 1).unwrap().occupants(),
             0,
             "the zone tag outlived the regrade"
         );
@@ -1217,7 +1521,6 @@ mod tests {
     /// down to build order. Now it always does.
     #[test]
     fn planting_clears_a_road_or_rail_in_either_spelling() {
-        use crate::occupants::{OVERHEAD_MASK, SURFACE_MASK};
         use crate::wilderness::{compute_wilderness, WildernessTunables};
 
         for surface in [Tool::Road, Tool::Rail] {
@@ -1236,18 +1539,15 @@ mod tests {
 
                 assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Tree);
                 let after = s.tile_at(1, 1).unwrap();
-                assert_eq!(
-                    after.occupants & SURFACE_MASK,
-                    0,
+                assert!(
+                    after.surface.is_empty(),
                     "{surface:?} (line_first={line_first}): the {} spelling \
                      survived a planting that erased the other",
                     if line_first { "underlay" } else { "kind" }
                 );
                 assert_eq!(
-                    after.occupants
-                        & OVERHEAD_MASK
-                        & !crate::occupants::occupant_bit(Occupant::Trees),
-                    before.occupants & OVERHEAD_MASK,
+                    after.overhead.bits() & !crate::occupants::occupant_bit(Occupant::Trees),
+                    before.overhead.bits(),
                     "{surface:?} (line_first={line_first}): the span crosses the \
                      tile whatever grows under it"
                 );
@@ -1357,7 +1657,7 @@ mod tests {
             let bid = s.tile_at(1, 1).unwrap().building_id.unwrap();
             remove_building(&mut s, bid as u32);
             assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
-            assert_eq!(s.tile_at(1, 1).unwrap().occupants, 0);
+            assert_eq!(s.tile_at(1, 1).unwrap().occupants(), 0);
             assert!(s.tile_at(1, 1).unwrap().building_id.is_none());
 
             let r = apply_tool(&mut s, tool, 1, 1);

@@ -294,8 +294,8 @@ mod tests {
                         tile.building_id,
                     );
                     assert_eq!(
-                        (back.terrain, back.occupants),
-                        (tile.terrain, tile.occupants),
+                        (back.terrain, back.occupants()),
+                        (tile.terrain, tile.occupants()),
                         "v4 ({kind:?}, {f:#06b}, {underground:?}) did not survive the wire"
                     );
                     checked += 1;

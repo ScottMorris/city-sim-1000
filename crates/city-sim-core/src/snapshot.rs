@@ -14,7 +14,28 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// gained `revenue_tourism`.
 /// v5: #177 step 3 — `Tile` was stratified. `kind: TileKind` + `underground:
 /// Option<TileKind>` + three structural bits inside `flags` became `terrain:
-/// Terrain` + `occupants: OccupantSet` + `density: ZoneDensity`.
+/// Terrain` + `underground: Underground` + `surface: Surface` + `overhead:
+/// Overhead` + `density: ZoneDensity`.
+///
+/// **The three stratum fields landed inside v5, not in a v6.** v5 has never
+/// been released — `origin/main` and `main` both read `VERSION = 4` — so it was
+/// introduced and reshaped on the same unpushed branch, and a v6 would exist
+/// solely to describe a shape that was never published. What a version number
+/// buys is a migration path for bytes that exist; there are none to speak of,
+/// so it would buy nothing and cost a permanent dead arm in [`from_bytes`].
+/// The moment this branch is pushed that reasoning expires — the next change to
+/// the tile's shape is a v6.
+///
+/// Be precise about what that costs, because it is not nothing. The restructure
+/// changed no *simulated* behaviour, but it did move the persisted bytes:
+/// `Tile` went from one varint `occupants` field to three, so a snapshot
+/// written by an earlier commit *on this branch* no longer loads. The exposure
+/// is a `.citysim` download or an IndexedDB save made while dev-running the
+/// branch between the first stratum commit and this one, and nothing else. The
+/// failure is loud rather than silent — the hand-written `Deserialize` on the
+/// stratum newtypes rejects a foreign bit pattern outright, which is what
+/// `tests::a_snapshot_with_a_cross_stratum_bit_is_refused` covers — so such a
+/// save errors instead of decoding into a wrong city.
 ///
 /// v4 is still **readable**: [`from_bytes`] dispatches it through
 /// [`crate::migrate::v4_to_v5`], which describes the old `GameState` field for
@@ -375,6 +396,69 @@ mod tests {
             from_bytes(&bytes),
             Err(SnapshotError::UnsupportedVersion(99))
         ));
+    }
+
+    /// A snapshot whose `surface` field carries an overhead bit is **refused**,
+    /// end to end, by [`from_bytes`] — not masked, not logged, not loaded.
+    ///
+    /// The reasoning is in the `Deserialize` impl the stratum newtypes share:
+    /// the invariant is unrepresentable in the running program, so no build of
+    /// this engine can have written such a tile, and postcard is positional
+    /// with nothing to resynchronise against — a stratum holding a foreign bit
+    /// says the reader and the writer disagree about where the fields are, and
+    /// every byte after it is suspect. Loading it anyway would produce a city
+    /// that is quietly wrong, which is the failure mode the whole model exists
+    /// to end.
+    ///
+    /// The forgery is done in bytes because there is no other way to do it:
+    /// `Surface(1 << 9)` does not compile outside `occupants::strata`.
+    #[test]
+    fn a_snapshot_with_a_cross_stratum_bit_is_refused() {
+        use crate::occupants::{occupant_bit, Occupant, OccupantSet};
+
+        let mut bytes = to_bytes(&GameState::new(1, 1, 0)).unwrap();
+        // Header, then `width`, `height`, the tile-vector length — all 1 — and
+        // then the tile, whose first four fields are `terrain` and the three
+        // strata. Asserted rather than assumed, so a reordering of `Tile` fails
+        // here instead of silently testing nothing.
+        let tile = 8 + 3;
+        assert_eq!(
+            &bytes[tile..tile + 4],
+            &[0, 0, 0, 0],
+            "expected Land + three empty strata at the head of the tile"
+        );
+
+        // Splice a hydro line — an *overhead* occupant — into `surface`.
+        let line: OccupantSet = occupant_bit(Occupant::PowerLine);
+        let forged = postcard::to_allocvec(&line).unwrap();
+        bytes.splice(tile + 2..tile + 3, forged);
+
+        let err = from_bytes(&bytes).expect_err("a forged stratum must not load");
+        assert!(
+            matches!(err, SnapshotError::Postcard(_)),
+            "expected a decode error, got {err:?}"
+        );
+    }
+
+    /// The same splice into `overhead`, where the bit does belong, loads
+    /// cleanly — so the test above is failing on the *stratum*, not on the
+    /// splice itself.
+    #[test]
+    fn the_same_bit_in_its_own_stratum_loads() {
+        use crate::occupants::{occupant_bit, Occupant, OccupantSet};
+
+        let mut bytes = to_bytes(&GameState::new(1, 1, 0)).unwrap();
+        let tile = 8 + 3;
+        let line: OccupantSet = occupant_bit(Occupant::PowerLine);
+        let forged = postcard::to_allocvec(&line).unwrap();
+        bytes.splice(tile + 3..tile + 4, forged);
+
+        let state = from_bytes(&bytes).expect("a line overhead is a legal tile");
+        assert!(state.tiles[0].has_occupant(Occupant::PowerLine));
+        assert_eq!(
+            state.tiles[0].occupants_in(crate::occupants::Stratum::Surface),
+            0
+        );
     }
 
     #[test]
