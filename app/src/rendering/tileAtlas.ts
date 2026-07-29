@@ -19,6 +19,22 @@ export type RoadVariant =
   | 'cross'
   | 'end-n' | 'end-e' | 'end-s' | 'end-w';
 
+export const ROAD_VARIANT_NAMES: readonly RoadVariant[] = [
+  'ns', 'ew',
+  'corner-ne', 'corner-nw', 'corner-se', 'corner-sw',
+  't-nes', 't-new', 't-nsw', 't-esw',
+  'cross',
+  'end-n', 'end-e', 'end-s', 'end-w'
+];
+
+/** Hydro has one more case than road: a pole with nothing attached. */
+export type HydroVariant = RoadVariant | 'isolated';
+
+/** What a hydro tile was laid over, named for the CARRIAGEWAY's axis rather
+ *  than the line's — `along-ns` is a road or rail running north-south. A tile
+ *  carrying both axes (a 4-way, or a level crossing) is a `junction`. */
+export type CarriagewayClass = 'along-ns' | 'along-ew' | 'junction';
+
 export interface TileTextures {
   tiles: Partial<Record<TileKind, PIXI.Texture>>;
   road: Partial<Record<RoadVariant, PIXI.Texture>>;
@@ -26,6 +42,17 @@ export interface TileTextures {
   railCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
   powerPlant: Partial<Record<PowerPlantType, PIXI.Texture>>;
   powerLine: Partial<Record<RoadVariant, PIXI.Texture>>;
+  /** Transparent twins, composited over the road/rail/zone a line crosses. */
+  powerLineOverlay: Partial<Record<RoadVariant, PIXI.Texture>>;
+  /** Two-pole twins: a line crossing a carriageway is carried by poles either
+   *  side of it, not by one planted in the middle. */
+  powerLineCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
+  /** A pole with nothing attached, for a tile with no wire neighbours. */
+  powerLineIsolated?: PIXI.Texture;
+  powerLineIsolatedOverlay?: PIXI.Texture;
+  /** Kerbside twins, keyed by carriageway situation then connectivity: the
+   *  pole stands clear of the traffic lane rather than in it. */
+  powerLineKerbside: Record<CarriagewayClass, Partial<Record<HydroVariant, PIXI.Texture>>>;
   residentialHouses: PIXI.Texture[];
   commercialBuildings: PIXI.Texture[];
   commercialGeminiBuildings: PIXI.Texture[];
@@ -155,6 +182,48 @@ const industrialBuildingTexturePaths = [
   assetPath('assets/tiles/buildings/ind-factory-5.png')
 ];
 
+// Transparent twins of the hydro set. Same 15 variants, grass fill omitted,
+// so the renderer can draw them over whatever the line crosses (issue #169).
+const powerLineOverlayTexturePaths = Object.fromEntries(
+  (Object.entries(powerLineTexturePaths) as [RoadVariant, string][]).map(([variant, p]) => [
+    variant,
+    p.replace(/\.png$/, '-overlay.png')
+  ])
+) as Record<RoadVariant, string>;
+
+const powerLineCrossingTexturePaths = {
+  ns: assetPath('assets/tiles/power/power-line-ns-crossing.png'),
+  ew: assetPath('assets/tiles/power/power-line-ew-crossing.png')
+} as const;
+
+const powerLineIsolatedPath = assetPath('assets/tiles/power/power-line-isolated.png');
+const powerLineIsolatedOverlayPath = assetPath('assets/tiles/power/power-line-isolated-overlay.png');
+
+export const HYDRO_VARIANTS: readonly HydroVariant[] = [...ROAD_VARIANT_NAMES, 'isolated'];
+export const CARRIAGEWAY_CLASSES: readonly CarriagewayClass[] = ['along-ns', 'along-ew', 'junction'];
+
+/** A straight line square across the carriageway is carried on two poles, so
+ *  it has no kerbside twin — `powerLineCrossing` serves it instead. */
+export function isSquareCrossing(cls: CarriagewayClass, variant: HydroVariant): boolean {
+  if (variant !== 'ns' && variant !== 'ew') return false;
+  return cls === 'junction' || (cls === 'along-ns') === (variant === 'ew');
+}
+
+// Kerbside twins: the same variants again, once per carriageway situation,
+// with the pole moved off the traffic lane and the legs rebuilt to reach it.
+// Overlay-only — they never occur on open ground (issue #169).
+const powerLineKerbsideTexturePaths = Object.fromEntries(
+  CARRIAGEWAY_CLASSES.map((cls) => [
+    cls,
+    Object.fromEntries(
+      HYDRO_VARIANTS.filter((v) => !isSquareCrossing(cls, v)).map((v) => [
+        v,
+        assetPath(`assets/tiles/power/power-line-${v}-${cls}.png`)
+      ])
+    ) as Partial<Record<HydroVariant, string>>
+  ])
+) as Record<CarriagewayClass, Partial<Record<HydroVariant, string>>>;
+
 const schoolTexturePaths = {
   elementary: assetPath('assets/tiles/buildings/school-elementary.png'),
   high:       assetPath('assets/tiles/buildings/school-high.png')
@@ -213,6 +282,37 @@ export async function loadTileTextures(): Promise<TileTextures> {
     })
   );
 
+  const powerLineOverlayEntries = await Promise.all(
+    (Object.entries(powerLineOverlayTexturePaths) as [RoadVariant, string][]).map(async ([variant, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [variant, texture] as const;
+    })
+  );
+
+  const powerLineCrossingEntries = await Promise.all(
+    (Object.entries(powerLineCrossingTexturePaths) as ['ns' | 'ew', string][]).map(async ([key, path]) => {
+      const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+      return [key, texture] as const;
+    })
+  );
+
+  const powerLineKerbsideEntries = await Promise.all(
+    CARRIAGEWAY_CLASSES.map(async (cls) => {
+      const variants = await Promise.all(
+        Object.entries(powerLineKerbsideTexturePaths[cls]).map(async ([variant, path]) => {
+          const texture = await PIXI.Assets.load<PIXI.Texture>(path);
+          return [variant, texture] as const;
+        })
+      );
+      return [cls, Object.fromEntries(variants)] as const;
+    })
+  );
+
+  const [powerLineIsolated, powerLineIsolatedOverlay] = await Promise.all([
+    PIXI.Assets.load<PIXI.Texture>(powerLineIsolatedPath),
+    PIXI.Assets.load<PIXI.Texture>(powerLineIsolatedOverlayPath)
+  ]);
+
   const residentialHouses = await Promise.all(
     residentialHouseTexturePaths.map(async (path) => PIXI.Assets.load<PIXI.Texture>(path))
   );
@@ -257,6 +357,12 @@ export async function loadTileTextures(): Promise<TileTextures> {
     railCrossing:           Object.fromEntries(railCrossingEntries),
     powerPlant:             Object.fromEntries(powerPlantEntries),
     powerLine:              Object.fromEntries(powerLineEntries),
+    powerLineOverlay:       Object.fromEntries(powerLineOverlayEntries),
+    powerLineCrossing:      Object.fromEntries(powerLineCrossingEntries),
+    powerLineIsolated,
+    powerLineIsolatedOverlay,
+    powerLineKerbside:      Object.fromEntries(powerLineKerbsideEntries) as
+      Record<CarriagewayClass, Partial<Record<HydroVariant, PIXI.Texture>>>,
     residentialHouses,
     commercialBuildings,
     commercialGeminiBuildings,

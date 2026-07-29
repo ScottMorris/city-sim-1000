@@ -30,6 +30,18 @@ const PROFILE = 'rich-pixel-48';
 const ROAD_VARIANTS = ['ns', 'ew', 'corner-ne', 'corner-nw', 'corner-se', 'corner-sw',
   't-nes', 't-esw', 't-nsw', 't-new', 'cross', 'end-n', 'end-e', 'end-s', 'end-w'];
 
+// Hydro also has a pole with nothing attached, and three kerbside families —
+// one per carriageway situation — where the pole stands clear of the traffic
+// lane instead of in it. Named for the carriageway's axis, not the line's.
+const HYDRO_VARIANTS = [...ROAD_VARIANTS, 'isolated'];
+const KERBSIDE = ['along-ns', 'along-ew', 'junction'];
+
+/** A straight line square across the carriageway is carried on two poles
+ *  (`power-line-<axis>-crossing.png`), so it has no kerbside twin. */
+const isSquareCrossing = (cls, variant) =>
+  (variant === 'ns' || variant === 'ew') &&
+  (cls === 'junction' || (cls === 'along-ns') === (variant === 'ew'));
+
 /** scene output -> game sprite path (relative to assets/tiles/). */
 const PACK = [
   ...ROAD_VARIANTS.map((v) => [`road-${v}`, `roads/road-${v}.png`]),
@@ -37,6 +49,20 @@ const PACK = [
   ['crossing-ns', 'rails/rail-road-crossing-ns.png'],
   ['crossing-ew', 'rails/rail-road-crossing-ew.png'],
   ...ROAD_VARIANTS.map((v) => [`power-${v}`, `power/power-line-${v}.png`]),
+  // Transparent twins the renderer composites over road/rail/zone tiles.
+  ...ROAD_VARIANTS.map((v) => [`power-${v}`, `power/power-line-${v}-overlay.png`, 'overlay']),
+  // Two-pole twins, for a line crossing a road/rail rather than running in it.
+  // Their own scenes: the E-W spans are rebuilt to peak at the two poles.
+  ['power-crossing-ns', 'power/power-line-ns-crossing.png', 'overlay'],
+  ['power-crossing-ew', 'power/power-line-ew-crossing.png', 'overlay'],
+  // A pole with nothing attached, instead of a 4-way cross wired to nothing.
+  ['power-isolated', 'power/power-line-isolated.png'],
+  ['power-isolated', 'power/power-line-isolated-overlay.png', 'overlay'],
+  // The kerbside families: every variant that is not a square crossing, once
+  // per carriageway situation, with the pole moved out of the traffic lane.
+  ...KERBSIDE.flatMap((cls) => HYDRO_VARIANTS
+    .filter((v) => !isSquareCrossing(cls, v))
+    .map((v) => [`power-${cls}-${v}`, `power/power-line-${v}-${cls}.png`, 'overlay'])),
   ['house', 'buildings/res-house-5.png'],
   ['house2', 'buildings/res-house-6.png'],
   ['house3', 'buildings/res-house-7.png'],
@@ -55,13 +81,14 @@ const PACK = [
 
 const manifest = { profile: PROFILE, tileSize: 160, sprites: {} };
 let missing = 0;
-for (const [scene, dest] of PACK) {
-  const src = path.join(OUT, `look-${scene}-${PROFILE}.png`);
+for (const [scene, dest, kind] of PACK) {
+  const suffix = kind === 'overlay' ? '-overlay' : '';
+  const src = path.join(OUT, `look-${scene}-${PROFILE}${suffix}.png`);
   const destPath = path.join(DIST, dest);
   try {
     await fs.mkdir(path.dirname(destPath), { recursive: true });
     await fs.copyFile(src, destPath);
-    manifest.sprites[dest] = { scene };
+    manifest.sprites[dest] = kind ? { scene, [kind]: true } : { scene };
   } catch {
     console.error(`MISSING ${scene} (${src})`);
     missing++;

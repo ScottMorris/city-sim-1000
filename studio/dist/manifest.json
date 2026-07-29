@@ -143,6 +143,257 @@
     "power/power-line-end-w.png": {
       "scene": "power-end-w"
     },
+    "power/power-line-ns-overlay.png": {
+      "scene": "power-ns",
+      "overlay": true
+    },
+    "power/power-line-ew-overlay.png": {
+      "scene": "power-ew",
+      "overlay": true
+    },
+    "power/power-line-corner-ne-overlay.png": {
+      "scene": "power-corner-ne",
+      "overlay": true
+    },
+    "power/power-line-corner-nw-overlay.png": {
+      "scene": "power-corner-nw",
+      "overlay": true
+    },
+    "power/power-line-corner-se-overlay.png": {
+      "scene": "power-corner-se",
+      "overlay": true
+    },
+    "power/power-line-corner-sw-overlay.png": {
+      "scene": "power-corner-sw",
+      "overlay": true
+    },
+    "power/power-line-t-nes-overlay.png": {
+      "scene": "power-t-nes",
+      "overlay": true
+    },
+    "power/power-line-t-esw-overlay.png": {
+      "scene": "power-t-esw",
+      "overlay": true
+    },
+    "power/power-line-t-nsw-overlay.png": {
+      "scene": "power-t-nsw",
+      "overlay": true
+    },
+    "power/power-line-t-new-overlay.png": {
+      "scene": "power-t-new",
+      "overlay": true
+    },
+    "power/power-line-cross-overlay.png": {
+      "scene": "power-cross",
+      "overlay": true
+    },
+    "power/power-line-end-n-overlay.png": {
+      "scene": "power-end-n",
+      "overlay": true
+    },
+    "power/power-line-end-e-overlay.png": {
+      "scene": "power-end-e",
+      "overlay": true
+    },
+    "power/power-line-end-s-overlay.png": {
+      "scene": "power-end-s",
+      "overlay": true
+    },
+    "power/power-line-end-w-overlay.png": {
+      "scene": "power-end-w",
+      "overlay": true
+    },
+    "power/power-line-ns-crossing.png": {
+      "scene": "power-crossing-ns",
+      "overlay": true
+    },
+    "power/power-line-ew-crossing.png": {
+      "scene": "power-crossing-ew",
+      "overlay": true
+    },
+    "power/power-line-isolated.png": {
+      "scene": "power-isolated"
+    },
+    "power/power-line-isolated-overlay.png": {
+      "scene": "power-isolated",
+      "overlay": true
+    },
+    "power/power-line-ns-along-ns.png": {
+      "scene": "power-along-ns-ns",
+      "overlay": true
+    },
+    "power/power-line-corner-ne-along-ns.png": {
+      "scene": "power-along-ns-corner-ne",
+      "overlay": true
+    },
+    "power/power-line-corner-nw-along-ns.png": {
+      "scene": "power-along-ns-corner-nw",
+      "overlay": true
+    },
+    "power/power-line-corner-se-along-ns.png": {
+      "scene": "power-along-ns-corner-se",
+      "overlay": true
+    },
+    "power/power-line-corner-sw-along-ns.png": {
+      "scene": "power-along-ns-corner-sw",
+      "overlay": true
+    },
+    "power/power-line-t-nes-along-ns.png": {
+      "scene": "power-along-ns-t-nes",
+      "overlay": true
+    },
+    "power/power-line-t-esw-along-ns.png": {
+      "scene": "power-along-ns-t-esw",
+      "overlay": true
+    },
+    "power/power-line-t-nsw-along-ns.png": {
+      "scene": "power-along-ns-t-nsw",
+      "overlay": true
+    },
+    "power/power-line-t-new-along-ns.png": {
+      "scene": "power-along-ns-t-new",
+      "overlay": true
+    },
+    "power/power-line-cross-along-ns.png": {
+      "scene": "power-along-ns-cross",
+      "overlay": true
+    },
+    "power/power-line-end-n-along-ns.png": {
+      "scene": "power-along-ns-end-n",
+      "overlay": true
+    },
+    "power/power-line-end-e-along-ns.png": {
+      "scene": "power-along-ns-end-e",
+      "overlay": true
+    },
+    "power/power-line-end-s-along-ns.png": {
+      "scene": "power-along-ns-end-s",
+      "overlay": true
+    },
+    "power/power-line-end-w-along-ns.png": {
+      "scene": "power-along-ns-end-w",
+      "overlay": true
+    },
+    "power/power-line-isolated-along-ns.png": {
+      "scene": "power-along-ns-isolated",
+      "overlay": true
+    },
+    "power/power-line-ew-along-ew.png": {
+      "scene": "power-along-ew-ew",
+      "overlay": true
+    },
+    "power/power-line-corner-ne-along-ew.png": {
+      "scene": "power-along-ew-corner-ne",
+      "overlay": true
+    },
+    "power/power-line-corner-nw-along-ew.png": {
+      "scene": "power-along-ew-corner-nw",
+      "overlay": true
+    },
+    "power/power-line-corner-se-along-ew.png": {
+      "scene": "power-along-ew-corner-se",
+      "overlay": true
+    },
+    "power/power-line-corner-sw-along-ew.png": {
+      "scene": "power-along-ew-corner-sw",
+      "overlay": true
+    },
+    "power/power-line-t-nes-along-ew.png": {
+      "scene": "power-along-ew-t-nes",
+      "overlay": true
+    },
+    "power/power-line-t-esw-along-ew.png": {
+      "scene": "power-along-ew-t-esw",
+      "overlay": true
+    },
+    "power/power-line-t-nsw-along-ew.png": {
+      "scene": "power-along-ew-t-nsw",
+      "overlay": true
+    },
+    "power/power-line-t-new-along-ew.png": {
+      "scene": "power-along-ew-t-new",
+      "overlay": true
+    },
+    "power/power-line-cross-along-ew.png": {
+      "scene": "power-along-ew-cross",
+      "overlay": true
+    },
+    "power/power-line-end-n-along-ew.png": {
+      "scene": "power-along-ew-end-n",
+      "overlay": true
+    },
+    "power/power-line-end-e-along-ew.png": {
+      "scene": "power-along-ew-end-e",
+      "overlay": true
+    },
+    "power/power-line-end-s-along-ew.png": {
+      "scene": "power-along-ew-end-s",
+      "overlay": true
+    },
+    "power/power-line-end-w-along-ew.png": {
+      "scene": "power-along-ew-end-w",
+      "overlay": true
+    },
+    "power/power-line-isolated-along-ew.png": {
+      "scene": "power-along-ew-isolated",
+      "overlay": true
+    },
+    "power/power-line-corner-ne-junction.png": {
+      "scene": "power-junction-corner-ne",
+      "overlay": true
+    },
+    "power/power-line-corner-nw-junction.png": {
+      "scene": "power-junction-corner-nw",
+      "overlay": true
+    },
+    "power/power-line-corner-se-junction.png": {
+      "scene": "power-junction-corner-se",
+      "overlay": true
+    },
+    "power/power-line-corner-sw-junction.png": {
+      "scene": "power-junction-corner-sw",
+      "overlay": true
+    },
+    "power/power-line-t-nes-junction.png": {
+      "scene": "power-junction-t-nes",
+      "overlay": true
+    },
+    "power/power-line-t-esw-junction.png": {
+      "scene": "power-junction-t-esw",
+      "overlay": true
+    },
+    "power/power-line-t-nsw-junction.png": {
+      "scene": "power-junction-t-nsw",
+      "overlay": true
+    },
+    "power/power-line-t-new-junction.png": {
+      "scene": "power-junction-t-new",
+      "overlay": true
+    },
+    "power/power-line-cross-junction.png": {
+      "scene": "power-junction-cross",
+      "overlay": true
+    },
+    "power/power-line-end-n-junction.png": {
+      "scene": "power-junction-end-n",
+      "overlay": true
+    },
+    "power/power-line-end-e-junction.png": {
+      "scene": "power-junction-end-e",
+      "overlay": true
+    },
+    "power/power-line-end-s-junction.png": {
+      "scene": "power-junction-end-s",
+      "overlay": true
+    },
+    "power/power-line-end-w-junction.png": {
+      "scene": "power-junction-end-w",
+      "overlay": true
+    },
+    "power/power-line-isolated-junction.png": {
+      "scene": "power-junction-isolated",
+      "overlay": true
+    },
     "buildings/res-house-5.png": {
       "scene": "house"
     },

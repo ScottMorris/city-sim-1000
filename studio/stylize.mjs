@@ -15,7 +15,7 @@
  */
 
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { promises as fs } from 'node:fs';
+import { promises as fs, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -56,7 +56,22 @@ const refKey = REFS[SCENE] ? SCENE : SCENE.split('-')[0];
 const REF_PNG = path.join(ROOT, 'app/public/assets/tiles', REFS[refKey] ?? REFS.house);
 
 const TILE = 160;          // game convention for a 1×1 sprite
+// Only the shipped profile gets an overlay twin; the rest exist for comparison.
+const OVERLAY_PROFILE = 'rich-pixel-48';
 const HOUSE_SCALE = 0.84;  // fraction of the tile the house content occupies
+
+/** Billboard prop placement, as recorded by the scene at render time.
+ *
+ *  Hydro tiles move the pole off the carriageway — two poles either side for
+ *  a square crossing, one out on the kerb for everything else — and the wires
+ *  are built to meet the arm wherever it ends up. Restating those offsets here
+ *  meant two files had to agree and eventually didn't, so the scene now writes
+ *  `props.json` beside its passes and this just reads it. */
+function propOffsetsFor(scene) {
+  const sidecar = path.join(ROOT, 'studio/out/passes', scene, 'props.json');
+  if (!existsSync(sidecar)) return null;
+  return JSON.parse(readFileSync(sidecar, 'utf8')).propOffsets ?? null;
+}
 
 // Role palette — base colours per building part (sRGB). Light bands derive
 // from these in HSL; the albedo pass is only used to recover lighting.
@@ -268,6 +283,9 @@ const SCENE_STYLES = {
     // the crossarm (z 2.0 -> screen 46.5) on the upper wire anchor and the
     // pole base (z 0 -> screen 118) at ~74% of the tile.
     ground: true,
+    // Hydro is laid *over* roads, rails and zones, so it also needs a
+    // transparent twin the renderer can composite (see issue #169).
+    emitOverlay: true,
     overlay: 'pole',
     overlayOffsetY: 13,
     overlayBaseY: 118,
@@ -284,7 +302,11 @@ const SCENE_STYLES = {
     roofSpacing: 0.36,
   },
 };
+// Every hydro variant — the straights, the two-pole crossings and the whole
+// kerbside family — shares one style and differs only in where the pole is
+// composited, which the scene records in `props.json`.
 const STYLE = SCENE_STYLES[SCENE] ?? SCENE_STYLES[SCENE.split('-')[0]] ?? SCENE_STYLES.house;
+const PROP_OFFSETS = propOffsetsFor(SCENE) ?? STYLE.propOffsets ?? [{ dx: 0, dy: 0 }];
 for (const [name, colour] of Object.entries(STYLE.palette)) {
   ROLES.find((r) => r.name === name).colour = colour;
 }
@@ -866,16 +888,25 @@ async function main() {
   const ref = await loadImage(REF_PNG);
   panels.push({ label: 'reference (current game)', image: ref });
 
-  for (const profile of PROFILES) {
-    const canvas = renderProfile(profile, maps, crop, grassAt);
+  // Compose one tile: the ground pass, then any billboard prop on top.
+  // `transparent` leaves cells with no geometry clear instead of filling them
+  // with grass, which turns the result into an OVERLAY the game can composite
+  // over a road, rail or zone rather than a ground tile that paints over it.
+  // Where the prop billboard is stamped, in tile px, relative to centre. One
+  // entry = one pole. A crossing tile uses two, shifted clear of the
+  // carriageway, because a pole planted in the middle of a road is nonsense —
+  // real spans are carried by poles standing either side of it.
+  const composeTile = (profile, opts = {}) => {
+    const canvas = renderProfile(profile, maps, crop, grassAt, opts);
     if (overlay) {
       const bctx = canvas.getContext('2d');
+      for (const { dx, dy } of PROP_OFFSETS) {
       // Pole ground shadow: a small cell-aligned dark blob south-east of the
       // pole base, consistent with the studio sun (from the screen's
       // upper-left) that shades every other asset.
       const cell = TILE / profile.grid;
-      const baseX = profile.grid / 2;
-      const baseY = (STYLE.overlayBaseY ?? TILE / 2 + (STYLE.overlayOffsetY ?? 0)) / cell;
+      const baseX = profile.grid / 2 + dx / cell;
+      const baseY = ((STYLE.overlayBaseY ?? TILE / 2 + (STYLE.overlayOffsetY ?? 0)) + dy) / cell;
       bctx.fillStyle = 'rgba(10, 22, 16, 0.30)';
       for (let cy = 0; cy < profile.grid; cy++) {
         for (let cx = 0; cx < profile.grid; cx++) {
@@ -887,12 +918,27 @@ async function main() {
       }
       const ov = withPalette(overlay.palette, () =>
         renderProfile(profile, overlay.maps, overlay.crop, grassAt, { transparent: true }));
-      bctx.drawImage(ov, 0, STYLE.overlayOffsetY ?? 0);
+      bctx.drawImage(ov, dx, (STYLE.overlayOffsetY ?? 0) + dy);
+      }
     }
+    return canvas;
+  };
+
+  for (const profile of PROFILES) {
+    const canvas = composeTile(profile);
     const file = path.join(OUT_DIR, `look-${SCENE}-${profile.name}.png`);
     await fs.writeFile(file, canvas.toBuffer('image/png'));
     console.log(`Wrote ${file}`);
     panels.push({ label: profile.name, image: canvas });
+
+    // Overlay twin, for scenes the game composites rather than lays down.
+    // Only for the shipped profile — the others exist for comparison.
+    if (STYLE.emitOverlay && profile.name === OVERLAY_PROFILE) {
+      const overlayCanvas = composeTile(profile, { transparent: true });
+      const overlayFile = path.join(OUT_DIR, `look-${SCENE}-${profile.name}-overlay.png`);
+      await fs.writeFile(overlayFile, overlayCanvas.toBuffer('image/png'));
+      console.log(`Wrote ${overlayFile}`);
+    }
   }
 
   const SCALE = 2, PAD = 16, LABEL_H = 26;

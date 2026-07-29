@@ -17,12 +17,29 @@
 # SPDX-License-Identifier: MIT
 
 import importlib
+import json
 import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import studiolib
+
+
+def emit(name, module):
+    """Render one variant, then record any compositing the scene asks for.
+
+    A scene that places a billboard prop (the hydro pole) decides *where* as
+    part of its geometry — the wires have to meet the arm exactly. Writing the
+    offsets alongside the passes keeps that one decision in one place instead
+    of restating it in the stylizer, where the two drifted apart.
+    """
+    studiolib.run(name, module)
+    if hasattr(module, 'prop_offsets'):
+        out = f'{studiolib.OUT_ROOT}/{name}/props.json'
+        with open(out, 'w') as f:
+            json.dump({'propOffsets': module.prop_offsets()}, f)
+
 
 argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 scene_name = argv[0] if argv else 'house'
@@ -34,6 +51,6 @@ if hasattr(scene_module, 'VARIANTS') and len(argv) > 1:
     wanted = list(scene_module.VARIANTS) if argv[1] == 'all' else argv[1:]
     for variant in wanted:
         scene_module.VARIANT = variant
-        studiolib.run(f'{scene_name}-{variant}', scene_module)
+        emit(f'{scene_name}-{variant}', scene_module)
 else:
-    studiolib.run(scene_name, scene_module)
+    emit(scene_name, scene_module)
