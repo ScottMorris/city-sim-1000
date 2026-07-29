@@ -620,9 +620,18 @@ mod tests {
             apply_tool(&mut reverse, second, 1, 1);
             apply_tool(&mut reverse, first, 1, 1);
 
-            let (a, b) = (forward.tile_at(1, 1).unwrap(), reverse.tile_at(1, 1).unwrap());
-            assert_eq!(a.kind, b.kind, "{first:?} then {second:?} disagreed on kind");
-            assert_eq!(a.flags, b.flags, "{first:?} then {second:?} disagreed on flags");
+            let (a, b) = (
+                forward.tile_at(1, 1).unwrap(),
+                reverse.tile_at(1, 1).unwrap(),
+            );
+            assert_eq!(
+                a.kind, b.kind,
+                "{first:?} then {second:?} disagreed on kind"
+            );
+            assert_eq!(
+                a.flags, b.flags,
+                "{first:?} then {second:?} disagreed on flags"
+            );
         }
     }
 
@@ -634,7 +643,10 @@ mod tests {
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.kind, TileKind::Rail);
         assert!(t.has_road_underlay(), "the road under the rail was lost");
-        assert!(!t.has_rail_underlay(), "rail recorded itself as its own underlay");
+        assert!(
+            !t.has_rail_underlay(),
+            "rail recorded itself as its own underlay"
+        );
     }
 
     #[test]

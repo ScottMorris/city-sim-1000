@@ -381,10 +381,17 @@ mod tests {
         });
 
         let near = |got: f32, want: f32, what: &str| {
-            assert!((got - want).abs() < 1e-4, "{what}: billed {got:.3}, expected {want:.3}");
+            assert!(
+                (got - want).abs() < 1e-4,
+                "{what}: billed {got:.3}, expected {want:.3}"
+            );
         };
         near(road, MAINT_ROAD, "road alone");
-        near(road_line, MAINT_ROAD + MAINT_POWER_LINE, "road carrying a line");
+        near(
+            road_line,
+            MAINT_ROAD + MAINT_POWER_LINE,
+            "road carrying a line",
+        );
         near(crossing, MAINT_ROAD + MAINT_RAIL, "level crossing");
         near(
             all_three,
@@ -393,7 +400,10 @@ mod tests {
         );
         near(zone_line, MAINT_POWER_LINE, "line strung across a zone");
 
-        assert!(road_line > road, "adding a line to a road must not reduce the bill");
+        assert!(
+            road_line > road,
+            "adding a line to a road must not reduce the bill"
+        );
     }
 
     #[test]
@@ -408,8 +418,16 @@ mod tests {
         apply_tool(&mut s, Tool::Road, 1, 1);
         apply_tool(&mut s, Tool::WaterPipe, 1, 1);
         let b = compute_daily_budget(&s);
-        assert!((b.maint_pipes - MAINT_WATER_PIPE).abs() < 1e-4, "pipes: {}", b.maint_pipes);
-        assert!((b.maint_roads - MAINT_ROAD).abs() < 1e-4, "roads: {}", b.maint_roads);
+        assert!(
+            (b.maint_pipes - MAINT_WATER_PIPE).abs() < 1e-4,
+            "pipes: {}",
+            b.maint_pipes
+        );
+        assert!(
+            (b.maint_roads - MAINT_ROAD).abs() < 1e-4,
+            "roads: {}",
+            b.maint_roads
+        );
     }
 
     #[test]
