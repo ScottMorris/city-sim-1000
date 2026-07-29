@@ -59,8 +59,8 @@ Same shape at every stratum, so adding a layer or an occupant is additive rather
 struct Tile {
     terrain:     Terrain,            // Land | Water, + elevation (exists today)
     underground: OccupantSet,        // pipes, subway, fibre
-    surface:     OccupantSet,        // trees, road, rail, zone, structure
-    overhead:    OccupantSet,        // power lines, street trees
+    surface:     OccupantSet,        // road, rail, zone, structure
+    overhead:    OccupantSet,        // power lines, tree canopy
     development: Option<BuildingId>,
 }
 
@@ -109,15 +109,43 @@ Occupant → { eco, upkeep, conducts: set<Network>, stratum, … }
 
 The permutation matrix already exists in the codebase — smeared across hand-written guards in `Tool::Road`, each zone tool, `place_footprint_building` and `Tool::PowerLine`. Every guard is a row of a table nobody has ever seen whole, which is exactly why two of them disagreed about the road/hydro interaction.
 
-Strata make most of the table fall out:
+Strata make most of the table fall out — but **the default is per stratum, not global**, because the strata differ physically in whether space is scarce:
 
-- **same stratum → conflict by default**
-- **different stratum → coexist by default**
+| stratum | default | why |
+| --- | --- | --- |
+| surface | **conflict** | the ground is the scarce resource; two things cannot occupy it |
+| overhead | **conflict** | canopy and conductors genuinely fight — utilities trim trees away from lines |
+| underground | **coexist** | depth is free; a main and a tunnel are simply at different depths |
 
-The exceptions then become a short, readable list instead of the general case. Known exceptions so far:
+With those defaults the exception list is calculable. Enumerating every pair from the occupants named so far:
 
-- road + rail on one surface tile — the level crossing, deliberate
-- trees yield to everything on their stratum
+**Surface** — Road, Rail, ZoneR, ZoneC, ZoneI, Structure → 15 pairs.
+
+- Road + Rail — **coexist.** The level crossing. *Exception.*
+- Road/Rail + any zone — conflict; the zone tools already refuse road and rail.
+- Road/Rail + Structure — conflict; `place_footprint_building` already refuses both.
+- Zone + Zone — conflict; land use is exclusive.
+- Zone + Structure — conflict; a park placed on a zone replaces it.
+- Structure + Structure — conflict; footprint placement already refuses overlap.
+
+**Overhead** — PowerLine, Trees → 1 pair, conflicting by default, **0 exceptions**.
+
+**Underground** — Pipe, Subway, Fibre → 3 pairs, all coexisting by default, **0 exceptions**.
+
+**Total: 19 pairs, exactly one exception — road + rail.** Derivation carries the entire table and the exception list is one line long.
+
+### Trees belong overhead, and this is why
+
+Trees were originally sketched as a surface occupant that "yields to everything". Putting them **overhead** instead is strictly better and costs nothing:
+
+- The exception count is unchanged — still one.
+- `Trees + Road` becomes a *cross-stratum* pair, so it coexists by default. **Street trees come out free**, with no rule written for them.
+- `Trees + PowerLine` becomes a *same-stratum* pair, so it conflicts by default — physically correct, and again no rule.
+- A bare forest is simply terrain `Land` with `overhead: {Trees}`. Nothing special-cased.
+
+It also settles open question 2 below: overhead gets a second occupant, so it is a real stratum rather than a boolean wearing a costume.
+
+What it does *not* settle is whether laying a road through forest should clear the canopy or leave it as street trees. That is a gameplay choice, not a modelling one, and the model expresses either.
 
 Making the table explicit data means it can be *printed and exhaustively tested*, which is the trick that worked for `hydroCoverage.test.ts`: it enumerated a space nobody had written down and immediately found 103 holes in it. The same trick applied to placement rules instead of sprites.
 
@@ -192,6 +220,36 @@ So occupants stay **bare tags in a bitset**, and flow lives in per-network array
 
 The topology is stratum data; the flow over it is network logic. See #176 for the mechanic driving this, and the backlog issue for the rest.
 
+### Scalar load is not enough for traffic
+
+A capacity mechanic needs only *how much* — a scalar per tile. Drawing moving cars needs *which way*, so a network that wants visualisation carries **directed** flow: outflow per edge, four values per tile.
+
+```rust
+struct NetworkField {
+    load:     Vec<f32>,               // scalar — enough for capacity and overload
+    capacity: Vec<f32>,
+    flow:     Option<Vec<[f32; 4]>>,  // N/E/S/W outflow — only for networks that draw motion
+}
+```
+
+Power needs the scalar and not the direction — nobody animates electrons. Roads need both.
+
+### Traffic is a field, not a population
+
+Cars are **not agents**. An agent has identity, an origin, a destination and a route it committed to. A car here has none of those, and giving it them means per-vehicle pathfinding for something the player reads as texture.
+
+The middle ground is a particle **advected by the flow field**: a car is spawned on a tile, reads that tile's directed flow, moves along it, and at a junction picks an outgoing edge with probability proportional to that edge's share of the outflow. No pathfinding, no origin-destination pair, no memory, no lifetime beyond the viewport.
+
+The behaviour that makes it look right is emergent rather than authored — cars thicken on busy corridors, thin out on quiet streets, and turn at junctions in the proportions the solver already computed. **The realism comes from the solver, not from the cars.** That is why this is cheaper than it sounds, and why it is worth making the solver produce direction rather than only magnitude.
+
+The line between the two categories:
+
+| | identity | route | cost |
+| --- | --- | --- | --- |
+| train | yes — it is *that* train | committed, follows specific track | agent |
+| car | none | picks per junction from the field | particle |
+
+
 ## What is *not* a tile occupant
 
 Anything that **moves** is an agent, not tile data. The tile model describes static infrastructure; agents travel over it and reference the network for routing.
@@ -221,6 +279,8 @@ Step 3 is where the compiler earns its keep: narrowing `kind` makes every stale 
 
 ## Open questions
 
+All three raised in the first revision are now resolved. Kept with their answers, because the reasoning is the useful part.
+
 1. ~~**Do occupants need per-tile state?**~~ **Resolved:** no. Flow is derived rather than authored, so it lives in per-network arrays beside the grid and occupants stay bare tags. See *Not yet designed: flow*.
-2. **Is `overhead` real, or is it just hydro?** If nothing else ever goes up there, an honest `power: bool` is cheaper than a stratum. Street trees along a road would settle it — they are physically overhead, they genuinely conflict with power lines (utilities trim canopy away from conductors), and they would give the stratum a second occupant and a new sprite group. That is a game-design call, not an engineering one, and it decides the scope of this whole proposal.
-3. **How many same-stratum exceptions are there really?** If road + rail is the only one, derivation carries the entire table. If there turn out to be five, the table wants to be explicit data regardless.
+2. ~~**Is `overhead` real, or is it just hydro?**~~ **Resolved: real.** Tree canopy is the second occupant, and putting it overhead rather than on the surface gives street trees for free while making trees-versus-conductors conflict by default. Both fall out of the stratum defaults with no rule written.
+3. ~~**How many same-stratum exceptions are there really?**~~ **Resolved: exactly one** — road + rail, out of 19 pairs — provided the default is set per stratum rather than globally. See *Compatibility is mostly derivable*.
