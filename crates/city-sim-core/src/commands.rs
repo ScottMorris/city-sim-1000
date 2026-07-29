@@ -102,17 +102,31 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             }
             let had_rail =
                 state.tiles[idx].kind == TileKind::Rail || state.tiles[idx].has_rail_underlay();
+            let had_line = state.tiles[idx].kind == TileKind::PowerLine
+                || state.tiles[idx].has_power_overlay();
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
-            state.tiles[idx].kind = TileKind::Road;
-            // Set every structural flag explicitly, never conditionally. A
-            // road replaces whatever was here, so a hydro line that used to
-            // run through the tile must lose its overlay — leaving it set
-            // draws wires over a road the line no longer occupies.
+            // A hydro line survives a road laid across it, exactly as a rail
+            // does. Build order must not change the outcome: paving under a
+            // line used to sever the grid silently, with no warning and no
+            // refund, while doing the same two things in the other order gave
+            // a crossing.
+            //
+            // ONE CANONICAL RECORDING. When a line is present the tile keeps
+            // kind `PowerLine` and records the road as an underlay — bit for
+            // bit what `Tool::PowerLine` produces on a road tile — so there is
+            // never a second way to spell the same tile.
+            //
+            // Set every structural flag explicitly, never conditionally.
+            state.tiles[idx].kind = if had_line {
+                TileKind::PowerLine
+            } else {
+                TileKind::Road
+            };
             state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_rail);
-            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, false);
-            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, false);
+            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_line);
+            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, had_line);
             state.tile_revision += 1;
             CommandResult::ok()
         }
@@ -123,13 +137,21 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             }
             let had_road =
                 state.tiles[idx].kind == TileKind::Road || state.tiles[idx].has_road_underlay();
+            let had_line = state.tiles[idx].kind == TileKind::PowerLine
+                || state.tiles[idx].has_power_overlay();
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
-            state.tiles[idx].kind = TileKind::Rail;
+            // Mirrors `Tool::Road` above — a line survives, and the tile is
+            // recorded the one canonical way.
+            state.tiles[idx].kind = if had_line {
+                TileKind::PowerLine
+            } else {
+                TileKind::Rail
+            };
             state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_road);
-            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, false);
-            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, false);
+            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_line);
+            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, had_line);
             state.tile_revision += 1;
             CommandResult::ok()
         }
@@ -547,21 +569,44 @@ mod tests {
     }
 
     #[test]
-    fn road_and_rail_replace_a_hydro_line_completely() {
-        // Building over a line removes it, so its overlay flag must go too.
-        // Road/Rail only ever set flags, so the flag used to survive and the
-        // renderer kept drawing wires over the new road.
+    fn road_and_rail_carry_a_hydro_line_rather_than_severing_it() {
+        // Road preserves rail and rail preserves road, both deliberately, so
+        // that level crossings work. Power used to be the odd one out: paving
+        // under a line destroyed it silently, with no warning and no refund,
+        // while doing the same two things in the other order gave a crossing.
         for tool in [Tool::Road, Tool::Rail] {
             let mut s = gs(4, 4);
             apply_tool(&mut s, Tool::PowerLine, 1, 1);
-            assert!(s.tile_at(1, 1).unwrap().has_power_overlay());
-
             apply_tool(&mut s, tool, 1, 1);
+
             let t = s.tile_at(1, 1).unwrap();
-            assert!(
-                !t.has_power_overlay(),
-                "{tool:?} left the power overlay set"
-            );
+            assert_eq!(t.kind, TileKind::PowerLine, "{tool:?} severed the line");
+            assert!(t.has_power_overlay(), "{tool:?} cleared the power overlay");
+            let beneath = match tool {
+                Tool::Road => t.has_road_underlay(),
+                _ => t.has_rail_underlay(),
+            };
+            assert!(beneath, "{tool:?} did not record itself beneath the line");
+        }
+    }
+
+    #[test]
+    fn build_order_does_not_change_the_tile() {
+        // The whole point: the same two actions in either order must produce
+        // the same tile, bit for bit. Two spellings of one situation is how
+        // the renderer ended up with a pole standing in the middle of a road.
+        for (first, second) in [(Tool::Road, Tool::PowerLine), (Tool::Rail, Tool::PowerLine)] {
+            let mut forward = gs(4, 4);
+            apply_tool(&mut forward, first, 1, 1);
+            apply_tool(&mut forward, second, 1, 1);
+
+            let mut reverse = gs(4, 4);
+            apply_tool(&mut reverse, second, 1, 1);
+            apply_tool(&mut reverse, first, 1, 1);
+
+            let (a, b) = (forward.tile_at(1, 1).unwrap(), reverse.tile_at(1, 1).unwrap());
+            assert_eq!(a.kind, b.kind, "{first:?} then {second:?} disagreed on kind");
+            assert_eq!(a.flags, b.flags, "{first:?} then {second:?} disagreed on flags");
         }
     }
 
@@ -573,10 +618,7 @@ mod tests {
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.kind, TileKind::Rail);
         assert!(t.has_road_underlay(), "the road under the rail was lost");
-        assert!(
-            !t.has_rail_underlay(),
-            "rail recorded itself as its own underlay"
-        );
+        assert!(!t.has_rail_underlay(), "rail recorded itself as its own underlay");
     }
 
     #[test]
