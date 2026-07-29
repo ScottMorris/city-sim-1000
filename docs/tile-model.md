@@ -52,6 +52,53 @@ Same shape at every stratum, so adding a layer or an occupant is additive rather
 
 **Terrain is not just a sprite.** It sets placement policy (most things need land; docks, marinas and bridges need water), it is what the bulldozer restores a tile to, and it survives terraforming. It has to be a distinct field for bulldoze to be expressible at all — under the current model, "what was here before" is not recoverable, which is why bulldoze hand-clears a list of flags and why it broke when it forgot one.
 
+### Concretely
+
+```rust
+// AUTHORED — what the player built. This is what the snapshot persists.
+struct Tile {
+    terrain:     Terrain,            // Land | Water, + elevation (exists today)
+    underground: OccupantSet,        // pipes, subway, fibre
+    surface:     OccupantSet,        // trees, road, rail, zone, structure
+    overhead:    OccupantSet,        // power lines, street trees
+    development: Option<BuildingId>,
+}
+
+type OccupantSet = u16;              // bitset — an occupant is a flat tag
+
+enum Occupant {
+    Trees, Road, Rail, PowerLine, Pipe, Subway, Fibre,
+    ZoneResidential, ZoneCommercial, ZoneIndustrial,
+    Structure,                       // which structure lives in the BuildingInstance
+}
+```
+
+Zones get one tag each rather than a payload, because they are mutually exclusive anyway. `Structure` needs no payload because `development` already points at an instance that knows what it is.
+
+The occupant table is data, not code:
+
+```rust
+struct OccupantDef {
+    stratum:   Stratum,
+    eco:       f32,
+    upkeep:    f32,
+    conducts:  NetworkSet,           // Road conducts {Traffic, Power}; Zone conducts {Power}
+    conflicts: OccupantSet,          // exceptions only; same-stratum conflict is the default
+    on_water:  WaterRule,            // Forbidden | Plain | Variant(bridge, pylon, …)
+}
+```
+
+**Two orderings exist today, and they are inverted.** This is worth naming because it is confusing and the model deletes half of it:
+
+| ordering | question it answers | current precedence |
+| --- | --- | --- |
+| data | who owns `kind` | zone > hydro > road/rail |
+| visual | who is the base, who adapts | road/rail > hydro |
+
+Hydro *wins* the data slot (roads and rails yield, because they have underlay flags to fall back on) but *loses* the visual contest (roads draw first and ignore everything; hydro's pole has to dodge). The data ordering was never a layering decision — it came from which occupant had somewhere else to be stored, which is an implementation accident.
+
+Under strata the data ordering **disappears entirely**, because nothing is contested. Only the visual one survives, and it is just the physical stack: underground → surface → overhead. One ordering, and it means what it says.
+
 **Network membership is a property, not a slot.** This is the correction to an earlier sketch that had `networks` as a sibling of `cover`: a road is surface cover that *happens to conduct*. So is a zone — `is_power_carrier` already returns true for roads, rails and zones, that fact just isn't written down anywhere as data.
 
 ```
@@ -97,7 +144,7 @@ The tile stays a dumb storage unit. `development: Option<BuildingId>` points at 
 
 ## Bulldoze
 
-The bulldozer works on **what you can see**: surface and overhead together, restoring the tile to its terrain. Underground occupants are only removable from the underground view. This matches the established interaction and is expressible only because terrain is a separate field.
+The bulldozer works on **what you can see**: surface and overhead together, restoring the tile to its terrain. Underground occupants are only removable from the underground view — which **already exists** (`minimap.ts`, mode `underground`) and is how water pipes are laid today. So this is not a new interaction to design, it is an existing one the model has to keep expressible, and it is expressible only because terrain is a separate field.
 
 ## Scoring becomes a sum
 
@@ -133,7 +180,32 @@ Worked from what the game already ships:
 
 The sketch above treats occupants as static. Several wanted mechanics need **per-tile, per-network dynamic state** — traffic volume on a road, load on a power line, water pressure — and that changes the data layout (a set of enums is cheap; a set of small structs is not).
 
-This is deliberately out of scope here but must not be designed around. See the game-mechanics backlog issue for the specific mechanics driving it. The decision to make early is whether an occupant is a bare tag or a record, because retrofitting that is expensive.
+**Flow is derived, not authored** — and that resolves the layout question. Load on a line is simulation output recomputed each tick from topology, exactly like `powered` and `happiness` today. It is not something the player edits, so it does not belong *inside* the occupant:
+
+```rust
+// DERIVED — recomputed per tick from topology. Not authored, not player-editable.
+struct NetworkField { load: Vec<f32>, capacity: Vec<f32> }   // indexed by tile
+struct Networks { power: NetworkField, traffic: NetworkField, water: NetworkField }
+```
+
+So occupants stay **bare tags in a bitset**, and flow lives in per-network arrays alongside the tile grid — structure-of-arrays, matching how the tile buffer already crosses the WASM boundary. Adding a network adds one field to `Networks`, not a float to every `Tile`.
+
+The topology is stratum data; the flow over it is network logic. See #176 for the mechanic driving this, and the backlog issue for the rest.
+
+## What is *not* a tile occupant
+
+Anything that **moves** is an agent, not tile data. The tile model describes static infrastructure; agents travel over it and reference the network for routing.
+
+| thing | where it lives |
+| --- | --- |
+| runway, terminal, airport | `Structure` occupant on the surface |
+| **aeroplane** | agent — continuous position, no tile |
+| track | `Rail` occupant |
+| **train** | agent |
+| road | `Road` occupant |
+| **vehicle, ship** | agent |
+
+Aeroplanes in particular sit *entirely* outside the tile layer — they are not even constrained to the grid — so adding them needs an agent system, not another stratum. Worth stating because "trains animating on the tracks" reads like tile work and is not: the track is tile data, the train is an agent.
 
 ## Migration
 
@@ -143,10 +215,12 @@ Strangler, not big bang. Feature work continues throughout.
 2. Convert consumers one at a time to the accessor. Each conversion is individually testable, and each gets a coverage-matrix-style test pinning its behaviour.
 3. When no consumer reads `kind` for a multi-valued question, flip the storage: strata become authoritative and `kind` narrows to terrain. Snapshot version bumps here, and only here.
 
+**Sizing the sweep**, measured rather than guessed: 180 references to `tile.kind` / `TileKind::` across nine non-test files in `city-sim-core` (`wilderness.rs` 49, `commands.rs` 42, `economy.rs` 23, `education.rs` 19, and the rest in single digits), plus 27 TypeScript files in `app/src/game` and `app/src/rendering`. Not all of them are multi-valued questions — many legitimately ask about terrain — but that is the search space, and step 2 is what shrinks it before anything breaks.
+
 Step 3 is where the compiler earns its keep: narrowing `kind` makes every stale `TileKind::Road` comparison fail to compile, so the remaining wilderness-shaped bugs are found by `cargo check` rather than by a screenshot six months later.
 
 ## Open questions
 
-1. **Do occupants need per-tile state?** See *Not yet designed* above. This is the one that changes the data layout, so it wants answering first.
+1. ~~**Do occupants need per-tile state?**~~ **Resolved:** no. Flow is derived rather than authored, so it lives in per-network arrays beside the grid and occupants stay bare tags. See *Not yet designed: flow*.
 2. **Is `overhead` real, or is it just hydro?** If nothing else ever goes up there, an honest `power: bool` is cheaper than a stratum. Street trees along a road would settle it — they are physically overhead, they genuinely conflict with power lines (utilities trim canopy away from conductors), and they would give the stratum a second occupant and a new sprite group. That is a game-design call, not an engineering one, and it decides the scope of this whole proposal.
 3. **How many same-stratum exceptions are there really?** If road + rail is the only one, derivation carries the entire table. If there turn out to be five, the table wants to be explicit data regardless.
