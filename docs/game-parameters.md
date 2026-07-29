@@ -9,13 +9,13 @@
 - **Adjacency draft**:
   - Roads: 4-way orthogonal connectivity (no diagonal) for zoning reach, services, and traffic assumptions. Intersections auto-connect; roads and rail may cross with rules (rail over/under or shared tile if allowed).
   - Rail: 4-way network; gives freight/passenger bonus if a zone is road-adjacent to any rail tile within 1 tile (orthogonal) or directly orthogonal if sharing tiles is disallowed.
-  - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power). Roads and rail also conduct power; power lines can overlay road/rail without breaking access. No diagonal hops.
+  - Power: 4-way flood fill through power lines and powered structures (plants, zones/buildings count as carriers if they have power). Roads and rail also conduct power; power lines can overlay road/rail without breaking access, in either build order (laying a road or rail across a line keeps the line, exactly as it keeps a crossing rail). No diagonal hops.
   - Water: 4-way flood fill through pipes and water facilities (Pumps/Towers). Powered, connected sources seed the network; roads and rail also conduct water (early game); underground pipes connect sources to the network and bridge gaps. Buildings without water connection become Inactive.
   - Buildings count as “served” if any orthogonally adjacent tile satisfies the needed network (road for access, line for power, pipe/road for water).
 - **Service gating**: Thresholds where power/water deficits halt growth or trigger decay; magnitude of happiness/demand penalties. InactiveNoWater status stops consumption and output. Water requirements are opt-in: until the first pump, water tower, or pipe is placed, buildings do not require water ("stubbed high until pipes land") — young cities grow and draw power normally, and the requirement activates the moment water infrastructure exists.
 - **Feedback hooks**: Sticky warnings fire when utilities go negative (power/water) and a follow-up toast confirms recovery once the balance returns above zero. Budget panel surfaces a monthly net projection with colour-coded surplus/deficit plus a month/day readout to keep solvency visible. A news ticker bar cycles short updates at month end, with immediate utility alerts that persist until resolved. A Budget screen (from the HUD) adds quarterly totals, per-month net, runway hints, revenue/expense breakdowns, and narrative Insights when enabled.
 - **Tool clarity**: Tool info card sits with the tile inspector; it shows cost/upkeep/output plus hints and can be pinned always-on. Tile inspector only appears while the Inspect tool is active.
-- **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build.
+- **Maintenance vs revenue**: How upkeep scales relative to income; target cadence of build → wait → build. Transport upkeep is charged once per *feature* a tile carries, not once per tile: a road with a hydro line over it pays 0.1 + 0.08, and a level crossing under a line pays 0.1 + 0.2 + 0.08. Water pipes are billed from the underground layer.
 - **Upgrade paths**: Pumps/towers → pipes; lines → plants; low → mid density; terraforming pricing that makes space trade-offs matter.
 - **Space trade-offs**: Footprint of utilities/parks vs valuable zones; underground view to reduce surface clutter.
 
@@ -38,7 +38,7 @@
 ## Player Options in Terms of the Core
 - **Terraform**: Unlocks buildable land and shapes flow; must be priced to matter.
 - **Road/Rail**: Primary connectivity; rail as mid/late-game freight/passenger efficiency.
-- **Power**: Plants with upkeep; lines as network graph; outages visibly stall zones. Roads/rail can conduct power; power lines can overlay roads/rail.
+- **Power**: Plants with upkeep; lines as network graph; outages visibly stall zones. Roads/rail can conduct power; power lines can overlay roads/rail, and build order does not change the result.
 - **Water**: Pumps/towers and pipes; underground view for clean management. Roads/rail conduct water to simplify early expansion; pipes connect distant sources.
 - **Zoning**: R/C/I with demand bars; growth tied to services and connectivity.
 - **Amenities**: Parks/trees for happiness; future services can reuse road reach.

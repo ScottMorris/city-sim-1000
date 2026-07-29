@@ -33,8 +33,9 @@ const MAINT_WATER_PIPE: f32 = 0.04;
 /// Compute the current daily budget from `GameState`.
 ///
 /// Matches the budget block in `simulation.ts:tick()`:
-/// - Transport maintenance: per-tile upkeep for Road/Rail/PowerLine/WaterPipe
-///   (only tiles where `building_id.is_none()`).
+/// - Transport maintenance: per-tile upkeep charged once per FEATURE present,
+///   so a tile carrying a road, a rail and a hydro line pays for all three.
+///   Water pipes are counted from `underground`.
 /// - Building maintenance: summed from `state.buildings` templates.
 /// - Revenue: base + population + commercial zones + industrial zones.
 ///
@@ -56,18 +57,36 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
             _ => {}
         }
 
-        // Transport maintenance — only undeveloped/unoccupied tiles
-        if tile.building_id.is_none() {
-            match tile.kind {
-                TileKind::Road => maint_roads += MAINT_ROAD,
-                TileKind::Rail => maint_rail += MAINT_RAIL,
-                TileKind::PowerLine => maint_power_lines += MAINT_POWER_LINE,
-                TileKind::WaterPipe => maint_pipes += MAINT_WATER_PIPE,
-                _ => {}
-            }
+        // Transport maintenance — BILL EVERY FEATURE THE TILE CARRIES, not
+        // just whichever one happens to own its `kind`.
+        //
+        // This was a `match tile.kind`, so one tile paid for exactly one
+        // thing and any overlay rode free. Stringing a line over a road took
+        // upkeep DOWN from 0.10 to 0.08, because `PowerLine` won the match and
+        // the road stopped being billed — adding infrastructure made the bill
+        // smaller. A level crossing paid 0.20 instead of 0.30, a line across a
+        // zone paid nothing at all, and a tile carrying road, rail and line
+        // together paid 0.08 against a true 0.38.
+        //
+        // Nor is `building_id.is_none()` the right gate. Roads, rails and
+        // zones all refuse to be built over, so a developed tile never carries
+        // one and the guard did nothing for them — but a zone can develop a
+        // lot *under* an existing line, and that line is still real
+        // infrastructure somebody has to maintain.
+        if tile.kind == TileKind::Road || tile.has_road_underlay() {
+            maint_roads += MAINT_ROAD;
+        }
+        if tile.kind == TileKind::Rail || tile.has_rail_underlay() {
+            maint_rail += MAINT_RAIL;
+        }
+        if tile.kind == TileKind::PowerLine || tile.has_power_overlay() {
+            maint_power_lines += MAINT_POWER_LINE;
         }
 
-        // Underground water pipe (e.g. under a road) always contributes
+        // Water pipes are only ever recorded underground — no tool has ever
+        // set `kind` to `WaterPipe`, so the arm of the old match that looked
+        // for it was dead, and would have double-billed a tile that somehow
+        // had both.
         if tile.underground == Some(TileKind::WaterPipe) {
             maint_pipes += MAINT_WATER_PIPE;
         }
@@ -323,6 +342,95 @@ mod tests {
     }
 
     #[test]
+    fn every_feature_on_a_tile_is_billed() {
+        // The maintenance loop used to be a `match tile.kind`, so a tile paid
+        // for exactly one thing and every overlay rode free. The numbers below
+        // are the whole point: adding a line to a road once took the bill
+        // DOWN, from 0.10 to 0.08.
+        use crate::commands::apply_tool;
+        use city_sim_protocol::commands::Tool;
+
+        let bill = |build: &dyn Fn(&mut GameState)| {
+            let mut s = gs(8, 8);
+            for t in &mut s.tiles {
+                t.kind = TileKind::Land;
+            }
+            build(&mut s);
+            compute_daily_budget(&s).expenses
+        };
+
+        let road = bill(&|s| {
+            apply_tool(s, Tool::Road, 1, 1);
+        });
+        let road_line = bill(&|s| {
+            apply_tool(s, Tool::Road, 1, 1);
+            apply_tool(s, Tool::PowerLine, 1, 1);
+        });
+        let crossing = bill(&|s| {
+            apply_tool(s, Tool::Road, 1, 1);
+            apply_tool(s, Tool::Rail, 1, 1);
+        });
+        let all_three = bill(&|s| {
+            apply_tool(s, Tool::Road, 1, 1);
+            apply_tool(s, Tool::Rail, 1, 1);
+            apply_tool(s, Tool::PowerLine, 1, 1);
+        });
+        let zone_line = bill(&|s| {
+            apply_tool(s, Tool::Commercial, 1, 1);
+            apply_tool(s, Tool::PowerLine, 1, 1);
+        });
+
+        let near = |got: f32, want: f32, what: &str| {
+            assert!(
+                (got - want).abs() < 1e-4,
+                "{what}: billed {got:.3}, expected {want:.3}"
+            );
+        };
+        near(road, MAINT_ROAD, "road alone");
+        near(
+            road_line,
+            MAINT_ROAD + MAINT_POWER_LINE,
+            "road carrying a line",
+        );
+        near(crossing, MAINT_ROAD + MAINT_RAIL, "level crossing");
+        near(
+            all_three,
+            MAINT_ROAD + MAINT_RAIL + MAINT_POWER_LINE,
+            "road, rail and line on one tile",
+        );
+        near(zone_line, MAINT_POWER_LINE, "line strung across a zone");
+
+        assert!(
+            road_line > road,
+            "adding a line to a road must not reduce the bill"
+        );
+    }
+
+    #[test]
+    fn a_water_pipe_under_a_road_is_billed_once() {
+        use crate::commands::apply_tool;
+        use city_sim_protocol::commands::Tool;
+
+        let mut s = gs(8, 8);
+        for t in &mut s.tiles {
+            t.kind = TileKind::Land;
+        }
+        apply_tool(&mut s, Tool::Road, 1, 1);
+        apply_tool(&mut s, Tool::WaterPipe, 1, 1);
+        let b = compute_daily_budget(&s);
+        assert!(
+            (b.maint_pipes - MAINT_WATER_PIPE).abs() < 1e-4,
+            "pipes: {}",
+            b.maint_pipes
+        );
+        assert!(
+            (b.maint_roads - MAINT_ROAD).abs() < 1e-4,
+            "roads: {}",
+            b.maint_roads
+        );
+    }
+
+    #[test]
     fn empty_city_has_base_income_only() {
         let s = gs(4, 4);
         let b = compute_daily_budget(&s);
@@ -348,14 +456,28 @@ mod tests {
     }
 
     #[test]
-    fn road_with_building_does_not_count_transport() {
+    fn infrastructure_under_a_developed_lot_is_still_billed() {
+        // Maintenance used to skip any tile with a `building_id`, and this
+        // test pinned that with a hand-built Road tile carrying a building.
+        // No tool can produce that: `place_footprint_building` refuses Road,
+        // Rail and PowerLine kinds and both underlays, and roads clear any
+        // building they replace. The guard never fired where it was aimed.
+        //
+        // Where a building CAN meet infrastructure is the reachable case it
+        // got wrong: a zone lot developing under an existing hydro line. The
+        // line is still strung over the roof and still costs money.
         let mut s = gs(1, 1);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        {
+            let t = s.tile_at_mut(0, 0).unwrap();
+            t.kind = TileKind::Residential;
+            t.set_flag(crate::state::FLAG_POWER_OVERLAY, true);
+            t.building_id = Some(1);
+        }
         let b = compute_daily_budget(&s);
         assert!(
-            (b.maint_roads).abs() < 0.001,
-            "occupied tile should not contribute"
+            (b.maint_power_lines - MAINT_POWER_LINE).abs() < 1e-4,
+            "a line over a developed lot went unbilled: {}",
+            b.maint_power_lines
         );
     }
 

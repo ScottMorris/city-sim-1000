@@ -97,9 +97,18 @@ const registry: ToolRegistry = {
     if (tile?.buildingId !== undefined) return { success: false, message: 'Bulldoze the building first.' };
     state.money -= cost;
     const hadRail = tile?.kind === TileKind.Rail || tile?.railUnderlay;
-    setTile(state, x, y, TileKind.Road);
+    // A hydro line survives a road laid across it, exactly as a rail does, and
+    // the tile is recorded the one canonical way — kind `PowerLine` with the
+    // road beneath, identical to building them in the other order. Mirrors
+    // `Tool::Road` in `crates/city-sim-core/src/commands.rs`.
+    const hadLine = tile?.kind === TileKind.PowerLine || tile?.powerOverlay;
+    setTile(state, x, y, hadLine ? TileKind.PowerLine : TileKind.Road);
     const updated = getTile(state, x, y);
     if (updated && hadRail) updated.railUnderlay = true; // remember rail for render/crossing
+    if (updated && hadLine) {
+      updated.roadUnderlay = true;
+      updated.powerOverlay = true;
+    }
     return { success: true };
   },
   [Tool.Rail]: ({ state, x, y }, cost) => {
@@ -107,9 +116,14 @@ const registry: ToolRegistry = {
     if (tile?.buildingId !== undefined) return { success: false, message: 'Bulldoze the building first.' };
     state.money -= cost;
     const hadRoad = tile?.kind === TileKind.Road || tile?.roadUnderlay;
-    setTile(state, x, y, TileKind.Rail);
+    const hadLine = tile?.kind === TileKind.PowerLine || tile?.powerOverlay;
+    setTile(state, x, y, hadLine ? TileKind.PowerLine : TileKind.Rail);
     const updated = getTile(state, x, y);
     if (updated && hadRoad) updated.roadUnderlay = true; // rail over road
+    if (updated && hadLine) {
+      updated.railUnderlay = true;
+      updated.powerOverlay = true;
+    }
     return { success: true };
   },
   [Tool.PowerLine]: ({ state, x, y }, cost) => {
