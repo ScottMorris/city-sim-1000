@@ -558,7 +558,10 @@ mod tests {
 
             apply_tool(&mut s, tool, 1, 1);
             let t = s.tile_at(1, 1).unwrap();
-            assert!(!t.has_power_overlay(), "{tool:?} left the power overlay set");
+            assert!(
+                !t.has_power_overlay(),
+                "{tool:?} left the power overlay set"
+            );
         }
     }
 
@@ -570,7 +573,10 @@ mod tests {
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.kind, TileKind::Rail);
         assert!(t.has_road_underlay(), "the road under the rail was lost");
-        assert!(!t.has_rail_underlay(), "rail recorded itself as its own underlay");
+        assert!(
+            !t.has_rail_underlay(),
+            "rail recorded itself as its own underlay"
+        );
     }
 
     #[test]
