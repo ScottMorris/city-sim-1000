@@ -273,12 +273,15 @@ impl Simulation {
 /// identical across a snapshot boundary because `tiles` is a `Vec` in
 /// row-major order, never a set. Per tile:
 ///
-/// - `kind`, which subsumes the old histogram and adds position;
-/// - [`Tile::occupants`], the representation-independent view of what stands
-///   there. Deliberately the occupant set rather than the raw `flags` byte:
-///   the two spellings of one physical tile must hash alike, and step 3 moves
-///   these bits out of `kind` without changing what is on the ground;
-/// - `underground`, which the occupant set only reports as *pipe or no pipe*;
+/// - the wire `kind` byte ([`crate::display::wire_kind`]), which subsumes the
+///   old histogram and adds position. Derived from the strata since step 3, so
+///   this hash not moving across the flip is the proof the derivation is
+///   byte-neutral;
+/// - `Tile::occupants`, what actually stands there. Deliberately the occupant
+///   set rather than the raw `flags` byte: the two spellings one physical tile
+///   used to have hash alike;
+/// - the wire `underground` byte, which the occupant set only reports as
+///   *pipe or no pipe*;
 /// - `building_id`, so a tile losing its link to a live `BuildingInstance` is
 ///   visible — the state defect B of this pass was about.
 ///
@@ -295,6 +298,10 @@ pub fn state_hash(state: &GameState) -> u64 {
         h
     }
 
+    // `Occupant::Structure` is one flat tag, so the kind byte for a structure
+    // tile is resolved through its development. Indexed once, not per tile.
+    let lookup = crate::occupants::StructureLookup::new(state);
+
     let mut buf: Vec<u8> = Vec::with_capacity(64 + state.tiles.len() * 6);
     buf.extend_from_slice(&state.tick.to_le_bytes());
     buf.extend_from_slice(&state.day.to_le_bytes());
@@ -310,9 +317,9 @@ pub fn state_hash(state: &GameState) -> u64 {
     buf.extend_from_slice(&state.height.to_le_bytes());
     // The grid, tile by tile in index order.
     for tile in &state.tiles {
-        buf.push(tile.kind as u8);
-        buf.extend_from_slice(&tile.occupants().to_le_bytes());
-        buf.push(tile.underground.map_or(0xFF, |k| k as u8));
+        buf.push(crate::display::wire_kind(tile, &lookup) as u8);
+        buf.extend_from_slice(&tile.occupants.to_le_bytes());
+        buf.push(crate::display::wire_underground(tile));
         buf.extend_from_slice(&tile.building_id.unwrap_or(u16::MAX).to_le_bytes());
     }
     // Demand (quantised to i32 for stability)
@@ -415,26 +422,21 @@ mod tests {
     /// every day and conducted power and the other did neither — so an undo or
     /// a snapshot round trip that dropped the flag passed silently.
     ///
-    /// Each flag is checked on its own, because each is a different occupant,
-    /// and `underground` and `building_id` with them.
+    /// Since step 3 those flags are occupant bits, and the tiles below are
+    /// built by setting the bit rather than the flag. The question is the same
+    /// one: a tile carrying a road, a rail or a line must not hash like bare
+    /// land. `underground` and `building_id` follow.
     #[test]
-    fn a_structural_flag_changes_the_hash() {
+    fn a_structural_occupant_changes_the_hash() {
         use crate::occupants::Occupant;
-        use crate::state::{FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY};
         use city_sim_protocol::tile_kind::TileKind;
 
         let base = Simulation::new(4, 4, 1);
         let base_hash = state_hash(&base.state);
 
-        for (flag, occupant) in [
-            (FLAG_ROAD_UNDERLAY, Occupant::Road),
-            (FLAG_RAIL_UNDERLAY, Occupant::Rail),
-            (FLAG_POWER_OVERLAY, Occupant::PowerLine),
-        ] {
+        for occupant in [Occupant::Road, Occupant::Rail, Occupant::PowerLine] {
             let mut other = Simulation::new(4, 4, 1);
-            other.state.tiles[5].kind = TileKind::Land;
-            other.state.tiles[5].flags |= flag;
-            assert!(other.state.tiles[5].has_occupant(occupant));
+            other.state.tiles[5].set_occupant(occupant, true);
             assert_ne!(
                 state_hash(&other.state),
                 base_hash,
@@ -445,7 +447,7 @@ mod tests {
         // The same for the two tile fields the occupant set cannot fully
         // report: a buried pipe, and the link to a live building.
         let mut piped = Simulation::new(4, 4, 1);
-        piped.state.tiles[5].underground = Some(TileKind::WaterPipe);
+        piped.state.tiles[5].set_occupant(Occupant::Pipe, true);
         assert_ne!(state_hash(&piped.state), base_hash, "a buried pipe");
 
         let mut built = Simulation::new(4, 4, 1);
@@ -455,11 +457,11 @@ mod tests {
         // And position, which a histogram of `kind` cannot see: the same two
         // kinds, swapped between two tiles, is a different city.
         let mut moved = Simulation::new(4, 4, 1);
-        moved.state.tiles[5].kind = TileKind::Water;
-        moved.state.tiles[6].kind = TileKind::Land;
+        crate::migrate::set_v4_kind(&mut moved.state.tiles[5], TileKind::Water);
+        crate::migrate::set_v4_kind(&mut moved.state.tiles[6], TileKind::Land);
         let mut swapped = Simulation::new(4, 4, 1);
-        swapped.state.tiles[5].kind = TileKind::Land;
-        swapped.state.tiles[6].kind = TileKind::Water;
+        crate::migrate::set_v4_kind(&mut swapped.state.tiles[5], TileKind::Land);
+        crate::migrate::set_v4_kind(&mut swapped.state.tiles[6], TileKind::Water);
         assert_ne!(
             state_hash(&moved.state),
             state_hash(&swapped.state),

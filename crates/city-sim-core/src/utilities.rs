@@ -60,7 +60,7 @@ fn is_source(tile: &Tile, kind: UtilityKind) -> bool {
 ///
 /// **That was a live bug, and converting to [`Tile::conducts`] fixes it.**
 /// `Tool::Tree` and the terrain brushes rewrite `kind` and leave
-/// `FLAG_POWER_OVERLAY` standing: plant a tree on a hydro line, or flood it,
+/// `flags::POWER_OVERLAY` standing: plant a tree on a hydro line, or flood it,
 /// and the tile kept charging `MAINT_POWER_LINE` every day while silently
 /// severing the grid. Two spellings of the same physical tile —
 /// `kind = PowerLine` and `kind = Tree` + overlay — now conduct alike, which
@@ -245,8 +245,11 @@ fn sum_output_water(state: &GameState) -> i32 {
 mod tests {
     use super::*;
     use crate::commands::apply_tool;
-    use crate::state::{Tile, FLAG_POWER_OVERLAY, FLAG_ROAD_UNDERLAY};
+    use crate::migrate::{set_v4_kind, tile_from_v4};
+    use crate::occupants::Occupant;
+    use crate::state::Tile;
     use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::tile_buffer::flags;
     use city_sim_protocol::tile_kind::TileKind;
 
     fn grid(w: u32, h: u32) -> GameState {
@@ -254,7 +257,7 @@ mod tests {
     }
 
     fn place(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
-        state.tile_at_mut(x, y).unwrap().kind = kind;
+        set_v4_kind(state.tile_at_mut(x, y).unwrap(), kind);
     }
 
     fn is_power_carrier(tile: &Tile) -> bool {
@@ -269,19 +272,13 @@ mod tests {
 
     #[test]
     fn power_line_is_power_carrier() {
-        let t = Tile {
-            kind: TileKind::PowerLine,
-            ..Tile::land()
-        };
+        let t = tile_from_v4(TileKind::PowerLine, 0, None, None);
         assert!(is_power_carrier(&t));
     }
 
     #[test]
     fn road_is_power_carrier() {
-        let t = Tile {
-            kind: TileKind::Road,
-            ..Tile::land()
-        };
+        let t = tile_from_v4(TileKind::Road, 0, None, None);
         assert!(is_power_carrier(&t));
     }
 
@@ -292,18 +289,15 @@ mod tests {
 
     #[test]
     fn residential_is_power_carrier() {
-        let t = Tile {
-            kind: TileKind::Residential,
-            ..Tile::land()
-        };
+        let t = tile_from_v4(TileKind::Residential, 0, None, None);
         assert!(is_power_carrier(&t));
     }
 
     #[test]
     fn road_underlay_is_power_carrier() {
         let mut t = Tile::land();
-        t.set_flag(FLAG_ROAD_UNDERLAY, true);
-        // Even when kind is Land, road underlay makes it a carrier
+        t.set_occupant(Occupant::Road, true);
+        // Even with no visible carriageway sprite, the road makes it a carrier
         assert!(is_power_carrier(&t));
     }
 
@@ -317,23 +311,20 @@ mod tests {
     }
 
     /// **Behaviour change, step 2 of #177.** A hydro line recorded only in
-    /// `FLAG_POWER_OVERLAY` is a carrier. The old `is_power_carrier` asked
+    /// `flags::POWER_OVERLAY` is a carrier. The old `is_power_carrier` asked
     /// `kind == PowerLine` and nothing else, so every one of these tiles broke
     /// the grid while still being billed `MAINT_POWER_LINE` a day.
     ///
-    /// Every kind is exercised, not just the reachable ones, because the flag
-    /// is orthogonal to `kind` in storage and step 3 has to keep it that way.
+    /// Every v4 kind is decoded, not just the reachable ones: the overlay flag
+    /// was orthogonal to `kind` in the old storage, and every one of those
+    /// spellings has to land on the same `Occupant::PowerLine` bit now.
     #[test]
     fn a_line_in_the_overlay_flag_alone_carries_power() {
         for &kind in TileKind::ALL {
-            let t = Tile {
-                kind,
-                flags: FLAG_POWER_OVERLAY,
-                ..Tile::land()
-            };
+            let t = tile_from_v4(kind, flags::POWER_OVERLAY, None, Some(1));
             assert!(
                 is_power_carrier(&t),
-                "{kind:?} + FLAG_POWER_OVERLAY must carry power"
+                "{kind:?} + flags::POWER_OVERLAY must carry power"
             );
         }
     }
@@ -343,37 +334,28 @@ mod tests {
     /// under a line carries water because it is a road.
     #[test]
     fn a_line_in_the_overlay_flag_alone_does_not_carry_water() {
-        let bare = Tile {
-            kind: TileKind::Tree,
-            flags: FLAG_POWER_OVERLAY,
-            ..Tile::land()
-        };
+        let bare = tile_from_v4(TileKind::Tree, flags::POWER_OVERLAY, None, None);
         assert!(is_power_carrier(&bare));
         assert!(!is_water_carrier(&bare));
 
-        let paved = Tile {
-            kind: TileKind::PowerLine,
-            flags: FLAG_POWER_OVERLAY | FLAG_ROAD_UNDERLAY,
-            ..Tile::land()
-        };
+        let paved = tile_from_v4(
+            TileKind::PowerLine,
+            flags::POWER_OVERLAY | flags::ROAD_UNDERLAY,
+            None,
+            None,
+        );
         assert!(is_water_carrier(&paved), "the road under the line carries");
     }
 
     #[test]
     fn water_pipe_underground_is_water_carrier() {
-        let t = Tile {
-            underground: Some(TileKind::WaterPipe),
-            ..Tile::land()
-        };
+        let t = tile_from_v4(TileKind::Land, 0, Some(TileKind::WaterPipe), None);
         assert!(is_water_carrier(&t));
     }
 
     #[test]
     fn road_is_water_carrier() {
-        let t = Tile {
-            kind: TileKind::Road,
-            ..Tile::land()
-        };
+        let t = tile_from_v4(TileKind::Road, 0, None, None);
         assert!(is_water_carrier(&t));
     }
 
@@ -421,7 +403,7 @@ mod tests {
         let mut g = grid(7, 1);
         // Power plant at (0, 0), road from (0,0) to (5,0)
         g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
         for x in 1..=5 {
             place(&mut g, x, 0, TileKind::Road);
         }
@@ -440,7 +422,7 @@ mod tests {
     fn power_flows_through_residential_zone() {
         let mut g = grid(3, 1);
         g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
         place(&mut g, 1, 0, TileKind::Residential);
         recompute_utility_network(&mut g, UtilityKind::Power);
         assert!(g.tile_at(1, 0).unwrap().is_powered());
@@ -448,7 +430,7 @@ mod tests {
 
     /// The bug this conversion closes, built with the real tools rather than
     /// hand-set flags: string a line, then plant a tree on it (or flood it).
-    /// Both tools rewrite `kind` and leave `FLAG_POWER_OVERLAY` standing, so
+    /// Both tools rewrite `kind` and leave `flags::POWER_OVERLAY` standing, so
     /// before step 2 the grid went dark from that tile onward while the daily
     /// budget kept charging `MAINT_POWER_LINE` for the very span that had
     /// stopped conducting.
@@ -458,26 +440,26 @@ mod tests {
     /// over water is a pylon span, and the tree by the blindness
     /// `known_defect_trees_are_planted_through_a_live_hydro_line` describes.
     /// The two terraform tools reach the same tile the same way. What neither
-    /// leaves standing is the *surface*: `set_kind_clearing_surface` takes a
-    /// road or rail underlay with it, which is why this test strings its line
-    /// over bare ground.
+    /// leaves standing is the *surface*: a regrade takes the whole surface
+    /// stratum with it, which is why this test strings its line over bare
+    /// ground.
     #[test]
     fn a_line_buried_under_a_tree_or_flooded_still_carries_power() {
         for tool in [Tool::Tree, Tool::Water] {
             let mut g = grid(5, 1);
             g.money = 10_000;
             g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
-            g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+            set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
             for x in 1..=3 {
                 apply_tool(&mut g, Tool::PowerLine, x, 0);
             }
             apply_tool(&mut g, tool, 2, 0);
 
             let mid = g.tile_at(2, 0).unwrap();
-            assert_ne!(mid.kind, TileKind::PowerLine, "{tool:?} rewrote kind");
             assert!(
-                mid.has_power_overlay(),
-                "{tool:?} left the line in the flag — the premise of this test"
+                mid.has_occupant(Occupant::PowerLine),
+                "{tool:?} regraded the ground and left the span — the premise \
+                 of this test"
             );
 
             recompute_utility_network(&mut g, UtilityKind::Power);
@@ -496,7 +478,7 @@ mod tests {
     fn land_gap_breaks_power_chain() {
         let mut g = grid(5, 1);
         g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
         // gap at (1,0) = Land (not carrier)
         place(&mut g, 2, 0, TileKind::Road);
         place(&mut g, 3, 0, TileKind::Road);
@@ -527,11 +509,11 @@ mod tests {
         let mut g = grid(3, 1);
         g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
         g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        g.tile_at_mut(1, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        set_v4_kind(g.tile_at_mut(1, 0).unwrap(), TileKind::Road);
         g.tile_at_mut(2, 0).unwrap().power_plant_mw = 80;
         g.tile_at_mut(2, 0).unwrap().building_id = Some(2);
-        g.tile_at_mut(2, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(g.tile_at_mut(2, 0).unwrap(), TileKind::Road);
         recompute_utility_network(&mut g, UtilityKind::Power);
         assert_eq!(g.utilities.power_produced, 140);
     }
@@ -541,7 +523,7 @@ mod tests {
         let mut g = grid(3, 1);
         // First run: plant at (0,0), road to (2,0)
         g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
         place(&mut g, 1, 0, TileKind::Road);
         place(&mut g, 2, 0, TileKind::Road);
         recompute_utility_network(&mut g, UtilityKind::Power);
@@ -558,7 +540,7 @@ mod tests {
     fn active_pump(g: &mut GameState, id: u32, x: u32, y: u32) {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         g.tile_at_mut(x, y).unwrap().water_output = 50;
-        g.tile_at_mut(x, y).unwrap().kind = TileKind::WaterPump;
+        set_v4_kind(g.tile_at_mut(x, y).unwrap(), TileKind::WaterPump);
         g.tile_at_mut(x, y).unwrap().building_id = Some(id as u16);
         let mut b = BuildingInstance::new(id, TileKind::WaterPump, (x, y));
         b.status = BuildingStatus::Active;
@@ -569,8 +551,12 @@ mod tests {
     fn water_pump_seeds_water_network() {
         let mut g = grid(3, 1);
         active_pump(&mut g, 1, 0, 0);
-        g.tile_at_mut(1, 0).unwrap().underground = Some(TileKind::WaterPipe);
-        g.tile_at_mut(2, 0).unwrap().underground = Some(TileKind::WaterPipe);
+        g.tile_at_mut(1, 0)
+            .unwrap()
+            .set_occupant(Occupant::Pipe, true);
+        g.tile_at_mut(2, 0)
+            .unwrap()
+            .set_occupant(Occupant::Pipe, true);
         recompute_utility_network(&mut g, UtilityKind::Water);
         assert!(g.tile_at(0, 0).unwrap().is_watered());
         assert!(g.tile_at(1, 0).unwrap().is_watered());
@@ -594,12 +580,14 @@ mod tests {
         let mut g = grid(3, 1);
         // Pump tile has water_output set but its building is Inactive (no power)
         g.tile_at_mut(0, 0).unwrap().water_output = 50;
-        g.tile_at_mut(0, 0).unwrap().kind = TileKind::WaterPump;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
         g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
         let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
         b.status = BuildingStatus::InactiveNoPower;
         g.buildings.push(b);
-        g.tile_at_mut(1, 0).unwrap().underground = Some(TileKind::WaterPipe);
+        g.tile_at_mut(1, 0)
+            .unwrap()
+            .set_occupant(Occupant::Pipe, true);
         recompute_utility_network(&mut g, UtilityKind::Water);
         assert!(
             !g.tile_at(0, 0).unwrap().is_watered(),

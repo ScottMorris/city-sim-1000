@@ -192,15 +192,18 @@ pub fn tile_has_water(state: &GameState, x: u32, y: u32) -> bool {
 mod tests {
     use super::*;
     use crate::commands::apply_tool;
-    use crate::state::{FLAG_POWER_OVERLAY, FLAG_ROAD_UNDERLAY};
+    use crate::display::wire_kind_at;
+    use crate::migrate::{set_v4, set_v4_kind};
+    use crate::occupants::Occupant;
     use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::tile_buffer::flags;
     use city_sim_protocol::tile_kind::TileKind;
 
     fn g(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
     }
     fn kind(state: &mut GameState, x: u32, y: u32, k: TileKind) {
-        state.tile_at_mut(x, y).unwrap().kind = k;
+        set_v4_kind(state.tile_at_mut(x, y).unwrap(), k);
     }
 
     #[test]
@@ -224,7 +227,7 @@ mod tests {
         kind(&mut s, 0, 0, TileKind::Residential);
         s.tile_at_mut(1, 0)
             .unwrap()
-            .set_flag(FLAG_ROAD_UNDERLAY, true);
+            .set_occupant(Occupant::Road, true);
         assert!(has_road_access(&s, 0, 0));
     }
 
@@ -239,8 +242,11 @@ mod tests {
         kind(&mut s, 0, 0, TileKind::Residential);
         apply_tool(&mut s, Tool::PowerLine, 1, 0);
         let line = s.tile_at(1, 0).unwrap();
-        assert_eq!(line.kind, TileKind::PowerLine);
-        assert!(!line.has_road_underlay(), "no road under this line");
+        assert!(line.has_occupant(Occupant::PowerLine));
+        assert!(
+            !line.has_occupant(Occupant::Road),
+            "no road under this line"
+        );
         assert!(!has_road_access(&s, 0, 0));
     }
 
@@ -256,9 +262,9 @@ mod tests {
         kind(&mut s, 0, 0, TileKind::Residential);
         apply_tool(&mut s, Tool::PowerLine, 1, 0);
         apply_tool(&mut s, Tool::Road, 1, 0);
+        assert_eq!(wire_kind_at(&s, 1, 0), TileKind::PowerLine);
         let t = s.tile_at(1, 0).unwrap();
-        assert_eq!(t.kind, TileKind::PowerLine);
-        assert!(t.has_road_underlay());
+        assert!(t.has_occupant(Occupant::Road));
         assert!(has_road_access(&s, 0, 0), "line-then-road");
 
         // Pave first, then string the line — same tile, same answer.
@@ -276,10 +282,12 @@ mod tests {
     fn road_underlay_beneath_a_power_overlay_gives_access() {
         let mut s = g(2, 1);
         kind(&mut s, 0, 0, TileKind::Residential);
-        let n = s.tile_at_mut(1, 0).unwrap();
-        n.kind = TileKind::Tree;
-        n.set_flag(FLAG_ROAD_UNDERLAY, true);
-        n.set_flag(FLAG_POWER_OVERLAY, true);
+        set_v4(
+            s.tile_at_mut(1, 0).unwrap(),
+            TileKind::Tree,
+            flags::ROAD_UNDERLAY | flags::POWER_OVERLAY,
+            None,
+        );
         assert!(has_road_access(&s, 0, 0));
     }
 
@@ -290,20 +298,19 @@ mod tests {
             TileKind::Commercial,
             TileKind::Industrial,
         ] {
-            assert!(is_zone(&Tile {
-                kind: k,
-                ..Tile::land()
-            }));
+            assert!(is_zone(&crate::migrate::tile_from_v4(k, 0, None, None)));
         }
     }
 
     #[test]
     fn is_zone_false_for_non_zone() {
         assert!(!is_zone(&Tile::land()));
-        assert!(!is_zone(&Tile {
-            kind: TileKind::Road,
-            ..Tile::land()
-        }));
+        assert!(!is_zone(&crate::migrate::tile_from_v4(
+            TileKind::Road,
+            0,
+            None,
+            None
+        )));
     }
 
     #[test]
@@ -410,9 +417,10 @@ mod tests {
     fn tile_has_power_via_a_line_in_the_overlay_flag() {
         let mut s = g(2, 1);
         kind(&mut s, 0, 0, TileKind::Residential);
+        // Tool::Tree rewrote kind and the overlay flag survived — one tile,
+        // two v4 spellings, one occupant set.
         let n = s.tile_at_mut(1, 0).unwrap();
-        n.kind = TileKind::Tree; // Tool::Tree rewrote kind, the flag survived
-        n.set_flag(FLAG_POWER_OVERLAY, true);
+        set_v4(n, TileKind::Tree, flags::POWER_OVERLAY, None);
         n.set_flag(FLAG_POWERED, true);
         assert!(tile_has_power(&s, 0, 0));
     }

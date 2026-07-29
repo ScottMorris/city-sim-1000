@@ -366,6 +366,8 @@ pub fn recompute_education(state: &mut GameState) {
 mod tests {
     use super::*;
     use crate::buildings::{update_building_states, BuildingInstance};
+    use crate::migrate::set_v4_kind;
+    use crate::occupants::Occupant;
     use crate::state::FLAG_POWERED;
 
     fn gs(w: u32, h: u32) -> GameState {
@@ -379,7 +381,7 @@ mod tests {
         for dy in 0..fh {
             for dx in 0..fw {
                 let tile = s.tile_at_mut(ox + dx, oy + dy).unwrap();
-                tile.kind = kind;
+                tile.set_occupant(Occupant::Structure, true);
                 tile.building_id = Some(id as u16);
                 tile.set_flag(FLAG_POWERED, true);
             }
@@ -392,7 +394,7 @@ mod tests {
     #[test]
     fn no_schools_gives_full_coverage_by_default() {
         let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Residential);
         s.population = 50;
         recompute_education(&mut s);
         // No schools → load = 0 → coverage = 1 (TS behaviour)
@@ -407,8 +409,8 @@ mod tests {
         //         [School(0,1)(1,1)] ...
         let mut s = gs(6, 2);
         place_building(&mut s, TileKind::ElementarySchool, 0, 0);
-        s.tile_at_mut(2, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(3, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
         // Place a residential zone building so it has load
         place_building(&mut s, TileKind::Residential, 3, 0);
@@ -435,7 +437,7 @@ mod tests {
             }
         }
         update_building_states(&mut s, false);
-        s.tile_at_mut(3, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         place_building(&mut s, TileKind::Residential, 3, 0);
         s.population = 14;
         recompute_education(&mut s);
@@ -457,7 +459,7 @@ mod tests {
     #[test]
     fn zone_load_is_zero_without_buildings() {
         let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Residential);
         s.population = 50;
         let loads = compute_zone_loads(&s);
         // No active zone buildings → no load entries
@@ -471,8 +473,8 @@ mod tests {
         //         [HighSchool(0,1)(1,1)]
         let mut s = gs(6, 2);
         place_building(&mut s, TileKind::HighSchool, 0, 0);
-        s.tile_at_mut(2, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(3, 0).unwrap().kind = TileKind::Commercial;
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Commercial);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
         place_building(&mut s, TileKind::Commercial, 3, 0);
         s.jobs = 8;

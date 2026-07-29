@@ -7,9 +7,10 @@ use crate::adjacency::{
     has_road_access, is_frontier_zone, tile_has_power, tile_has_water, zone_has_road_path,
 };
 use crate::buildings::BuildingInstance;
-use crate::occupants::Occupant;
+use crate::occupants::{zone_template_kind, Occupant};
 use crate::rng::SeededRng;
 use crate::state::{GameState, FLAG_ABANDONED};
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::{BTreeSet, HashMap};
 
@@ -136,30 +137,9 @@ impl ZoneGrowthSim {
         let demand_r = state.demand.residential;
         let demand_c = state.demand.commercial;
         let demand_i = state.demand.industrial;
-        let grew_r = grow_zone_type(
-            state,
-            rng,
-            TileKind::Residential,
-            demand_r,
-            &mut residential,
-            &mut self.vacant,
-        );
-        let grew_c = grow_zone_type(
-            state,
-            rng,
-            TileKind::Commercial,
-            demand_c,
-            &mut commercial,
-            &mut self.vacant,
-        );
-        let grew_i = grow_zone_type(
-            state,
-            rng,
-            TileKind::Industrial,
-            demand_i,
-            &mut industrial,
-            &mut self.vacant,
-        );
+        let grew_r = grow_zone_type(state, rng, demand_r, &mut residential, &mut self.vacant);
+        let grew_c = grow_zone_type(state, rng, demand_c, &mut commercial, &mut self.vacant);
+        let grew_i = grow_zone_type(state, rng, demand_i, &mut industrial, &mut self.vacant);
 
         if grew_r || grew_c || grew_i {
             self.last_revision = state.tile_revision;
@@ -185,7 +165,6 @@ struct Candidate {
 fn grow_zone_type(
     state: &mut GameState,
     rng: &mut SeededRng,
-    _kind: TileKind,
     demand: f32,
     candidates: &mut [Candidate],
     vacant: &mut BTreeSet<usize>,
@@ -265,14 +244,18 @@ pub(crate) fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool
         return false;
     }
 
+    // Not a land-use question but a template lookup: `BuildingInstance::kind`
+    // is the key `get_building_template` is indexed by. The land use is the
+    // zone tag; `zone_template_kind` is the inverse map step 3 of #177 added so
+    // the tag can name its template. An unzoned tile has no lot to grow.
+    let Some(kind) = state.tiles[idx]
+        .zone_occupant()
+        .and_then(zone_template_kind)
+    else {
+        return false;
+    };
+
     let bid = state.next_building_id;
-    // Left reading `kind` deliberately. This is not a land-use question but a
-    // template lookup — `BuildingInstance::kind` is the key
-    // `get_building_template` is indexed by, and `Occupant` has no mapping
-    // back to a `TileKind`. Step 3 of #177 has to give the three zone
-    // occupants their template kind before this line can move; the compiler
-    // will stop here when `kind` narrows to terrain, which is the point.
-    let kind = state.tiles[idx].kind;
     state.next_building_id += 1;
     state.tile_revision += 1;
 
@@ -291,6 +274,7 @@ pub(crate) fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::migrate::set_v4_kind;
     use crate::state::FLAG_POWERED;
 
     fn gs(w: u32, h: u32) -> GameState {
@@ -298,7 +282,7 @@ mod tests {
     }
 
     fn kind(s: &mut GameState, x: u32, y: u32, k: TileKind) {
-        s.tile_at_mut(x, y).unwrap().kind = k;
+        set_v4_kind(s.tile_at_mut(x, y).unwrap(), k);
     }
 
     fn road(s: &mut GameState, x: u32, y: u32) {

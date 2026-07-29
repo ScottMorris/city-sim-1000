@@ -7,10 +7,10 @@ use crate::buildings::{
     get_building_template, BuildingInstance, COAL_PLANT_MW, HYDRO_PLANT_MW, SOLAR_FARM_MW,
     WIND_TURBINE_MW,
 };
-use crate::occupants::{iter_set, occupant_bit, pair_conflicts, Occupant, OccupantSet, ZONE_MASK};
-use crate::state::{
-    GameState, Tile, FLAG_ABANDONED, FLAG_POWER_OVERLAY, FLAG_RAIL_UNDERLAY, FLAG_ROAD_UNDERLAY,
+use crate::occupants::{
+    iter_set, pair_conflicts, Occupant, OccupantSet, Stratum, Terrain, ZONE_MASK,
 };
+use crate::state::{GameState, Tile, FLAG_ABANDONED};
 use city_sim_protocol::{
     commands::{CommandResult, Tool},
     tile_kind::TileKind,
@@ -56,30 +56,9 @@ pub fn tool_cost(tool: Tool) -> i64 {
 // flags by hand, which is how they came to disagree: `place_footprint_building`
 // rejected `kind == PowerLine` but never asked `has_power_overlay()`, so a line
 // recorded in the flag — which is every line strung across a zone, and every
-// line that has since been terraformed — was invisible to it. The guards now
-// ask `Tile::occupants()` and consult `pair_conflicts`, so a line answers the
-// same whichever of its two spellings it happens to be wearing.
-
-/// The occupants a placement guard must respect.
-///
-/// [`Tile::occupants`] with the *ghost* structure dropped — a structure `kind`
-/// left standing by [`remove_building`] so a zone lot can regrow underneath it.
-/// A ghost has no `BuildingInstance` behind it: nothing bills it, nothing
-/// powers it and the bulldozer clears it in a single click. Letting it refuse a
-/// placement would strand every bulldozed park behind a second bulldoze, so the
-/// guards ignore it exactly as they did before this conversion.
-///
-/// The real question — *is something built here?* — is `building_id`, the
-/// target model's `development` field, and it stays a separate check. It has to
-/// be: a developed residential lot carries a `building_id` while its `kind`
-/// remains `Residential`, so it has no `Structure` occupant to find.
-fn standing_occupants(tile: &Tile) -> OccupantSet {
-    let mut set = tile.occupants();
-    if tile.has_ghost_structure() {
-        set &= !occupant_bit(Occupant::Structure);
-    }
-    set
-}
+// line that has since been terraformed — was invisible to it. The guards ask
+// `Tile::occupants` and consult `pair_conflicts` instead, and since step 3
+// there is only one spelling for them to see.
 
 /// The first occupant standing on `tile` that refuses `incoming`, in bit order.
 ///
@@ -89,8 +68,20 @@ fn standing_occupants(tile: &Tile) -> OccupantSet {
 /// from conductors — while a park refuses a tile with a road on it. Only
 /// refusal needs a guard, so each caller names the conflicts it resolves by
 /// *displacement* in `displaces` and everything left over is refused.
+///
+/// Reads `tile.occupants` directly. It used to have to filter out a *ghost*
+/// structure first — a structure `kind` [`remove_building`] left standing over
+/// a cleared `building_id` — because letting one refuse a placement stranded
+/// every bulldozed park behind a second bulldoze. Ghosts no longer exist:
+/// `remove_building` clears the tag with the id, since with `Structure` being
+/// one flat tag there is nowhere for a tagless structure's identity to live.
+///
+/// The real question — *is something built here?* — is `building_id`, the
+/// design note's `development`, and it stays a separate check. It has to be: a
+/// developed residential lot carries a `building_id` while its occupant stays a
+/// zone tag, so it has no `Structure` bit to find.
 fn refused_by(tile: &Tile, incoming: Occupant, displaces: OccupantSet) -> Option<Occupant> {
-    let standing = standing_occupants(tile) & !displaces;
+    let standing = tile.occupants & !displaces;
     iter_set(standing).find(|&o| pair_conflicts(o, incoming))
 }
 
@@ -117,8 +108,8 @@ fn refused_by(tile: &Tile, incoming: Occupant, displaces: OccupantSet) -> Option
 /// what stood on the ground — it never read `kind` at all, only wrote it — and
 /// `Tool::Bulldoze` costs 1 against terraform's 10, so refusing them would
 /// close no exploit and would only make the brush weaker than it has ever
-/// been. What the surface *does* need is [`set_kind_clearing_surface`], so that
-/// the wipe lands the same however the occupant happens to be spelled.
+/// been. What the surface *does* need is [`regrade_at`], so that the wipe takes
+/// the whole stratum rather than one slot of it.
 fn regrade_refusal(tile: &Tile) -> Option<&'static str> {
     if tile.building_id.is_some() {
         return Some("A building occupies this tile. Bulldoze first.");
@@ -177,22 +168,21 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             }
             state.money -= cost;
             let ground = if tool == Tool::TerraformRaise {
-                TileKind::Land
+                Terrain::Land
             } else {
-                TileKind::Water
+                Terrain::Water
             };
-            set_kind_clearing_surface(state, x, y, ground);
+            regrade_at(state, x, y, ground);
             CommandResult::ok()
         }
         Tool::Tree => {
             // Planting clears the ground it plants on — a canopy shares the
-            // tile with a road only in the target model, and today `Tool::Tree`
-            // still overwrites one. That is a gameplay decision of its own; what
-            // is not is *which* road it overwrites, so the write goes through
-            // `set_kind_clearing_surface` and takes both spellings.
+            // tile with a road only in the target model, and `Tool::Tree` still
+            // overwrites one. That is a gameplay decision of its own, preserved
+            // exactly: `regrade_at` takes the surface stratum with it.
             //
-            // The overhead stratum is deliberately left alone: a tree planted
-            // over a live line still produces `{Trees, PowerLine}`, which is
+            // The hydro span is deliberately left standing: a tree planted over
+            // a live line still produces `{Trees, PowerLine}`, which is
             // `known_defect_trees_are_planted_through_a_live_hydro_line`.
             //
             // The one refusal here is against stranding a live building,
@@ -203,7 +193,8 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
                 return CommandResult::fail("A building occupies this tile. Bulldoze first.");
             }
             state.money -= cost;
-            set_kind_clearing_surface(state, x, y, TileKind::Tree);
+            regrade_at(state, x, y, Terrain::Land);
+            state.tiles[idx].set_occupant(Occupant::Trees, true);
             CommandResult::ok()
         }
 
@@ -218,31 +209,20 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
                 return CommandResult::fail("A building occupies this tile. Bulldoze first.");
             }
             let had_rail = state.tiles[idx].has_occupant(Occupant::Rail);
-            let had_line = state.tiles[idx].has_occupant(Occupant::PowerLine);
             clear_building_at(state, x, y);
             state.money -= cost;
-            let idx = state.tile_index(x, y).unwrap();
             // A hydro line survives a road laid across it, exactly as a rail
-            // does. Build order must not change the outcome: paving under a
-            // line used to sever the grid silently, with no warning and no
-            // refund, while doing the same two things in the other order gave
-            // a crossing.
+            // does — the overhead stratum is not the surface, so there is
+            // nothing left to arbitrate. Build order cannot change the outcome
+            // any more: it is not expressible.
             //
-            // ONE CANONICAL RECORDING. When a line is present the tile keeps
-            // kind `PowerLine` and records the road as an underlay — bit for
-            // bit what `Tool::PowerLine` produces on a road tile — so there is
-            // never a second way to spell the same tile.
-            //
-            // Set every structural flag explicitly, never conditionally.
-            state.tiles[idx].kind = if had_line {
-                TileKind::PowerLine
-            } else {
-                TileKind::Road
-            };
-            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_rail);
-            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_line);
-            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, had_line);
-            state.tile_revision += 1;
+            // The regrade is what takes the zone tag, the canopy and the water
+            // under the carriageway, all of which `kind = Road` used to
+            // overwrite by occupying the same slot.
+            regrade_at(state, x, y, Terrain::Land);
+            let idx = state.tile_index(x, y).unwrap();
+            state.tiles[idx].set_occupant(Occupant::Road, true);
+            state.tiles[idx].set_occupant(Occupant::Rail, had_rail);
             CommandResult::ok()
         }
         Tool::Rail => {
@@ -251,21 +231,13 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
                 return CommandResult::fail("A building occupies this tile. Bulldoze first.");
             }
             let had_road = state.tiles[idx].has_occupant(Occupant::Road);
-            let had_line = state.tiles[idx].has_occupant(Occupant::PowerLine);
             clear_building_at(state, x, y);
             state.money -= cost;
+            // Mirrors `Tool::Road` above.
+            regrade_at(state, x, y, Terrain::Land);
             let idx = state.tile_index(x, y).unwrap();
-            // Mirrors `Tool::Road` above — a line survives, and the tile is
-            // recorded the one canonical way.
-            state.tiles[idx].kind = if had_line {
-                TileKind::PowerLine
-            } else {
-                TileKind::Rail
-            };
-            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_road);
-            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_line);
-            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, had_line);
-            state.tile_revision += 1;
+            state.tiles[idx].set_occupant(Occupant::Rail, true);
+            state.tiles[idx].set_occupant(Occupant::Road, had_road);
             CommandResult::ok()
         }
         Tool::PowerLine => {
@@ -273,23 +245,21 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             if state.tiles[idx].building_id.is_some() {
                 return CommandResult::fail("A building occupies this tile. Bulldoze first.");
             }
-            let had_road = state.tiles[idx].has_occupant(Occupant::Road);
-            let had_rail = state.tiles[idx].has_occupant(Occupant::Rail);
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
-            // A line strung across a zone leaves the zone standing, recording
-            // itself as an overlay — the same courtesy roads and rails get.
-            // Zoning over a line already kept both (`set_kind` leaves flags
-            // alone), so replacing the zone here made the outcome depend on
-            // which you clicked first.
-            let zoned = state.tiles[idx].zone_occupant().is_some();
-            if !zoned {
-                state.tiles[idx].kind = TileKind::PowerLine;
-            }
-            state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_road);
-            state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_rail);
-            state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, true);
+            // The surface is untouched: a line strung across a zone, a road or
+            // a rail leaves all of them standing. The `zoned` special case this
+            // replaces existed only to arbitrate the `kind` slot — with the
+            // strata there is no slot to arbitrate, so it goes.
+            //
+            // The canopy does not survive, because `kind = PowerLine` used to
+            // destroy it. Utilities trim trees away from conductors, which is
+            // also what `Occupant::PowerLine`'s conflict set says.
+            let tile = &mut state.tiles[idx];
+            tile.terrain = Terrain::Land;
+            tile.set_occupant(Occupant::PowerLine, true);
+            tile.set_occupant(Occupant::Trees, false);
             state.tile_revision += 1;
             CommandResult::ok()
         }
@@ -297,21 +267,19 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         Tool::WaterPipe => {
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
-            state.tiles[idx].underground = Some(TileKind::WaterPipe);
+            state.tiles[idx].set_occupant(Occupant::Pipe, true);
             // tile_revision not bumped — underground doesn't affect zone cache
             CommandResult::ok()
         }
 
         // Zone tools — cannot place over road, rail, or existing buildings.
         // A hydro line is *not* in the way: a zone and a line share a tile
-        // happily, and `set_kind` leaves `FLAG_POWER_OVERLAY` standing so the
-        // line survives the zoning. That is the pair `Tool::PowerLine` was
-        // taught to preserve in the other direction by 55de254.
+        // happily, in either build order, because they are in different strata.
         Tool::Residential | Tool::Commercial | Tool::Industrial => {
-            let (zone_kind, zone_occupant) = match tool {
-                Tool::Residential => (TileKind::Residential, Occupant::ZoneResidential),
-                Tool::Commercial => (TileKind::Commercial, Occupant::ZoneCommercial),
-                _ => (TileKind::Industrial, Occupant::ZoneIndustrial),
+            let zone_occupant = match tool {
+                Tool::Residential => Occupant::ZoneResidential,
+                Tool::Commercial => Occupant::ZoneCommercial,
+                _ => Occupant::ZoneIndustrial,
             };
             let t = &state.tiles[state.tile_index(x, y).unwrap()];
             // Re-zoning is a replacement, so the zone tags are displaced rather
@@ -327,7 +295,13 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
                 return CommandResult::fail("Cannot zone over a building. Bulldoze first.");
             }
             state.money -= cost;
-            set_kind(state, x, y, zone_kind);
+            // Re-zoning replaces the old tag, and zoning over forest or water
+            // takes both — `kind = Residential` overwrote either. Everything
+            // conflicting that is left was refused above, so the regrade only
+            // ever clears what the zone displaces.
+            regrade_at(state, x, y, Terrain::Land);
+            let idx = state.tile_index(x, y).unwrap();
+            state.tiles[idx].set_occupant(zone_occupant, true);
             CommandResult::ok()
         }
 
@@ -378,48 +352,29 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Write `kind` at (x, y). Storage only: no flag is touched, so an occupant
-/// recorded in a structural flag outlives the write.
+/// Rewrite the ground at (x, y): set the terrain, and clear everything the old
+/// single-valued `kind` write used to destroy by occupying its slot.
 ///
-/// That is exactly what the zone tools want. A zone and a hydro line share a
-/// tile, and `55de254` established that they do so in either build order —
-/// which works precisely *because* zoning leaves `FLAG_POWER_OVERLAY` standing.
-/// The zone tools also refuse road and rail rather than displacing them, so
-/// there is no surface occupant left for them to clear.
+/// **What goes:** the whole surface stratum — road, rail, the zone tag, a
+/// structure — and the tree canopy. The canopy is overhead but it lived in
+/// `kind` all the same (`TileKind::Tree`), so `kind = Land` / `Water` / `Road`
+/// / `Residential` all removed it, and a `clear_stratum(Surface)` alone would
+/// silently start leaving forests standing under new construction.
 ///
-/// Tools that displace what they are written over want
-/// [`set_kind_clearing_surface`] instead.
-fn set_kind(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
-    let idx = state.tile_index(x, y).unwrap();
-    state.tiles[idx].kind = kind;
-    state.tile_revision += 1;
-}
-
-/// Write `kind` at (x, y) and take the surface stratum with it — in **both**
-/// of its spellings.
-///
-/// A bare road is spelled `kind = Road`; a road under a line is spelled
-/// `FLAG_ROAD_UNDERLAY`, with `kind` given over to the line. A plain
-/// `kind = …` write erases the first and preserves the second, so whether
-/// terraforming or planting destroyed your road depended on whether you had
-/// strung a line over it first — the same build-order asymmetry `55de254` and
-/// `c18f9ac` closed for the road, rail and line tools. Clearing the underlay
-/// flags alongside the write closes it here without weakening the brush: the
-/// historical rule is that a regrade wipes what stood on the ground, and it
-/// now wipes it whichever way it was recorded.
-///
-/// **Surface only.** `FLAG_POWER_OVERLAY` and `underground` are untouched: a
-/// span crosses the tile whatever happens beneath it and a pipe is at depth.
+/// **What stays:** the hydro span and anything buried. A line crosses the tile
+/// whatever happens beneath it — over water it is the pylon span the design
+/// note names as a legitimate variant — and a pipe is at depth.
 /// `terraforming_regrades_the_ground_and_leaves_the_strata_above_and_below`
 /// pins that, and it is why `PowerLine` → `TerraformRaise` is legal play.
 ///
-/// Why here and not in [`set_kind`]: displacement is a property of the *tool*,
-/// not of the write. Folding it into the shared primitive would hand it to the
-/// zone tools too, and a zone must leave a line standing.
-fn set_kind_clearing_surface(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
+/// Every tool that builds calls this first, which is also why terrain is not
+/// yet durable in behaviour: they all pass `Terrain::Land`.
+fn regrade_at(state: &mut GameState, x: u32, y: u32, terrain: Terrain) {
     let idx = state.tile_index(x, y).unwrap();
-    state.tiles[idx].kind = kind;
-    state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY | FLAG_RAIL_UNDERLAY, false);
+    let tile = &mut state.tiles[idx];
+    tile.terrain = terrain;
+    tile.clear_stratum(Stratum::Surface);
+    tile.set_occupant(Occupant::Trees, false);
     state.tile_revision += 1;
 }
 
@@ -432,6 +387,19 @@ fn clear_building_at(state: &mut GameState, x: u32, y: u32) {
 }
 
 /// Remove a building by id: delete from `state.buildings`, clear tile fields.
+///
+/// **The `Structure` tag goes with the development.** It used to stay behind —
+/// the comment read "keep the tile kind so the zone lot can regrow" — and for a
+/// zone lot that is exactly right and still happens: a lot's occupant is its
+/// zone tag, which this function never touches, so the lot regrows as it always
+/// did. For a *structure* it was a ghost: `kind` stayed `Park` with nothing
+/// behind it, so a bulldozed park went on scoring +4.0 of wilderness for ever
+/// and took a second click to clear.
+///
+/// Under the strata a ghost is not merely wrong, it is unrepresentable —
+/// `Occupant::Structure` is one flat tag and the `BuildingInstance` is the only
+/// thing that knows which structure it is, so a tag with no id behind it has no
+/// identity to score. Clearing it is what makes `StructureLookup` total.
 pub fn remove_building(state: &mut GameState, building_id: u32) {
     // Remove the BuildingInstance
     state.buildings.retain(|b| b.id != building_id);
@@ -441,7 +409,7 @@ pub fn remove_building(state: &mut GameState, building_id: u32) {
             tile.building_id = None;
             tile.power_plant_mw = 0;
             tile.water_output = 0;
-            // Keep the tile kind so the zone lot can regrow
+            tile.set_occupant(Occupant::Structure, false);
         }
     }
     state.tile_revision += 1;
@@ -517,8 +485,12 @@ fn place_footprint_building(
 
     for dy in 0..fh {
         for dx in 0..fw {
+            // The footprint stamp used to be `kind = <structure>`, which took
+            // the zone tag, the canopy and the water with it. `regrade_at` is
+            // that same displacement written out.
+            regrade_at(state, x + dx, y + dy, Terrain::Land);
             let idx = state.tile_index(x + dx, y + dy).unwrap();
-            state.tiles[idx].kind = kind;
+            state.tiles[idx].set_occupant(Occupant::Structure, true);
             state.tiles[idx].building_id = Some(bid as u16);
             state.tiles[idx].set_flag(FLAG_ABANDONED, false);
             state.tiles[idx].happiness = (state.tiles[idx].happiness + 0.05).min(1.5);
@@ -544,22 +516,24 @@ fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
     let idx = state.tile_index(x, y).unwrap();
     if let Some(bid) = state.tiles[idx].building_id {
         remove_building(state, bid as u32);
-    } else if state.tiles[idx].underground.is_some() {
-        state.tiles[idx].underground = None;
+    } else if state.tiles[idx].occupants_in(Stratum::Underground) != 0 {
+        state.tiles[idx].clear_stratum(Stratum::Underground);
     } else {
-        state.tiles[idx].kind = TileKind::Land;
-        // Clear the structural flags with the tile. They describe what was
-        // built here, not what the simulation derived: leaving them set makes
-        // a bulldozed tile keep rendering the thing that was removed. In
-        // particular FLAG_POWER_OVERLAY was set when a line was strung and
-        // never cleared anywhere, so hydro survived its own demolition once
-        // the renderer started drawing overlays. FLAG_POWERED / FLAG_WATERED
-        // are recomputed by the utility passes, so they are cleared too rather
-        // than left describing a tile that no longer exists.
-        state.tiles[idx].set_flag(
-            FLAG_ROAD_UNDERLAY | FLAG_RAIL_UNDERLAY | FLAG_POWER_OVERLAY | FLAG_ABANDONED,
-            false,
-        );
+        // The bulldozer works on what you can see: surface and overhead
+        // together. Underground is reached on its own click, above, because it
+        // is only editable from the underground view.
+        //
+        // The terrain goes back to `Land` rather than to what was there
+        // before. That is today's behaviour preserved, not a modelling
+        // statement — restoring water is the point of making terrain durable
+        // and it belongs to step 4.
+        let tile = &mut state.tiles[idx];
+        tile.terrain = Terrain::Land;
+        tile.clear_stratum(Stratum::Surface);
+        tile.clear_stratum(Stratum::Overhead);
+        // FLAG_POWERED / FLAG_WATERED are recomputed by the utility passes;
+        // ABANDONED describes a lot that no longer exists.
+        tile.set_flag(FLAG_ABANDONED, false);
         state.tile_revision += 1;
     }
     CommandResult::ok()
@@ -572,6 +546,9 @@ fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display::{wire_flags_at, wire_kind_at};
+    use crate::migrate::set_v4_kind;
+    use city_sim_protocol::tile_buffer::flags;
 
     fn gs(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -607,28 +584,39 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::Road, 1, 1);
         assert!(r.success);
-        assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Road);
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Road);
         assert_eq!(s.money, before - tool_cost(Tool::Road));
     }
 
+    /// A level crossing carries both occupants whichever way round it was
+    /// built, and — since step 3 of #177 — is spelled on the wire exactly one
+    /// way: `Rail` + `ROAD_UNDERLAY`.
+    ///
+    /// **This is the one wire byte the flip could not reproduce.** Build order
+    /// was the only thing distinguishing `Road` + `RAIL_UNDERLAY` from `Rail` +
+    /// `ROAD_UNDERLAY`, and build order is not stored, so `{Road, Rail}` had to
+    /// normalise onto one of them. Rail wins because dragging a railway across
+    /// an existing road network is far commoner than the reverse, so it is the
+    /// spelling most saves already hold. The sprite is unaffected —
+    /// `resolveBaseTileSprite` tests `(Rail && roadUnderlay) || (Road &&
+    /// railUnderlay)` and `pickRailCrossingTexture` orients off the rail axis
+    /// either way — and so are the renderer's debug labels. The single
+    /// user-visible delta is the minimap base colour of a road-last crossing,
+    /// which goes rail-brown instead of road-grey (`minimap.ts` checks
+    /// `railUnderlay` before `roadUnderlay`).
     #[test]
-    fn road_over_rail_keeps_rail_underlay() {
-        let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Rail;
-        apply_tool(&mut s, Tool::Road, 0, 0);
-        let t = s.tile_at(0, 0).unwrap();
-        assert_eq!(t.kind, TileKind::Road);
-        assert!(t.has_rail_underlay(), "rail underlay should be preserved");
-    }
-
-    #[test]
-    fn rail_over_road_keeps_road_underlay() {
-        let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        apply_tool(&mut s, Tool::Rail, 0, 0);
-        let t = s.tile_at(0, 0).unwrap();
-        assert_eq!(t.kind, TileKind::Rail);
-        assert!(t.has_road_underlay(), "road underlay should be preserved");
+    fn a_level_crossing_has_one_spelling_in_both_build_orders() {
+        for order in [[Tool::Rail, Tool::Road], [Tool::Road, Tool::Rail]] {
+            let mut s = gs(4, 4);
+            for tool in order {
+                assert!(apply_tool(&mut s, tool, 0, 0).success);
+            }
+            let t = s.tile_at(0, 0).unwrap();
+            assert!(t.has_occupant(Occupant::Road), "{order:?}: the road");
+            assert!(t.has_occupant(Occupant::Rail), "{order:?}: the rail");
+            assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Rail, "{order:?}");
+            assert_eq!(wire_flags_at(&s, 0, 0), flags::ROAD_UNDERLAY, "{order:?}");
+        }
     }
 
     #[test]
@@ -637,18 +625,18 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::Residential, 2, 2);
         assert!(r.success);
-        assert_eq!(s.tile_at(2, 2).unwrap().kind, TileKind::Residential);
+        assert_eq!(wire_kind_at(&s, 2, 2), TileKind::Residential);
         assert_eq!(s.money, before - tool_cost(Tool::Residential));
     }
 
     #[test]
     fn zone_over_road_fails() {
         let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
         let r = apply_tool(&mut s, Tool::Residential, 0, 0);
         assert!(!r.success);
         assert_eq!(
-            s.tile_at(0, 0).unwrap().kind,
+            wire_kind_at(&s, 0, 0),
             TileKind::Road,
             "tile should not change"
         );
@@ -658,10 +646,7 @@ mod tests {
     fn water_pipe_sets_underground() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::WaterPipe, 1, 1);
-        assert_eq!(
-            s.tile_at(1, 1).unwrap().underground,
-            Some(TileKind::WaterPipe)
-        );
+        assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Pipe));
     }
 
     #[test]
@@ -670,7 +655,7 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::WaterPump, 0, 0);
         assert!(r.success);
-        assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::WaterPump);
+        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::WaterPump);
         assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
         assert_eq!(s.buildings.len(), 1);
         assert_eq!(s.money, before - tool_cost(Tool::WaterPump));
@@ -684,9 +669,8 @@ mod tests {
         let bid = s.tile_at(0, 0).unwrap().building_id.unwrap();
         for dy in 0..2 {
             for dx in 0..2 {
-                let t = s.tile_at(dx, dy).unwrap();
-                assert_eq!(t.kind, TileKind::WaterTower);
-                assert_eq!(t.building_id, Some(bid));
+                assert_eq!(wire_kind_at(&s, dx, dy), TileKind::WaterTower);
+                assert_eq!(s.tile_at(dx, dy).unwrap().building_id, Some(bid));
             }
         }
     }
@@ -697,7 +681,7 @@ mod tests {
         // WaterTower is 2×2; placing at (2,2) would go to (3,3) which is out of bounds
         let r = apply_tool(&mut s, Tool::WaterTower, 2, 2);
         assert!(!r.success);
-        assert_eq!(s.tile_at(2, 2).unwrap().kind, TileKind::Land);
+        assert_eq!(wire_kind_at(&s, 2, 2), TileKind::Land);
     }
 
     #[test]
@@ -714,7 +698,7 @@ mod tests {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::Road, 0, 0);
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
-        assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::Land);
+        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Land);
     }
 
     #[test]
@@ -735,12 +719,9 @@ mod tests {
     fn bulldoze_removes_underground_pipe() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::WaterPipe, 0, 0);
-        assert_eq!(
-            s.tile_at(0, 0).unwrap().underground,
-            Some(TileKind::WaterPipe)
-        );
+        assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
-        assert_eq!(s.tile_at(0, 0).unwrap().underground, None);
+        assert!(!s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
     }
 
     #[test]
@@ -754,12 +735,19 @@ mod tests {
             apply_tool(&mut s, Tool::PowerLine, 1, 1);
             apply_tool(&mut s, tool, 1, 1);
 
+            assert_eq!(
+                wire_kind_at(&s, 1, 1),
+                TileKind::PowerLine,
+                "{tool:?} severed the line"
+            );
             let t = s.tile_at(1, 1).unwrap();
-            assert_eq!(t.kind, TileKind::PowerLine, "{tool:?} severed the line");
-            assert!(t.has_power_overlay(), "{tool:?} cleared the power overlay");
+            assert!(
+                t.has_occupant(Occupant::PowerLine),
+                "{tool:?} cleared the span"
+            );
             let beneath = match tool {
-                Tool::Road => t.has_road_underlay(),
-                _ => t.has_rail_underlay(),
+                Tool::Road => t.has_occupant(Occupant::Road),
+                _ => t.has_occupant(Occupant::Rail),
             };
             assert!(beneath, "{tool:?} did not record itself beneath the line");
         }
@@ -784,33 +772,33 @@ mod tests {
             apply_tool(&mut reverse, second, 1, 1);
             apply_tool(&mut reverse, first, 1, 1);
 
-            let (a, b) = (
-                forward.tile_at(1, 1).unwrap(),
-                reverse.tile_at(1, 1).unwrap(),
+            assert_eq!(
+                (wire_kind_at(&forward, 1, 1), wire_flags_at(&forward, 1, 1)),
+                (wire_kind_at(&reverse, 1, 1), wire_flags_at(&reverse, 1, 1)),
+                "{first:?} then {second:?} disagreed on the wire bytes"
             );
             assert_eq!(
-                a.kind, b.kind,
-                "{first:?} then {second:?} disagreed on kind"
-            );
-            assert_eq!(
-                a.flags, b.flags,
-                "{first:?} then {second:?} disagreed on flags"
+                forward.tile_at(1, 1).unwrap().occupants,
+                reverse.tile_at(1, 1).unwrap().occupants,
+                "{first:?} then {second:?} disagreed on the occupant set"
             );
         }
     }
 
+    /// The rail must not appear as its own underlay on the wire. An underlay
+    /// bit means "present, but not the kind byte"; a rail that is the kind byte
+    /// and sets `RAIL_UNDERLAY` too is a tile spelled twice.
     #[test]
     fn rail_over_road_keeps_the_road_but_not_a_stale_rail_underlay() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::Road, 1, 1);
         apply_tool(&mut s, Tool::Rail, 1, 1);
-        let t = s.tile_at(1, 1).unwrap();
-        assert_eq!(t.kind, TileKind::Rail);
-        assert!(t.has_road_underlay(), "the road under the rail was lost");
         assert!(
-            !t.has_rail_underlay(),
-            "rail recorded itself as its own underlay"
+            s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road),
+            "the road under the rail was lost"
         );
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Rail);
+        assert_eq!(wire_flags_at(&s, 1, 1), flags::ROAD_UNDERLAY);
     }
 
     #[test]
@@ -821,23 +809,25 @@ mod tests {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::Road, 1, 1);
         apply_tool(&mut s, Tool::PowerLine, 1, 1);
-        assert!(s.tile_at(1, 1).unwrap().has_road_underlay());
-        assert!(s.tile_at(1, 1).unwrap().has_power_overlay());
+        assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road));
+        assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::PowerLine));
 
         apply_tool(&mut s, Tool::Bulldoze, 1, 1);
-        let t = s.tile_at(1, 1).unwrap();
-        assert_eq!(t.kind, TileKind::Land);
-        assert!(!t.has_road_underlay(), "road underlay survived bulldoze");
-        assert!(!t.has_rail_underlay(), "rail underlay survived bulldoze");
-        assert!(!t.has_power_overlay(), "power overlay survived bulldoze");
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
+        assert_eq!(wire_flags_at(&s, 1, 1), 0, "a structural bit survived");
+        assert_eq!(
+            s.tile_at(1, 1).unwrap().visible_occupants(),
+            0,
+            "the bulldozer clears everything you can see"
+        );
     }
 
     #[test]
     fn power_line_sets_power_overlay_flag() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::PowerLine, 0, 0);
-        assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::PowerLine);
-        assert!(s.tile_at(0, 0).unwrap().has_power_overlay());
+        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::PowerLine);
+        assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::PowerLine));
     }
 
     #[test]
@@ -845,7 +835,7 @@ mod tests {
         let mut s = gs(4, 4);
         let r = apply_tool(&mut s, Tool::ElementarySchool, 0, 0);
         assert!(r.success);
-        assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::ElementarySchool);
+        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::ElementarySchool);
         assert_eq!(s.buildings.len(), 1);
     }
 
@@ -898,7 +888,7 @@ mod tests {
                 "{tool:?} must not charge on rejection"
             );
             assert_eq!(
-                s.tile_at(1, 1).unwrap().kind,
+                wire_kind_at(&s, 1, 1),
                 TileKind::WaterPump,
                 "tile should not change"
             );
@@ -913,11 +903,7 @@ mod tests {
         let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
         assert!(!r.success, "building should be rejected over a road");
         assert_eq!(s.money, before_money, "must not charge on rejection");
-        assert_eq!(
-            s.tile_at(1, 1).unwrap().kind,
-            TileKind::Road,
-            "road should remain"
-        );
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Road, "road should remain");
     }
 
     #[test]
@@ -940,27 +926,32 @@ mod tests {
         apply_tool(&mut s, Tool::Residential, 1, 1);
         apply_tool(&mut s, Tool::PowerLine, 1, 1);
         let t = s.tile_at(1, 1).unwrap();
-        assert_eq!(t.kind, TileKind::Residential, "the line is in the flag");
-        assert!(t.has_power_overlay());
+        assert_eq!(t.zone_occupant(), Some(Occupant::ZoneResidential));
+        assert!(t.has_occupant(Occupant::PowerLine));
 
         let before_money = s.money;
         let r = apply_tool(&mut s, Tool::Park, 1, 1);
         assert!(!r.success, "a park was stamped over a live hydro line");
         assert_eq!(s.money, before_money, "must not charge on rejection");
         assert!(s.buildings.is_empty());
-        assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Residential);
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Residential);
     }
 
     #[test]
     fn building_over_a_terraformed_line_fails() {
-        // The other route to the same tile: a regrade writes `kind = Land` and
-        // leaves the span standing overhead, which is correct — but it also
-        // moves the line out of `kind`, and the old guard read only `kind`.
+        // The other route to the same tile: a regrade rewrites the ground and
+        // leaves the span standing overhead, which is correct — but in v4 it
+        // also moved the line out of `kind`, and the old guard read only
+        // `kind`. There is no `kind` to move out of any more, which is the
+        // point of the flip; the guard reads the occupant set either way.
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::PowerLine, 1, 1);
         apply_tool(&mut s, Tool::TerraformRaise, 1, 1);
-        assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Land);
-        assert!(s.tile_at(1, 1).unwrap().has_power_overlay());
+        let t = s.tile_at(1, 1).unwrap();
+        assert_eq!(t.occupants_in(Stratum::Surface), 0, "the ground is bare");
+        assert!(t.has_occupant(Occupant::PowerLine));
+        // …and the wire now spells it the same as any other bare hydro line.
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::PowerLine);
 
         let r = apply_tool(&mut s, Tool::HydroPlant, 1, 1);
         assert!(!r.success, "a plant was stamped over a terraformed line");
@@ -974,8 +965,8 @@ mod tests {
         // — which is also why the sweep's `PowerLine → TerraformRaise` route
         // was never a terraforming bug, only a guard that read `kind`.
         for (tool, expected) in [
-            (Tool::TerraformRaise, TileKind::Land),
-            (Tool::TerraformLower, TileKind::Water),
+            (Tool::TerraformRaise, Terrain::Land),
+            (Tool::TerraformLower, Terrain::Water),
         ] {
             let mut s = gs(4, 4);
             apply_tool(&mut s, Tool::PowerLine, 1, 1);
@@ -983,12 +974,16 @@ mod tests {
             apply_tool(&mut s, tool, 1, 1);
 
             let t = s.tile_at(1, 1).unwrap();
-            assert_eq!(t.kind, expected, "{tool:?} did not regrade the ground");
-            assert!(t.has_power_overlay(), "{tool:?} took down the span");
+            assert_eq!(t.terrain(), expected, "{tool:?} did not regrade the ground");
+            assert!(
+                t.has_occupant(Occupant::PowerLine),
+                "{tool:?} took down the span"
+            );
+            assert!(t.has_occupant(Occupant::Pipe), "{tool:?} dug up the pipe");
             assert_eq!(
-                t.underground,
-                Some(TileKind::WaterPipe),
-                "{tool:?} dug up the pipe"
+                t.occupants_in(Stratum::Surface),
+                0,
+                "{tool:?} left something standing on the regraded ground"
             );
         }
     }
@@ -1017,8 +1012,12 @@ mod tests {
             );
             assert_eq!(s.money, before_money, "{tool:?} charged on rejection");
 
+            assert_eq!(
+                wire_kind_at(&s, 5, 5),
+                TileKind::CoalPlant,
+                "{tool:?} moved the plant"
+            );
             let t = s.tile_at(5, 5).unwrap();
-            assert_eq!(t.kind, TileKind::CoalPlant, "{tool:?} moved the plant");
             assert_eq!(t.building_id, Some(1));
             assert_eq!(t.power_plant_mw, COAL_PLANT_MW as i32);
             assert!(
@@ -1053,17 +1052,18 @@ mod tests {
             r.message.as_deref(),
             Some("A building occupies this tile. Bulldoze first.")
         );
-        assert_eq!(s.tile_at(2, 1).unwrap().kind, TileKind::Residential);
+        assert_eq!(wire_kind_at(&s, 2, 1), TileKind::Residential);
         assert_eq!(s.buildings.len(), 1);
     }
 
     /// A regrade wipes what stood on the ground — it always has — and it must
-    /// wipe it the same however the surface occupant happens to be spelled. A
-    /// bare road lives in `kind`, a road under a line lives in
+    /// wipe it the same however the surface occupant happens to be spelled. In
+    /// v4 a bare road lived in `kind` and a road under a line lived in
     /// `FLAG_ROAD_UNDERLAY`, and the plain `kind` write erased the first while
     /// preserving the second: whether terraforming destroyed your road, silently
     /// and with no refund, depended on whether you had strung a line over it
-    /// first. `set_kind_clearing_surface` takes both.
+    /// first. There is one spelling now, and `regrade_at` clears the stratum it
+    /// lives in.
     ///
     /// The line itself is *not* wiped in either spelling — it is overhead.
     #[test]
@@ -1079,7 +1079,7 @@ mod tests {
                 }
                 let before = s.tile_at(1, 1).unwrap().clone();
                 assert!(
-                    before.occupants() & SURFACE_MASK != 0,
+                    before.occupants & SURFACE_MASK != 0,
                     "{surface:?} (line_first={line_first}): nothing on the ground \
                      to clear — the premise of this test"
                 );
@@ -1099,21 +1099,21 @@ mod tests {
 
                 let after = s.tile_at(1, 1).unwrap();
                 assert_eq!(
-                    after.kind,
-                    TileKind::Land,
+                    after.terrain(),
+                    Terrain::Land,
                     "{surface:?} (line_first={line_first}): ground not regraded"
                 );
                 assert_eq!(
-                    after.occupants() & SURFACE_MASK,
+                    after.occupants & SURFACE_MASK,
                     0,
                     "{surface:?} (line_first={line_first}): the {} spelling \
                      survived a regrade that erased the other",
                     if line_first { "underlay" } else { "kind" }
                 );
-                assert!(!after.has_road_underlay() && !after.has_rail_underlay());
+                assert!(!after.has_occupant(Occupant::Road) && !after.has_occupant(Occupant::Rail));
                 assert_eq!(
-                    after.occupants() & OVERHEAD_MASK,
-                    before.occupants() & OVERHEAD_MASK,
+                    after.occupants & OVERHEAD_MASK,
+                    before.occupants & OVERHEAD_MASK,
                     "{surface:?} (line_first={line_first}): the span crosses the \
                      tile whatever the ground does"
                 );
@@ -1134,9 +1134,12 @@ mod tests {
         let r = apply_tool(&mut s, Tool::TerraformLower, 1, 1);
         assert!(r.success, "a regrade was refused over an undeveloped zone");
         assert_eq!(s.money, before_money - tool_cost(Tool::TerraformLower));
-        let t = s.tile_at(1, 1).unwrap();
-        assert_eq!(t.kind, TileKind::Water);
-        assert_eq!(t.occupants(), 0, "the zone tag outlived the regrade");
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Water);
+        assert_eq!(
+            s.tile_at(1, 1).unwrap().occupants,
+            0,
+            "the zone tag outlived the regrade"
+        );
 
         for (tool, expected) in [
             (Tool::TerraformLower, TileKind::Water),
@@ -1146,7 +1149,7 @@ mod tests {
             let before_money = s.money;
             let r = apply_tool(&mut s, tool, 3, 3);
             assert!(r.success, "{tool:?} refused open ground");
-            assert_eq!(s.tile_at(3, 3).unwrap().kind, expected);
+            assert_eq!(wire_kind_at(&s, 3, 3), expected);
             assert_eq!(s.money, before_money - tool_cost(tool));
         }
     }
@@ -1177,18 +1180,20 @@ mod tests {
                 assert!(r.success, "{surface:?} (line_first={line_first}) refused");
                 assert_eq!(s.money, before_money - tool_cost(Tool::Tree));
 
+                assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Tree);
                 let after = s.tile_at(1, 1).unwrap();
-                assert_eq!(after.kind, TileKind::Tree);
                 assert_eq!(
-                    after.occupants() & SURFACE_MASK,
+                    after.occupants & SURFACE_MASK,
                     0,
                     "{surface:?} (line_first={line_first}): the {} spelling \
                      survived a planting that erased the other",
                     if line_first { "underlay" } else { "kind" }
                 );
                 assert_eq!(
-                    after.occupants() & OVERHEAD_MASK & !occupant_bit(Occupant::Trees),
-                    before.occupants() & OVERHEAD_MASK,
+                    after.occupants
+                        & OVERHEAD_MASK
+                        & !crate::occupants::occupant_bit(Occupant::Trees),
+                    before.occupants & OVERHEAD_MASK,
                     "{surface:?} (line_first={line_first}): the span crosses the \
                      tile whatever grows under it"
                 );
@@ -1216,12 +1221,12 @@ mod tests {
         let r = apply_tool(&mut s, Tool::Tree, 5, 5);
         assert!(!r.success, "a canopy was planted over a live plant");
         assert_eq!(s.money, before_money, "charged on rejection");
-        assert_eq!(s.tile_at(5, 5).unwrap().kind, TileKind::CoalPlant);
+        assert_eq!(wire_kind_at(&s, 5, 5), TileKind::CoalPlant);
         assert_eq!(s.buildings.len(), 1);
 
         // Open ground still takes a tree.
         assert!(apply_tool(&mut s, Tool::Tree, 0, 0).success);
-        assert_eq!(s.tile_at(0, 0).unwrap().kind, TileKind::Tree);
+        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Tree);
     }
 
     #[test]
@@ -1240,7 +1245,7 @@ mod tests {
             assert!(apply_tool(&mut s, tool, 1, 1).success);
             let r = apply_tool(&mut s, Tool::Park, 1, 1);
             assert!(r.success, "a park was refused over {tool:?}");
-            assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Park);
+            assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Park);
         }
     }
 
@@ -1261,12 +1266,12 @@ mod tests {
             );
             let t = s.tile_at(1, 1).unwrap();
             assert!(
-                t.has_power_overlay(),
+                t.has_occupant(Occupant::PowerLine),
                 "{first:?} then {second:?} lost the line"
             );
             assert_eq!(
-                t.kind,
-                TileKind::Residential,
+                t.zone_occupant(),
+                Some(Occupant::ZoneResidential),
                 "{first:?} then {second:?} lost the zone"
             );
         }
@@ -1282,26 +1287,27 @@ mod tests {
         apply_tool(&mut s, Tool::Tree, 1, 1);
         let r = apply_tool(&mut s, Tool::PowerLine, 1, 1);
         assert!(r.success, "a line was refused over a tree");
-        assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::PowerLine);
+        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::PowerLine);
     }
 
     #[test]
-    fn a_bulldozed_park_leaves_a_ghost_that_blocks_nothing() {
-        // `remove_building` keeps the `kind` so a zone lot can regrow, which
-        // leaves a `Structure` occupant with no building behind it. The guards
-        // read the occupant set now, so they have to ignore that ghost or every
-        // bulldozed park would need a second bulldoze before anything else
-        // could go there.
+    /// **Behaviour change, step 3 of #177 — see `remove_building`.** A
+    /// bulldozed park used to leave its `kind` standing with no building
+    /// behind it: a ghost that still scored +4.0 of wilderness and took a
+    /// second click to clear. The tag goes with the development now, so the
+    /// tile is bare ground on the wire and on the ledger.
+    fn a_bulldozed_park_leaves_bare_ground() {
         for tool in [Tool::Residential, Tool::Road, Tool::Rail, Tool::PowerLine] {
             let mut s = gs(4, 4);
             apply_tool(&mut s, Tool::Park, 1, 1);
             let bid = s.tile_at(1, 1).unwrap().building_id.unwrap();
             remove_building(&mut s, bid as u32);
-            assert_eq!(s.tile_at(1, 1).unwrap().kind, TileKind::Park);
+            assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
+            assert_eq!(s.tile_at(1, 1).unwrap().occupants, 0);
             assert!(s.tile_at(1, 1).unwrap().building_id.is_none());
 
             let r = apply_tool(&mut s, tool, 1, 1);
-            assert!(r.success, "{tool:?} was refused by a ghost park");
+            assert!(r.success, "{tool:?} was refused by a demolished park");
         }
     }
 
@@ -1327,7 +1333,7 @@ mod tests {
                 r.message
             );
             assert_eq!(
-                s.tile_at(0, 0).unwrap().kind,
+                wire_kind_at(&s, 0, 0),
                 expected_kind,
                 "{tool:?} should stamp {expected_kind:?}"
             );

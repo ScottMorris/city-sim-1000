@@ -21,15 +21,15 @@
 //! score. Worse, the breakdown's `match kind` forced one category per tile, so
 //! the same tile moved its damage out of `transport` and into `power`: not
 //! merely under-counted, misattributed. Scoring runs over
-//! [`Tile::occupants`](crate::occupants) now, so a road with a line costs
-//! −2.0 + −1.0 and each half is filed on its own line.
+//! `Tile::occupants` now, so a road with a line costs −2.0 + −1.0 and each
+//! half is filed on its own line.
 //!
 //! This module is Rust-first: its tests are the spec, and it is deliberately
 //! excluded from the TS parity oracle (`simulation.ts`).
 
 use crate::occupants::{
-    iter_set, occupant_category, occupant_eco, structure_category, structure_eco, EcoCategory,
-    Terrain,
+    is_strong_nature, iter_set, occupant_category, occupant_eco, structure_category, structure_eco,
+    tile_eco, EcoCategory, StructureLookup, Terrain,
 };
 use crate::state::GameState;
 use city_sim_protocol::commands::WildernessPolicy;
@@ -234,14 +234,14 @@ pub struct WildernessOutput {
 /// Strong nature by `TileKind` alone — the pre-migration rule, kept as an
 /// independent oracle for the occupant model and **not** used to score.
 ///
-/// `compute_wilderness` asks [`Tile::is_strong_nature`](crate::occupants)
-/// instead, which sums over the tile's occupants and so answers for a tile
-/// whose canopy or park lives somewhere other than the `kind` slot. This
-/// `matches!` stays so `occupants.rs` can pin its derived answer against a
-/// rule written out longhand rather than against a copy of itself.
+/// `compute_wilderness` asks [`occupants::is_strong_nature`](crate::occupants::is_strong_nature)
+/// instead, which sums over the tile's occupants and resolves a structure
+/// through its development. This `matches!` stays so `occupants.rs` can pin its
+/// answer against a rule written out longhand rather than against a copy of
+/// itself.
 #[cfg(test)]
 #[inline]
-pub(crate) fn is_strong_nature(kind: TileKind) -> bool {
+pub(crate) fn strong_nature_kind(kind: TileKind) -> bool {
     matches!(kind, TileKind::Tree | TileKind::Park | TileKind::ParkLarge)
 }
 
@@ -259,13 +259,20 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
     let h = state.height as usize;
     let n = w * h;
 
+    // `Occupant::Structure` is one flat tag, so which structure stands on a
+    // tile — and therefore whether it is a park worth +4.0 or a coal plant
+    // worth −8.0 — lives on the `BuildingInstance` it points at. Index them
+    // once, in O(buildings): asking `state.buildings.iter().find(…)` per tile
+    // would make both O(N) passes O(N × B).
+    let lookup = StructureLookup::new(state);
+
     // Pass 1: label contiguous strong-nature clusters (4-connectivity) and
     // record each cluster's size. cluster_of[i] = usize::MAX for non-nature.
     let mut cluster_of = vec![usize::MAX; n];
     let mut cluster_sizes: Vec<u32> = Vec::new();
     let mut stack: Vec<usize> = Vec::new();
     for start in 0..n {
-        if cluster_of[start] != usize::MAX || !state.tiles[start].is_strong_nature() {
+        if cluster_of[start] != usize::MAX || !is_strong_nature(&state.tiles[start], &lookup) {
             continue;
         }
         let cluster_id = cluster_sizes.len();
@@ -277,7 +284,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
             let x = i % w;
             let y = i / w;
             let mut visit = |j: usize| {
-                if cluster_of[j] == usize::MAX && state.tiles[j].is_strong_nature() {
+                if cluster_of[j] == usize::MAX && is_strong_nature(&state.tiles[j], &lookup) {
                     cluster_of[j] = cluster_id;
                     stack.push(j);
                 }
@@ -322,14 +329,14 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
         if let Some(category) = tile.terrain_category() {
             breakdown.add(category, eco);
         }
-        for o in iter_set(tile.occupants()) {
+        for o in iter_set(tile.occupants) {
             // A `None` pair means the occupant tag cannot answer for itself —
             // today only `Structure`, whose eco *and* line both come from the
             // structure's kind (a park is +4.0 on `parks`, a coal plant −8.0
             // on `power`).
             let (value, category) = match (occupant_eco(o, t), occupant_category(o)) {
                 (Some(value), Some(category)) => (value, category),
-                _ => match tile.structure_kind() {
+                _ => match lookup.structure_kind(tile) {
                     Some(kind) => (structure_eco(kind, t), structure_category(kind)),
                     None => (0.0, EcoCategory::Neutral),
                 },
@@ -339,11 +346,11 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
         }
         debug_assert_eq!(
             eco,
-            tile.tile_eco(t),
+            tile_eco(tile, &lookup, t),
             "the scoring loop must sum to Tile::tile_eco"
         );
 
-        if tile.is_strong_nature() {
+        if is_strong_nature(tile, &lookup) {
             let x = i % w;
             let y = i / w;
 
@@ -377,7 +384,7 @@ pub fn compute_wilderness(state: &GameState, t: &WildernessTunables) -> Wilderne
                         && (nx as usize) < w
                         && ny >= 0
                         && (ny as usize) < h
-                        && state.tiles[ny as usize * w + nx as usize].is_strong_nature()
+                        && is_strong_nature(&state.tiles[ny as usize * w + nx as usize], &lookup)
                     {
                         nature_neighbours += 1;
                     }
@@ -470,15 +477,30 @@ pub fn apply_happiness_drift(state: &mut GameState, score: f32, t: &WildernessTu
 mod tests {
     use super::*;
     use crate::commands::apply_tool;
-    use crate::state::{FLAG_POWER_OVERLAY, FLAG_ROAD_UNDERLAY};
+    use crate::migrate::set_v4_kind;
+    use crate::occupants::Occupant;
     use city_sim_protocol::commands::Tool;
 
     fn grid(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
     }
 
+    /// Paint a tile by its old v4 `kind`, giving structure kinds the
+    /// development they need to be scored — `Occupant::Structure` is a flat
+    /// tag, so a park with no `BuildingInstance` behind it is bare ground.
     fn set(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
-        state.tile_at_mut(x, y).unwrap().kind = kind;
+        if crate::occupants::is_structure_kind(kind) {
+            let id = state.next_building_id;
+            state.next_building_id += 1;
+            state
+                .buildings
+                .push(crate::buildings::BuildingInstance::new(id, kind, (x, y)));
+            let tile = state.tile_at_mut(x, y).unwrap();
+            tile.set_occupant(Occupant::Structure, true);
+            tile.building_id = Some(id as u16);
+        } else {
+            set_v4_kind(state.tile_at_mut(x, y).unwrap(), kind);
+        }
     }
 
     fn score(state: &GameState) -> f32 {
@@ -946,8 +968,12 @@ mod tests {
         let mut s = grid(8, 8);
         build_row(&mut s, &[Tool::Residential, Tool::PowerLine], 4, 1);
         let tile = s.tile_at(0, 4).unwrap();
-        assert_eq!(tile.kind, TileKind::Residential, "the zone survives");
-        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0, "…carrying the line");
+        assert_eq!(
+            tile.zone_occupant(),
+            Some(Occupant::ZoneResidential),
+            "the zone survives"
+        );
+        assert!(tile.has_occupant(Occupant::PowerLine), "…carrying the line");
 
         // Before the fix: −1.0, all of it on `zones`.
         assert_eq!(eco_at(&s, 0, 4), -2.0);
@@ -965,8 +991,8 @@ mod tests {
         let mut s = grid(8, 8);
         build_row(&mut s, &[Tool::PowerLine, Tool::TerraformRaise], 4, 1);
         let tile = s.tile_at(0, 4).unwrap();
-        assert_eq!(tile.kind, TileKind::Land);
-        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0);
+        assert_eq!(tile.occupants_in(crate::occupants::Stratum::Surface), 0);
+        assert!(tile.has_occupant(Occupant::PowerLine));
 
         // Before the fix: +1.0, filed on `open_land`.
         assert_eq!(eco_at(&s, 0, 4), -1.0);
@@ -987,8 +1013,8 @@ mod tests {
         let mut over_line = grid(8, 8);
         build_row(&mut over_line, &[Tool::PowerLine, Tool::Tree], 4, 1);
         let tile = over_line.tile_at(0, 4).unwrap();
-        assert_eq!(tile.kind, TileKind::Tree);
-        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0);
+        assert!(tile.has_occupant(Occupant::Trees));
+        assert!(tile.has_occupant(Occupant::PowerLine));
 
         // Same neighbourhood adjustments (lone tree, no water, fragmented) on
         // both grids, so the whole difference is the line's −1.0.
@@ -1010,8 +1036,8 @@ mod tests {
         let mut s = grid(8, 8);
         build_row(&mut s, &[Tool::Industrial, Tool::PowerLine], 4, 1);
         let tile = s.tile_at(0, 4).unwrap();
-        assert_eq!(tile.kind, TileKind::Industrial);
-        assert_ne!(tile.flags & FLAG_POWER_OVERLAY, 0);
+        assert_eq!(tile.zone_occupant(), Some(Occupant::ZoneIndustrial));
+        assert!(tile.has_occupant(Occupant::PowerLine));
 
         let base = WildernessTunables::default();
         let green = base.effective(&WildernessPolicy {
@@ -1032,7 +1058,7 @@ mod tests {
         let mut s = grid(8, 8);
         build_row(&mut s, &[Tool::Road, Tool::Rail, Tool::PowerLine], 4, 1);
         let tile = s.tile_at(0, 4).unwrap();
-        assert_ne!(tile.flags & FLAG_ROAD_UNDERLAY, 0);
+        assert!(tile.has_occupant(Occupant::Road));
 
         // Before the fix: −1.0 or −2.0 depending on which occupant owned `kind`.
         assert_eq!(eco_at(&s, 0, 4), -5.0);

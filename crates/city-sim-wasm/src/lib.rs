@@ -5,8 +5,10 @@
 
 use city_sim_core::{
     commands::apply_tool,
+    display::{wire_kind_and_flags, wire_underground},
     history::{History, HistoryConfig},
     import::{from_tile_buffer, ImportStats},
+    occupants::StructureLookup,
     sim::Simulation,
     snapshot,
 };
@@ -402,10 +404,17 @@ impl SimHost {
         let tiles = &self.sim.state.tiles;
         let n = tiles.len();
         let o = TileBufferOffsets::for_size(n);
+        // The kind byte for a structure tile is the structure's own kind, which
+        // since #177 step 3 lives on the `BuildingInstance` rather than on the
+        // tile. Index the building list once per buffer, not once per tile.
+        let lookup = StructureLookup::new(&self.sim.state);
         let mut buf = vec![0u8; n * BYTES_PER_TILE];
         for (i, tile) in tiles.iter().enumerate() {
-            buf[o.kind + i] = tile.kind as u8;
-            buf[o.flags + i] = tile.flags;
+            // Derived, never stored — `display` is the single definition of the
+            // wire spelling and the only thing that may produce these bytes.
+            let (kind, flags) = wire_kind_and_flags(tile, &lookup);
+            buf[o.kind + i] = kind as u8;
+            buf[o.flags + i] = flags;
             buf[o.happiness + i] = encode_happiness(tile.happiness);
             buf[o.elevation + i] = tile.elevation;
             let bid = tile.building_id.unwrap_or(0);
@@ -413,7 +422,7 @@ impl SimHost {
             buf[base] = (bid & 0xFF) as u8;
             buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
             // 0xFF = no underground (0 = TileKind::Land, not a valid sentinel).
-            buf[o.underground_kind + i] = tile.underground.map_or(0xFF, |k| k as u8);
+            buf[o.underground_kind + i] = wire_underground(tile);
             // 128 = neutral until the first wilderness recompute fills the field.
             buf[o.wilderness + i] = self
                 .sim

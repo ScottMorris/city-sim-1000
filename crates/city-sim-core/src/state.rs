@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::BuildingInstance;
+use crate::occupants::{
+    occupant_bit, stratum_mask, Occupant, OccupantSet, Stratum, Terrain, VISIBLE_MASK, ZONE_MASK,
+};
 use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
 use city_sim_protocol::commands::Policies;
@@ -13,20 +16,27 @@ use std::collections::VecDeque;
 // ---------------------------------------------------------------------------
 // Tile flags
 // ---------------------------------------------------------------------------
+//
+// Three bits, and only three. `FLAG_ROAD_UNDERLAY`, `FLAG_RAIL_UNDERLAY` and
+// `FLAG_POWER_OVERLAY` are gone: they were the overflow of the single-valued
+// `kind` slot, and the strata are the slot now. Deleting them is what makes
+// every stale structural-flag read fail to compile (step 3 of #177).
+//
+// The *wire* still carries all six bits — `city_sim_protocol::tile_buffer::flags`
+// is untouched, and `display::wire_flags` re-derives the three structural ones
+// from the occupant set on the way out.
 
 pub const FLAG_POWERED: u8 = 0b0000_0001;
 pub const FLAG_WATERED: u8 = 0b0000_0010;
 pub const FLAG_ABANDONED: u8 = 0b0000_0100;
-pub const FLAG_ROAD_UNDERLAY: u8 = 0b0000_1000;
-pub const FLAG_RAIL_UNDERLAY: u8 = 0b0001_0000;
-pub const FLAG_POWER_OVERLAY: u8 = 0b0010_0000;
-/// Zone density packed into bits 6–7: 00=Low, 01=Medium, 10=High.
-pub const FLAG_ZONE_DENSITY_MASK: u8 = 0b1100_0000;
-pub const FLAG_ZONE_DENSITY_SHIFT: u8 = 6;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// Every bit a `Tile::flags` byte may hold. Everything else is derived.
+pub const DERIVED_FLAG_MASK: u8 = FLAG_POWERED | FLAG_WATERED | FLAG_ABANDONED;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum ZoneDensity {
+    #[default]
     Low = 0,
     Medium = 1,
     High = 2,
@@ -50,25 +60,56 @@ pub enum ServiceKind {
 // Tile
 // ---------------------------------------------------------------------------
 
-/// One grid cell. Mirrors the TS `Tile` interface in `gameState.ts`.
-///
-/// `happiness` is stored as 0–100 (u8) to match the SoA tile buffer field.
-/// `building_id` is `None` for unbuildable/empty tiles; `Some(id)` otherwise.
-/// `underground` holds a buried `TileKind` (e.g. `WaterPipe`) if present.
-/// `power_plant_mw` is > 0 for power plant tiles; used as both source flag and
-///   output tracker in the power BFS (in MW, deduped by building_id at roll-up).
-/// `water_output` is > 0 for active water source tiles (pumps/towers) in the same fashion.
+/// One grid cell. Storage is stratified: the ground itself is `terrain`, and
+/// everything standing on, over or under it is a bit in `occupants`. Nothing
+/// competes for a slot any more, so no consumer has to check two places — the
+/// bug class catalogued in `docs/tile-model.md`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
-    pub kind: TileKind,
+    // ---- AUTHORED — what the player built. This is what the snapshot persists.
+    /// What the ground is, `Land` | `Water`. Its own field, so it is no longer
+    /// destroyed by whatever is built on top.
+    ///
+    /// **Durable in storage, not yet in behaviour.** Every tool that overwrote
+    /// `kind` today still writes `Terrain::Land` here (see `regrade` in
+    /// `commands.rs`), and `bulldoze` still writes `Land` rather than restoring
+    /// water. Making terrain survive construction changes the wilderness
+    /// `buildable` count and therefore the score, so it is a gameplay change
+    /// (#177 step 4), not part of the flip.
+    pub terrain: Terrain,
+    /// Everything physically present, all three strata in one bitset.
+    ///
+    /// One field, not three. [`Occupant`]'s discriminants are already absolute
+    /// bit positions grouped by stratum, so three sibling fields would be three
+    /// legal spellings of the same bit. With one field `UNDERGROUND_MASK` /
+    /// `SURFACE_MASK` / `OVERHEAD_MASK` are the single definition of "which
+    /// stratum" and [`Tile::occupants_in`] stays one AND. Stratum-scoped writes
+    /// go through [`Tile::clear_stratum`] / [`Tile::set_occupant`].
+    pub occupants: OccupantSet,
+    /// The design note's `development`: the `BuildingInstance` this tile
+    /// belongs to, and — with [`Occupant::Structure`] being one flat tag — the
+    /// only thing that knows *which* structure stands here. Resolve it through
+    /// `occupants::StructureLookup`.
+    pub building_id: Option<u16>,
+    /// Ground height. Beside `terrain` because it describes the ground.
+    /// Authored by nothing today (import-only); no tool writes it.
+    pub elevation: u8,
+    /// Zone density. Was flags bits 6–7, promoted to a field because the flags
+    /// byte no longer has room to hide it. Still read by no system.
+    pub density: ZoneDensity,
+
+    // ---- DERIVED — recomputed by the sim each tick. Not player-editable.
+    /// `FLAG_POWERED | FLAG_WATERED | FLAG_ABANDONED` and nothing else; see
+    /// [`DERIVED_FLAG_MASK`].
     pub flags: u8,
     /// Happiness in [0.0, 1.5] matching the TS float range (createInitialState
     /// sets 1.0; the SoA wire buffer quantises this to u8 on output).
     pub happiness: f32,
-    pub elevation: u8,
-    pub building_id: Option<u16>,
-    pub underground: Option<TileKind>,
+    /// MW this tile contributes as a power source. A cached copy of the
+    /// building's template, keyed by `building_id`; kept as-is so the power BFS
+    /// is untouched.
     pub power_plant_mw: i32,
+    /// kL/day this tile contributes as a water source. Same story.
     pub water_output: i32,
     /// True when an active elementary school covers this tile.
     pub elementary_served: bool,
@@ -83,12 +124,13 @@ pub struct Tile {
 impl Tile {
     pub fn land() -> Self {
         Self {
-            kind: TileKind::Land,
+            terrain: Terrain::Land,
+            occupants: 0,
+            building_id: None,
+            elevation: 0,
+            density: ZoneDensity::Low,
             flags: 0,
             happiness: 1.0,
-            elevation: 0,
-            building_id: None,
-            underground: None,
             power_plant_mw: 0,
             water_output: 0,
             elementary_served: false,
@@ -100,9 +142,68 @@ impl Tile {
 
     pub fn water() -> Self {
         Self {
-            kind: TileKind::Water,
+            terrain: Terrain::Water,
             ..Self::land()
         }
+    }
+
+    // --- occupant accessors ---
+
+    /// The occupants of one stratum.
+    #[inline]
+    pub fn occupants_in(&self, stratum: Stratum) -> OccupantSet {
+        self.occupants & stratum_mask(stratum)
+    }
+
+    /// Whether one specific occupant is present.
+    #[inline]
+    pub fn has_occupant(&self, occupant: Occupant) -> bool {
+        self.occupants & occupant_bit(occupant) != 0
+    }
+
+    /// Surface + overhead: what the player sees and what the bulldozer clears.
+    /// Underground occupants are excluded — they are only reachable from the
+    /// underground view.
+    #[inline]
+    pub fn visible_occupants(&self) -> OccupantSet {
+        self.occupants & VISIBLE_MASK
+    }
+
+    /// What the ground is. `Terrain::Land` is exactly the old
+    /// `wilderness::is_buildable` (which was `kind != Water`).
+    ///
+    /// Kept as a method as well as a field so the step-2 call sites read
+    /// unchanged.
+    #[inline]
+    pub fn terrain(&self) -> Terrain {
+        self.terrain
+    }
+
+    /// The tile's land use, if it is zoned. Zones are mutually exclusive.
+    #[inline]
+    pub fn zone_occupant(&self) -> Option<Occupant> {
+        match self.occupants & ZONE_MASK {
+            x if x == occupant_bit(Occupant::ZoneResidential) => Some(Occupant::ZoneResidential),
+            x if x == occupant_bit(Occupant::ZoneCommercial) => Some(Occupant::ZoneCommercial),
+            x if x == occupant_bit(Occupant::ZoneIndustrial) => Some(Occupant::ZoneIndustrial),
+            _ => None,
+        }
+    }
+
+    /// Set or clear one occupant. The only write path into the bitset.
+    #[inline]
+    pub fn set_occupant(&mut self, occupant: Occupant, on: bool) {
+        if on {
+            self.occupants |= occupant_bit(occupant);
+        } else {
+            self.occupants &= !occupant_bit(occupant);
+        }
+    }
+
+    /// Clear a whole stratum — a regrade wants exactly `Stratum::Surface`.
+    #[inline]
+    pub fn clear_stratum(&mut self, stratum: Stratum) {
+        self.occupants &= !stratum_mask(stratum);
     }
 
     // --- flag accessors ---
@@ -116,35 +217,18 @@ impl Tile {
     pub fn is_abandoned(&self) -> bool {
         self.flags & FLAG_ABANDONED != 0
     }
-    pub fn has_road_underlay(&self) -> bool {
-        self.flags & FLAG_ROAD_UNDERLAY != 0
-    }
-    pub fn has_rail_underlay(&self) -> bool {
-        self.flags & FLAG_RAIL_UNDERLAY != 0
-    }
-    pub fn has_power_overlay(&self) -> bool {
-        self.flags & FLAG_POWER_OVERLAY != 0
-    }
-
-    pub fn zone_density(&self) -> ZoneDensity {
-        match (self.flags & FLAG_ZONE_DENSITY_MASK) >> FLAG_ZONE_DENSITY_SHIFT {
-            1 => ZoneDensity::Medium,
-            2 => ZoneDensity::High,
-            _ => ZoneDensity::Low,
-        }
-    }
 
     pub fn set_flag(&mut self, mask: u8, on: bool) {
+        debug_assert_eq!(
+            mask & !DERIVED_FLAG_MASK,
+            0,
+            "structural flags are derived from the occupant set, not stored"
+        );
         if on {
             self.flags |= mask;
         } else {
             self.flags &= !mask;
         }
-    }
-
-    pub fn set_zone_density(&mut self, density: ZoneDensity) {
-        self.flags =
-            (self.flags & !FLAG_ZONE_DENSITY_MASK) | ((density as u8) << FLAG_ZONE_DENSITY_SHIFT);
     }
 }
 
@@ -432,10 +516,7 @@ impl GameState {
         self.buildings
             .iter()
             .any(|b| matches!(b.kind, TileKind::WaterPump | TileKind::WaterTower))
-            || self
-                .tiles
-                .iter()
-                .any(|t| t.underground == Some(TileKind::WaterPipe))
+            || self.tiles.iter().any(|t| t.has_occupant(Occupant::Pipe))
     }
 
     pub fn tile_at_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
@@ -449,14 +530,26 @@ impl GameState {
     /// ignored so player-built kinds present in a display snapshot can never
     /// leak into the engine as free construction. Tiles that are no longer
     /// `Land` (already built on) are left alone.
+    ///
+    /// "No longer `Land`" was `kind != TileKind::Land`, and the question it was
+    /// asking is *has anything happened to this cell yet?* — which the strata
+    /// answer as bare land carrying nothing you can see. A hydro line is not a
+    /// disqualifier: it lived in `FLAG_POWER_OVERLAY` on a `kind = Land` tile,
+    /// so a terraformed line has always been seeded straight over. A buried
+    /// pipe is not one either, for the same reason.
     pub fn seed_natural_terrain(&mut self, kinds: &[u8]) {
         let n = self.tiles.len().min(kinds.len());
         for (tile, &kind_byte) in self.tiles.iter_mut().zip(kinds.iter()).take(n) {
-            if tile.kind != TileKind::Land {
+            let untouched = tile.terrain == Terrain::Land
+                && tile.occupants_in(Stratum::Surface) == 0
+                && !tile.has_occupant(Occupant::Trees);
+            if !untouched {
                 continue;
             }
-            if let Some(k @ (TileKind::Water | TileKind::Tree)) = TileKind::from_u8(kind_byte) {
-                tile.kind = k;
+            match TileKind::from_u8(kind_byte) {
+                Some(TileKind::Water) => tile.terrain = Terrain::Water,
+                Some(TileKind::Tree) => tile.set_occupant(Occupant::Trees, true),
+                _ => {}
             }
         }
         self.tile_revision += 1;
@@ -470,15 +563,17 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::display::wire_kind_at;
+    use crate::migrate::set_v4_kind;
 
     #[test]
     fn has_water_system_detects_pumps_towers_and_pipes() {
         let mut s = GameState::new(4, 4, 0);
         assert!(!s.has_water_system(), "fresh city has no water system");
 
-        s.tiles[0].underground = Some(TileKind::WaterPipe);
+        s.tiles[0].set_occupant(Occupant::Pipe, true);
         assert!(s.has_water_system(), "a single pipe opts in");
-        s.tiles[0].underground = None;
+        s.tiles[0].set_occupant(Occupant::Pipe, false);
 
         s.buildings.push(crate::buildings::BuildingInstance::new(
             1,
@@ -517,7 +612,10 @@ mod tests {
     #[test]
     fn all_tiles_start_as_land() {
         let g = gs();
-        assert!(g.tiles.iter().all(|t| t.kind == TileKind::Land));
+        assert!(g
+            .tiles
+            .iter()
+            .all(|t| t.terrain == Terrain::Land && t.occupants == 0));
     }
 
     #[test]
@@ -548,8 +646,8 @@ mod tests {
     #[test]
     fn tile_at_returns_correct_tile() {
         let mut g = gs();
-        g.tiles[35].kind = TileKind::Road;
-        assert_eq!(g.tile_at(5, 3).unwrap().kind, TileKind::Road);
+        set_v4_kind(&mut g.tiles[35], TileKind::Road);
+        assert_eq!(wire_kind_at(&g, 5, 3), TileKind::Road);
     }
 
     #[test]
@@ -562,8 +660,8 @@ mod tests {
     #[test]
     fn tile_at_mut_mutates() {
         let mut g = gs();
-        g.tile_at_mut(2, 3).unwrap().kind = TileKind::Residential;
-        assert_eq!(g.tile_at(2, 3).unwrap().kind, TileKind::Residential);
+        set_v4_kind(g.tile_at_mut(2, 3).unwrap(), TileKind::Residential);
+        assert_eq!(wire_kind_at(&g, 2, 3), TileKind::Residential);
     }
 
     #[test]
@@ -579,27 +677,30 @@ mod tests {
     #[test]
     fn zone_density_default_is_low() {
         let t = Tile::land();
-        assert_eq!(t.zone_density(), ZoneDensity::Low);
+        assert_eq!(t.density, ZoneDensity::Low);
     }
 
     #[test]
     fn zone_density_round_trips() {
         let mut t = Tile::land();
         for &d in &[ZoneDensity::Low, ZoneDensity::Medium, ZoneDensity::High] {
-            t.set_zone_density(d);
-            assert_eq!(t.zone_density(), d);
+            t.density = d;
+            assert_eq!(t.density, d);
         }
     }
 
+    /// Density is a field of its own now rather than flags bits 6–7, so it
+    /// cannot collide with the derived flags by construction. Kept as the
+    /// regression pin for the old packed representation.
     #[test]
     fn zone_density_does_not_clobber_other_flags() {
         let mut t = Tile::land();
         t.set_flag(FLAG_POWERED, true);
         t.set_flag(FLAG_WATERED, true);
-        t.set_zone_density(ZoneDensity::High);
+        t.density = ZoneDensity::High;
         assert!(t.is_powered());
         assert!(t.is_watered());
-        assert_eq!(t.zone_density(), ZoneDensity::High);
+        assert_eq!(t.density, ZoneDensity::High);
     }
 
     #[test]

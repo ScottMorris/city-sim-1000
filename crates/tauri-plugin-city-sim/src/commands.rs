@@ -8,8 +8,10 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use city_sim_core::commands::apply_tool as sim_apply_tool;
+use city_sim_core::display::wire_kind;
 use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::import::{from_tile_buffer, ImportStats};
+use city_sim_core::occupants::StructureLookup;
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
@@ -111,7 +113,14 @@ impl SimState {
 
 fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
     let s = &sim.state;
-    let tiles: Vec<u8> = s.tiles.iter().map(|t| t.kind as u8).collect();
+    // Derived from the strata, never stored — `display::wire_kind` is the one
+    // definition of the wire spelling, shared with the WASM tile buffer.
+    let lookup = StructureLookup::new(s);
+    let tiles: Vec<u8> = s
+        .tiles
+        .iter()
+        .map(|t| wire_kind(t, &lookup) as u8)
+        .collect();
     TickEvent {
         tick: s.tick,
         day: s.day,
