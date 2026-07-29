@@ -105,6 +105,19 @@ Use `gh pr edit <number> --add-label "<label>"` immediately after `gh pr create`
 - Do not push or force-push unless explicitly requested by the user.
 - Do not commit local planning or scratch files unless the user explicitly asks for them to become part of the repository.
 
+### Never destroy the undo path
+
+**Do not run `git reflog expire`, `git gc --prune`, or `git prune`.** Not as cleanup, not to tidy up after a rewrite, not for any reason. These are repo-wide and irreversible: they destroy the undo path for *every* branch, not just the one being worked on, and they can orphan a stash — `git stash list` reads a reflog, so expiring it makes stashes vanish even though `refs/stash` still points at live objects.
+
+This has already cost this repository its reflog once, during a `filter-branch` that did not need either command.
+
+When rewriting history (which requires the branch to be unpushed, and should be verified as such first):
+
+- Cut a backup branch before starting, and leave it until the user says otherwise.
+- Leave `refs/original/` in place after `filter-branch`. It is the recovery path; deleting it is the user's call, not the agent's.
+- Verify and report: same commit count, same subjects in the same order, same authors and both dates, and `git diff <old-head> HEAD` empty.
+- Never let a history rewrite delete or repack objects as a side effect.
+
 ## Markdown Formatting
 
 - Do not manually hard-wrap prose in markdown files (no inserting line breaks mid-paragraph to keep lines under some width). Let paragraphs run as single long lines and rely on the renderer/editor to soft-wrap.

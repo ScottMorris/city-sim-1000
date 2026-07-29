@@ -25,3 +25,17 @@ app/src/wasm/
 app/test-results/
 app/playwright-report/
 app/blob-report/
+
+# Local agent config — machine-specific, never shared. `.claude/mcp.json` hard-codes
+# an absolute `cwd`, so committing it breaks every other clone and every worktree.
+.claude/mcp.json
+.claude/settings.local.json
+
+# Ad-hoc screenshots taken while working (hud-*.png, ribbon*.png, city-sim-*.png, …).
+# Committed game art lives under app/public/assets/ and studio/, never at the root.
+/*.png
+
+# Scratch output and prototypes from the house/asset studio experiments.
+# The maintained pipeline is tools/house-studio/, not these.
+/house-studio-out/
+/app/scripts/house-studio/

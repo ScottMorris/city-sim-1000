@@ -132,7 +132,7 @@ Tiles include:
 
 * Tiles carry a `powered` flag.
 * Power sources: any building/tile with `powerPlantType` set (Hydro, Coal, Wind, Solar).
-* Network edges: `TileKind.PowerLine` tiles, Road, and Rail.
+* Network edges: any tile carrying a hydro line — whether the line owns the tile or rides it as an overlay (over a road or rail, or beneath trees or water painted on afterwards) — plus Road and Rail. If the wires are drawn, the tile conducts.
 * Connectivity: 4-directional BFS flood-fill from sources through power lines/roads/rail; reachable lines/plants are marked `powered: true`.
 * Production: `powerProduced` sums plant outputs from `BUILDING_TEMPLATES`.
 * Maintenance: per-tile upkeep plus per-plant maintenance from configs.
@@ -285,10 +285,15 @@ Bulldoze
 * Raise = height++
 * Lower = height-- (min 0)
 * Water = convert to water tile only
+* Regrading wipes the ground: a road, a rail or a zone tag on the tile is cleared by the brush, and it is cleared the same whether the road owns the tile or rides under a hydro line as an underlay.
+* Refused on a tile carrying a building — bulldoze first — because a regrade cannot remove the building behind it and would otherwise leave it running on ground that no longer holds it.
+* A hydro line overhead and a pipe below are untouched by a regrade and do not block one.
 
 #### Bulldoze
 
-* Removes everything **except** base land/water
+* Clears what stands on the tile and leaves the terrain as the land or water it was. Bulldozing a lake does not fill it in.
+* One click removes one layer, in this order: a building if there is one; otherwise anything buried (pipes); otherwise everything at and above ground level — roads, rail, zone tags, power lines and trees together. So razing a developed lot leaves the zoning behind for it to regrow on, and a hydro line over that lot survives the same click; a second click clears them.
+* The terrain brushes — Raise, Lower and Water paint — are the tools *for* changing what the ground is, priced at 10, 10 and 12 against Bulldoze's 1. They are not the only way to change it: every building tool fills water in as it builds over the tile, so Road (5) then Bulldoze (1) drains a water tile for 6.
 * Does not modify height
 
 #### Zoning

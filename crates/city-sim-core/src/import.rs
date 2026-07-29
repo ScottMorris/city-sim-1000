@@ -99,6 +99,16 @@ pub fn from_tile_buffer(
     state.policies = stats.policies.clamped();
     state.rng = SeededRng::from_state(rng_state);
 
+    // The decoded kind byte per tile, kept for the building-rebuild pass below.
+    //
+    // It has to be kept rather than re-read off the tile, because the tile no
+    // longer stores a kind — but this is not a structure-identity problem. The
+    // *input* here is a v4-shaped wire buffer, where the kind byte is
+    // legitimately canonical; it is the buffer that knows a footprint holds
+    // a coal plant, and the `BuildingInstance` this loop is about to build is
+    // what will know it afterwards.
+    let mut kinds: Vec<TileKind> = Vec::with_capacity(n);
+
     let mut max_building_id: u32 = 0;
     for i in 0..n {
         let kind_byte = buffer[o.kind + i];
@@ -106,26 +116,28 @@ pub fn from_tile_buffer(
             index: i,
             value: kind_byte,
         })?;
+        kinds.push(kind);
         let underground_byte = buffer[o.underground_kind + i];
-        let building_id = u16::from_le_bytes([
-            buffer[o.building_id + i * 2],
-            buffer[o.building_id + i * 2 + 1],
-        ]);
-
-        let tile = &mut state.tiles[i];
-        tile.kind = kind;
-        tile.flags = buffer[o.flags + i];
-        tile.happiness = decode_happiness(buffer[o.happiness + i]);
-        tile.elevation = buffer[o.elevation + i];
-        tile.building_id = (building_id != 0).then_some(building_id);
-        tile.underground = if underground_byte == 0xFF {
+        let underground = if underground_byte == 0xFF {
             None
         } else {
             TileKind::from_u8(underground_byte)
         };
+        let building_id = u16::from_le_bytes([
+            buffer[o.building_id + i * 2],
+            buffer[o.building_id + i * 2 + 1],
+        ]);
+        let building_id = (building_id != 0).then_some(building_id);
 
-        if building_id != 0 {
-            max_building_id = max_building_id.max(building_id as u32);
+        // The same v4 → strata conversion the snapshot migration uses, so the
+        // legacy importer and the save migration are one code path.
+        let tile = &mut state.tiles[i];
+        *tile = crate::migrate::tile_from_v4(kind, buffer[o.flags + i], underground, building_id);
+        tile.happiness = decode_happiness(buffer[o.happiness + i]);
+        tile.elevation = buffer[o.elevation + i];
+
+        if let Some(id) = building_id {
+            max_building_id = max_building_id.max(id as u32);
             if let Some((mw, _)) = plant_stats(kind) {
                 tile.power_plant_mw = mw as i32;
             }
@@ -140,7 +152,7 @@ pub fn from_tile_buffer(
     // Rebuild the building list from first-occurrence origins per id. Tiles
     // are scanned row-major, so the first tile seen for an id is its top-left
     // footprint corner — the same convention `place_footprint_building` stamps.
-    for i in 0..n {
+    for (i, &kind) in kinds.iter().enumerate() {
         let Some(id) = state.tiles[i].building_id else {
             continue;
         };
@@ -148,7 +160,6 @@ pub fn from_tile_buffer(
         if state.buildings.iter().any(|b| b.id == id) {
             continue;
         }
-        let kind = state.tiles[i].kind;
         let x = (i as u32) % width;
         let y = (i as u32) / width;
         let mut instance = BuildingInstance::new(id, kind, (x, y));
@@ -167,25 +178,33 @@ pub fn from_tile_buffer(
 mod tests {
     use super::*;
     use crate::commands::apply_tool;
+    use crate::display::{wire_flags, wire_kind, wire_underground};
+    use crate::occupants::StructureLookup;
     use crate::sim::Simulation;
     use city_sim_protocol::commands::Tool;
     use city_sim_protocol::tile_buffer::encode_happiness;
 
     /// Encode a state's tiles the way the TS legacy exporter does — the exact
     /// inverse of `from_tile_buffer` (wilderness byte left neutral).
+    ///
+    /// It goes through `display::wire_*`, which is the same derivation the WASM
+    /// tile buffer uses, so every round trip below is simultaneously a test
+    /// that the wire derivation and the v4 decode are inverses.
     fn encode_tiles(state: &GameState) -> Vec<u8> {
         let n = state.tiles.len();
         let o = TileBufferOffsets::for_size(n);
+        let lookup = StructureLookup::new(state);
         let mut buf = vec![0u8; n * BYTES_PER_TILE];
         for (i, tile) in state.tiles.iter().enumerate() {
-            buf[o.kind + i] = tile.kind as u8;
-            buf[o.flags + i] = tile.flags;
+            let kind = wire_kind(tile, &lookup);
+            buf[o.kind + i] = kind as u8;
+            buf[o.flags + i] = wire_flags(tile, kind);
             buf[o.happiness + i] = encode_happiness(tile.happiness);
             buf[o.elevation + i] = tile.elevation;
             let bid = tile.building_id.unwrap_or(0);
             buf[o.building_id + i * 2] = (bid & 0xFF) as u8;
             buf[o.building_id + i * 2 + 1] = ((bid >> 8) & 0xFF) as u8;
-            buf[o.underground_kind + i] = tile.underground.map_or(0xFF, |k| k as u8);
+            buf[o.underground_kind + i] = wire_underground(tile);
             buf[o.wilderness + i] = 128;
         }
         buf
@@ -237,10 +256,10 @@ mod tests {
             .zip(imported.tiles.iter())
             .enumerate()
         {
-            assert_eq!(a.kind, b.kind, "tile {i} kind");
+            assert_eq!(a.terrain, b.terrain, "tile {i} terrain");
+            assert_eq!(a.occupants(), b.occupants(), "tile {i} occupants");
             assert_eq!(a.flags, b.flags, "tile {i} flags");
             assert_eq!(a.building_id, b.building_id, "tile {i} building id");
-            assert_eq!(a.underground, b.underground, "tile {i} underground");
             assert_eq!(a.power_plant_mw, b.power_plant_mw, "tile {i} plant MW");
             assert_eq!(a.water_output, b.water_output, "tile {i} water output");
         }

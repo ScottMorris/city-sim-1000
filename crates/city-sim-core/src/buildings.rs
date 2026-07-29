@@ -414,6 +414,7 @@ fn abandon_zone_building(state: &mut GameState, building_id: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::occupants::Occupant;
     use crate::state::FLAG_POWERED;
 
     fn gs(w: u32, h: u32) -> GameState {
@@ -424,7 +425,7 @@ mod tests {
         let id = s.next_building_id;
         s.next_building_id += 1;
         let tile = s.tile_at_mut(x, y).unwrap();
-        tile.kind = kind;
+        tile.set_occupant(Occupant::Structure, true);
         tile.building_id = Some(id as u16);
         s.buildings.push(BuildingInstance::new(id, kind, (x, y)));
         s.tile_revision += 1;
@@ -478,7 +479,7 @@ mod tests {
         for dy in 0..2 {
             for dx in 0..2 {
                 let tile = s.tile_at_mut(dx, dy).unwrap();
-                tile.kind = TileKind::HydroPlant;
+                tile.set_occupant(Occupant::Structure, true);
                 tile.building_id = Some(id as u16);
             }
         }

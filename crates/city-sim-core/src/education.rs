@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::{get_building_template, BuildingStatus};
+use crate::occupants::Occupant;
 use crate::state::{EducationStats, GameState, ServiceKind};
 use city_sim_protocol::tile_kind::TileKind;
 use std::cmp::Reverse;
@@ -145,11 +146,13 @@ fn reachable_zone_candidates(
         let y = (idx as u32) / state.width;
         let tile = &state.tiles[idx];
 
-        let is_road = tile.kind == TileKind::Road || tile.has_road_underlay();
-        let is_zone = matches!(
-            tile.kind,
-            TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-        );
+        // "Is there a road here?" is a multi-valued question — a level
+        // crossing and a road under a hydro line both carry one without owning
+        // `kind` — so it goes through the occupant set. The BFS already asked
+        // it correctly by hand; the accessor is what keeps it correct once
+        // step 3 of #177 narrows `kind` to terrain.
+        let is_road = tile.has_occupant(Occupant::Road);
+        let is_zone = tile.zone_occupant().is_some();
 
         if is_zone {
             reachable
@@ -174,11 +177,8 @@ fn reachable_zone_candidates(
                 continue;
             }
             let ntile = &state.tiles[nidx];
-            let n_road = ntile.kind == TileKind::Road || ntile.has_road_underlay();
-            let n_zone = matches!(
-                ntile.kind,
-                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-            );
+            let n_road = ntile.has_occupant(Occupant::Road);
+            let n_zone = ntile.zone_occupant().is_some();
             if n_road || n_zone {
                 heap.push(Reverse((nd, nidx)));
             }
@@ -230,10 +230,7 @@ pub fn recompute_education(state: &mut GameState) {
     let mut elementary_load = 0.0_f32;
     let mut high_load = 0.0_f32;
     for (idx, tile) in state.tiles.iter().enumerate() {
-        if !matches!(
-            tile.kind,
-            TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-        ) {
+        if tile.zone_occupant().is_none() {
             continue;
         }
         elementary_load += loads.population.get(&idx).copied().unwrap_or(0.0);
@@ -293,11 +290,10 @@ pub fn recompute_education(state: &mut GameState) {
             if used >= capacity {
                 break;
             }
-            let tile_kind = state.tiles[cidx].kind;
-            if !matches!(
-                tile_kind,
-                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
-            ) {
+            // Redundant — `reachable_zone_candidates` files only zoned tiles —
+            // but kept because `education.ts` re-checks here too and the two
+            // are held to parity.
+            if state.tiles[cidx].zone_occupant().is_none() {
                 continue;
             }
             let load = if svc == ServiceKind::EducationElementary {
@@ -370,6 +366,8 @@ pub fn recompute_education(state: &mut GameState) {
 mod tests {
     use super::*;
     use crate::buildings::{update_building_states, BuildingInstance};
+    use crate::migrate::set_v4_kind;
+    use crate::occupants::Occupant;
     use crate::state::FLAG_POWERED;
 
     fn gs(w: u32, h: u32) -> GameState {
@@ -383,7 +381,7 @@ mod tests {
         for dy in 0..fh {
             for dx in 0..fw {
                 let tile = s.tile_at_mut(ox + dx, oy + dy).unwrap();
-                tile.kind = kind;
+                tile.set_occupant(Occupant::Structure, true);
                 tile.building_id = Some(id as u16);
                 tile.set_flag(FLAG_POWERED, true);
             }
@@ -396,7 +394,7 @@ mod tests {
     #[test]
     fn no_schools_gives_full_coverage_by_default() {
         let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Residential);
         s.population = 50;
         recompute_education(&mut s);
         // No schools → load = 0 → coverage = 1 (TS behaviour)
@@ -411,8 +409,8 @@ mod tests {
         //         [School(0,1)(1,1)] ...
         let mut s = gs(6, 2);
         place_building(&mut s, TileKind::ElementarySchool, 0, 0);
-        s.tile_at_mut(2, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(3, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
         // Place a residential zone building so it has load
         place_building(&mut s, TileKind::Residential, 3, 0);
@@ -439,7 +437,7 @@ mod tests {
             }
         }
         update_building_states(&mut s, false);
-        s.tile_at_mut(3, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         place_building(&mut s, TileKind::Residential, 3, 0);
         s.population = 14;
         recompute_education(&mut s);
@@ -461,7 +459,7 @@ mod tests {
     #[test]
     fn zone_load_is_zero_without_buildings() {
         let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Residential;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Residential);
         s.population = 50;
         let loads = compute_zone_loads(&s);
         // No active zone buildings → no load entries
@@ -475,8 +473,8 @@ mod tests {
         //         [HighSchool(0,1)(1,1)]
         let mut s = gs(6, 2);
         place_building(&mut s, TileKind::HighSchool, 0, 0);
-        s.tile_at_mut(2, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(3, 0).unwrap().kind = TileKind::Commercial;
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Commercial);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
         place_building(&mut s, TileKind::Commercial, 3, 0);
         s.jobs = 8;

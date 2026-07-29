@@ -246,7 +246,7 @@ mod tests {
             restored
                 .tiles
                 .iter()
-                .all(|t| t.kind != city_sim_protocol::tile_kind::TileKind::Road),
+                .all(|t| !t.has_occupant(crate::occupants::Occupant::Road)),
             "undoing the stroke removes every tile it painted"
         );
     }

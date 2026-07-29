@@ -62,21 +62,38 @@ Wilderness is two sums blended into one score:
 
 Each tile contributes a base “eco value” (positive or negative), then receives neighbourhood adjustments. Positive results accumulate into P, negative into U (as a positive magnitude).
 
-**Base eco weights**, mapped to the real `TileKind` enum (starter values — tune in play):
+The base value is the **sum over everything on the tile** — the terrain's own credit plus one contribution per occupant — not a single lookup on the tile's `kind`. A road carrying a hydro line is −2 + −1 = −3, and a level crossing −2 + −2 = −4. This is what #173 fixed: the original implementation scored `base_eco[tile.kind]` once, so whichever feature happened to own the `kind` slot was charged and every other feature on the tile rode free. Because a hydro line takes over the `kind` slot of the road it crosses, ten roads with lines scored *better* than ten bare roads — building infrastructure improved the score.
 
-| `TileKind`         | Base Eco | Rationale |
+**Base eco weights** (starter values — tune in play). Three concepts, three tables: they used to share one `base_eco` array indexed by `TileKind`, which made `TileKind` the key to three questions it only really answers one of.
+
+*Terrain* — keyed by `Terrain`, read once per tile:
+
+| `Terrain` | Base Eco | Rationale |
+| --------- | -------: | --------- |
+| `Land`    |       +1 | Open natural land — small but citywide. Forfeited the moment the tile carries anything visible. |
+| `Water`   |        0 | Neutral base; contributes via the water-edge bonus instead. |
+
+*Occupants* — keyed by `Occupant`, read once per occupant standing on the tile:
+
+| `Occupant`         | Base Eco | Rationale |
 | ------------------ | -------: | --------- |
-| `Tree`             |       +6 | Strongest natural capital. |
-| `Park`             |       +4 | Managed green space (Small, 1x1). |
-| `ParkLarge`        |       +4 | Managed green space (Large, 2x2 footprint — same per-tile weight as Small, so it contributes ~4x in total). |
-| `Land`             |       +1 | Open natural land — small but citywide. |
-| `Water`            |        0 | Neutral base; contributes via the water-edge bonus instead. |
-| `Residential`      |       −1 | Mild footprint. |
-| `Commercial`       |       −2 | |
-| `Industrial`       |       −5 | Strong urban pressure. |
+| `Trees`            |       +6 | Strongest natural capital. |
+| `ZoneResidential`  |       −1 | Mild footprint. |
+| `ZoneCommercial`   |       −2 | |
+| `ZoneIndustrial`   |       −5 | Strong urban pressure. Rewritten to −2 by Green Industry. |
 | `Road`             |       −2 | Hard surface + fragmentation vector. |
 | `Rail`             |       −2 | |
 | `PowerLine`        |       −1 | Corridor, but light footprint. |
+| `Pipe`             |        0 | **Underground layer — excluded.** Nature above a buried pipe is still nature. |
+| `Subway`, `Fibre`  |        0 | Reserved; nothing can build them yet. |
+| `Structure`        |        — | One flat tag over ten kinds spanning +4 to −8 — see the structure table. |
+
+*Structures* — keyed by `TileKind`, which is the building template key and says *which* structure stands there:
+
+| `TileKind`         | Base Eco | Rationale |
+| ------------------ | -------: | --------- |
+| `Park`             |       +4 | Managed green space (Small, 1x1). |
+| `ParkLarge`        |       +4 | Managed green space (Large, 2x2 footprint — same per-tile weight as Small, so it contributes ~4x in total). |
 | `CoalPlant`        |       −8 | Worst offender — creates the “pay more for cleaner power” pressure. |
 | `HydroPlant`       |       −2 | Clean but disruptive (reservoir/dam footprint). |
 | `WindTurbine`      |       −1 | Clean; land take only. |
@@ -85,12 +102,13 @@ Each tile contributes a base “eco value” (positive or negative), then receiv
 | `WaterTower`       |       −1 | |
 | `ElementarySchool` |       −1 | Counts like residential footprint. |
 | `HighSchool`       |       −1 | |
-| `WaterPipe`        |        0 | **Underground layer — excluded.** Nature above a buried pipe is still nature. |
 
 Notes:
 
-* All weights live in a central `WildernessTunables` struct so iteration is fast.
-* Only the surface `kind` is scored; the underground layer never contributes.
+* All weights live in a central `WildernessTunables` struct so iteration is fast, and every one of them is a **table row, not a constant**: the Green Industry programme rewrites the `ZoneIndustrial` row at runtime, and scoring always reads through the tunables, so the patch reaches every route into the score. A value baked into a static `OccupantDef` would be a second copy no policy could reach.
+* Only surface and overhead occupants are scored; the underground layer never contributes, and a buried pipe leaves the surface free to keep its +1 open-land credit.
+* The `Land` +1 credit belongs to the *terrain*, and a tile forfeits it as soon as it carries anything visible — so it is never paid alongside a road, a zone or a hydro line.
+* Scoring the occupants means the score is only as honest as the tools that maintain them. The terrain brushes used to rewrite `kind` unchecked, so lowering the ground under a coal plant erased its occupant — and its −8 — while the plant went on producing and billing. Raise, Lower, Water paint and Trees now refuse a tile carrying a building; over anything else they clear the ground as they always did, but they clear it the same whichever way it was recorded, so a road no longer survives a regrade just because a hydro line happened to be strung over it first.
 
 ### Neighbourhood Adjustments
 
@@ -140,6 +158,10 @@ where `k = k_per_tile × buildable_tiles` (starter: `k_per_tile = 0.5`). The con
 * stops a two-tree hamlet from scoring 100,
 * scales with map size so the formula is map-agnostic,
 * keeps an untouched map (mostly `Land` at +1, plus generated tree patches) in the mid-to-high band.
+
+`buildable_tiles` is the count of tiles whose terrain is `Land` — water is excluded so that water-heavy maps are not skewed. **The bulldozer no longer moves it.** Clearing a tile restores it to its terrain, so a bulldozed lake is still a lake and the click changes neither the count nor the score. That is a behaviour change (#177): while the bulldozer wrote `Land` unconditionally, one click per tile at a cost of 1 drained a lake that the water brush charges 12 a tile to dig, and it moved the score twice over — `P` gained the +1.0 open-land credit per tile, `k` gained 0.5, and any shoreline nature tile lost its +2.0 edge bonus. On a dirty city the arithmetic favoured the vandal: `100·P/(P+U+k)` rises with a filled tile whenever the city scores under 66.67, so on a 16×16 map of eight industrial rows, a road row and a 4×8 lake away from any nature, thirty-two credits of bulldozing took the score from 9.2593 to 12.2807 without removing a single factory.
+
+**The exploit is 6× dearer, not closed.** Raise, Lower and Water paint are the tools *for* changing what the ground is, but construction changes it too — every building tool fills water in as it builds over the tile, and the tile stays filled once the building is razed. So Road (5) then Bulldoze (1) still drains a tile for 6, and on that same industrial map the same thirty-two tiles drain for 192 credits and buy the same three points (11.3208 → 14.2857 without the road row). The round trip is still a loss — digging the lake back out costs 384 — which is the only thing currently standing between the score and a pump. Pricing building-over-water properly is bridges and docks, a feature of its own; `wilderness::tests::a_builder_and_a_bulldozer_still_drain_a_lake_and_move_the_score` pins the numbers until then.
 
 No clamping is needed — the ratio is inherently 0–100 and responds to every marginal change.
 
@@ -219,7 +241,9 @@ Production simulation is Rust (`crates/city-sim-core`) — the compute lives the
 
 ```rust
 pub struct WildernessTunables {
-    pub base_eco: [f32; TileKind::COUNT],
+    pub terrain_eco: [f32; TERRAIN_COUNT],       // keyed by Terrain
+    pub occupant_eco: [f32; OCCUPANT_COUNT],     // keyed by Occupant
+    pub structure_eco: [f32; TileKind::COUNT],   // keyed by the building template key
     pub patch_bonus_cap: f32,
     pub patch_reference_size: f32,
     pub edge_bonus: f32,

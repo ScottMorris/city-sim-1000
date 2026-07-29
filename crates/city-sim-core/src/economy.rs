@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::get_building_template;
+use crate::occupants::{LedgerLine, Occupant, LEDGER_LINE_COUNT};
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
 use crate::wilderness::{tourism_dividend, WildernessTunables};
 use city_sim_protocol::commands::BudgetPolicy;
@@ -18,10 +19,14 @@ const DAYS_PER_MONTH: u32 = 30;
 
 // Per-tile maintenance per day (from `constants.ts` MAINTENANCE table).
 // Only tiles with no building_id contribute transport maintenance.
-const MAINT_ROAD: f32 = 0.1;
-const MAINT_RAIL: f32 = 0.2;
-const MAINT_POWER_LINE: f32 = 0.08;
-const MAINT_WATER_PIPE: f32 = 0.04;
+//
+// `pub(crate)` so `occupants.rs` can build its table out of these very
+// constants rather than a copy of their values — a copy is free to drift, and
+// the whole point of the occupant table is that it agrees with this ledger.
+pub(crate) const MAINT_ROAD: f32 = 0.1;
+pub(crate) const MAINT_RAIL: f32 = 0.2;
+pub(crate) const MAINT_POWER_LINE: f32 = 0.08;
+pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 
 // Lighting bylaw scaling is not yet ported (P3-9+).  Default bylaw is neutral
 // (multiplier = 1.0), so civic/zone maintenance is unscaled here.
@@ -42,18 +47,19 @@ const MAINT_WATER_PIPE: f32 = 0.04;
 /// Lighting-bylaw scaling of civic/zone maintenance is stubbed to 1.0 until
 /// bylaws are ported (P3-9+).
 pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
-    let mut maint_roads = 0.0_f32;
-    let mut maint_rail = 0.0_f32;
-    let mut maint_power_lines = 0.0_f32;
-    let mut maint_pipes = 0.0_f32;
+    // Per-tile upkeep, accumulated per `BudgetStats` line and before funding.
+    let mut upkeep = [0.0_f32; LEDGER_LINE_COUNT];
     let mut commercial_zones = 0_u32;
     let mut industrial_zones = 0_u32;
 
     for tile in &state.tiles {
-        // Zone revenue counters (all commercial/industrial tiles, developed or not)
-        match tile.kind {
-            TileKind::Commercial => commercial_zones += 1,
-            TileKind::Industrial => industrial_zones += 1,
+        // Zone revenue counters (all commercial/industrial tiles, developed or
+        // not). A genuinely single-valued question — a tile has at most one
+        // zone — asked through the accessor rather than off `kind` so that
+        // step 3 of #177 can narrow `kind` to terrain.
+        match tile.zone_occupant() {
+            Some(Occupant::ZoneCommercial) => commercial_zones += 1,
+            Some(Occupant::ZoneIndustrial) => industrial_zones += 1,
             _ => {}
         }
 
@@ -73,24 +79,24 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         // one and the guard did nothing for them — but a zone can develop a
         // lot *under* an existing line, and that line is still real
         // infrastructure somebody has to maintain.
-        if tile.kind == TileKind::Road || tile.has_road_underlay() {
-            maint_roads += MAINT_ROAD;
-        }
-        if tile.kind == TileKind::Rail || tile.has_rail_underlay() {
-            maint_rail += MAINT_RAIL;
-        }
-        if tile.kind == TileKind::PowerLine || tile.has_power_overlay() {
-            maint_power_lines += MAINT_POWER_LINE;
-        }
-
-        // Water pipes are only ever recorded underground — no tool has ever
-        // set `kind` to `WaterPipe`, so the arm of the old match that looked
-        // for it was dead, and would have double-billed a tile that somehow
-        // had both.
-        if tile.underground == Some(TileKind::WaterPipe) {
-            maint_pipes += MAINT_WATER_PIPE;
+        //
+        // Fixing that (#172) left four hand-written `kind == X || flag`
+        // branches here, one per ledger line, plus a fifth reading
+        // `underground` for the pipe. Step 2 of #177 replaces the lot with the
+        // occupant table: `tile_upkeep_by_line` charges every occupant present
+        // to the line its `OccupantDef` names, so a fifth billable occupant is
+        // a table row and a `LedgerLine` variant — never a branch someone
+        // forgets to add here. The funding multipliers stay below, because the
+        // table carries the department tag, not the policy.
+        for (line, add) in upkeep.iter_mut().zip(tile.tile_upkeep_by_line()) {
+            *line += add;
         }
     }
+
+    let mut maint_roads = upkeep[LedgerLine::Roads as usize];
+    let mut maint_rail = upkeep[LedgerLine::Rail as usize];
+    let mut maint_power_lines = upkeep[LedgerLine::PowerLines as usize];
+    let mut maint_pipes = upkeep[LedgerLine::Pipes as usize];
 
     // Building maintenance — all buildings in state.buildings, accumulated
     // per type so the budget screen can show coal vs wind vs hydro etc.
@@ -336,6 +342,8 @@ pub fn apply_money_tick(state: &mut GameState, dt: f64) {
 mod tests {
     use super::*;
     use crate::buildings::{BuildingInstance, BuildingStatus};
+    use crate::migrate::set_v4_kind;
+    use crate::occupants::Occupant;
 
     fn gs(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -353,7 +361,7 @@ mod tests {
         let bill = |build: &dyn Fn(&mut GameState)| {
             let mut s = gs(8, 8);
             for t in &mut s.tiles {
-                t.kind = TileKind::Land;
+                *t = crate::state::Tile::land();
             }
             build(&mut s);
             compute_daily_budget(&s).expenses
@@ -413,7 +421,7 @@ mod tests {
 
         let mut s = gs(8, 8);
         for t in &mut s.tiles {
-            t.kind = TileKind::Land;
+            *t = crate::state::Tile::land();
         }
         apply_tool(&mut s, Tool::Road, 1, 1);
         apply_tool(&mut s, Tool::WaterPipe, 1, 1);
@@ -448,8 +456,8 @@ mod tests {
     #[test]
     fn road_tiles_contribute_transport_maintenance() {
         let mut s = gs(3, 1);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Road);
         let b = compute_daily_budget(&s);
         assert!((b.maint_roads - 2.0 * MAINT_ROAD).abs() < 0.001);
         assert!((b.expenses_transport - b.maint_roads).abs() < 0.001);
@@ -469,8 +477,8 @@ mod tests {
         let mut s = gs(1, 1);
         {
             let t = s.tile_at_mut(0, 0).unwrap();
-            t.kind = TileKind::Residential;
-            t.set_flag(crate::state::FLAG_POWER_OVERLAY, true);
+            t.set_occupant(Occupant::ZoneResidential, true);
+            t.set_occupant(Occupant::PowerLine, true);
             t.building_id = Some(1);
         }
         let b = compute_daily_budget(&s);
@@ -484,8 +492,10 @@ mod tests {
     #[test]
     fn underground_water_pipe_always_contributes() {
         let mut s = gs(1, 1);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(0, 0).unwrap().underground = Some(TileKind::WaterPipe);
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        s.tile_at_mut(0, 0)
+            .unwrap()
+            .set_occupant(Occupant::Pipe, true);
         let b = compute_daily_budget(&s);
         // Road upkeep + pipe underlay upkeep
         assert!((b.maint_roads - MAINT_ROAD).abs() < 0.001);
@@ -495,8 +505,8 @@ mod tests {
     #[test]
     fn commercial_zones_contribute_revenue() {
         let mut s = gs(2, 1);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Commercial;
-        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Commercial;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Commercial);
+        set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Commercial);
         let b = compute_daily_budget(&s);
         assert!((b.revenue_commercial - 2.0 * 6.0).abs() < 0.001);
     }
@@ -624,8 +634,8 @@ mod tests {
     #[test]
     fn transport_funding_scales_road_maintenance() {
         let mut s = gs(3, 1);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Road;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Road);
         let full = compute_daily_budget(&s).maint_roads;
         s.policies.budget.fund_transport = 50;
         let half = compute_daily_budget(&s).maint_roads;
@@ -665,8 +675,8 @@ mod tests {
     fn neutral_policy_is_bit_exact_with_prepolicy_budget() {
         let mut s = gs(4, 4);
         s.population = 37;
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Road;
-        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Commercial;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Commercial);
         let b = compute_daily_budget(&s);
         // Reproduce the pre-policy formulas literally.
         assert_eq!(b.revenue_pop, 37.0_f32 * 1.5);
@@ -680,8 +690,8 @@ mod tests {
         use city_sim_protocol::commands::WildernessPolicy;
 
         let mut s = gs(4, 4);
-        s.tile_at_mut(0, 0).unwrap().kind = TileKind::Industrial;
-        s.tile_at_mut(1, 0).unwrap().kind = TileKind::Industrial;
+        set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Industrial);
+        set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Industrial);
         let t = WildernessTunables::default();
 
         let before = compute_daily_budget(&s);

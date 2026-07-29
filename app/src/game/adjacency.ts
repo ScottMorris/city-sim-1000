@@ -1,3 +1,8 @@
+// adjacency.ts — orthogonal neighbour queries: road access, network carriers.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { GameState, Tile, TileKind, getTile } from './gameState';
 
 const ORTHOGONAL_DIRS: Array<[number, number]> = [
@@ -22,14 +27,26 @@ export function getOrthogonalNeighbourCoords(
   return coords;
 }
 
+/**
+ * Returns true if any orthogonal neighbour of (x, y) carries traffic — that is,
+ * has a road, whether recorded as `kind` or as `roadUnderlay`.
+ *
+ * Mirrors `has_road_access()` in `crates/city-sim-core/src/adjacency.rs`, which
+ * asks `Tile::conducts(Network::Traffic)`.
+ *
+ * **Behaviour change, step 2 of #177.** This used to accept a third case,
+ * `kind === TileKind.PowerLine`. That clause was compensation, not a rule: when
+ * a hydro line is strung over a road the tile is recorded `kind = PowerLine` +
+ * `roadUnderlay`, and its author was reaching for the road hidden underneath.
+ * It reached too far — a *bare* hydro line across open country granted road
+ * access to every zone beside it, so lots grew, filled and paid tax with no
+ * street. The road-under-a-line case answers through `roadUnderlay` with no
+ * special case at all. A hydro line is not a road.
+ */
 export function hasRoadAccess(state: GameState, x: number, y: number): boolean {
   return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
     const neighbour = getTile(state, nx, ny);
-    return (
-      neighbour?.kind === TileKind.Road ||
-      neighbour?.roadUnderlay === true ||
-      neighbour?.kind === TileKind.PowerLine
-    );
+    return neighbour?.kind === TileKind.Road || neighbour?.roadUnderlay === true;
   });
 }
 
@@ -51,11 +68,24 @@ export function isFrontierZone(state: GameState, x: number, y: number): boolean 
   });
 }
 
+/**
+ * Whether power flows *through* this tile.
+ *
+ * Mirrors `Tile::conducts(Network::Power)` in
+ * `crates/city-sim-core/src/occupants.rs`.
+ *
+ * **Behaviour change, step 2 of #177.** The hydro-line clause used to ask
+ * `kind === TileKind.PowerLine` and nothing else, so a line was only visible to
+ * the BFS when it happened to own the contested `kind` slot. A line recorded
+ * only in `powerOverlay` — the spelling `Tool.PowerLine` leaves on a zoned tile,
+ * and the one a tree or a flood leaves behind in the engine — silently severed
+ * the grid while the tile kept being billed for a power line every day.
+ */
 export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.powerPlantType) return true;
   if (tile.buildingId !== undefined) return true;
-  if (tile.kind === TileKind.PowerLine) return true;
+  if (tile.kind === TileKind.PowerLine || tile.powerOverlay) return true;
   if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
   if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;
   if (isZone(tile)) {
@@ -64,6 +94,17 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
   return false;
 }
 
+/**
+ * Whether water flows *through* this tile.
+ *
+ * Mirrors `Tile::conducts(Network::Water)` in
+ * `crates/city-sim-core/src/occupants.rs`. Unchanged by step 2 of #177, and
+ * deliberately so: a buried pipe is already read out of `underground` and both
+ * transport underlays out of their flags, so there is no `kind`-only hole to
+ * close. A hydro line is *not* on this list — a road carrying a line still
+ * carries water, but that is the road's doing, not the line's, so nothing here
+ * consults `powerOverlay`.
+ */
 export function isWaterCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
   if (tile.underground === TileKind.WaterPipe) return true;
