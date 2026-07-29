@@ -11,9 +11,34 @@ export interface Command {
   tool: Tool;
   x: number;
   y: number;
+  /**
+   * Fixed ticks to run on **both** engines immediately after this command.
+   *
+   * Without this a script can only settle at its end, which puts every tick
+   * after every click — so no command in it ever lands on a tile that has
+   * already developed, been powered, or been abandoned. Those are exactly the
+   * states `buildings/manager.ts` owns, so a harness that cannot reach them
+   * cannot check the half of the oracle it was written for. `fuzzScript` never
+   * emits one; scenarios place them deliberately.
+   */
+  settle?: number;
 }
 
 export const cmd = (tool: Tool, x: number, y: number): Command => ({ tool, x, y });
+
+/**
+ * A command that does nothing but let `ticks` fixed ticks pass.
+ *
+ * `Tool.Inspect` is a no-op in both engines — it is the one tool the fuzz
+ * palettes leave out for that reason — so this carries the tick count without
+ * touching the city.
+ */
+export const settle = (ticks: number): Command => ({
+  tool: Tool.Inspect,
+  x: 0,
+  y: 0,
+  settle: ticks
+});
 
 export interface Disagreement {
   /** Which predicate disagreed — `accepted`, a tile fact key, or a headline key. */
@@ -90,16 +115,22 @@ export function replay(script: Command[], opts: ReplayOptions = {}): Disagreemen
   const ts = tsEngine(width, height, seed);
   const found: Disagreement[] = [];
 
+  let settled = 0;
   script.forEach((c, i) => {
     const r = rust.apply(c.tool, c.x, c.y);
     const t = ts.apply(c.tool, c.x, c.y);
     if (r !== t) {
       found.push({
         predicate: 'accepted',
-        where: `step ${i}: ${c.tool} at (${c.x},${c.y})`,
+        where: `step ${i}: ${c.tool} at (${c.x},${c.y}) after ${settled} settling tick(s)`,
         rust: String(r),
         ts: String(t)
       });
+    }
+    for (let n = 0; n < (c.settle ?? 0); n++) {
+      rust.tick();
+      ts.tick();
+      settled++;
     }
   });
 
@@ -119,15 +150,19 @@ export function replay(script: Command[], opts: ReplayOptions = {}): Disagreemen
       if (ignore.has(key)) continue;
       // Money is the one scalar the two engines cannot hold identically: Rust
       // keeps whole credits in an `i64` with a separate `money_frac`
-      // accumulator, TypeScript keeps a float. Comparing the whole-credit part
-      // is exact on everything a player can see; a sub-credit divergence is
-      // invisible here by construction, and no other scalar is floored.
+      // accumulator, TypeScript keeps a float. Flooring compares the part a
+      // player can see and drops a sub-credit difference — but only for as long
+      // as the residue stays inside one credit. Over about 90 ticks of daily
+      // maintenance it does not (measured: 73 756 against 73 757.15), so long
+      // scenarios leave the headline out entirely rather than pretending this
+      // makes them exact; see `COMPARE_TILES_ONLY` in `crossEngineParity.test.ts`.
+      // No other scalar is floored.
       const r = key === 'money' ? Math.floor(rh[key]) : rh[key];
       const t = key === 'money' ? Math.floor(th[key]) : th[key];
       if (r !== t) {
         found.push({
           predicate: key,
-          where: `after ${script.length} commands and ${ticks} ticks`,
+          where: `after ${script.length} commands and ${settled + ticks} ticks`,
           rust: String(rh[key]),
           ts: String(th[key])
         });

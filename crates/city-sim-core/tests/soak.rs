@@ -23,7 +23,14 @@
 //! 3. **`state_hash` is reproducible.** Two independently built, independently
 //!    stepped simulations are compared at every checkpoint, not just at the
 //!    end, so a divergence names the checkpoint it started at.
-//! 4. **Allocation stays bounded.** See below — this is the interesting one.
+//! 4. **Allocation stays bounded.** Three checks at different resolutions. Two
+//!    are plain assertions that fail the run like any other complaint: bytes
+//!    per tick, early window against late; and the heap still held between
+//!    ticks, which is the only one that sees a leak whose *rate* is flat. The
+//!    third, the fine-grained `StructureLookup::new` probe, is the *one* known
+//!    exception (#180): it is reported rather than enforced, it is excused by
+//!    signature rather than by category, and the excusal is itself pinned so it
+//!    cannot outlive the defect. See below.
 //!
 //! ## Running it
 //!
@@ -60,8 +67,16 @@
 //!
 //! The engine's per-tick work is bounded by the map, which does not grow. So
 //! once a city reaches steady state, *bytes allocated per tick must stop
-//! growing too*. Anything that keeps climbing is either a leak or an index
-//! sized by something monotonic, and both are bugs that only a long run finds.
+//! growing too*, and *the heap the city holds between ticks must stop growing*.
+//! Anything that keeps climbing is either a leak or an index sized by something
+//! monotonic, and both are bugs that only a long run finds.
+//!
+//! Those two are not the same measurement, and one of them is not optional:
+//! a rate and a level fail differently. An index sized by a counter grows the
+//! *rate*; a `Vec` that is pushed to once per tile per tick and never drained
+//! grows only the *level*, at a perfectly flat rate. Measured, that second
+//! mutation takes the peak heap from 0.05 MiB to 100 MiB while leaving bytes per
+//! tick where they were, so a harness that watched only the rate would pass it.
 //!
 //! Measurement is a counting [`GlobalAlloc`] wrapping [`System`]. Its counters
 //! are **thread-local**, so a soak measured on the test thread is not polluted
@@ -72,21 +87,81 @@
 //! state, so the numbers are the same on every machine and there is no flake
 //! budget to spend.
 //!
-//! There are two allocation assertions, at different resolutions, and it is
-//! worth being clear about which catches what:
+//! There are three allocation checks, at different resolutions, and it is worth
+//! being clear about which catches what and which of them can fail a build.
+//! **Two of the three are enforced; only the third is excused:**
 //!
-//! - **The aggregate.** Bytes per tick over two equal windows — an early one
-//!   taken after the city stops growing, a late one at the end of the run —
-//!   must not grow. This is the general net: it catches anything large,
-//!   including leaks nobody has thought of. It is also *coarse*, because a
-//!   tick allocates ~20 KB and a small index growing by a few hundred bytes
-//!   disappears into that.
+//! - **The rate aggregate — enforced.** Bytes per tick over two equal windows —
+//!   an early one taken after the city stops growing, a late one at the end of
+//!   the run — must not grow. It is a plain assertion: it fails
+//!   [`soak_long_run_stays_sane`] exactly like a `NaN` would. This is the
+//!   general net, and it catches anything large, including leaks nobody has
+//!   thought of. It is also *coarse*, because a tick allocates ~20 KB and a
+//!   small index growing by a few hundred bytes disappears into that. On the
+//!   default run it reads 1.01× against a 1.25× tolerance.
 //!
-//! - **The probe.** The worst `StructureLookup::new` call in each window,
-//!   normalised by the change in peak live building count. An index of the live
-//!   buildings must cost what the live buildings cost; if it grows while they
-//!   do not, it is sized by the clock. This is the fine-toothed one, and it is
-//!   the assertion that currently fails — see below.
+//! - **The retained level — enforced.** The worst heap still outstanding
+//!   *between* ticks, sampled once the tick's transients have been dropped,
+//!   compared the same way across the same two windows. This is the ordinary
+//!   meaning of "leak", and it is the one the rate aggregate is blind to by
+//!   construction. It reads 1.15× on the default run against a 1.25× tolerance
+//!   plus 8 KiB of slack, and — the reason the tolerance is trustworthy — the
+//!   late figure is *the same 52 432 B* at 160 days and at 3 000 days, so the
+//!   1.15× is one `Vec` capacity step and not a trend. #180 cannot register
+//!   here at all: a `StructureLookup` is a transient, dropped before the
+//!   sample, so it can never be offered as an excuse for a retained finding.
+//!
+//! - **The probe — reported, and the one known exception.** The worst
+//!   `StructureLookup::new` call in each window, normalised by the change in
+//!   peak live building count. An index of the live buildings must cost what the
+//!   live buildings cost; if it grows while they do not, it is sized by the
+//!   clock. This is the fine-toothed one, and it is what reports #180 — see
+//!   below.
+//!
+//! ## Exactly one finding is excused, and it is excused by signature
+//!
+//! Every allocation finding carries an [`AllocationFinding::known`] tag, and
+//! only the probe sets it. Everything else — the retained-heap finding, and an
+//! aggregate finding raised in the same run the probe fires in — lands in the
+//! enforced list and fails the soak. That distinction is the whole point: a
+//! brand-new, unrelated leak must not be reported to whoever is reading the
+//! output as "known defect #180" and then fail nothing, which is precisely what
+//! an earlier draft of this file did by excusing the *category* rather than the
+//! signature — and, worse, by leaving the only asserting test `#[ignore]`d, so
+//! that the enforced list had nothing reading it at all.
+//!
+//! The excusal is pinned in both directions, so it cannot outlive the defect:
+//!
+//! - [`soak_long_run_stays_sane`] asserts that on a run of the default length or
+//!   longer the probe *does* fire. Fix #180 and the soak goes red telling you to
+//!   delete the exception — the same discipline the parity harness uses for its
+//!   known drifts.
+//! - [`allocation_per_call_tracks_live_buildings_not_the_id_space`] is the
+//!   `#[ignore]`d acceptance test for the fix. Un-`ignore` it when the fix lands.
+//!
+//! ## Every part of that was checked by mutation, not by reading
+//!
+//! A gate nobody has watched fail is a gate nobody has tested — and this file
+//! has already been wrong about that once, having claimed assertions it did not
+//! make. So each of the three claims below was run. None of the mutations is
+//! committed; re-run them if this file changes shape.
+//!
+//! - **The enforced rate aggregate has teeth.** Adding
+//!   `let junk = vec![0u8; a.state.tick as usize * 4];` to the measured tick path
+//!   — a leak sized by the clock and nothing to do with `StructureLookup` — takes
+//!   the ratio to 1.45× and fails the soak, reporting 12 335 B/tick of growth
+//!   against the probe's 126 B per call, so the message says plainly that the two
+//!   are not the same order of magnitude.
+//! - **The enforced retained level has teeth, and this one is why it exists.**
+//!   Pushing one `String` per tile per tick into a `Vec` that is never drained
+//!   fails the soak at 2.32× retained growth (44.0 MB → 102.0 MB), and the
+//!   finding states that #180 cannot be the cause. The same mutation moves the
+//!   rate aggregate not at all — it stays at 1.01× — so before this check
+//!   existed, that leak passed the soak while taking the peak heap to 100 MiB.
+//! - **The exception cannot outlive the defect.** Widening
+//!   [`LOOKUP_GROWTH_TOLERANCE`] to 99.0 stands in for #180 being fixed: the
+//!   probe stops firing and the soak fails with the message asking for the
+//!   exception to be deleted.
 //!
 //! ## What this currently reports
 //!
@@ -109,20 +184,30 @@
 //!   under churn there is nearly always one alive.
 //! - **Sizing the index by the live building count is a fix, and a
 //!   behaviour-preserving one.** Swapping the `Vec` for a map keyed by id holds
-//!   the allocation flat at 304 B across the whole run and leaves every
-//!   `state_hash` in the checkpoint table byte-for-byte identical.
+//!   the allocation flat across the whole run — a
+//!   `HashMap::with_capacity(state.buildings.len())` measures a constant 176 B
+//!   per call at both ends, against the `Vec`'s 78 B → 204 B; the exact constant
+//!   is whatever map is chosen — and leaves every `state_hash` in the checkpoint
+//!   table byte-for-byte identical. Per-tick allocation stays flat too (1.00×),
+//!   so paying a little more per call early costs nothing overall: the tick path
+//!   builds only a couple of these.
 //!
 //! `SOAK=long` (3 000 days, 90 000 ticks, ~2½ minutes) shows the same thing
 //! with the scale it deserves: 78 B → 4 389 B, a 56× growth against a live
 //! count that never moves off 28. Nothing else misbehaves over that run — no
 //! panic, no non-finite float, no `state_hash` divergence between the two
 //! cities, peak live heap flat at 0.06 MiB — and the coarse aggregate reaches
-//! 1.23× against its 1.25× tolerance, so given a few hundred more days even the
-//! general net would catch this one.
+//! 1.23× against its 1.25× tolerance, so a few hundred more days and the
+//! *enforced* net catches this one too. That is not a trap, and it is not an
+//! excuse either: the aggregate's message carries both figures — its own growth
+//! in B/tick and the probe's growth in B per call — and asks the reader to check
+//! that they are the same order of magnitude before filing one as the other.
+//! Being #180 is something the numbers have to show, not something a fired probe
+//! confers.
 //!
-//! That failure is the correct outcome, not a broken test. **Do not silence it
-//! by widening [`LOOKUP_GROWTH_TOLERANCE`], shortening the run, or reducing the
-//! churn.** The fix belongs in `occupants.rs`.
+//! The probe's report is the correct outcome, not a broken test. **Do not
+//! silence it by widening [`LOOKUP_GROWTH_TOLERANCE`], shortening the run, or
+//! reducing the churn.** The fix belongs in `occupants.rs`.
 //!
 //! ## Modelling the 20 Hz host loop
 //!
@@ -222,6 +307,15 @@ fn peak_live() -> i64 {
     PEAK.with(Cell::get)
 }
 
+/// Bytes outstanding on this thread *right now* — allocated and not yet freed.
+///
+/// Sampled between ticks, when the transient per-tick buffers have all been
+/// dropped, this is the heap the city is actually holding on to. It is the only
+/// figure that sees a leak whose *rate* is constant.
+fn live_bytes() -> i64 {
+    LIVE.with(Cell::get)
+}
+
 /// Reset the high-water mark to whatever is live right now, so a later
 /// [`peak_live`] describes only the window that follows.
 fn rebase_peak() {
@@ -283,6 +377,21 @@ const WARMUP_TICKS: u32 = 1_500;
 /// some honest variation is expected. 1.25 is far below what an index sized by
 /// a monotonic counter produces over a soak.
 const ALLOC_GROWTH_TOLERANCE: f64 = 1.25;
+
+/// How much more of the heap the city may still be holding in the late window
+/// than it held in the early one.
+///
+/// Retained heap is what a leak in the ordinary sense grows: a `Vec` that is
+/// pushed to and never drained, a cache with no eviction. Such a leak allocates
+/// at a *constant* rate, so [`ALLOC_GROWTH_TOLERANCE`] — which compares rates —
+/// never moves for it, and only this check sees it.
+const RETAINED_GROWTH_TOLERANCE: f64 = 1.25;
+
+/// Bytes of slack under [`RETAINED_GROWTH_TOLERANCE`]. The steady-state heap
+/// here is tens of kilobytes and the live building list breathes with the churn,
+/// so a fixed floor keeps the ratio from being decided by a few `Vec` growth
+/// steps. Small next to any real leak, which climbs without bound.
+const RETAINED_SLACK_BYTES: f64 = 8.0 * 1024.0;
 
 /// How much more the *same* `StructureLookup::new` call may allocate at the end
 /// of the run than at the start, after normalising for the change in live
@@ -508,6 +617,39 @@ fn emit_wire_frame(state: &GameState) -> u64 {
 /// One complaint. Collected rather than asserted, so a failing soak reports
 /// every way in which the city went wrong instead of only the first.
 type Complaints = Vec<String>;
+
+/// The issue a known allocation exception is filed under.
+const KNOWN_DEFECT: &str = "#180";
+
+/// One allocation finding, plus whether this branch knowingly leaves it open.
+///
+/// The tag is set **per finding**, at the site that raises it, and only the
+/// `StructureLookup::new` probe sets it. Tagging by signature rather than by
+/// category is what keeps the exception from turning into a blindfold: an
+/// aggregate finding raised in the same run the probe fires in still carries
+/// `known: None`, so it still fails the soak.
+struct AllocationFinding {
+    /// `Some(issue)` for a finding whose *specific* signature is a recorded
+    /// known defect. `None` — the default for anything new — is enforced.
+    known: Option<&'static str>,
+    message: String,
+}
+
+impl AllocationFinding {
+    fn enforced(message: String) -> Self {
+        Self {
+            known: None,
+            message,
+        }
+    }
+
+    fn known_defect(issue: &'static str, message: String) -> Self {
+        Self {
+            known: Some(issue),
+            message,
+        }
+    }
+}
 
 fn finite(name: &str, v: f32, at: &str, out: &mut Complaints) {
     if !v.is_finite() {
@@ -856,6 +998,9 @@ struct Window {
     /// Peak bytes one `StructureLookup::new(&state)` allocated during the
     /// window.
     max_lookup_bytes: u64,
+    /// Worst retained heap seen between ticks in the window — bytes allocated
+    /// and not freed, sampled after the tick's transients have been dropped.
+    max_retained_bytes: i64,
 }
 
 impl Window {
@@ -863,6 +1008,9 @@ impl Window {
     /// the per-tick allocation measurement, so the probe does not inflate the
     /// aggregate figure it is compared against.
     fn observe(&mut self, state: &GameState) {
+        // Sampled before the probe below allocates anything, so this is the
+        // heap the simulation is holding between ticks and nothing else.
+        self.max_retained_bytes = self.max_retained_bytes.max(live_bytes());
         let (_, lookup_bytes) = measure_bytes(|| StructureLookup::new(state));
         self.max_lookup_bytes = self.max_lookup_bytes.max(lookup_bytes);
         self.max_live = self.max_live.max(state.buildings.len());
@@ -888,11 +1036,11 @@ struct Checkpoint {
     hash: u64,
 }
 
-/// Drive the soak once and return `(invariant complaints, allocation
-/// complaints, simulated days)`. Shared so the enforced invariants and the
-/// known-defect acceptance test below measure the *same* run rather than two
-/// hand-kept copies of one.
-fn run_soak() -> (Complaints, Complaints, u32) {
+/// Drive the soak once and return `(invariant complaints, allocation findings,
+/// simulated days)`. Shared so the enforced invariants and the known-defect
+/// acceptance test below measure the *same* run rather than two hand-kept
+/// copies of one.
+fn run_soak() -> (Complaints, Vec<AllocationFinding>, u32) {
     let days = soak_days();
     let total_ticks = days * TICKS_PER_DAY;
     assert!(
@@ -902,11 +1050,10 @@ fn run_soak() -> (Complaints, Complaints, u32) {
     );
 
     let mut complaints: Complaints = Vec::new();
-    // Allocation growth is tracked separately from the invariants. It is a
-    // *known* defect (#180), not a regression this run discovered, so it must
-    // not turn the branch red — but it must also not be silently tolerated.
-    // See the report block at the end of this test.
-    let mut allocation: Complaints = Vec::new();
+    // Allocation findings are collected here, each one tagged at the site that
+    // raises it with whether it is a recorded known defect. The caller enforces
+    // every untagged one; see [`AllocationFinding`].
+    let mut allocation: Vec<AllocationFinding> = Vec::new();
 
     // Two independent cities, built and stepped in lockstep. Identical inputs
     // must give identical `state_hash` at every checkpoint; comparing as we go
@@ -1007,12 +1154,16 @@ fn run_soak() -> (Complaints, Complaints, u32) {
     let span_days = (late_window.start - early_window.start) as f64 / TICKS_PER_DAY as f64;
     let churn_per_day = (late.next_id - early.next_id) as f64 / span_days;
 
+    let retained_ratio =
+        late.max_retained_bytes as f64 / (early.max_retained_bytes as f64).max(1.0);
+
     println!(
         "\nallocation, city A, including the 20 Hz host emit. Each window is {WINDOW_TICKS} ticks;\n\
-         the live, id and lookup columns are the worst tick in the window, not the first.\n\
-         \x20 early  ticks {:>6}..{:<6}  {:>9.0} B/tick   live {:>5}  max live id {:>8}  next_building_id {:>8}  StructureLookup::new {:>8} B\n\
-         \x20 late   ticks {:>6}..{:<6}  {:>9.0} B/tick   live {:>5}  max live id {:>8}  next_building_id {:>8}  StructureLookup::new {:>8} B\n\
+         the live, id, retained and lookup columns are the worst tick in the window, not the first.\n\
+         \x20 early  ticks {:>6}..{:<6}  {:>9.0} B/tick   live {:>5}  max live id {:>8}  next_building_id {:>8}  retained {:>10} B  StructureLookup::new {:>8} B\n\
+         \x20 late   ticks {:>6}..{:<6}  {:>9.0} B/tick   live {:>5}  max live id {:>8}  next_building_id {:>8}  retained {:>10} B  StructureLookup::new {:>8} B\n\
          \x20 per-tick growth {ratio:.2}× (tolerance {ALLOC_GROWTH_TOLERANCE:.2}×)\n\
+         \x20 retained growth {retained_ratio:.2}× (tolerance {RETAINED_GROWTH_TOLERANCE:.2}× + {RETAINED_SLACK_BYTES:.0} B)\n\
          \x20 zone churn {churn_per_day:.1} new building ids per simulated day over {span_days:.0} days\n\
          \x20 peak live heap during the run {:.2} MiB\n",
         early_window.start,
@@ -1021,6 +1172,7 @@ fn run_soak() -> (Complaints, Complaints, u32) {
         early.max_live,
         early.max_live_id,
         early.next_id,
+        early.max_retained_bytes,
         early.max_lookup_bytes,
         late_window.start,
         late_window.end,
@@ -1028,9 +1180,28 @@ fn run_soak() -> (Complaints, Complaints, u32) {
         late.max_live,
         late.max_live_id,
         late.next_id,
+        late.max_retained_bytes,
         late.max_lookup_bytes,
         peak as f64 / (1024.0 * 1024.0),
     );
+
+    // -- The isolated probe, measured first -------------------------------
+    //
+    // The aggregate below says *something* grew. This says what. It is measured
+    // first only so the aggregate's message can name whether the two fired
+    // together, which is the difference between "#180 has finally reached the
+    // coarse net" and "something new is leaking".
+    //
+    // A `StructureLookup` is an index of the live buildings, so the memory it
+    // needs is a function of how many buildings are live — not of how many have
+    // ever existed. Comparing the worst call in each window, and normalising by
+    // the change in peak live count, makes the check scale-free: it does not
+    // care what the index costs per building, only that the cost tracks the
+    // buildings rather than the clock.
+    let live_ratio = late.max_live as f64 / (early.max_live as f64).max(1.0);
+    let allowed =
+        early.max_lookup_bytes as f64 * live_ratio * LOOKUP_GROWTH_TOLERANCE + LOOKUP_SLACK_BYTES;
+    let probe_fired = late.max_lookup_bytes as f64 > allowed;
 
     // -- The aggregate assertion ------------------------------------------
     //
@@ -1038,13 +1209,43 @@ fn run_soak() -> (Complaints, Complaints, u32) {
     // count does not trend, and the player does nothing after the build-out —
     // so the late window must not allocate materially more per tick than the
     // early one. Anything that does is sized by something monotonic.
+    //
+    // This one is **enforced**: it carries no known-defect tag, so it fails the
+    // soak. It is the general net, and it has to stay able to see a leak that
+    // has nothing to do with #180.
     if ratio > ALLOC_GROWTH_TOLERANCE {
-        allocation.push(format!(
+        // Whether this is #180 arriving in the coarse net or a second defect is
+        // decided by arithmetic, not by whether the probe happens to have fired
+        // — it fires on every run of the default length or longer, so treating
+        // that as an excuse would put every future aggregate finding under
+        // someone else's issue number. Both figures go in the message and the
+        // reader is asked to compare them.
+        let agg_excess = late.per_tick() - early.per_tick();
+        let lookup_excess = late.max_lookup_bytes as i64 - early.max_lookup_bytes as i64;
+        let attribution = if probe_fired {
+            format!(
+                "\n    Known defect {KNOWN_DEFECT} is also present on this run: \
+                 `StructureLookup::new` grew {lookup_excess} B per call over the same interval. \
+                 The tick path builds only a handful of lookups per tick (the host emit, \
+                 `state_hash`, and `compute_wilderness` on its cadence), so {KNOWN_DEFECT} can \
+                 account for a few times {lookup_excess} B/tick at most — against the \
+                 {agg_excess:.0} B/tick this finding reports. Compare those two before filing \
+                 this under {KNOWN_DEFECT}: if they are not the same order of magnitude, this \
+                 is a second, unrelated leak."
+            )
+        } else {
+            format!(
+                "\n    The `StructureLookup::new` probe did NOT fire on this run, so this is \
+                 not known defect {KNOWN_DEFECT}. Something else on the tick or wire-emit path \
+                 is sized by a counter. It grew {agg_excess:.0} B/tick."
+            )
+        };
+        allocation.push(AllocationFinding::enforced(format!(
             "steady-state allocation per tick grew {ratio:.2}× between tick {} and tick {} \
              ({:.0} → {:.0} B/tick) while the live building count went {} → {}. Per-tick work \
              is bounded by the map, which did not change, so something on the tick path is \
              sized by a counter rather than by the live data. `next_building_id` went {} → {} \
-             over the same interval ({churn_per_day:.1}/day)",
+             over the same interval ({churn_per_day:.1}/day){attribution}",
             early_window.start,
             late_window.start,
             early.per_tick(),
@@ -1053,25 +1254,51 @@ fn run_soak() -> (Complaints, Complaints, u32) {
             late.max_live,
             early.next_id,
             late.next_id
-        ));
+        )));
     }
 
-    // -- The isolated probe -----------------------------------------------
+    // -- The retained-heap assertion --------------------------------------
     //
-    // The aggregate above says *something* grew. This says what.
+    // The aggregate above compares *rates*, and that is blind to a whole class
+    // of leak by construction: pushing one `String` per tile into a `Vec` that
+    // is never drained allocates the same number of bytes on every tick for
+    // ever, so the rate never grows even as the heap does. Measured, that
+    // mutation takes the peak heap from 0.05 MiB to 100 MiB and moves the
+    // per-tick ratio not at all. So the heap itself is asserted, not just
+    // printed.
     //
-    // A `StructureLookup` is an index of the live buildings, so the memory it
-    // needs is a function of how many buildings are live — not of how many have
-    // ever existed. Comparing the worst call in each window, and normalising by
-    // the change in peak live count, makes the assertion scale-free: it does not
-    // care what the index costs per building, only that the cost tracks the
-    // buildings rather than the clock.
-    let live_ratio = late.max_live as f64 / (early.max_live as f64).max(1.0);
-    let allowed =
-        early.max_lookup_bytes as f64 * live_ratio * LOOKUP_GROWTH_TOLERANCE + LOOKUP_SLACK_BYTES;
-    if late.max_lookup_bytes as f64 > allowed {
-        allocation.push(format!(
-            "the worst `StructureLookup::new` in a window went {} B → {} B over the run while \
+    // Enforced, and untaggable as #180: `StructureLookup` is a transient that
+    // is dropped before this is sampled, so #180 cannot register here at all
+    // and cannot be offered as an explanation for anything that does.
+    if late.max_retained_bytes as f64
+        > early.max_retained_bytes as f64 * RETAINED_GROWTH_TOLERANCE + RETAINED_SLACK_BYTES
+    {
+        let grew = late.max_retained_bytes - early.max_retained_bytes;
+        allocation.push(AllocationFinding::enforced(format!(
+            "retained heap between ticks grew {retained_ratio:.2}× between tick {} and tick {} \
+             ({} → {} B, +{grew} B) while the live building count went {} → {}. This is memory \
+             allocated and never freed, not per-tick churn: something is accumulating across \
+             ticks — a `Vec` pushed to and never drained, a cache with no eviction, a history \
+             that keeps every entry. Known defect {KNOWN_DEFECT} cannot be the cause and does \
+             not excuse this: a `StructureLookup` is a transient, dropped before this figure is \
+             sampled, so it contributes nothing to it. Peak heap over the whole run was {:.2} \
+             MiB, against {:.2} MiB retained in the early window",
+            early_window.start,
+            late_window.start,
+            early.max_retained_bytes,
+            late.max_retained_bytes,
+            early.max_live,
+            late.max_live,
+            peak as f64 / (1024.0 * 1024.0),
+            early.max_retained_bytes as f64 / (1024.0 * 1024.0),
+        )));
+    }
+
+    if probe_fired {
+        allocation.push(AllocationFinding::known_defect(
+            KNOWN_DEFECT,
+            format!(
+                "the worst `StructureLookup::new` in a window went {} B → {} B over the run while \
              the live building count it indexes went {} → {} ({live_ratio:.2}×). Sized by the \
              live data it would have grown {live_ratio:.2}×; it grew {:.2}×.\n    \
              It allocates `vec![None; max(max live id, next_building_id) + 1]` — sized by the \
@@ -1084,40 +1311,70 @@ fn run_soak() -> (Complaints, Complaints, u32) {
              churn. The repair is to stop indexing a dense `Vec` by a sparse building id.\n    \
              This allocation is on the 20 Hz host emit path (`SimHost::tile_buffer` and the \
              Tauri tick event) as well as on `state_hash` and `compute_wilderness`",
-            early.max_lookup_bytes,
-            late.max_lookup_bytes,
-            early.max_live,
-            late.max_live,
-            late.max_lookup_bytes as f64 / (early.max_lookup_bytes as f64).max(1.0),
-            early.next_id,
-            late.next_id,
-            early.max_live_id,
-            late.max_live_id,
+                early.max_lookup_bytes,
+                late.max_lookup_bytes,
+                early.max_live,
+                late.max_live,
+                late.max_lookup_bytes as f64 / (early.max_lookup_bytes as f64).max(1.0),
+                early.next_id,
+                late.next_id,
+                early.max_live_id,
+                late.max_live_id,
+            ),
         ));
     }
 
-    // -- Report -----------------------------------------------------------
-    //
-    // The invariants are enforced. Allocation growth is reported but does not
-    // fail this test, because it is the known defect #180 — see
-    // `allocation_per_call_tracks_live_buildings_not_the_id_space` below, which
-    // is the acceptance test for the fix.
     (complaints, allocation, days)
 }
 
 /// The invariants: no panic, no NaN or infinity, no impossible stat,
-/// reproducible `state_hash`, bounded heap. Allocation growth is reported here
-/// but enforced by the `#[ignore]`d test below, because it is known defect #180.
+/// reproducible `state_hash`, bounded bytes per tick and bounded retained heap
+/// — **and** every allocation finding except the one whose signature is the
+/// recorded known defect #180.
+///
+/// Three things happen here, in this order:
+///
+/// 1. Findings tagged with a known defect are printed under a banner that names
+///    the issue, and do not fail. Exactly one signature is tagged, and only the
+///    `StructureLookup::new` probe tags it.
+/// 2. Every other finding — the rate aggregate, the retained heap, anything
+///    added later — is folded into the complaints and fails the test. That is
+///    what stops a new leak being filed under someone else's issue number, and
+///    it is what makes this test, which *runs*, the thing enforcing the
+///    allocation gate rather than the `#[ignore]`d one below.
+/// 3. On a run of the default length or longer, the absence of the known finding
+///    is itself a failure. A known exception nobody has re-checked is how a
+///    harness quietly stops asserting anything, so the exception is pinned the
+///    same way the parity harness pins its known drifts: fix #180 and this goes
+///    red asking for the exception to be deleted.
 #[test]
 fn soak_long_run_stays_sane() {
-    let (complaints, allocation, days) = run_soak();
-    if !allocation.is_empty() {
+    let (mut complaints, allocation, days) = run_soak();
+
+    let (known, unexpected): (Vec<&AllocationFinding>, Vec<&AllocationFinding>) =
+        allocation.iter().partition(|f| f.known.is_some());
+
+    for f in &known {
         println!(
-            "\nKNOWN DEFECT #180 — {} allocation finding(s), not failing this test:\n  - {}\n",
-            allocation.len(),
-            allocation.join("\n  - ")
+            "\nKNOWN DEFECT {} — reported, not failing this test:\n  - {}\n",
+            f.known.unwrap_or("?"),
+            f.message
         );
     }
+
+    complaints.extend(unexpected.iter().map(|f| f.message.clone()));
+
+    if days >= DEFAULT_DAYS && known.is_empty() {
+        complaints.push(format!(
+            "the `StructureLookup::new` probe did not fire over {days} simulated days, but \
+             known defect {KNOWN_DEFECT} says it must. Either the defect is FIXED — in which \
+             case delete the `AllocationFinding::known_defect` arm, un-`ignore` \
+             `allocation_per_call_tracks_live_buildings_not_the_id_space`, and update the module \
+             note — or the soak has stopped measuring the thing it excuses, which would let \
+             {KNOWN_DEFECT} hide any amount of new growth behind it"
+        ));
+    }
+
     if !complaints.is_empty() {
         panic!(
             "the soak found {} problem(s) over {days} simulated days:\n  - {}\n",
@@ -1141,15 +1398,19 @@ fn soak_long_run_stays_sane() {
 /// building count it indexes went 28 → 28.
 ///
 /// Kept `#[ignore]` rather than deleted or weakened so the harness records the
-/// defect instead of being tuned around it.
+/// defect instead of being tuned around it. Note that it is *not* the only thing
+/// standing between #180 and a green tree: [`soak_long_run_stays_sane`] runs, it
+/// enforces every allocation finding this one does bar the single excused
+/// signature, and it fails if that signature stops appearing.
 #[test]
 #[ignore = "known defect #180 — StructureLookup is sized by the id space, not the live count"]
 fn allocation_per_call_tracks_live_buildings_not_the_id_space() {
     let (_, allocation, _) = run_soak();
+    let messages: Vec<&str> = allocation.iter().map(|f| f.message.as_str()).collect();
     assert!(
-        allocation.is_empty(),
+        messages.is_empty(),
         "#180 is still open:\n  - {}\n",
-        allocation.join("\n  - ")
+        messages.join("\n  - ")
     );
 }
 

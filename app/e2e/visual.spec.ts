@@ -13,7 +13,8 @@
 //
 // It is deliberately organised around `display.rs`'s "three deltas" — the
 // three classes of tile that come off the wire differently than they did at
-// `303897f`, the last commit where `kind` was canonical:
+// `fix(sim): read every stratum, so no feature goes uncounted` — step 2 of
+// #177, the last commit where `kind` was canonical:
 //
 //   delta 1  a bare level crossing — rail now wins the kind byte in both
 //            build orders, so a road-last crossing's *flat* colour moves.
@@ -29,11 +30,18 @@
 // a control that must NOT have moved.
 //
 // The images are known to be *sensitive*, not merely stable: reverting
-// `wire_kind`'s road/rail precedence (delta 1) moves `d-minimap.png` and
-// nothing else, exactly as `display.rs` predicts, and dropping its zone rung
-// moves `b-hydro-lines.png` by 3899 pixels. Neither mutation is committed;
-// they were run against this spec while it was being written, and re-running
-// them is the way to check the harness has not gone blind.
+// `wire_kind`'s road/rail precedence (delta 1) moves `d-minimap.png` by 11
+// pixels and nothing else, exactly as `display.rs` predicts, and dropping its
+// zone rung moves `b-hydro-lines.png` by 3899 pixels. Neither mutation is
+// committed; re-running them is the way to check the harness has not gone blind.
+//
+// That first one is only visible because `playwright.config.ts` pins the
+// per-pixel `threshold` at 0. Playwright's default of 0.2 lets a pixel move a
+// fifth of the colour space before it counts as different at all, and delta 1 is
+// one minimap pixel going rail-brown to road-grey — a smaller step than that.
+// Measured: with the engine reverted and `threshold: 0.2`, all four baselines
+// pass and only the `kindAt` assertions below notice. If either setting is ever
+// loosened, this spec stops being able to see the delta it exists for.
 //
 // Run:     bun run test:visual
 // Update:  bun run test:visual:update

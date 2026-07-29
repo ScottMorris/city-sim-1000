@@ -67,9 +67,9 @@ use std::path::PathBuf;
 use city_sim_core::buildings::BuildingInstance;
 use city_sim_core::commands::apply_tool;
 use city_sim_core::display::{wire_flags, wire_kind, wire_underground};
-use city_sim_core::occupants::{iter_set, Occupant, StructureLookup, Terrain};
+use city_sim_core::occupants::{iter_set, Network, Occupant, StructureLookup, Terrain};
 use city_sim_core::sim::{state_hash, Simulation};
-use city_sim_core::state::Tile;
+use city_sim_core::state::{GameState, Tile};
 use city_sim_protocol::commands::Tool;
 use city_sim_protocol::tile_buffer::flags;
 use city_sim_protocol::tile_kind::TileKind;
@@ -628,6 +628,73 @@ fn some_tile_saw(history: &BTreeMap<(u32, u32), Vec<Tool>>, run: &[Tool]) -> boo
         .any(|applied| applied.windows(run.len()).any(|w| w == run))
 }
 
+/// Every tool that stamps a footprint building, with the footprint it stamps.
+///
+/// Learned by asking the engine — place the tool on an empty map and read the
+/// template behind whatever building appears — rather than by restating a
+/// `Tool → TileKind` table here. A table would be the third copy of that mapping
+/// in the tree and the only one nothing checks, so it would go stale silently and
+/// take the coverage assertion below quietly with it. Tools that build nothing
+/// (the zones, the carriageways, the brushes) simply do not appear.
+fn footprint_tools() -> Vec<(Tool, (u32, u32))> {
+    let mut out = Vec::new();
+    for tool in (0u8..=u8::MAX).filter_map(|v| Tool::try_from(v).ok()) {
+        let mut s = GameState::new(8, 8, 1);
+        s.money = 10_000_000;
+        if !apply_tool(&mut s, tool, 2, 2).success {
+            continue;
+        }
+        // A zone tool writes a tag and no building; only a footprint stamp does.
+        if let Some(b) = s.buildings.first() {
+            if let Some(t) = city_sim_core::buildings::get_building_template(b.kind) {
+                out.push((tool, t.footprint));
+            }
+        }
+    }
+    out
+}
+
+/// Did one bulldozer click clear a **multi-tile** footprint from somewhere other
+/// than its origin?
+///
+/// This case cannot be asked of [`some_tile_saw`], and that is the whole reason
+/// it needs its own walk: `tool_history` keys runs by `(x, y)`, and the case
+/// spans two tiles by definition — the stamp lands on the origin and the click
+/// lands somewhere else inside the rect — so no per-tile run of tools can ever
+/// express it. Nor can it be asked of the replayed city, because what has to be
+/// pinned is that the *whole rect* went, and afterwards there is nothing left to
+/// look at.
+///
+/// So the script is walked in order, tracking each live footprint rect, and a
+/// `Bulldoze` landing inside one is matched to it. Returns the rect it cleared.
+fn a_footprint_cleared_off_origin(script: &Script) -> Option<((u32, u32), (u32, u32))> {
+    let footprints = footprint_tools();
+    // Live rects, most recently stamped last: `(origin, (width, height))`.
+    let mut live: Vec<((u32, u32), (u32, u32))> = Vec::new();
+    for &(_, step) in &script.steps {
+        let Step::Apply { tool, x, y } = step else {
+            continue;
+        };
+        if let Some(&(_, footprint)) = footprints.iter().find(|(t, _)| *t == tool) {
+            live.push(((x, y), footprint));
+            continue;
+        }
+        if tool != Tool::Bulldoze {
+            continue;
+        }
+        let hit = live
+            .iter()
+            .position(|&((ox, oy), (w, h))| x >= ox && x < ox + w && y >= oy && y < oy + h);
+        if let Some(i) = hit {
+            let (origin, footprint) = live.remove(i);
+            if footprint != (1, 1) && (x, y) != origin {
+                return Some((origin, footprint));
+            }
+        }
+    }
+    None
+}
+
 #[test]
 fn the_golden_city_still_covers_every_awkward_state() {
     use Tool::*;
@@ -645,9 +712,11 @@ fn the_golden_city_still_covers_every_awkward_state() {
         ("a zone drawn under a hydro line", &[PowerLine, Commercial]),
         ("trees planted through a live line", &[PowerLine, Tree]),
         ("water brushed over a live line", &[PowerLine, Water]),
+        // The whole three-tool run, not just the first two: the fixtures README
+        // and `docs/testing.md` both promise the pipe, so the pipe is asserted.
         (
-            "a line demoted to its flag by a regrade",
-            &[PowerLine, TerraformRaise],
+            "a line demoted to its flag by a regrade, with a pipe under it",
+            &[PowerLine, TerraformRaise, WaterPipe],
         ),
         ("a pipe buried under a road", &[Road, WaterPipe]),
         ("water brushed over a buried pipe", &[WaterPipe, Water]),
@@ -727,6 +796,24 @@ fn the_golden_city_still_covers_every_awkward_state() {
         ("a lake left standing", &|t: &Tile| {
             t.terrain == Terrain::Water && t.occupants() == 0
         }),
+        // A hydro line demoted by a regrade *and* carrying a pipe. The build
+        // order is pinned above; this pins the tile the order produced, which is
+        // the half a script walk cannot see.
+        ("a demoted hydro line with a pipe under it", &|t: &Tile| {
+            t.has_occupant(Occupant::Pipe)
+                && t.has_occupant(Occupant::PowerLine)
+                && t.terrain == Terrain::Land
+        }),
+        // An abandoned lot: the zone tag survives, the development does not, and
+        // `ABANDONED` is standing. This is the one state in the gallery the
+        // *simulation* produces rather than the script — no directive can ask
+        // for it — so it is also the one most likely to vanish unnoticed if the
+        // decay parameters or the run length move.
+        ("an abandoned lot", &|t: &Tile| {
+            t.zone_occupant().is_some()
+                && t.building_id.is_none()
+                && t.flags & flags::ABANDONED != 0
+        }),
     ];
     for (what, pred) in structural {
         assert!(
@@ -752,6 +839,88 @@ fn the_golden_city_still_covers_every_awkward_state() {
     assert!(
         footprints.contains(&(2, 2)),
         "no 2×2 footprint building in the golden city"
+    );
+
+    // One click anywhere inside a multi-tile footprint clears the whole thing.
+    let cleared = a_footprint_cleared_off_origin(&script);
+    assert!(
+        cleared.is_some(),
+        "golden_city.script no longer bulldozes a multi-tile footprint from a tile \
+         other than its origin. Restore the case — a 1×1 raze and a 2×2 raze go \
+         down different paths in `remove_building`, and only the second one proves \
+         the click does not have to find the origin."
+    );
+    let ((ox, oy), (w, h)) = cleared.expect("checked just above");
+    for dy in 0..h {
+        for dx in 0..w {
+            let idx = s.tile_index(ox + dx, oy + dy).expect("in bounds");
+            let t = &s.tiles[idx];
+            assert!(
+                !t.has_occupant(Occupant::Structure) && t.building_id.is_none(),
+                "({},{}) still carries part of the {w}×{h} footprint stamped at \
+                 ({ox},{oy}) after one bulldozer click inside it — the raze cleared \
+                 the tile that was clicked and left the rest of the rect standing",
+                ox + dx,
+                oy + dy
+            );
+        }
+    }
+
+    // A power source deliberately left off the network, and one deliberately on
+    // it. The isolated plant is ordinary play — a turbine dropped in a field —
+    // and its wilderness penalty still counts, so the dump has to keep showing
+    // it doing exactly that and no more. "Off the network" is asked as *nothing
+    // adjacent to the footprint conducts power*, because a plant's own tiles
+    // always read `POWERED`: `Tile::conducts` is true for anything with a
+    // `building_id`, so a footprint is always its own conductor.
+    let plants: Vec<&BuildingInstance> = s
+        .buildings
+        .iter()
+        .filter(|b| {
+            city_sim_core::buildings::get_building_template(b.kind)
+                .is_some_and(|t| t.is_power_plant)
+        })
+        .collect();
+    let connected = |b: &BuildingInstance| -> bool {
+        let (w, h) = city_sim_core::buildings::get_building_template(b.kind)
+            .expect("a plant has a template")
+            .footprint;
+        let (ox, oy) = b.origin;
+        for dy in 0..h {
+            for dx in 0..w {
+                let (x, y) = (ox + dx, oy + dy);
+                for (nx, ny) in [
+                    (x.wrapping_sub(1), y),
+                    (x + 1, y),
+                    (x, y.wrapping_sub(1)),
+                    (x, y + 1),
+                ] {
+                    let Some(idx) = s.tile_index(nx, ny) else {
+                        continue;
+                    };
+                    // Its own footprint conducts by definition; skip it.
+                    if s.tiles[idx].building_id == Some(b.id as u16) {
+                        continue;
+                    }
+                    if s.tiles[idx].conducts(Network::Power) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    };
+    assert!(
+        plants.iter().any(|b| !connected(b)),
+        "every power plant in the golden city is wired to something. The script is \
+         supposed to leave one deliberately off the network — an isolated source \
+         that still carries its wilderness penalty — and both the fixtures README \
+         and docs/testing.md say so."
+    );
+    assert!(
+        plants.iter().any(|b| connected(b)),
+        "no power plant in the golden city reaches the grid, so the isolated one \
+         above is not a contrast with anything. The city is supposed to have both."
     );
 
     // --- the invariants the strata are supposed to make unrepresentable ---

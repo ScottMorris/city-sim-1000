@@ -72,9 +72,35 @@ export default defineConfig({
       animations: 'disabled',
       caret: 'hide',
       scale: 'css',
-      // Exact match. The tile art is flat dithered pixel art composited by
-      // WebGL with a fixed camera — there is no antialiasing jitter to
-      // absorb, so any difference at all is a real one worth looking at.
+      // Exact match, and it takes BOTH of these to say so.
+      //
+      // `maxDiffPixels` bounds how many pixels may differ; `threshold` decides
+      // what "differ" means, per pixel, as a perceived YIQ distance. Playwright
+      // defaults `threshold` to 0.2, and left at that default a pixel has to
+      // move by a fifth of the colour space before it is counted at all — so
+      // `maxDiffPixels: 0` on its own is not an exact match, it is "no pixel
+      // moved a lot". That is not a hypothetical gap here: delta 1 is a single
+      // minimap pixel going rail-brown (#6b4a2f) to road-grey (#555), a YIQ
+      // distance well inside 0.2, and `d-minimap.png` exists precisely to pin
+      // that shift. With the default threshold the harness could not see it.
+      //
+      // 0 is the honest setting and it is affordable: every clip in
+      // `visual.spec.ts` is canvas — flat dithered pixel art composited by
+      // WebGL at a fixed camera, with the rasteriser, colour profile and DPR all
+      // pinned by the `visual` project above — so there is no antialiasing
+      // jitter to absorb and no font rendering in shot.
+      //
+      // Measured both ways, by swapping rungs 6 and 7 of `wire_kind` so `Road`
+      // wins a level crossing again and rebuilding the WASM:
+      //   threshold: 0     `d-minimap.png` fails, 11 pixels different, and the
+      //                    other three baselines are untouched — exactly what
+      //                    `display.rs` predicts for delta 1.
+      //   threshold: 0.2   every baseline passes. The only thing that fails is
+      //                    the numeric `kindAt` soft assertion in the spec, so
+      //                    the *visual* harness saw nothing at all.
+      // Neither mutation is committed; re-running that swap is how to check this
+      // has not gone blind again.
+      threshold: 0,
       maxDiffPixels: 0
     }
   },

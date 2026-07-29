@@ -36,14 +36,21 @@
  *   normalisations there; that is the visual-regression harness's ground, not
  *   this one's. See the note at the top of `tileFacts.ts`.
  * - **two named headline drifts** — `WATER_PRODUCTION_DRIFT` below, and the
- *   activation gate pinned in "known drift". Both are listed, both are pinned
- *   by a test that fails when the underlying disagreement goes away, and both
- *   are written out in full where they are declared.
+ *   activation gate pinned in "known drift". Both are listed, both are pinned by
+ *   a test that fails when the underlying disagreement goes away, and both are
+ *   written out in full where they are declared.
+ * - **the headline scalars on the two long deterministic scenarios** — a
+ *   numeric-representation difference rather than a logic one, written out at
+ *   `COMPARE_TILES_ONLY`. Every other scenario compares them exactly.
+ * - **which lot zone growth picks, past about 110 ticks** — two independent RNG
+ *   streams that only stay in step while their draw counts do. Measured and
+ *   written out at `SERVICED_CITY`, which is also where the coverage of
+ *   `developed`, `powered`, `watered` and `abandoned` is explained.
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { initWasm, rustEngine, tsEngine } from './engines';
-import { cmd, Command, fuzzScript, replay, ReplayOptions, summarise } from './replay';
+import { Engine, initWasm, rustEngine, tsEngine } from './engines';
+import { cmd, Command, fuzzScript, replay, ReplayOptions, settle, summarise } from './replay';
 import { Tool } from '../toolTypes';
 
 beforeAll(async () => {
@@ -54,6 +61,25 @@ beforeAll(async () => {
 function expectAgreement(label: string, script: Command[], opts: ReplayOptions = {}): void {
   const found = replay(script, opts);
   expect(found.length, `${label}\n${summarise(found)}`).toBe(0);
+}
+
+/**
+ * Replay `script` on a fresh pair of engines and hand them back, so a scenario
+ * can assert what state was *reached* and not only that the two agree on it.
+ *
+ * Agreement on its own is a weak claim for anything that has to happen over
+ * time: two engines that both grew nothing agree perfectly. Honours `settle` the
+ * same way `replay` does.
+ */
+function driveBoth(script: Command[], width = 12, height = 12, seed = 7): Engine[] {
+  const engines = [rustEngine(width, height, seed), tsEngine(width, height, seed)];
+  for (const engine of engines) {
+    for (const c of script) {
+      engine.apply(c.tool, c.x, c.y);
+      for (let n = 0; n < (c.settle ?? 0); n++) engine.tick();
+    }
+  }
+  return engines;
 }
 
 describe('cross-engine parity — placement', () => {
@@ -191,6 +217,128 @@ describe('cross-engine parity — placement', () => {
  */
 const WATER_PRODUCTION_DRIFT = ['waterProduced', 'waterBalance'] as const;
 
+/**
+ * Tiles compared, headline not — the option the two long deterministic scenarios
+ * below pass, and why they pass it — a *representation* difference, not a logic one, and the reason it
+ * only shows up over long runs.
+ *
+ * The two engines hold the ledgers in different numeric types. Rust keeps
+ * `utilities.power_used` / `water_used` as `i32` and money as an `i64` plus a
+ * separate `money_frac`; TypeScript keeps all of them as floats. Every
+ * individual figure is the same to within a rounding step — `powerUse` is 1.5
+ * for a house and 2.5 for a shop, so an odd number of active lots reads 8.5 in
+ * the oracle and 9 in the engine — but the residues accumulate, and over 90
+ * ticks of daily maintenance the whole-credit part of money crosses a boundary
+ * too (measured: 73 756 against 73 757.15, one credit apart).
+ *
+ * None of that is drift in the mirror, so it is not pinned as one; it is also
+ * not something these two scenarios are for. The headline scalars are compared
+ * **exactly** by the short scenarios above and by all 26 fuzz scenarios, where
+ * the run is brief enough that no residue has accumulated. What the long ones
+ * add is the four *tile* facts — `developed`, `powered`, `watered`, `abandoned`
+ * — and those are compared in full.
+ */
+const COMPARE_TILES_ONLY: ReplayOptions = { compareHeadline: false };
+
+/**
+ * A city with hydro, water and road access, on a 12×12 map — the prelude that
+ * puts the *service* facts within reach of a scenario.
+ *
+ * ## Why this exists
+ *
+ * Four of the twelve `TileFacts` predicates — `powered`, `watered`, `developed`,
+ * `abandoned` — belong to `buildings/manager.ts` and the two utility mirrors,
+ * which is half of the drift this file's header names as its reason for
+ * existing. The original fuzz families could reach none of them: no palette
+ * contained a power source, so nothing was ever `powered`; and the two placement
+ * families run zero ticks while the third stops at 30, under the 40-tick growth
+ * delay, so nothing was ever `developed`, `watered` or `abandoned`. The stated
+ * purpose and the actual coverage disagreed.
+ *
+ * A wider palette on its own does not close that. A 300-click script drawn from
+ * a palette with a plant in it spends the treasury in twenty commands and then
+ * measures refusals, and it only builds a *working* network by luck. A fixed
+ * prelude does it in nine commands and every time.
+ *
+ * ## Why the pump stands on a lake shore
+ *
+ * `WATER_PRODUCTION_DRIFT` is not only a headline exclusion: the oracle credits
+ * a pump's output only when it is `Active` *and* beside natural water, and the
+ * water *balance* feeds `applyZoneGrowthForType`'s growth probability. A pump on
+ * dry ground therefore makes which lots develop a downstream consequence of a
+ * pinned drift instead of a parity question. Powered, and on a shore, both
+ * engines credit the same 50 units.
+ *
+ * ## What still cannot be fuzzed, and why — measured, not assumed
+ *
+ * Zone growth is a Fisher-Yates shuffle plus a per-candidate probability roll,
+ * drawn from `SeededRng` in TypeScript and the deliberately matching `rng.rs` in
+ * Rust. The two streams stay in step only while the *number of draws* does, and
+ * the draw count depends on the candidate list, on `utilityFactor` (0.15 for an
+ * unpowered lot, 0.35 for an unwatered one) and therefore on the utility
+ * balances. Two things were measured rather than assumed:
+ *
+ * - **Under a random script, growth diverges immediately.** With this prelude
+ *   plus 80 fuzz commands and then 90 ticks, two of four seeds disagreed on
+ *   `developed` for two tiles each. Every one traced back to a random click
+ *   knocking out the pump or the plant and the two pinned drifts then moving one
+ *   engine's water balance, not to anything new.
+ * - **Even undisturbed, growth diverges past about 110 ticks.** This prelude on
+ *   its own agrees exactly at 90 and at 100 ticks; at 120 the two engines have
+ *   grown different lots (TypeScript takes (5,4) and (1,7), Rust takes (2,7)).
+ *   That is the RNG streams falling out of step as the city starts abandoning and
+ *   regrowing, and it is a real limit of the oracle rather than of this file.
+ *
+ * So the two deterministic scenarios below stop at **90 ticks**, inside the
+ * window where growth selection is reproducible across the language boundary,
+ * and the fuzz families stop at 30, under the growth delay — which is why they
+ * still pass `ticks: 30` and why they compare `powered` and `watered` but not
+ * `developed`. `docs/testing.md` carries the 110-tick ceiling in its gap table;
+ * closing it means making one engine's RNG consumption match the other's
+ * exactly, which is an oracle-calibration change and moves committed goldens.
+ */
+const SERVICED_CITY: Command[] = [
+  // A coal plant, its spur, and two crossing streets that carry the power:
+  // roads conduct, so the whole grid is one network.
+  cmd(Tool.CoalPlant, 0, 0),
+  cmd(Tool.PowerLine, 2, 1),
+  cmd(Tool.PowerLine, 3, 1),
+  ...Array.from({ length: 12 }, (_, y) => cmd(Tool.Road, 4, y)),
+  ...Array.from({ length: 12 }, (_, x) => cmd(Tool.Road, x, 6)),
+  // A lake, and a pump on its shore, piped into the grid.
+  cmd(Tool.Water, 6, 8),
+  cmd(Tool.Water, 7, 8),
+  cmd(Tool.Water, 6, 9),
+  cmd(Tool.Water, 7, 9),
+  cmd(Tool.WaterPump, 5, 8),
+  cmd(Tool.WaterPipe, 5, 7),
+  cmd(Tool.WaterPipe, 5, 6),
+  // Zones on both streets. Every one has road access, so they develop rather
+  // than sitting vacant.
+  cmd(Tool.Residential, 3, 0),
+  cmd(Tool.Residential, 3, 2),
+  cmd(Tool.Residential, 3, 4),
+  cmd(Tool.Commercial, 5, 0),
+  cmd(Tool.Commercial, 5, 2),
+  cmd(Tool.Commercial, 5, 4),
+  cmd(Tool.Industrial, 0, 7),
+  cmd(Tool.Industrial, 1, 7),
+  cmd(Tool.Industrial, 2, 7)
+];
+
+/** The nine zoned lots of {@link SERVICED_CITY}, as tile indices on a 12-wide map. */
+const SERVICED_LOTS: readonly number[] = [
+  0 * 12 + 3,
+  2 * 12 + 3,
+  4 * 12 + 3,
+  0 * 12 + 5,
+  2 * 12 + 5,
+  4 * 12 + 5,
+  7 * 12 + 0,
+  7 * 12 + 1,
+  7 * 12 + 2
+];
+
 describe('cross-engine parity — running city', () => {
   const smallCity: Command[] = [
     cmd(Tool.CoalPlant, 1, 1),
@@ -248,6 +396,67 @@ describe('cross-engine parity — running city', () => {
     });
     expect(developedAt[0], 'the engine never developed the lot under the line').toBeGreaterThan(0);
     expect(developedAt[1], 'rust and ts developed the lot at different ticks').toBe(developedAt[0]);
+  });
+
+  it('develops every lot of a serviced city, in both engines', () => {
+    // The positive half of the `developed` / `powered` / `watered` coverage the
+    // fuzz families cannot reach — see `SERVICED_CITY`. Agreement alone would
+    // not be enough here: two engines that both grew nothing would agree
+    // perfectly, so the reached states are asserted directly as well.
+    const script: Command[] = [...SERVICED_CITY, settle(90)];
+    expectAgreement('serviced city, grown', script, {
+      width: 12,
+      height: 12,
+      ...COMPARE_TILES_ONLY
+    });
+
+    for (const engine of driveBoth(script)) {
+      const facts = engine.facts();
+      const built = SERVICED_LOTS.filter(i => facts[i].developed);
+      // Not all nine. Residential demand falls as the lots fill, and the run
+      // stops at 90 ticks for the reason `SERVICED_CITY` gives, so four is what
+      // this window builds — identically in both engines, which is what the
+      // agreement check above has already established. Four is a floor to catch
+      // the scenario silently stopping, not a measurement of anything.
+      expect(
+        built.length,
+        `${engine.name} grew only ${built.length} of ${SERVICED_LOTS.length} serviced lots, so ` +
+          'this scenario is no longer exercising development'
+      ).toBeGreaterThanOrEqual(4);
+      for (const lot of built) {
+        expect(facts[lot].powered, `${engine.name} left developed lot ${lot} unpowered`).toBe(true);
+        expect(facts[lot].watered, `${engine.name} left developed lot ${lot} unwatered`).toBe(true);
+      }
+    }
+  });
+
+  it('abandons what it built when the city loses its only power plant', () => {
+    // `abandoned` is the last of the four service facts, and the only route to
+    // it is a live city that then goes wrong. The plant is razed after the lots
+    // have grown; `troublePowerPenalty` is 3.0 a tick against an abandon
+    // threshold of 12, so twelve ticks is comfortably past the turn and well
+    // short of the 40-tick delay before a vacated lot may regrow — which is what
+    // keeps this deterministic, because regrowth is the RNG roll `SERVICED_CITY`
+    // explains cannot be compared.
+    const script: Command[] = [
+      ...SERVICED_CITY,
+      settle(90),
+      cmd(Tool.Bulldoze, 0, 0),
+      settle(12)
+    ];
+    expectAgreement('serviced city, cut off', script, {
+      width: 12,
+      height: 12,
+      ...COMPARE_TILES_ONLY
+    });
+
+    for (const engine of driveBoth(script)) {
+      const facts = engine.facts();
+      const abandoned = SERVICED_LOTS.filter(i => facts[i].abandoned).length;
+      expect(abandoned, `${engine.name} abandoned nothing after losing its hydro`).toBeGreaterThan(
+        0
+      );
+    }
   });
 
   it('agrees on money, population and jobs across the first two sim days', () => {
@@ -392,6 +601,26 @@ describe('cross-engine parity — fuzz', () => {
         ticks: 30,
         ignoreHeadline: WATER_PRODUCTION_DRIFT
       });
+    });
+  }
+
+  // A serviced city, then a random script over it. This is the family that
+  // reaches `powered` and `watered` — see `SERVICED_CITY` for why the three
+  // families above cannot, and `docs/testing.md` for the two facts that stay out
+  // of reach of any fuzz.
+  for (const seed of [41, 42, 43, 44] as const) {
+    it(`agrees on the networks of a serviced city put through a random script (seed ${seed})`, () => {
+      expectAgreement(
+        `serviced-city fuzz seed ${seed}`,
+        [...SERVICED_CITY, ...fuzzScript(seed, 80, 12, PALETTE)],
+        {
+          width: 12,
+          height: 12,
+          // Under the 40-tick growth delay, deliberately: see `SERVICED_CITY`.
+          ticks: 30,
+          ignoreHeadline: WATER_PRODUCTION_DRIFT
+        }
+      );
     });
   }
 });
