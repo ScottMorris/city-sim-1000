@@ -210,14 +210,23 @@ export class Simulation {
         industrialZones++;
         if (tile.buildingId !== undefined) developedIndustrialZones++;
       }
-      const upkeep = MAINTENANCE[tile.kind];
-      if (upkeep && tile.buildingId === undefined) {
+      // Bill every feature the tile carries, not just whichever one owns its
+      // `kind`. Mirrors `compute_daily_budget` in
+      // `crates/city-sim-core/src/economy.rs` — see there for why the old
+      // per-kind form made a road get *cheaper* when you strung a line over it.
+      // Water pipes are only ever recorded in `underground`, handled below.
+      const bill = (kind: TileKind, present: boolean, add: (u: number) => void) => {
+        if (!present) return;
+        const upkeep = MAINTENANCE[kind] ?? 0;
         maintenance += upkeep;
-        if (tile.kind === TileKind.Road) maintenanceRoads += upkeep;
-        if (tile.kind === TileKind.Rail) maintenanceRail += upkeep;
-        if (tile.kind === TileKind.PowerLine) maintenancePowerLines += upkeep;
-        if (tile.kind === TileKind.WaterPipe) maintenancePipes += upkeep;
-      }
+        add(upkeep);
+      };
+      bill(TileKind.Road, tile.kind === TileKind.Road || !!tile.roadUnderlay,
+        (u) => { maintenanceRoads += u; });
+      bill(TileKind.Rail, tile.kind === TileKind.Rail || !!tile.railUnderlay,
+        (u) => { maintenanceRail += u; });
+      bill(TileKind.PowerLine, tile.kind === TileKind.PowerLine || !!tile.powerOverlay,
+        (u) => { maintenancePowerLines += u; });
 
       if (tile.underground) {
         const uUpkeep = MAINTENANCE[tile.underground];

@@ -167,7 +167,18 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
             clear_building_at(state, x, y);
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
-            state.tiles[idx].kind = TileKind::PowerLine;
+            // A line strung across a zone leaves the zone standing, recording
+            // itself as an overlay — the same courtesy roads and rails get.
+            // Zoning over a line already kept both (`set_kind` leaves flags
+            // alone), so replacing the zone here made the outcome depend on
+            // which you clicked first.
+            let zoned = matches!(
+                state.tiles[idx].kind,
+                TileKind::Residential | TileKind::Commercial | TileKind::Industrial
+            );
+            if !zoned {
+                state.tiles[idx].kind = TileKind::PowerLine;
+            }
             state.tiles[idx].set_flag(FLAG_ROAD_UNDERLAY, had_road);
             state.tiles[idx].set_flag(FLAG_RAIL_UNDERLAY, had_rail);
             state.tiles[idx].set_flag(FLAG_POWER_OVERLAY, true);
@@ -595,7 +606,12 @@ mod tests {
         // The whole point: the same two actions in either order must produce
         // the same tile, bit for bit. Two spellings of one situation is how
         // the renderer ended up with a pole standing in the middle of a road.
-        for (first, second) in [(Tool::Road, Tool::PowerLine), (Tool::Rail, Tool::PowerLine)] {
+        for (first, second) in [
+            (Tool::Road, Tool::PowerLine),
+            (Tool::Rail, Tool::PowerLine),
+            (Tool::Residential, Tool::PowerLine),
+            (Tool::Commercial, Tool::PowerLine),
+        ] {
             let mut forward = gs(4, 4);
             apply_tool(&mut forward, first, 1, 1);
             apply_tool(&mut forward, second, 1, 1);
