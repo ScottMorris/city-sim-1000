@@ -592,13 +592,13 @@ mod tests {
     /// built, and — since step 3 of #177 — is spelled on the wire exactly one
     /// way: `Rail` + `ROAD_UNDERLAY`.
     ///
-    /// **This is one of the wire bytes the flip could not reproduce** — delta 1
-    /// of the three `display.rs` names. Build order was the only thing
+    /// **This is one of the wire bytes the projection could not reproduce** —
+    /// delta 1 of the three `display.rs` names. Build order was the only thing
     /// distinguishing `Road` + `RAIL_UNDERLAY` from `Rail` + `ROAD_UNDERLAY`,
-    /// and build order is not stored, so `{Road, Rail}` had to normalise onto
-    /// one of them. Rail wins because dragging a railway across an existing
-    /// road network is far commoner than the reverse, so it is the spelling
-    /// most saves already hold. The sprite is unaffected —
+    /// and build order is not a property of the tile, so `{Road, Rail}` had to
+    /// normalise onto one of them. Rail wins because dragging a railway across
+    /// an existing road network is far commoner than the reverse, so it is the
+    /// spelling most saves already hold. The sprite is unaffected —
     /// `resolveBaseTileSprite` tests `(Rail && roadUnderlay) || (Road &&
     /// railUnderlay)` and `pickRailCrossingTexture` orients off the rail axis
     /// either way — and so are the renderer's debug labels. What is visible is
@@ -718,7 +718,8 @@ mod tests {
         }
     }
 
-    /// **Delta 3 of the flip, through the bulldozer rather than the API.**
+    /// **Delta 3 of the three `display.rs` names, reached through the bulldozer
+    /// rather than through the API.**
     ///
     /// `a_bulldozed_park_leaves_bare_ground` covers the same behaviour change
     /// by calling [`remove_building`] directly on a 1×1 park. This is the
@@ -995,7 +996,8 @@ mod tests {
         // leaves the span standing overhead, which is correct — but in v4 it
         // also moved the line out of `kind`, and the old guard read only
         // `kind`. There is no `kind` to move out of any more, which is the
-        // point of the flip; the guard reads the occupant set either way.
+        // point of making the strata canonical; the guard reads the occupant
+        // set either way.
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::PowerLine, 1, 1);
         apply_tool(&mut s, Tool::TerraformRaise, 1, 1);

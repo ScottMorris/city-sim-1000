@@ -3,8 +3,8 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-//! The occupant model, the storage a tile is kept in since step 3 of the
-//! migration tracked in #177. The design note it implements is
+//! The occupant model, the canonical representation of a tile since step 3 of
+//! the migration tracked in #177. The design note it implements is
 //! `docs/tile-model.md`; "the design note" below always means that file.
 //!
 //! A tile used to record its infrastructure in two places — the single-valued
@@ -13,12 +13,14 @@
 //! line had *two* legal spellings depending on build order. Every consumer
 //! that read `kind` and forgot the flags silently under-counted; that same bug
 //! was found in `economy.rs`, `wilderness.rs`, `tileRenderUtils.ts` and
-//! `commands.rs` before the storage was flipped.
+//! `commands.rs` while `kind` was still canonical.
 //!
 //! Now `Tile::terrain` holds the ground and `Tile::occupants` holds everything
 //! standing on, over or under it, one bit per [`Occupant`]. There is one
-//! spelling, no precedence, and nothing to reconcile. `TileKind` survives as
-//! three things and no longer as tile storage: the *wire vocabulary* (the
+//! spelling, no precedence, and nothing to reconcile. `TileKind` no longer
+//! describes a tile at all, but it survives as three other things — the last
+//! of which is still canonical, for the structure rather than for the tile:
+//! the *wire vocabulary* (the
 //! `kind` byte of the SoA tile buffer — see `display.rs`), the *building
 //! template key* (`BuildingInstance::kind`), and the *wilderness tunables key*
 //! (`WildernessTunables::base_eco[kind]`, which [`EcoSource::Kind`] indirects
@@ -43,15 +45,15 @@
 //! terrain to be the thing the bulldozer restores a tile to and the thing that
 //! survives terraforming; the second holds by construction now, the first does
 //! not — `bulldoze` still writes `Land`, and every tool that used to overwrite
-//! `kind` still forces `Terrain::Land`. Making it durable in *behaviour* moves
-//! the wilderness buildable count, so it is step 4.
+//! `kind` still forces `Terrain::Land`. Teaching those tools to leave terrain
+//! alone moves the wilderness buildable count, so it is step 4.
 //!
 //! **Precedence disappears.** `commands.rs` used to run a zone > hydro >
 //! road/rail precedence purely to decide who owned the contested `kind` slot.
 //! The occupant set is a union, so it never asks who won. The one place an
 //! ordering survives is `display.rs`, which has to pick a single `kind` byte
-//! for the wire — and that ordering is a *rendering* concern, not a storage
-//! one.
+//! for the wire — and that ordering is a *projection* concern, not a fact
+//! about the tile.
 
 use crate::economy::{MAINT_POWER_LINE, MAINT_RAIL, MAINT_ROAD, MAINT_WATER_PIPE};
 use crate::state::{GameState, Tile};
@@ -133,7 +135,7 @@ pub type OccupantSet = u16;
 /// occupying it.
 ///
 /// Its own stored field on [`Tile`] since step 3, so it is no longer destroyed
-/// by whatever is built on top. It is not yet *durable in behaviour*: every
+/// by whatever is built on top. Behaviour has not caught up to it: every
 /// tool that used to overwrite `kind` still writes `Terrain::Land`, and
 /// `bulldoze` still writes `Land` rather than restoring water. Making terrain
 /// survive construction moves the wilderness `buildable` count, so it is a
@@ -889,7 +891,7 @@ impl StructureLookup {
 }
 
 // ---------------------------------------------------------------------------
-// Tile accessors over the stored strata
+// Tile accessors over the canonical strata
 // ---------------------------------------------------------------------------
 
 impl Tile {
@@ -1058,9 +1060,9 @@ mod tests {
     /// flags + underground, decoded into the strata.
     ///
     /// Every occupant-model assertion below still poses its question in the
-    /// pre-flip vocabulary, which is the point — the answers must not have
-    /// moved. A structure kind is given a development so it is not read as the
-    /// ghost `tile_from_v4` drops.
+    /// old `kind`-and-flags vocabulary, which is the point — the answers must
+    /// not have moved. A structure kind is given a development so it is not
+    /// read as the ghost `tile_from_v4` drops.
     fn tile(kind: TileKind, flags: u8, underground: Option<TileKind>) -> Tile {
         let building_id = is_structure_kind(kind).then_some(1);
         tile_from_v4(kind, flags, underground, building_id)
@@ -1603,12 +1605,13 @@ mod tests {
     /// `TileKind::Park` with nothing behind it: still +4.0 of wilderness for
     /// ever, and a second bulldoze click to clear.
     ///
-    /// The flip forces the question, because `Occupant::Structure` is one flat
-    /// tag and the `BuildingInstance` is the only thing that knows which
-    /// structure it is. A tag with no development has no identity to score, so
-    /// keeping it would have *silently* changed a bulldozed park from +4.0 to
-    /// 0.0 — the same fix, smuggled inside a representation change. It is made
-    /// in the open here instead: the tag goes with the id.
+    /// Making the strata canonical forces the question, because
+    /// `Occupant::Structure` is one flat tag and the `BuildingInstance` is the
+    /// only thing that knows which structure it is. A tag with no development
+    /// has no identity to score, so keeping it would have *silently* changed a
+    /// bulldozed park from +4.0 to 0.0 — the same fix, smuggled inside a
+    /// representation change. It is made in the open here instead: the tag goes
+    /// with the id.
     #[test]
     fn removing_a_building_takes_its_structure_tag_with_it() {
         for tool in [Tool::Residential, Tool::Road, Tool::Rail, Tool::PowerLine] {
@@ -1931,8 +1934,8 @@ mod tests {
     /// yields the identical set.
     ///
     /// A zone has no fallback flag, so when a zone is present only the zone
-    /// can own `kind`; that is a fact about today's storage, and it is exactly
-    /// the asymmetry the occupant set erases.
+    /// can own `kind`; that is a fact about the `kind`-and-flags encoding, and
+    /// it is exactly the asymmetry the occupant set erases.
     #[test]
     fn every_v4_recording_decodes_to_the_same_set() {
         let zones = [

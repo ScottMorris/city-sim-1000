@@ -1,4 +1,4 @@
-// display.rs — deriving the wire tile bytes from the stored strata.
+// display.rs — deriving the wire tile bytes from the canonical strata.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -37,9 +37,10 @@
 //! ## The three deltas
 //!
 //! Exactly three classes of tile come off the wire differently than they did at
-//! `303897f`, the last commit with `kind` in storage. Two are **normalisations**
-//! — one physical tile that v4 could spell two ways, collapsing onto one — and
-//! the third is a **behaviour fix** that the flip forced. Nothing else changes;
+//! `303897f`, the last commit where `kind` was canonical. Two are
+//! **normalisations** — one physical tile that v4 could spell two ways,
+//! collapsing onto one — and the third is a **behaviour fix** that reversing
+//! the derivation forced. Nothing else changes;
 //! `the_two_normalisations` pins the first two, and
 //! `commands::tests::a_bulldozed_park_leaves_bare_ground`,
 //! `commands::tests::one_bulldozer_click_clears_a_whole_footprint` and
@@ -167,7 +168,7 @@ pub fn wire_kind(tile: &Tile, lookup: &StructureLookup) -> TileKind {
 
 /// The `flags` byte for a tile — all six protocol bits.
 ///
-/// `POWERED` / `WATERED` / `ABANDONED` come straight out of storage; the three
+/// `POWERED` / `WATERED` / `ABANDONED` are copied straight off the tile; the three
 /// structural bits are re-derived. An underlay bit means "this occupant is
 /// present but did not win the kind byte", which is exactly the fallback the
 /// flags were minted as. `POWER_OVERLAY` is unconditional, even when the kind
@@ -410,15 +411,16 @@ mod tests {
 
     /// Where v4 wrote the same bytes for a tool sequence, and where it did not.
     ///
-    /// Every case's third column is what `303897f` — the last commit with
-    /// `kind` in storage — emitted for the identical sequence, read off that
+    /// Every case's third column is what `303897f` — the last commit where
+    /// `kind` was canonical — emitted for the identical sequence, read off that
     /// tree through `apply_tool` + `tile.kind`/`tile.flags`. `Same` is the
     /// byte-identity claim, case by case. `Was(..)` is an acknowledged delta,
     /// and the comment beside it names which of the module note's three it is.
     ///
     /// **There are exactly three `Was(..)` cases here and that is the point.**
     /// The list covers the producible occupant vocabulary, so a fourth
-    /// appearing means the flip changed something nobody decided to change.
+    /// appearing means reversing the derivation changed something nobody
+    /// decided to change.
     #[test]
     fn every_tool_built_tile_against_the_v4_bytes() {
         /// What v4 emitted, relative to what this tree emits.

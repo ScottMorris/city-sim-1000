@@ -1,4 +1,4 @@
-// migrate.rs — decoding the pre-strata (v4) tile shape into the stored strata.
+// migrate.rs — decoding the pre-strata (v4) tile shape into the canonical strata.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -10,7 +10,7 @@
 //! `underground: Option<TileKind>`. That shape still arrives from two places:
 //!
 //! - `import.rs`, decoding the SoA tile buffer a legacy TS save is re-encoded
-//!   into — where the `kind` byte is legitimately authoritative, because it is
+//!   into — where the `kind` byte is legitimately canonical, because it is
 //!   the wire and the wire never changed shape;
 //! - the v4 snapshot migration, which reads the same triple out of a postcard
 //!   payload.
@@ -20,8 +20,8 @@
 //! literally the old derived `Tile::occupants()` predicate, relocated: the
 //! two spellings of a road under a line (`kind = Road` + `POWER_OVERLAY`, and
 //! `kind = PowerLine` + `ROAD_UNDERLAY | POWER_OVERLAY`) collapse to the same
-//! `{Road, PowerLine}` here, which is what makes the flip lossless in the
-//! direction that matters.
+//! `{Road, PowerLine}` here, which is what makes the decode into the strata
+//! lossless in the direction that matters.
 
 use crate::occupants::{is_structure_kind, Occupant, OccupantSet, Terrain};
 use crate::state::{GameState, Tile, ZoneDensity, DERIVED_FLAG_MASK};
@@ -110,7 +110,7 @@ pub fn tile_from_v4(
 /// **The nested types are the live ones on purpose.** `UtilityStats`,
 /// `DemandStats`, `BudgetStats`, `EducationStats`, `BudgetHistoryEntry`,
 /// `BuildingInstance`, `SeededRng`, `Policies` and `WildernessStats` are
-/// re-used rather than copied, because none of them changed shape in the flip
+/// re-used rather than copied, because none of them changed shape in step 3
 /// — only [`Tile`] did. It is a deliberate trade: it saves ~200 lines of
 /// duplication, at the cost of a drift risk (someone edits `BudgetStats` in
 /// 2027 and silently changes what "v4" means). That risk is caught by
@@ -235,9 +235,9 @@ pub(crate) fn v4_to_v5(old: v4::GameState) -> GameState {
 /// outputs) alone.
 ///
 /// This is how the ~150 test-side `tile.kind = TileKind::X` writes are
-/// expressed after the flip, which means [`tile_from_v4`] — and therefore the
-/// v4 decode path — is executed by essentially the whole Rust test suite rather
-/// than by one migration test.
+/// expressed now that the strata are canonical, which means [`tile_from_v4`] —
+/// and therefore the v4 decode path — is executed by essentially the whole Rust
+/// test suite rather than by one migration test.
 #[cfg(test)]
 pub fn set_v4(tile: &mut Tile, kind: TileKind, flags: u8, underground: Option<TileKind>) {
     let v4 = tile_from_v4(kind, flags, underground, tile.building_id);

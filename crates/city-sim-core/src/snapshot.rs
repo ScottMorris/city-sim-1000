@@ -72,7 +72,7 @@ pub enum SnapshotError {
 }
 
 // ---------------------------------------------------------------------------
-// The v4 fixture — a genuine pre-flip save, loaded and checked byte for byte
+// The v4 fixture — a genuine pre-strata save, loaded and checked byte for byte
 // ---------------------------------------------------------------------------
 
 /// Loading a real v4 file and proving the city that comes out is the city that
@@ -88,7 +88,7 @@ pub enum SnapshotError {
 ///
 /// **The comparison is on the derived wire bytes, not on the new struct's
 /// fields.** The wire is the one vocabulary that exists on both sides of the
-/// flip, so "the loaded city is identical to what v4 produced" is a claim a
+/// change, so "the loaded city is identical to what v4 produced" is a claim a
 /// reviewer can check — and it is simultaneously the proof that `app/src/`
 /// needs no changes.
 #[cfg(test)]
@@ -114,11 +114,11 @@ mod v4_fixture {
     ///
     /// The first two are cases where v4 had **two** spellings for one physical
     /// tile and the strata have one, so the difference being erased is the
-    /// whole purpose of the flip rather than a defect in it. The third is not a
-    /// spelling collapse at all: it deletes an occupant, and so it moves the
-    /// loaded city's wilderness score and every trajectory downstream of it.
-    /// That is deliberate — it is delta 3 of `display.rs`'s module note, the
-    /// one change of the flip that is a gameplay fix rather than a
+    /// whole point of the occupant model rather than a defect in it. The third
+    /// is not a spelling collapse at all: it deletes an occupant, and so it
+    /// moves the loaded city's wilderness score and every trajectory downstream
+    /// of it. That is deliberate — it is delta 3 of `display.rs`'s module note,
+    /// the one change in step 3 that is a gameplay fix rather than a
     /// representation change. Every other tile must match exactly.
     #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
     enum Normalisation {

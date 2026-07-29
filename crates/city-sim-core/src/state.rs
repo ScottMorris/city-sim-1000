@@ -60,7 +60,7 @@ pub enum ServiceKind {
 // Tile
 // ---------------------------------------------------------------------------
 
-/// One grid cell. Storage is stratified: the ground itself is `terrain`, and
+/// One grid cell. The model is stratified: the ground itself is `terrain`, and
 /// everything standing on, over or under it is a bit in `occupants`. Nothing
 /// competes for a slot any more, so no consumer has to check two places — the
 /// bug class catalogued in `docs/tile-model.md`.
@@ -70,12 +70,12 @@ pub struct Tile {
     /// What the ground is, `Land` | `Water`. Its own field, so it is no longer
     /// destroyed by whatever is built on top.
     ///
-    /// **Durable in storage, not yet in behaviour.** Every tool that overwrote
-    /// `kind` today still writes `Terrain::Land` here (see `regrade` in
-    /// `commands.rs`), and `bulldoze` still writes `Land` rather than restoring
-    /// water. Making terrain survive construction changes the wilderness
-    /// `buildable` count and therefore the score, so it is a gameplay change
-    /// (#177 step 4), not part of the flip.
+    /// **A field of its own, but not yet honoured by behaviour.** Every tool
+    /// that overwrote `kind` today still writes `Terrain::Land` here (see
+    /// `regrade` in `commands.rs`), and `bulldoze` still writes `Land` rather
+    /// than restoring water. Making terrain survive construction changes the
+    /// wilderness `buildable` count and therefore the score, so it is a
+    /// gameplay change (#177 step 4), not part of making the strata canonical.
     pub terrain: Terrain,
     /// Everything physically present, all three strata in one bitset.
     ///

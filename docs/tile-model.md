@@ -35,7 +35,7 @@ Four systems, one root cause. Precedence rules (what #172 introduced) fix the *t
 | what networks pass through | **many** — a level crossing is the point |
 | what the tile contributes to scoring | derived from the union of the above |
 
-Networks are inherently multi-valued and are being stored in a single-valued slot, with the overflow spilling into ad-hoc booleans. Any consumer that checks the slot but not the overflow silently under-counts, and nothing tells you.
+Networks are inherently multi-valued and are being recorded in a single-valued slot, with the overflow spilling into ad-hoc booleans. Any consumer that checks the slot but not the overflow silently under-counts, and nothing tells you.
 
 ## The proposed model
 
@@ -95,7 +95,7 @@ struct OccupantDef {
 | data | who owns `kind` | zone > hydro > road/rail |
 | visual | who is the base, who adapts | road/rail > hydro |
 
-Hydro *wins* the data slot (roads and rails yield, because they have underlay flags to fall back on) but *loses* the visual contest (roads draw first and ignore everything; hydro's pole has to dodge). The data ordering was never a layering decision — it came from which occupant had somewhere else to be stored, which is an implementation accident.
+Hydro *wins* the data slot (roads and rails yield, because they have underlay flags to fall back on) but *loses* the visual contest (roads draw first and ignore everything; hydro's pole has to dodge). The data ordering was never a layering decision — it came from which occupant had somewhere else to be recorded, which is an implementation accident.
 
 Under strata the data ordering **disappears entirely**, because nothing is contested. Only the visual one survives, and it is just the physical stack: underground → surface → overhead. One ordering, and it means what it says.
 
@@ -166,7 +166,7 @@ Placement predicates belong in the same table: a hydro plant's "must be adjacent
 
 ## Buildings own their own stats
 
-The tile stays a dumb storage unit. `development: Option<BuildingId>` points at an instance; the instance's template carries output, upkeep, footprint, category and placement predicates. This is already how `BuildingInstance` + `get_building_template` work, and it is the property that lets a new building type be added without plumbing changes.
+The tile stays a dumb container. `development: Option<BuildingId>` points at an instance; the instance's template carries output, upkeep, footprint, category and placement predicates. This is already how `BuildingInstance` + `get_building_template` work, and it is the property that lets a new building type be added without plumbing changes.
 
 **Multi-tile footprints** need no special handling: every covered tile carries the same `development` id, the instance owns `origin`, and the template owns `footprint`. The renderer draws at the origin and skips the rest. That mechanism exists today and carries over unchanged.
 
@@ -271,7 +271,7 @@ Strangler, not big bang. Feature work continues throughout.
 
 1. Add a derived accessor (`tile.occupants(stratum)`) computed from today's `kind` + flags. No behaviour change.
 2. Convert consumers one at a time to the accessor. Each conversion is individually testable, and each gets a coverage-matrix-style test pinning its behaviour.
-3. When no consumer reads `kind` for a multi-valued question, flip the storage: strata become authoritative and `kind` narrows to terrain. Snapshot version bumps here, and only here.
+3. When no consumer reads `kind` for a multi-valued question, reverse the derivation: the strata become canonical, and the `kind` + flags the wire has always carried become the derived projection rather than the source of truth. `kind` narrows to terrain. The snapshot version bumps here, and only here — that is a consequence of the tile's fields changing shape, not the point of the step.
 
 **Sizing the sweep**, measured rather than guessed: 180 references to `tile.kind` / `TileKind::` across nine non-test files in `city-sim-core` (`wilderness.rs` 49, `commands.rs` 42, `economy.rs` 23, `education.rs` 19, and the rest in single digits), plus 27 TypeScript files in `app/src/game` and `app/src/rendering`. Not all of them are multi-valued questions — many legitimately ask about terrain — but that is the search space, and step 2 is what shrinks it before anything breaks.
 

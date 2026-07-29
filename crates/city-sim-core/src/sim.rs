@@ -275,8 +275,8 @@ impl Simulation {
 ///
 /// - the wire `kind` byte ([`crate::display::wire_kind`]), which subsumes the
 ///   old histogram and adds position. Derived from the strata since step 3, so
-///   this hash not moving across the flip is the proof the derivation is
-///   byte-neutral;
+///   this hash not moving when the derivation reversed is the proof the
+///   projection is byte-neutral;
 /// - `Tile::occupants`, what actually stands there. Deliberately the occupant
 ///   set rather than the raw `flags` byte: the two spellings one physical tile
 ///   used to have hash alike;

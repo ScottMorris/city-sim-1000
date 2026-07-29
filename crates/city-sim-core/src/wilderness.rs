@@ -536,7 +536,7 @@ mod tests {
     /// never built on, which is the whole point of clearing the tag.
     ///
     /// This is a gameplay change, not a representation one, and it is the only
-    /// one the flip made. It is pinned here so that stays true and visible.
+    /// one step 3 made. It is pinned here so that stays true and visible.
     #[test]
     fn a_bulldozed_park_stops_scoring_as_a_park() {
         let untouched = grid(8, 8);

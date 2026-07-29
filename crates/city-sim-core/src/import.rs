@@ -104,7 +104,7 @@ pub fn from_tile_buffer(
     // It has to be kept rather than re-read off the tile, because the tile no
     // longer stores a kind — but this is not a structure-identity problem. The
     // *input* here is a v4-shaped wire buffer, where the kind byte is
-    // legitimately authoritative; it is the buffer that knows a footprint holds
+    // legitimately canonical; it is the buffer that knows a footprint holds
     // a coal plant, and the `BuildingInstance` this loop is about to build is
     // what will know it afterwards.
     let mut kinds: Vec<TileKind> = Vec::with_capacity(n);

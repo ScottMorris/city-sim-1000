@@ -316,7 +316,7 @@ mod tests {
     /// the grid while still being billed `MAINT_POWER_LINE` a day.
     ///
     /// Every v4 kind is decoded, not just the reachable ones: the overlay flag
-    /// was orthogonal to `kind` in the old storage, and every one of those
+    /// was orthogonal to `kind` in the old encoding, and every one of those
     /// spellings has to land on the same `Occupant::PowerLine` bit now.
     #[test]
     fn a_line_in_the_overlay_flag_alone_carries_power() {
