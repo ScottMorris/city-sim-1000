@@ -1,6 +1,6 @@
 # Tile model — a stratum-based design note
 
-**Status:** proposal, not implemented. Written to be argued with.
+**Status:** proposal, not implemented. Written to be argued with. Implementation is tracked in #177.
 
 This note proposes replacing the single `kind` field with a set of *strata*, each holding a set of *occupants*. It exists because the same class of bug has now been found four times in three separate systems, and each time it was found by accident rather than by a test.
 
