@@ -192,8 +192,12 @@ pub struct WildernessOutput {
 // ---------------------------------------------------------------------------
 
 /// Strong nature: contributes to clusters, earns bonuses, risks fragmentation.
+///
+/// `pub(crate)` so `occupants.rs` can pin its derived answer against this rule
+/// itself rather than against a copy of the `matches!` — a copy would keep
+/// agreeing with itself while the two drifted apart.
 #[inline]
-fn is_strong_nature(kind: TileKind) -> bool {
+pub(crate) fn is_strong_nature(kind: TileKind) -> bool {
     matches!(kind, TileKind::Tree | TileKind::Park | TileKind::ParkLarge)
 }
 

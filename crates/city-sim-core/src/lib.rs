@@ -10,6 +10,7 @@ pub mod economy;
 pub mod education;
 pub mod history;
 pub mod import;
+pub mod occupants;
 pub mod rng;
 pub mod sim;
 pub mod snapshot;

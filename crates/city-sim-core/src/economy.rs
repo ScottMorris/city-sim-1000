@@ -18,10 +18,14 @@ const DAYS_PER_MONTH: u32 = 30;
 
 // Per-tile maintenance per day (from `constants.ts` MAINTENANCE table).
 // Only tiles with no building_id contribute transport maintenance.
-const MAINT_ROAD: f32 = 0.1;
-const MAINT_RAIL: f32 = 0.2;
-const MAINT_POWER_LINE: f32 = 0.08;
-const MAINT_WATER_PIPE: f32 = 0.04;
+//
+// `pub(crate)` so `occupants.rs` can build its table out of these very
+// constants rather than a copy of their values — a copy is free to drift, and
+// the whole point of the occupant table is that it agrees with this ledger.
+pub(crate) const MAINT_ROAD: f32 = 0.1;
+pub(crate) const MAINT_RAIL: f32 = 0.2;
+pub(crate) const MAINT_POWER_LINE: f32 = 0.08;
+pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 
 // Lighting bylaw scaling is not yet ported (P3-9+).  Default bylaw is neutral
 // (multiplier = 1.0), so civic/zone maintenance is unscaled here.
