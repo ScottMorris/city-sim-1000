@@ -32,6 +32,12 @@ export function placeBuilding(
       if (tile.buildingId !== undefined || tile.powerPlantType) {
         return { success: false, message: 'Cannot overlap another building. Bulldoze first.' };
       }
+      // A hydro line recorded in `powerOverlay` rather than `kind` is refused
+      // one level up, in `refuseHydroSpan` in `tools.ts` — not here. This
+      // function is also the zone-growth path (`spawnZoneBuildings` in
+      // `simulation.ts` calls it to develop a lot), and a lot under a line
+      // develops perfectly happily; the engine's guard is in
+      // `place_footprint_building`, which only the structure tools reach.
       if (
         tile.kind === TileKind.Road || tile.kind === TileKind.Rail ||
         tile.kind === TileKind.PowerLine || tile.roadUnderlay || tile.railUnderlay

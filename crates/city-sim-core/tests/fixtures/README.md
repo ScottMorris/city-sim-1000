@@ -1,4 +1,44 @@
-# Snapshot fixtures
+# Test fixtures
+
+Two families live here, and they answer different questions. `city_v4.*` asks *"does a save written by the old tree still load as the same city?"* — it is a one-way migration proof and cannot be regenerated. `golden_city.*` asks *"does this tree still produce the same city it produced yesterday?"* — it is a regression net over the current engine and is regenerated on purpose.
+
+## `golden_city.script` + `golden_city.expected`
+
+**The golden city.** A committed command script and a committed dump of everything observable after replaying it. `tests/golden_city.rs` is the harness.
+
+```bash
+cargo test -p city-sim-core --test golden_city                 # run it
+GOLDEN=regen cargo test -p city-sim-core --test golden_city    # regenerate the dump
+```
+
+**Regeneration is a deliberate act.** The dump is a *derived* artefact, so a wrong derivation and a stale expectation look identical from the outside — which makes "regenerate until green" the exact failure mode this fixture exists to prevent. Every line that moves must be named and justified in the commit message; a diff nobody can explain is a bug report, not a merge.
+
+- **`golden_city.script`** — data, not code. A readable list of `(tool, x, y)` commands and tick counts, so a case can be added without touching Rust:
+
+  ```
+  grid <w> <h>            the map size
+  seed <n>                the PRNG seed
+  tick <n>                advance the sim by n fixed ticks
+  <Tool> <x> <y>          apply a tool; MUST succeed or the harness panics
+  refuse <Tool> <x> <y>   apply a tool that MUST be refused; the refusal
+                          message is recorded in the dump
+  ```
+
+  Tool names are the `city_sim_protocol::commands::Tool` variants, and the harness derives the name table from the enum rather than restating it — so renaming a tool breaks the script loudly.
+
+- **`golden_city.expected`** — generated text, one thing per line so a diff points at the thing that moved: the script's identity and a hash of its effective directives; every refusal and its message; the scalars (tick, day, money, population, jobs, building count, `state_hash`); the utility, demand and education blocks; **every** `BudgetStats` field; the wilderness score, trend, EMAs and full breakdown; the building list; and one line per tile:
+
+  ```
+  tile <index> (<x>,<y>) <terrain> kind=<wire kind>(<byte>) flags=<hex>[PWArlp] ug=<byte> bid=<development> occ=<occupant set>
+  ```
+
+  `kind`, `flags` and `ug` are the **derived** wire bytes (`display.rs`) — what a renderer actually sees. `terrain`, `occ` and `bid` are the **canonical** tile. Having both on one line is the point: a derivation that drifts from the strata under it shows up as the two halves of a line disagreeing.
+
+The city is 24×16 — not square, so a transposed x/y cannot pass unnoticed — seeded, and run for 400 ticks in two stretches, so the gallery of awkward states is built into a *live* city rather than a static one. It covers: a level crossing in both build orders and a third carrying a hydro line; a line over a road, over a rail, over a level crossing, over a vacant zone and over a lot that then develops under it; a road laid under an existing line; a lone line; a line demoted to its flag by a later regrade, with a pipe under it; trees planted through a live line; water brushed over a live line; a pipe under a road, a lone pipe and a pipe under water; 1×1 and 2×2 footprints (park, pump, large park, two schools, coal plant, wind turbine); a 1×1 structure razed, where v4 left a scoring ghost; a 2×2 footprint cleared by one click anywhere inside it; a bulldozed lake that is still a lake; a lake paved and the pavement razed, which is not; an abandoned lot; and a power plant deliberately left off the network.
+
+**Reproducibility caveat.** Floats print to four decimals and everything behind them is IEEE-exact, with one exception: the wilderness patch bonus goes through `f32::exp`, which is a libm routine and may differ by an ulp between platforms. An ulp there is ~5e-7 against a printed precision of 1e-4, so it would take a value sitting on a rounding boundary to show. If `patch` or the wilderness `score` ever differ by one in the last digit on a new platform and *nothing else moves*, that is this and not a regression.
+
+Three companion tests keep the fixture honest rather than merely stable: `the_golden_city_is_deterministic` replays twice and diffs; `the_golden_city_still_covers_every_awkward_state` asserts each case above is *still* built — build-order cases against the script, structural ones against the replayed city — so a well-meaning edit cannot quietly delete coverage while leaving the dump green; and `the_dump_has_a_line_for_every_tile_and_every_section` catches a silently truncated dump.
 
 ## `city_v4.csim` + `city_v4.expected`
 

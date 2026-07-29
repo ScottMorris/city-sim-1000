@@ -1,0 +1,851 @@
+// golden_city.rs — replay a committed command script, dump everything
+// observable, and diff it against a committed expectation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
+//! **The golden city.**
+//!
+//! Three times during #177 someone wrote a probe that replayed a command list
+//! on two builds and diffed the observables, used it to settle one question,
+//! and deleted it. This is that probe, committed.
+//!
+//! Two files make it up and neither is Rust:
+//!
+//! - `tests/fixtures/golden_city.script` — a readable list of `(tool, x, y)`
+//!   commands and tick counts. Adding a case is a line in a text file.
+//! - `tests/fixtures/golden_city.expected` — everything the replayed city can
+//!   be asked about, as plain diffable text: the wilderness score and its full
+//!   breakdown, every `BudgetStats` field, population, jobs, money, the
+//!   `state_hash`, the building list, and one line per tile giving terrain,
+//!   occupant set, development and the three derived wire bytes.
+//!
+//! ## Running it
+//!
+//! ```text
+//! cargo test -p city-sim-core --test golden_city
+//! ```
+//!
+//! ## Regenerating it
+//!
+//! ```text
+//! GOLDEN=regen cargo test -p city-sim-core --test golden_city
+//! ```
+//!
+//! **Regeneration is a deliberate act and must be justified in the commit
+//! message**, naming which observable moved and why the new value is right.
+//! The failure mode this file exists to catch is someone regenerating to turn
+//! a red test green: the dump is a *derived* artefact, so a wrong derivation
+//! and a stale expectation look identical from the outside. A regeneration
+//! diff that nobody can explain is a bug report, not a merge.
+//!
+//! ## The one place this is not bit-exact
+//!
+//! Every float in the dump is printed to four decimals, and every sum, product
+//! and comparison behind them is IEEE-exact — so the dump is reproducible on
+//! any machine, with one caveat. `wilderness::compute_wilderness` calls
+//! `f32::exp` for the patch bonus, and `exp` is a libm routine rather than an
+//! IEEE-mandated operation: two platforms may disagree by an ulp. An ulp of an
+//! f32 near 5.0 is ~5e-7 against a printed precision of 1e-4, so a disagreement
+//! needs the true value to sit within an ulp of a rounding boundary. It has not
+//! happened here, but if `patch` or `wilderness score` ever differ by exactly
+//! one in the last printed digit on a new platform and nothing else moves,
+//! that is this and not a regression.
+//!
+//! ## Why a dump and not assertions
+//!
+//! `display.rs` exists to emit bytes a renderer interprets. Unit tests over it
+//! assert what someone thought to assert; a full dump asserts everything at
+//! once, including the things nobody thought of. The level crossing whose
+//! minimap pixel moved rail-brown to road-grey during #177 changed no unit
+//! test and would have changed one line here.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::path::PathBuf;
+
+use city_sim_core::buildings::BuildingInstance;
+use city_sim_core::commands::apply_tool;
+use city_sim_core::display::{wire_flags, wire_kind, wire_underground};
+use city_sim_core::occupants::{iter_set, Occupant, StructureLookup, Terrain};
+use city_sim_core::sim::{state_hash, Simulation};
+use city_sim_core::state::Tile;
+use city_sim_protocol::commands::Tool;
+use city_sim_protocol::tile_buffer::flags;
+use city_sim_protocol::tile_kind::TileKind;
+
+const SCRIPT: &str = include_str!("fixtures/golden_city.script");
+const EXPECTED: &str = include_str!("fixtures/golden_city.expected");
+
+/// One fixed tick, in real seconds. `Simulation::step` fires exactly one tick
+/// per call at this `dt` and leaves the accumulator at zero, so a tick count
+/// is exact rather than approximate.
+const TICK_DT: f64 = 1.0 / 20.0;
+
+// ---------------------------------------------------------------------------
+// The script
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+enum Step {
+    /// Apply a tool. Must succeed.
+    Apply { tool: Tool, x: u32, y: u32 },
+    /// Apply a tool that must be refused; the message goes in the dump.
+    Refuse { tool: Tool, x: u32, y: u32 },
+    /// Advance the simulation by this many fixed ticks.
+    Tick(u32),
+}
+
+struct Script {
+    width: u32,
+    height: u32,
+    seed: u32,
+    steps: Vec<(usize, Step)>,
+    /// FNV-1-64 over the *effective* directives only — comments and spacing
+    /// are normalised away, so re-wording a comment does not demand a regen
+    /// but changing a command does.
+    hash: u64,
+}
+
+impl Script {
+    fn ticks(&self) -> u32 {
+        self.steps
+            .iter()
+            .map(|(_, s)| match s {
+                Step::Tick(n) => *n,
+                _ => 0,
+            })
+            .sum()
+    }
+
+    fn directives(&self) -> usize {
+        self.steps.len()
+    }
+}
+
+/// `Tool` has no `from_str`, and the script names tools so a human can read
+/// it. The table is derived from the enum rather than written out, so renaming
+/// a variant breaks the script loudly instead of silently.
+fn tool_by_name(name: &str) -> Option<Tool> {
+    (0u8..=u8::MAX)
+        .filter_map(|v| Tool::try_from(v).ok())
+        .find(|t| format!("{t:?}").eq_ignore_ascii_case(name))
+}
+
+fn parse_script(src: &str) -> Script {
+    let mut width = None;
+    let mut height = None;
+    let mut seed = None;
+    let mut steps: Vec<(usize, Step)> = Vec::new();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+
+    for (n, raw) in src.lines().enumerate() {
+        let line_no = n + 1;
+        let line = raw.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        // Normalised for the hash: one space between fields, lower case.
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        for b in fields.join(" ").to_ascii_lowercase().bytes() {
+            hash = hash.wrapping_mul(0x0100_0000_01b3) ^ b as u64;
+        }
+
+        let num = |i: usize| -> u32 {
+            fields
+                .get(i)
+                .unwrap_or_else(|| {
+                    panic!("golden_city.script:{line_no}: `{line}` is missing a field")
+                })
+                .parse()
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "golden_city.script:{line_no}: `{}` is not a number",
+                        fields[i]
+                    )
+                })
+        };
+
+        match fields[0].to_ascii_lowercase().as_str() {
+            "grid" => {
+                assert!(
+                    width.is_none(),
+                    "golden_city.script:{line_no}: `grid` twice"
+                );
+                width = Some(num(1));
+                height = Some(num(2));
+            }
+            "seed" => {
+                assert!(seed.is_none(), "golden_city.script:{line_no}: `seed` twice");
+                seed = Some(num(1));
+            }
+            "tick" => steps.push((line_no, Step::Tick(num(1)))),
+            "refuse" => {
+                let tool = tool_by_name(fields[1]).unwrap_or_else(|| {
+                    panic!(
+                        "golden_city.script:{line_no}: `{}` is not a Tool",
+                        fields[1]
+                    )
+                });
+                steps.push((
+                    line_no,
+                    Step::Refuse {
+                        tool,
+                        x: num(2),
+                        y: num(3),
+                    },
+                ));
+            }
+            word => {
+                let tool = tool_by_name(word).unwrap_or_else(|| {
+                    panic!(
+                        "golden_city.script:{line_no}: `{word}` is neither a directive nor a Tool"
+                    )
+                });
+                steps.push((
+                    line_no,
+                    Step::Apply {
+                        tool,
+                        x: num(1),
+                        y: num(2),
+                    },
+                ));
+            }
+        }
+    }
+
+    Script {
+        width: width.expect("golden_city.script: no `grid` directive"),
+        height: height.expect("golden_city.script: no `grid` directive"),
+        seed: seed.expect("golden_city.script: no `seed` directive"),
+        steps,
+        hash,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The replay
+// ---------------------------------------------------------------------------
+
+struct Replay {
+    sim: Simulation,
+    /// One line per `refuse` directive: the command and the message it drew.
+    refusals: Vec<String>,
+}
+
+fn replay(script: &Script) -> Replay {
+    let mut sim = Simulation::new(script.width, script.height, script.seed);
+    let mut refusals = Vec::new();
+
+    for &(line_no, step) in &script.steps {
+        match step {
+            Step::Apply { tool, x, y } => {
+                let r = apply_tool(&mut sim.state, tool, x, y);
+                assert!(
+                    r.success,
+                    "golden_city.script:{line_no}: `{tool:?} {x} {y}` was refused — {}\n\
+                     A command the script asserts must work no longer works. Fix the engine \
+                     or fix the script; do not regenerate the dump.",
+                    r.message.as_deref().unwrap_or("(no message)")
+                );
+            }
+            Step::Refuse { tool, x, y } => {
+                let r = apply_tool(&mut sim.state, tool, x, y);
+                assert!(
+                    !r.success,
+                    "golden_city.script:{line_no}: `refuse {tool:?} {x} {y}` was ACCEPTED.\n\
+                     A placement guard has gone. That is a finding, not a stale expectation."
+                );
+                refusals.push(format!(
+                    "{tool:?} {x} {y} -> {}",
+                    r.message.as_deref().unwrap_or("(no message)")
+                ));
+            }
+            Step::Tick(n) => {
+                for _ in 0..n {
+                    sim.step(TICK_DT);
+                }
+            }
+        }
+    }
+
+    Replay { sim, refusals }
+}
+
+// ---------------------------------------------------------------------------
+// The dump
+// ---------------------------------------------------------------------------
+
+/// Four decimals, with negative zero folded onto zero so a sign flip in a
+/// value that is zero either way cannot show up as a diff.
+fn f(v: f32) -> String {
+    let v = if v == 0.0 { 0.0 } else { v };
+    format!("{v:.4}")
+}
+
+/// The six protocol flag bits as a fixed six-character column, in bit order:
+/// `POWERED WATERED ABANDONED ROAD_UNDERLAY RAIL_UNDERLAY POWER_OVERLAY`.
+/// Capitals are the derived per-tick bits, lower case the structural ones
+/// `display::wire_flags` re-derives from the occupant set.
+fn flag_glyphs(f: u8) -> String {
+    const BITS: [(u8, char); 6] = [
+        (flags::POWERED, 'P'),
+        (flags::WATERED, 'W'),
+        (flags::ABANDONED, 'A'),
+        (flags::ROAD_UNDERLAY, 'r'),
+        (flags::RAIL_UNDERLAY, 'l'),
+        (flags::POWER_OVERLAY, 'p'),
+    ];
+    BITS.iter()
+        .map(|&(bit, ch)| if f & bit != 0 { ch } else { '-' })
+        .collect()
+}
+
+fn occupant_list(tile: &Tile) -> String {
+    let names: Vec<&str> = iter_set(tile.occupants())
+        .map(|o| match o {
+            Occupant::Pipe => "Pipe",
+            Occupant::Subway => "Subway",
+            Occupant::Fibre => "Fibre",
+            Occupant::Road => "Road",
+            Occupant::Rail => "Rail",
+            Occupant::ZoneResidential => "ZoneResidential",
+            Occupant::ZoneCommercial => "ZoneCommercial",
+            Occupant::ZoneIndustrial => "ZoneIndustrial",
+            Occupant::Structure => "Structure",
+            Occupant::PowerLine => "PowerLine",
+            Occupant::Trees => "Trees",
+        })
+        .collect();
+    if names.is_empty() {
+        "-".to_string()
+    } else {
+        names.join(",")
+    }
+}
+
+fn dump(script: &Script, r: &Replay) -> String {
+    let s = &r.sim.state;
+    let mut out = String::with_capacity(64 * 1024);
+
+    out.push_str(
+        "# golden_city.expected — everything observable after replaying golden_city.script.\n\
+         #\n\
+         # GENERATED FILE. Do not hand-edit.\n\
+         #   run:        cargo test -p city-sim-core --test golden_city\n\
+         #   regenerate: GOLDEN=regen cargo test -p city-sim-core --test golden_city\n\
+         #\n\
+         # Regeneration is a deliberate act. Every line that moves must be named and\n\
+         # justified in the commit message. A diff nobody can explain is a bug report,\n\
+         # not a merge — see the module note in tests/golden_city.rs.\n\
+         #\n\
+         # Tile line format:\n\
+         #   tile <index> (<x>,<y>) <terrain> kind=<wire kind>(<byte>) flags=<hex>[PWArlp]\n\
+         #       ug=<underground byte> bid=<development> occ=<occupant set>\n\
+         # `kind`, `flags` and `ug` are the DERIVED wire bytes (display.rs); `terrain`,\n\
+         # `occ` and `bid` are the canonical tile. A renderer sees only the derived ones.\n\
+         \n",
+    );
+
+    writeln!(
+        out,
+        "script grid={}x{} seed={} ticks={} directives={} script_hash=0x{:016x}",
+        script.width,
+        script.height,
+        script.seed,
+        script.ticks(),
+        script.directives(),
+        script.hash
+    )
+    .unwrap();
+
+    // --- refusals ----------------------------------------------------------
+    out.push_str("\n[refusals]\n");
+    for line in &r.refusals {
+        writeln!(out, "refuse {line}").unwrap();
+    }
+
+    // --- scalars -----------------------------------------------------------
+    out.push_str("\n[scalars]\n");
+    writeln!(out, "tick {}", s.tick).unwrap();
+    writeln!(out, "day {}", s.day).unwrap();
+    writeln!(out, "money {}", s.money).unwrap();
+    writeln!(out, "population {}", s.population).unwrap();
+    writeln!(out, "jobs {}", s.jobs).unwrap();
+    writeln!(out, "buildings {}", s.buildings.len()).unwrap();
+    writeln!(out, "next_building_id {}", s.next_building_id).unwrap();
+    writeln!(out, "tile_revision {}", s.tile_revision).unwrap();
+    writeln!(out, "state_hash 0x{:016x}", state_hash(s)).unwrap();
+
+    // --- utilities ---------------------------------------------------------
+    out.push_str("\n[utilities]\n");
+    writeln!(out, "power {}", s.utilities.power).unwrap();
+    writeln!(out, "power_produced {}", s.utilities.power_produced).unwrap();
+    writeln!(out, "power_used {}", s.utilities.power_used).unwrap();
+    writeln!(out, "water {}", s.utilities.water).unwrap();
+    writeln!(out, "water_produced {}", s.utilities.water_produced).unwrap();
+    writeln!(out, "water_used {}", s.utilities.water_used).unwrap();
+
+    // --- demand ------------------------------------------------------------
+    out.push_str("\n[demand]\n");
+    writeln!(out, "residential {}", f(s.demand.residential)).unwrap();
+    writeln!(out, "commercial {}", f(s.demand.commercial)).unwrap();
+    writeln!(out, "industrial {}", f(s.demand.industrial)).unwrap();
+
+    // --- education ---------------------------------------------------------
+    let e = &s.education;
+    out.push_str("\n[education]\n");
+    writeln!(out, "elementary_served {}", f(e.elementary_served)).unwrap();
+    writeln!(out, "elementary_capacity {}", f(e.elementary_capacity)).unwrap();
+    writeln!(out, "elementary_load {}", f(e.elementary_load)).unwrap();
+    writeln!(out, "elementary_coverage {}", f(e.elementary_coverage)).unwrap();
+    writeln!(out, "high_served {}", f(e.high_served)).unwrap();
+    writeln!(out, "high_capacity {}", f(e.high_capacity)).unwrap();
+    writeln!(out, "high_load {}", f(e.high_load)).unwrap();
+    writeln!(out, "high_coverage {}", f(e.high_coverage)).unwrap();
+    writeln!(out, "score {}", f(e.score)).unwrap();
+
+    // --- budget — every field, none skipped --------------------------------
+    let b = &s.budget;
+    out.push_str("\n[budget]\n");
+    writeln!(out, "revenue {}", f(b.revenue)).unwrap();
+    writeln!(out, "expenses {}", f(b.expenses)).unwrap();
+    writeln!(out, "net {}", f(b.net)).unwrap();
+    writeln!(out, "net_per_day {}", f(b.net_per_day)).unwrap();
+    writeln!(out, "net_per_month {}", f(b.net_per_month)).unwrap();
+    writeln!(out, "revenue_base {}", f(b.revenue_base)).unwrap();
+    writeln!(out, "revenue_pop {}", f(b.revenue_pop)).unwrap();
+    writeln!(out, "revenue_commercial {}", f(b.revenue_commercial)).unwrap();
+    writeln!(out, "revenue_industrial {}", f(b.revenue_industrial)).unwrap();
+    writeln!(out, "revenue_tourism {}", f(b.revenue_tourism)).unwrap();
+    writeln!(out, "expenses_transport {}", f(b.expenses_transport)).unwrap();
+    writeln!(out, "expenses_buildings {}", f(b.expenses_buildings)).unwrap();
+    writeln!(out, "expenses_policies {}", f(b.expenses_policies)).unwrap();
+    writeln!(out, "maint_power {}", f(b.maint_power)).unwrap();
+    writeln!(out, "maint_civic {}", f(b.maint_civic)).unwrap();
+    writeln!(out, "maint_zones {}", f(b.maint_zones)).unwrap();
+    writeln!(out, "maint_roads {}", f(b.maint_roads)).unwrap();
+    writeln!(out, "maint_rail {}", f(b.maint_rail)).unwrap();
+    writeln!(out, "maint_power_lines {}", f(b.maint_power_lines)).unwrap();
+    writeln!(out, "maint_pipes {}", f(b.maint_pipes)).unwrap();
+    writeln!(out, "maint_power_hydro {}", f(b.maint_power_hydro)).unwrap();
+    writeln!(out, "maint_power_coal {}", f(b.maint_power_coal)).unwrap();
+    writeln!(out, "maint_power_wind {}", f(b.maint_power_wind)).unwrap();
+    writeln!(out, "maint_power_solar {}", f(b.maint_power_solar)).unwrap();
+    writeln!(out, "maint_civic_park {}", f(b.maint_civic_park)).unwrap();
+    writeln!(out, "maint_civic_pump {}", f(b.maint_civic_pump)).unwrap();
+    writeln!(out, "maint_civic_tower {}", f(b.maint_civic_tower)).unwrap();
+    writeln!(out, "maint_civic_school {}", f(b.maint_civic_school)).unwrap();
+    writeln!(out, "maint_zones_res {}", f(b.maint_zones_res)).unwrap();
+    writeln!(out, "maint_zones_com {}", f(b.maint_zones_com)).unwrap();
+    writeln!(out, "maint_zones_ind {}", f(b.maint_zones_ind)).unwrap();
+
+    // --- wilderness — score and the whole breakdown ------------------------
+    let w = &s.wilderness;
+    out.push_str("\n[wilderness]\n");
+    writeln!(out, "score {}", f(w.score)).unwrap();
+    writeln!(out, "trend {}", f(w.trend)).unwrap();
+    writeln!(out, "fast_ema {}", f(w.fast_ema)).unwrap();
+    writeln!(out, "slow_ema {}", f(w.slow_ema)).unwrap();
+    writeln!(out, "seeded {}", w.seeded).unwrap();
+    writeln!(out, "forests {}", f(w.breakdown.forests)).unwrap();
+    writeln!(out, "parks {}", f(w.breakdown.parks)).unwrap();
+    writeln!(out, "open_land {}", f(w.breakdown.open_land)).unwrap();
+    writeln!(out, "water_edge {}", f(w.breakdown.water_edge)).unwrap();
+    writeln!(out, "patch {}", f(w.breakdown.patch)).unwrap();
+    writeln!(out, "fragmentation {}", f(w.breakdown.fragmentation)).unwrap();
+    writeln!(out, "zones {}", f(w.breakdown.zones)).unwrap();
+    writeln!(out, "industry {}", f(w.breakdown.industry)).unwrap();
+    writeln!(out, "transport {}", f(w.breakdown.transport)).unwrap();
+    writeln!(out, "power {}", f(w.breakdown.power)).unwrap();
+    writeln!(out, "civic {}", f(w.breakdown.civic)).unwrap();
+
+    // --- buildings ---------------------------------------------------------
+    let mut buildings: Vec<&BuildingInstance> = s.buildings.iter().collect();
+    buildings.sort_by_key(|b| b.id);
+    out.push_str("\n[buildings]\n");
+    for b in buildings {
+        writeln!(
+            out,
+            "building {:<4} {:<17} at ({:>2},{:>2}) {:<16} health={:<3} trouble={}",
+            b.id,
+            format!("{:?}", b.kind),
+            b.origin.0,
+            b.origin.1,
+            format!("{:?}", b.status),
+            b.health,
+            f(b.trouble_ticks)
+        )
+        .unwrap();
+    }
+
+    // --- tiles -------------------------------------------------------------
+    let lookup = StructureLookup::new(s);
+    out.push_str("\n[tiles]\n");
+    for (idx, tile) in s.tiles.iter().enumerate() {
+        let (x, y) = s.index_to_xy(idx);
+        let kind = wire_kind(tile, &lookup);
+        let wf = wire_flags(tile, kind);
+        let ug = wire_underground(tile);
+        writeln!(
+            out,
+            "tile {idx:<5} ({x:>2},{y:>2}) {terrain:<5} kind={kind:<20} flags=0x{wf:02x}[{glyphs}] ug={ug:<3} bid={bid:<5} occ={occ}",
+            terrain = format!("{:?}", tile.terrain),
+            kind = format!("{kind:?}({})", kind as u8),
+            glyphs = flag_glyphs(wf),
+            bid = tile
+                .building_id
+                .map_or_else(|| "-".to_string(), |b| b.to_string()),
+            occ = occupant_list(tile),
+        )
+        .unwrap();
+    }
+
+    out
+}
+
+// ---------------------------------------------------------------------------
+// The tests
+// ---------------------------------------------------------------------------
+
+fn expected_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/golden_city.expected")
+}
+
+/// Report the first handful of differing lines rather than two 400-line blobs.
+fn diff_report(got: &str, want: &str) -> String {
+    let g: Vec<&str> = got.lines().collect();
+    let w: Vec<&str> = want.lines().collect();
+    let mut report = String::new();
+    let mut shown = 0;
+    let mut total = 0;
+    for i in 0..g.len().max(w.len()) {
+        let (a, b) = (g.get(i).copied(), w.get(i).copied());
+        if a == b {
+            continue;
+        }
+        total += 1;
+        if shown < 20 {
+            let _ = writeln!(report, "  line {}:", i + 1);
+            let _ = writeln!(report, "    want: {}", b.unwrap_or("<missing>"));
+            let _ = writeln!(report, "    got:  {}", a.unwrap_or("<missing>"));
+            shown += 1;
+        }
+    }
+    if total > shown {
+        let _ = writeln!(report, "  … and {} further differing lines", total - shown);
+    }
+    let _ = writeln!(report, "  {total} lines differ in total");
+    report
+}
+
+#[test]
+fn the_golden_city_matches_the_committed_dump() {
+    let script = parse_script(SCRIPT);
+    let r = replay(&script);
+    let got = dump(&script, &r);
+
+    if std::env::var("GOLDEN").as_deref() == Ok("regen") {
+        std::fs::write(expected_path(), &got).expect("write golden_city.expected");
+        eprintln!(
+            "\n*** golden_city.expected REGENERATED ***\n\
+             This is a deliberate act. `git diff` it, name every observable that moved,\n\
+             and justify each in the commit message. If you cannot explain a line, you\n\
+             have found a bug — do not commit the regeneration.\n"
+        );
+        return;
+    }
+
+    if got == EXPECTED {
+        return;
+    }
+
+    // A changed script is the commonest cause and deserves its own message —
+    // otherwise it reads as several hundred unrelated tile regressions.
+    let stale_script = EXPECTED
+        .lines()
+        .find(|l| l.starts_with("script "))
+        .is_some_and(|l| !l.contains(&format!("script_hash=0x{:016x}", script.hash)));
+
+    let preamble = if stale_script {
+        "golden_city.script has changed since golden_city.expected was cut.\n\
+         If the change was intended, regenerate:\n\
+           GOLDEN=regen cargo test -p city-sim-core --test golden_city\n\
+         and justify the resulting diff in the commit message.\n"
+    } else {
+        "The golden city no longer dumps what it dumped when this expectation was cut,\n\
+         and the script is unchanged — so the ENGINE moved. Read the diff before you\n\
+         reach for GOLDEN=regen: a wrong derivation and a stale expectation look\n\
+         identical from here, and only one of them should be fixed by regenerating.\n"
+    };
+
+    panic!("\n{preamble}\n{}", diff_report(&got, EXPECTED));
+}
+
+#[test]
+fn the_golden_city_is_deterministic() {
+    let script = parse_script(SCRIPT);
+    let first = dump(&script, &replay(&script));
+    let second = dump(&script, &replay(&script));
+    assert_eq!(
+        first.len(),
+        second.len(),
+        "two replays of the same seeded script produced dumps of different length"
+    );
+    if first != second {
+        panic!(
+            "two replays of the same seeded script disagree — the sim is not \
+             deterministic:\n{}",
+            diff_report(&second, &first)
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Coverage — the script must still build the states this architecture is about
+// ---------------------------------------------------------------------------
+
+/// Every tool applied at `(x, y)`, in script order. Refusals are excluded:
+/// they change nothing.
+fn tool_history(script: &Script) -> BTreeMap<(u32, u32), Vec<Tool>> {
+    let mut history: BTreeMap<(u32, u32), Vec<Tool>> = BTreeMap::new();
+    for &(_, step) in &script.steps {
+        if let Step::Apply { tool, x, y } = step {
+            history.entry((x, y)).or_default().push(tool);
+        }
+    }
+    history
+}
+
+/// Does some tile carry this exact run of tools, back to back?
+///
+/// Build order is the whole question for half the cases below — a crossing
+/// built road-last and one built rail-last are the same tile afterwards — so
+/// coverage for those has to be asked of the *script*, not of the final state.
+fn some_tile_saw(history: &BTreeMap<(u32, u32), Vec<Tool>>, run: &[Tool]) -> bool {
+    history
+        .values()
+        .any(|applied| applied.windows(run.len()).any(|w| w == run))
+}
+
+#[test]
+fn the_golden_city_still_covers_every_awkward_state() {
+    use Tool::*;
+    let script = parse_script(SCRIPT);
+    let history = tool_history(&script);
+
+    // --- build-order cases, asked of the script ---------------------------
+    let orders: &[(&str, &[Tool])] = &[
+        ("a level crossing built rail-last", &[Road, Rail]),
+        ("a level crossing built road-last", &[Rail, Road]),
+        ("a hydro line strung over a road", &[Road, PowerLine]),
+        ("a road laid under a hydro line", &[PowerLine, Road]),
+        ("a hydro line strung over a rail", &[Rail, PowerLine]),
+        ("a hydro line strung over a zone", &[Commercial, PowerLine]),
+        ("a zone drawn under a hydro line", &[PowerLine, Commercial]),
+        ("trees planted through a live line", &[PowerLine, Tree]),
+        ("water brushed over a live line", &[PowerLine, Water]),
+        (
+            "a line demoted to its flag by a regrade",
+            &[PowerLine, TerraformRaise],
+        ),
+        ("a pipe buried under a road", &[Road, WaterPipe]),
+        ("water brushed over a buried pipe", &[WaterPipe, Water]),
+        ("a 1×1 structure razed (the v4 ghost)", &[Park, Bulldoze]),
+        ("a bulldozed lake", &[Water, Bulldoze]),
+        (
+            "a lake paved and the pavement razed",
+            &[Water, Road, Bulldoze],
+        ),
+    ];
+    for (what, run) in orders {
+        assert!(
+            some_tile_saw(&history, run),
+            "golden_city.script no longer builds {what} ({run:?}). \
+             Restore the case — the dump is only worth what the script covers."
+        );
+    }
+
+    // --- structural cases, asked of the replayed city ---------------------
+    let r = replay(&script);
+    let s = &r.sim.state;
+    let lookup = StructureLookup::new(s);
+
+    /// "Some tile in the city looks like this" — a named shape the golden
+    /// city must still contain, whatever build order produced it.
+    type Shape<'a> = (&'a str, &'a dyn Fn(&Tile) -> bool);
+
+    let any = |pred: &dyn Fn(&Tile) -> bool| s.tiles.iter().any(pred);
+
+    let structural: &[Shape] = &[
+        ("a level crossing", &|t: &Tile| {
+            t.has_occupant(Occupant::Road) && t.has_occupant(Occupant::Rail)
+        }),
+        ("a line over a road", &|t: &Tile| {
+            t.has_occupant(Occupant::Road)
+                && t.has_occupant(Occupant::PowerLine)
+                && !t.has_occupant(Occupant::Rail)
+        }),
+        ("a line over a rail", &|t: &Tile| {
+            t.has_occupant(Occupant::Rail)
+                && t.has_occupant(Occupant::PowerLine)
+                && !t.has_occupant(Occupant::Road)
+        }),
+        ("a line over a level crossing", &|t: &Tile| {
+            t.has_occupant(Occupant::Road)
+                && t.has_occupant(Occupant::Rail)
+                && t.has_occupant(Occupant::PowerLine)
+        }),
+        ("a vacant zone carrying a line", &|t: &Tile| {
+            t.zone_occupant().is_some()
+                && t.has_occupant(Occupant::PowerLine)
+                && t.building_id.is_none()
+        }),
+        ("a DEVELOPED lot carrying a line", &|t: &Tile| {
+            t.zone_occupant().is_some()
+                && t.has_occupant(Occupant::PowerLine)
+                && t.building_id.is_some()
+        }),
+        ("a bare hydro line on open ground", &|t: &Tile| {
+            t.occupants() == (1 << Occupant::PowerLine as u16) && t.terrain == Terrain::Land
+        }),
+        ("trees standing under a live line", &|t: &Tile| {
+            t.has_occupant(Occupant::Trees) && t.has_occupant(Occupant::PowerLine)
+        }),
+        ("water carrying a live line", &|t: &Tile| {
+            t.terrain == Terrain::Water && t.has_occupant(Occupant::PowerLine)
+        }),
+        ("a pipe under a road", &|t: &Tile| {
+            t.has_occupant(Occupant::Pipe) && t.has_occupant(Occupant::Road)
+        }),
+        ("a lone pipe with nothing above it", &|t: &Tile| {
+            t.occupants() == (1 << Occupant::Pipe as u16)
+        }),
+        ("a pipe under water", &|t: &Tile| {
+            t.has_occupant(Occupant::Pipe) && t.terrain == Terrain::Water
+        }),
+        ("a lake left standing", &|t: &Tile| {
+            t.terrain == Terrain::Water && t.occupants() == 0
+        }),
+    ];
+    for (what, pred) in structural {
+        assert!(
+            any(pred),
+            "the replayed golden city no longer contains {what}. Either the script \
+             stopped building it or the engine stopped producing it — check which \
+             before touching the dump."
+        );
+    }
+
+    // 1×1 and 2×2 footprints, both present and both stamped over their whole area.
+    let footprints: Vec<(u32, u32)> = s
+        .buildings
+        .iter()
+        .filter_map(|b| {
+            city_sim_core::buildings::get_building_template(b.kind).map(|t| t.footprint)
+        })
+        .collect();
+    assert!(
+        footprints.contains(&(1, 1)),
+        "no 1×1 footprint building in the golden city"
+    );
+    assert!(
+        footprints.contains(&(2, 2)),
+        "no 2×2 footprint building in the golden city"
+    );
+
+    // --- the invariants the strata are supposed to make unrepresentable ---
+    for (idx, t) in s.tiles.iter().enumerate() {
+        let (x, y) = s.index_to_xy(idx);
+        if t.has_occupant(Occupant::Structure) {
+            assert!(
+                t.building_id.is_some(),
+                "({x},{y}) carries Occupant::Structure with no development behind it — \
+                 that is the v4 ghost, and it is supposed to be unrepresentable"
+            );
+        }
+        if let Some(bid) = t.building_id {
+            assert!(
+                s.buildings.iter().any(|b| b.id == bid as u32),
+                "({x},{y}) points at building {bid}, which is not in state.buildings"
+            );
+        }
+        // A structure tile must resolve to a real structure kind, or
+        // `wire_kind` silently falls through to the rung below it.
+        if t.has_occupant(Occupant::Structure) {
+            assert!(
+                lookup.structure_kind(t).is_some(),
+                "({x},{y}) is a structure whose kind cannot be resolved"
+            );
+        }
+    }
+
+    // --- normalisation 1, in situ ----------------------------------------
+    // Both build orders of a *bare* level crossing must come off the wire as
+    // the same bytes. This is the delta that moved a minimap pixel during
+    // #177, and it is the one a unit test over `display.rs` cannot see: it
+    // needs two tiles built two different ways in one city. Crossings that
+    // carry a hydro line are excluded — they are a different physical tile.
+    let crossings: Vec<((u32, u32), TileKind, u8)> = s
+        .tiles
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| {
+            t.has_occupant(Occupant::Road)
+                && t.has_occupant(Occupant::Rail)
+                && !t.has_occupant(Occupant::PowerLine)
+        })
+        .map(|(idx, t)| {
+            let k = wire_kind(t, &lookup);
+            (
+                s.index_to_xy(idx),
+                k,
+                wire_flags(t, k) & !city_sim_core::state::DERIVED_FLAG_MASK,
+            )
+        })
+        .collect();
+    assert!(
+        crossings.len() >= 2,
+        "fewer than two bare level crossings — the script must build one in each order"
+    );
+    let (at0, k0, f0) = crossings[0];
+    for &(at, k, fl) in &crossings[1..] {
+        assert_eq!(
+            (k, fl),
+            (k0, f0),
+            "the crossing at {at:?} emits ({k:?}, {fl:#04x}) but the one at {at0:?} emits \
+             ({k0:?}, {f0:#04x}) — build order has leaked back onto the wire"
+        );
+    }
+}
+
+/// The dump has to actually contain what it promises, or a silently truncated
+/// section would pass every diff for ever.
+#[test]
+fn the_dump_has_a_line_for_every_tile_and_every_section() {
+    let script = parse_script(SCRIPT);
+    let text = dump(&script, &replay(&script));
+    for section in [
+        "[refusals]",
+        "[scalars]",
+        "[utilities]",
+        "[demand]",
+        "[education]",
+        "[budget]",
+        "[wilderness]",
+        "[buildings]",
+        "[tiles]",
+    ] {
+        assert!(text.contains(section), "the dump is missing {section}");
+    }
+    let tiles = text.lines().filter(|l| l.starts_with("tile ")).count();
+    assert_eq!(
+        tiles as u32,
+        script.width * script.height,
+        "one line per tile, and no more"
+    );
+    assert!(
+        text.lines().any(|l| l.starts_with("state_hash ")),
+        "the dump must carry the state hash"
+    );
+}
