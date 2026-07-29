@@ -577,9 +577,10 @@ mod tests {
     /// **The score half of delta 3** — see `display.rs`'s module note and
     /// `commands::tests::one_bulldozer_click_clears_a_whole_footprint`.
     ///
-    /// At `303897f` `remove_building` kept the tile's `kind`, so a bulldozed
-    /// park stayed a park to every consumer that read the kind byte —
-    /// including this one. It scored +4.0 of natural capital for a tile with
+    /// On the pre-strata tree — the last commit where `kind` was canonical,
+    /// named in `display.rs`'s module note — `remove_building` kept the tile's
+    /// `kind`, so a bulldozed park stayed a park to every consumer that read
+    /// the kind byte — including this one. It scored +4.0 of natural capital for a tile with
     /// nothing on it, for ever. Measured on that tree, an 8×8 city with one
     /// park at (4, 4) scored 67.0312 both before *and* after the bulldozer;
     /// here the razed tile drops back to exactly the eco of ground that was

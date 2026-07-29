@@ -321,7 +321,10 @@ mod tests {
     #[test]
     fn a_line_in_the_overlay_flag_alone_carries_power() {
         for &kind in TileKind::ALL {
-            let t = tile_from_v4(kind, flags::POWER_OVERLAY, None, Some(1));
+            // `building_id: None` deliberately: `conducts` short-circuits on a
+            // building reference, so passing `Some(1)` here would carry the
+            // assertion on its own and never consult the occupant set at all.
+            let t = tile_from_v4(kind, flags::POWER_OVERLAY, None, None);
             assert!(
                 is_power_carrier(&t),
                 "{kind:?} + flags::POWER_OVERLAY must carry power"

@@ -36,8 +36,12 @@
 //!
 //! ## The three deltas
 //!
-//! Exactly three classes of tile come off the wire differently than they did at
-//! `303897f`, the last commit where `kind` was canonical. Two are
+//! Exactly three classes of tile come off the wire differently than they did on
+//! **the pre-strata tree** — step 2 of #177,
+//! `fix(sim): read every stratum, so no feature goes uncounted`, the last commit
+//! where `kind` was canonical. That baseline is named by commit *subject*
+//! throughout this branch, not by hash: the branch has been rebased more than
+//! once and a hash cited here does not survive it. Two are
 //! **normalisations** — one physical tile that v4 could spell two ways,
 //! collapsing onto one — and the third is a **behaviour fix** that reversing
 //! the derivation forced. Nothing else changes;
@@ -411,9 +415,10 @@ mod tests {
 
     /// Where v4 wrote the same bytes for a tool sequence, and where it did not.
     ///
-    /// Every case's third column is what `303897f` — the last commit where
-    /// `kind` was canonical — emitted for the identical sequence, read off that
-    /// tree through `apply_tool` + `tile.kind`/`tile.flags`. `Same` is the
+    /// Every case's third column is what the pre-strata tree — the last commit
+    /// where `kind` was canonical, named in this module's note — emitted for the
+    /// identical sequence, read off that tree through `apply_tool` +
+    /// `tile.kind`/`tile.flags`. `Same` is the
     /// byte-identity claim, case by case. `Was(..)` is an acknowledged delta,
     /// and the comment beside it names which of the module note's three it is.
     ///

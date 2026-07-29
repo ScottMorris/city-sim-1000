@@ -181,6 +181,33 @@ impl Tile {
         self.terrain
     }
 
+    /// Link this tile to a [`crate::buildings::BuildingInstance`], narrowing the
+    /// instance's `u32` id to the `u16` the tile persists.
+    ///
+    /// **The two widths disagree, and since step 3 of #177 that matters more
+    /// than it used to.** `next_building_id` counts in `u32`; `building_id` is
+    /// the only thing that knows *which* structure stands here, so a truncated
+    /// id no longer just bills the wrong ledger row — it resolves through
+    /// `occupants::StructureLookup` to another building's template, renders and
+    /// scores as that structure, and hands the bulldozer an unrelated lot.
+    ///
+    /// It is a `debug_assert!` rather than a `Result` because 65 535 buildings
+    /// is far beyond what any map this engine builds can hold, and because
+    /// there is no sensible thing for a placement to *do* about it. Widening the
+    /// persisted field or recycling freed ids is the real fix; both change the
+    /// snapshot format, so both belong in their own change.
+    #[inline]
+    pub fn set_building_id(&mut self, id: u32) {
+        debug_assert!(
+            id >= 1 && id <= u16::MAX as u32,
+            "building id {id} does not fit the u16 `Tile::building_id` persists \
+             — the tile would point at {} instead (0 reads as no building on the \
+             SoA wire buffer)",
+            id as u16
+        );
+        self.building_id = Some(id as u16);
+    }
+
     // --- flag accessors ---
 
     pub fn is_powered(&self) -> bool {

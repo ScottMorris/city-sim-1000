@@ -494,7 +494,7 @@ fn place_footprint_building(
             regrade_at(state, x + dx, y + dy, Terrain::Land);
             let idx = state.tile_index(x + dx, y + dy).unwrap();
             state.tiles[idx].set_occupant(Occupant::Structure, true);
-            state.tiles[idx].building_id = Some(bid as u16);
+            state.tiles[idx].set_building_id(bid);
             state.tiles[idx].set_flag(FLAG_ABANDONED, false);
             state.tiles[idx].happiness = (state.tiles[idx].happiness + 0.05).min(1.5);
             if power_output_mw > 0 {
@@ -1032,10 +1032,11 @@ mod tests {
     /// `a_bulldozed_park_leaves_bare_ground` covers the same behaviour change
     /// by calling [`remove_building`] directly on a 1×1 park. This is the
     /// player's route to it — `Tool::Bulldoze` — and it is where the *user*
-    /// consequence of the ghost lived: at `303897f` one click deleted the
-    /// `BuildingInstance` but left `kind` standing, so every tile of a 2×2
-    /// footprint went on emitting the structure's own kind and a second click
-    /// was needed to actually clear the sprite. Verified against that tree:
+    /// consequence of the ghost lived: on the pre-strata tree — the last commit
+    /// where `kind` was canonical, named in `display.rs`'s module note — one
+    /// click deleted the `BuildingInstance` but left `kind` standing, so every
+    /// tile of a 2×2 footprint went on emitting the structure's own kind and a
+    /// second click was needed to actually clear the sprite. Verified against that tree:
     /// `Park` then `Bulldoze` emitted `Park`, `CoalPlant` then `Bulldoze`
     /// emitted `CoalPlant`. Here one click clears the whole footprint.
     ///

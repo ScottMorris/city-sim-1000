@@ -101,9 +101,12 @@ pub enum SnapshotError {
 /// went in.
 ///
 /// The fixture is not synthesised by this module: `city_v4.csim` was written by
-/// `snapshot::to_bytes` on commit `303897f` — the last commit before the tile
-/// was stratified — by a throwaway `dump_v4_fixture` generator that has since
-/// been deleted. `city_v4.expected` is what that same tree put on the wire for
+/// `snapshot::to_bytes` on the commit
+/// `fix(sim): read every stratum, so no feature goes uncounted` — step 2 of
+/// #177, the last commit before the tile was stratified — by a throwaway
+/// `dump_v4_fixture` generator that has since been deleted. (Named by subject,
+/// not by hash: rebasing this branch changes the hash and leaves the citation
+/// pointing at nothing.) `city_v4.expected` is what that same tree put on the wire for
 /// every tile. Neither file can be regenerated from this tree, which is the
 /// point: a migration you can only demonstrate against your own output is not a
 /// migration.

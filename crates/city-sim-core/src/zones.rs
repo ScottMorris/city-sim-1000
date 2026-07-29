@@ -259,7 +259,7 @@ pub(crate) fn place_zone_building(state: &mut GameState, x: u32, y: u32) -> bool
     state.next_building_id += 1;
     state.tile_revision += 1;
 
-    state.tiles[idx].building_id = Some(bid as u16);
+    state.tiles[idx].set_building_id(bid);
     state.tiles[idx].set_flag(FLAG_ABANDONED, false);
     state
         .buildings

@@ -4,7 +4,9 @@
 
 A genuine pre-strata save, kept so the v4 → v5 migration can be demonstrated against a file this tree cannot produce.
 
-**Generated on commit `303897ff090b93380c223b8c53a3ceba79b8afca`** — the last commit before #177 step 3 stratified `Tile` — by a throwaway `dump_v4_fixture` test that was deleted immediately afterwards. Neither file is regenerable from the current tree, and that is deliberate: a migration you can only demonstrate against your own output is not a migration.
+**Generated on the commit `fix(sim): read every stratum, so no feature goes uncounted`** — step 2 of #177, the last commit before step 3 stratified `Tile` — by a throwaway `dump_v4_fixture` test that was deleted immediately afterwards. Neither file is regenerable from the current tree, and that is deliberate: a migration you can only demonstrate against your own output is not a migration.
+
+The baseline is cited by commit *subject* rather than by hash, here and in `src/display.rs`, `src/snapshot.rs`, `src/commands.rs` and `src/wilderness.rs`. A hash on a branch that gets rebased stops resolving — the subject survives the rebase and survives the merge to `main`, where the same commit lands with the same message. There is no `dump_v4_fixture` left in the tree to regenerate the header from, so nothing can reintroduce a hash here.
 
 - **`city_v4.csim`** — raw `snapshot::to_bytes` output, header version `4`. A 16×16 city, seed 42, 400 ticks.
 - **`city_v4.expected`** — what that same tree put on the wire, as plain text so it can be read in a diff. Grid size, the five scalars, `state_hash`, the building list, and then one `tile` line per cell:
