@@ -112,10 +112,14 @@ mod v4_fixture {
 
     /// The three ways a v4 tile is *allowed* to come back spelled differently.
     ///
-    /// Each is a case where v4 had **two** spellings for one physical tile and
-    /// the strata have one, so the difference being erased is the whole purpose
-    /// of the flip rather than a defect in it. Every other tile must match
-    /// exactly.
+    /// The first two are cases where v4 had **two** spellings for one physical
+    /// tile and the strata have one, so the difference being erased is the
+    /// whole purpose of the flip rather than a defect in it. The third is not a
+    /// spelling collapse at all: it deletes an occupant, and so it moves the
+    /// loaded city's wilderness score and every trajectory downstream of it.
+    /// That is deliberate — it is delta 3 of `display.rs`'s module note, the
+    /// one change of the flip that is a gameplay fix rather than a
+    /// representation change. Every other tile must match exactly.
     #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, PartialOrd, Ord)]
     enum Normalisation {
         /// `Road` + `RAIL_UNDERLAY` → `Rail` + `ROAD_UNDERLAY`. A level
@@ -129,7 +133,9 @@ mod v4_fixture {
         LineDemotedByARegrade,
         /// A structure kind with no development behind it → `Land`. A park
         /// `remove_building` bulldozed and left the `kind` of. It scored and
-        /// billed as a park with nothing there.
+        /// billed as a park with nothing there. **Not a spelling collapse** —
+        /// dropping it changes the loaded city's wilderness score, which is
+        /// the intended fix, not a side effect.
         GhostStructure,
     }
 

@@ -524,6 +524,45 @@ mod tests {
         }
     }
 
+    /// **The score half of delta 3** — see `display.rs`'s module note and
+    /// `commands::tests::one_bulldozer_click_clears_a_whole_footprint`.
+    ///
+    /// At `303897f` `remove_building` kept the tile's `kind`, so a bulldozed
+    /// park stayed a park to every consumer that read the kind byte —
+    /// including this one. It scored +4.0 of natural capital for a tile with
+    /// nothing on it, for ever. Measured on that tree, an 8×8 city with one
+    /// park at (4, 4) scored 67.0312 both before *and* after the bulldozer;
+    /// here the razed tile drops back to exactly the eco of ground that was
+    /// never built on, which is the whole point of clearing the tag.
+    ///
+    /// This is a gameplay change, not a representation one, and it is the only
+    /// one the flip made. It is pinned here so that stays true and visible.
+    #[test]
+    fn a_bulldozed_park_stops_scoring_as_a_park() {
+        let untouched = grid(8, 8);
+        let (blank_eco, blank_score) = (eco_at(&untouched, 4, 4), score(&untouched));
+
+        let mut s = grid(8, 8);
+        assert!(apply_tool(&mut s, Tool::Park, 4, 4).success);
+        let built_eco = eco_at(&s, 4, 4);
+        assert!(
+            built_eco > blank_eco,
+            "a park must be worth more than the ground it sits on ({built_eco} vs {blank_eco})"
+        );
+
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4).success);
+        assert_eq!(
+            eco_at(&s, 4, 4),
+            blank_eco,
+            "the razed tile still scores as something"
+        );
+        assert_eq!(
+            score(&s),
+            blank_score,
+            "the city still scores the dead park"
+        );
+    }
+
     // --- base weights ---
 
     #[test]

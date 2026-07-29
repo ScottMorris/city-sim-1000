@@ -12,28 +12,40 @@
 //!   / `underground_kind[N]` arrays the TypeScript renderer reads;
 //! - `tauri-plugin-city-sim`'s `build_tick_event` — the kind byte array on
 //!   `TickEvent`;
-//! - [`crate::sim::state_hash`], whose committed golden hash is the proof that
-//!   the derivation reproduces the old bytes exactly.
+//! - [`crate::sim::state_hash`], whose committed golden hash pins the bytes for
+//!   the small road-and-zone city `make_city_sim` builds. That city reaches
+//!   none of the three deltas below — no structure, no bulldozer, no rail, no
+//!   line — so the golden hash proves the derivation did not disturb the
+//!   ordinary case, not that it is byte-identical everywhere. The tests named
+//!   under "the three deltas" are what cover the rest.
 //!
 //! **The rule is "reproduce the canonical spelling `apply_tool` used to write",
 //! not "apply visual precedence".** The renderer's visual precedence — road and
 //! rail are the base sprite, hydro composites on top — lives entirely in
 //! `tileRenderUtils.ts` and is spelling-agnostic: `carriagewayBeneath` reads
 //! `roadUnderlay || kind === Road`, `carriesHydroOverlay` reads `powerOverlay ||
-//! (kind === PowerLine && …)`. But two consumers are *not* spelling-agnostic —
-//! `ui/minimap.ts` (`powerOverlay → railUnderlay → roadUnderlay →
-//! palette[kind]`) and `getTileColour` (`palette[kind]`, brightened only when
-//! `kind === PowerLine`). Emitting the visual order would change the flat
-//! colour of every road that carries a line. Emitting the old canonical order
-//! changes nothing, so that is what this does.
+//! (kind === PowerLine && …)`. But three consumers are *not* spelling-agnostic
+//! — `ui/minimap.ts` (`powerOverlay → railUnderlay → roadUnderlay →
+//! palette[kind]`), `getTileColour` (`palette[kind]`, brightened only when
+//! `kind === PowerLine`) and the HUD tile inspector, which prints the `kind`
+//! string verbatim in its Type row (`hud.ts`). Emitting the visual order would
+//! change the flat colour of every road that carries a line. Emitting the old
+//! canonical order changes nothing for any tile `apply_tool` can build, so that
+//! is what this does. (It is not a no-op over every *legacy* spelling — see
+//! delta 2 below.)
 //!
-//! ## The two normalisations
+//! ## The three deltas
 //!
-//! Two physical tiles had **two** v4 spellings each, and in both cases the
-//! difference was *build history* — which is not stored, is not a property of
-//! the tile, and is exactly what the strata stop recording. Each collapses onto
-//! one spelling, and each collapse is a visible (small) change. They are the
-//! entire user-facing delta of the flip; `the_two_normalisations` pins both.
+//! Exactly three classes of tile come off the wire differently than they did at
+//! `303897f`, the last commit with `kind` in storage. Two are **normalisations**
+//! — one physical tile that v4 could spell two ways, collapsing onto one — and
+//! the third is a **behaviour fix** that the flip forced. Nothing else changes;
+//! `the_two_normalisations` pins the first two, and
+//! `commands::tests::a_bulldozed_park_leaves_bare_ground`,
+//! `commands::tests::one_bulldozer_click_clears_a_whole_footprint` and
+//! `wilderness::tests::a_bulldozed_park_stops_scoring_as_a_park` pin the third.
+//! `every_tool_built_tile_against_the_v4_bytes` records, case by case, which
+//! tool sequences are byte-identical to v4 and which are not.
 //!
 //! 1. **A bare level crossing.** `Tool::Road` over rail wrote `Road` +
 //!    `RAIL_UNDERLAY`; `Tool::Rail` over road wrote `Rail` + `ROAD_UNDERLAY`.
@@ -42,9 +54,13 @@
 //!    hold, and `commands.rs` writes it in both build orders now. The sprite is
 //!    unchanged (`resolveBaseTileSprite` tests `(Rail && roadUnderlay) || (Road
 //!    && railUnderlay)`, and `pickRailCrossingTexture` orients off the rail axis
-//!    either way) and so are the renderer's debug labels. What changes is the
-//!    minimap base colour of a road-last crossing, from road-grey to
-//!    rail-brown, because `minimap.ts` checks `railUnderlay` first.
+//!    either way) and so are the renderer's debug labels. What changes is a
+//!    road-last crossing's *flat* colour, and the two consumers move opposite
+//!    ways: `minimap.ts` tests `railUnderlay` before `roadUnderlay`, so
+//!    `(Road, RAIL_UNDERLAY)` drew rail-brown and `(Rail, ROAD_UNDERLAY)` now
+//!    draws road-grey; `getTileColour` reads `palette[kind]`, so the same tile
+//!    goes road-grey → rail-brown on the renderer's flat-colour path. The
+//!    inspector's Type row reads `road` → `rail`.
 //!
 //! 2. **A bare hydro line on open ground.** `Tool::PowerLine` wrote
 //!    `PowerLine` with `POWER_OVERLAY`; regrading or planting under a line left
@@ -58,6 +74,32 @@
 //!    wire composited on top. That is the same tile drawing two different ways
 //!    depending on its history — the bug class `docs/tile-model.md` is about —
 //!    so collapsing it is the point rather than a cost.
+//!
+//!    The same collapse reaches one spelling `apply_tool` can no longer
+//!    produce but old saves still carry: a road under a line spelled `Road` +
+//!    `POWER_OVERLAY`, written before the road/rail/line tools were made
+//!    build-order symmetric (`migrate.rs` names both v4 spellings). It loads as
+//!    `{Road, PowerLine}` and re-emits as `PowerLine` + `ROAD_UNDERLAY |
+//!    POWER_OVERLAY` — the canonical spelling of that tile — so it changes flat
+//!    colour from road-grey to the hydro palette on load. Same normalisation,
+//!    not a fourth delta, and the only case where "emitting the canonical order
+//!    changes nothing" does not hold.
+//!
+//! 3. **A bulldozed footprint building.** *Not* a normalisation — a deliberate
+//!    behaviour change, and the only one of the three that moves a number.
+//!    `remove_building` deleted the `BuildingInstance` and cleared
+//!    `building_id` but kept `kind`, leaving a park spelled `Park` with nothing
+//!    behind it: it took a second bulldozer click to clear and went on scoring
+//!    +4.0 of wilderness for ever. Under the strata that ghost is
+//!    unrepresentable — `Occupant::Structure` is one flat tag whose identity
+//!    lives on the `BuildingInstance` — so `remove_building` now clears the tag
+//!    with the development and the tile emits `Land`. On an 8×8 city
+//!    `Tool::Park` then `Tool::Bulldoze` moves the razed tile's eco from 2.0615
+//!    back to bare ground's 1.0000 and the city score from 67.03 to 66.67,
+//!    which is the point: the razed tile now scores what is actually there.
+//!    `migrate::tile_from_v4` applies the same rule to ghosts already sitting
+//!    in v4 saves (`snapshot.rs`'s `Normalisation::GhostStructure`), so a
+//!    loaded city agrees with a freshly bulldozed one.
 
 use crate::occupants::{zone_template_kind, Occupant, StructureLookup, Terrain};
 use crate::state::{Tile, DERIVED_FLAG_MASK};
@@ -208,9 +250,10 @@ mod tests {
     /// space including spellings no tool could produce: whatever the wire says
     /// coming out means exactly the tile that went in. It deliberately does
     /// **not** claim the bytes are identical, because for two physical tiles
-    /// they cannot be — see `the_two_normalisations`. The byte-identity half is
-    /// `every_tool_built_tile_emits_the_v4_bytes`, which enumerates what
-    /// `apply_tool` can actually build.
+    /// they cannot be — see `the_two_normalisations`. The byte comparison is
+    /// `every_tool_built_tile_against_the_v4_bytes`, which enumerates what
+    /// `apply_tool` can actually build and records, case by case, whether v4
+    /// wrote the same bytes or different ones.
     #[test]
     fn every_v4_spelling_survives_a_round_trip_through_the_wire() {
         let lookup = empty_lookup();
@@ -365,80 +408,150 @@ mod tests {
         assert_eq!(wire_underground(&s.tiles[0]), TileKind::WaterPipe as u8);
     }
 
-    /// The whole producible occupant vocabulary, built with real tools, pinned
-    /// to the bytes v4 wrote for each.
+    /// Where v4 wrote the same bytes for a tool sequence, and where it did not.
+    ///
+    /// Every case's third column is what `303897f` — the last commit with
+    /// `kind` in storage — emitted for the identical sequence, read off that
+    /// tree through `apply_tool` + `tile.kind`/`tile.flags`. `Same` is the
+    /// byte-identity claim, case by case. `Was(..)` is an acknowledged delta,
+    /// and the comment beside it names which of the module note's three it is.
+    ///
+    /// **There are exactly three `Was(..)` cases here and that is the point.**
+    /// The list covers the producible occupant vocabulary, so a fourth
+    /// appearing means the flip changed something nobody decided to change.
     #[test]
-    fn every_tool_built_tile_emits_the_v4_bytes() {
-        let cases: &[(&[Tool], TileKind, u8)] = &[
-            (&[], TileKind::Land, 0),
-            (&[Tool::Tree], TileKind::Tree, 0),
-            (&[Tool::Road], TileKind::Road, 0),
-            (&[Tool::Rail], TileKind::Rail, 0),
+    fn every_tool_built_tile_against_the_v4_bytes() {
+        /// What v4 emitted, relative to what this tree emits.
+        #[derive(Debug)]
+        enum V4 {
+            /// v4 wrote these exact bytes too.
+            Same,
+            /// v4 wrote different bytes. Deliberate — see the module note.
+            Was(TileKind, u8),
+        }
+        use V4::{Same, Was};
+
+        let cases: &[(&[Tool], TileKind, u8, V4)] = &[
+            (&[], TileKind::Land, 0, Same),
+            (&[Tool::Tree], TileKind::Tree, 0, Same),
+            (&[Tool::Road], TileKind::Road, 0, Same),
+            (&[Tool::Rail], TileKind::Rail, 0, Same),
             (
                 &[Tool::Road, Tool::Rail],
                 TileKind::Rail,
                 flags::ROAD_UNDERLAY,
+                Same,
             ),
+            // Delta 1 — the level crossing. v4 spelled a road-last crossing
+            // the other way round; build order is not stored, so it collapses.
             (
                 &[Tool::Rail, Tool::Road],
                 TileKind::Rail,
                 flags::ROAD_UNDERLAY,
+                Was(TileKind::Road, flags::RAIL_UNDERLAY),
             ),
             (
                 &[Tool::PowerLine],
                 TileKind::PowerLine,
                 flags::POWER_OVERLAY,
+                Same,
             ),
             (
                 &[Tool::Road, Tool::PowerLine],
                 TileKind::PowerLine,
                 flags::ROAD_UNDERLAY | flags::POWER_OVERLAY,
+                Same,
             ),
             (
                 &[Tool::PowerLine, Tool::Road],
                 TileKind::PowerLine,
                 flags::ROAD_UNDERLAY | flags::POWER_OVERLAY,
+                Same,
             ),
             (
                 &[Tool::Rail, Tool::PowerLine],
                 TileKind::PowerLine,
                 flags::RAIL_UNDERLAY | flags::POWER_OVERLAY,
+                Same,
             ),
             (
                 &[Tool::Road, Tool::Rail, Tool::PowerLine],
                 TileKind::PowerLine,
                 flags::ROAD_UNDERLAY | flags::RAIL_UNDERLAY | flags::POWER_OVERLAY,
+                Same,
             ),
-            (&[Tool::Residential], TileKind::Residential, 0),
+            (&[Tool::Residential], TileKind::Residential, 0, Same),
             (
                 &[Tool::Residential, Tool::PowerLine],
                 TileKind::Residential,
                 flags::POWER_OVERLAY,
+                Same,
             ),
             (
                 &[Tool::PowerLine, Tool::Residential],
                 TileKind::Residential,
                 flags::POWER_OVERLAY,
+                Same,
             ),
             (
                 &[Tool::PowerLine, Tool::Tree],
                 TileKind::Tree,
                 flags::POWER_OVERLAY,
+                Same,
             ),
-            (&[Tool::Water], TileKind::Water, 0),
+            (&[Tool::Water], TileKind::Water, 0, Same),
             (
                 &[Tool::PowerLine, Tool::Water],
                 TileKind::Water,
                 flags::POWER_OVERLAY,
+                Same,
             ),
-            (&[Tool::TerraformRaise], TileKind::Land, 0),
-            (&[Tool::Water, Tool::TerraformRaise], TileKind::Land, 0),
-            (&[Tool::Park], TileKind::Park, 0),
-            (&[Tool::Park, Tool::Bulldoze], TileKind::Land, 0),
-            (&[Tool::Road, Tool::Bulldoze], TileKind::Land, 0),
+            (
+                &[Tool::PowerLine, Tool::TerraformLower],
+                TileKind::Water,
+                flags::POWER_OVERLAY,
+                Same,
+            ),
+            (&[Tool::TerraformRaise], TileKind::Land, 0, Same),
+            (
+                &[Tool::Water, Tool::TerraformRaise],
+                TileKind::Land,
+                0,
+                Same,
+            ),
+            // Delta 2 — the line demoted to its flag by a regrade. v4 kept the
+            // span only in `POWER_OVERLAY` and let `Land` take the kind byte.
+            (
+                &[Tool::PowerLine, Tool::TerraformRaise],
+                TileKind::PowerLine,
+                flags::POWER_OVERLAY,
+                Was(TileKind::Land, flags::POWER_OVERLAY),
+            ),
+            (&[Tool::Park], TileKind::Park, 0, Same),
+            // Delta 3 — the bulldozed footprint building. v4 kept the kind byte
+            // after `remove_building` had taken the development away, so the
+            // razed tile went on drawing and scoring as a park.
+            (
+                &[Tool::Park, Tool::Bulldoze],
+                TileKind::Land,
+                0,
+                Was(TileKind::Park, 0),
+            ),
+            (&[Tool::Road, Tool::Bulldoze], TileKind::Land, 0, Same),
+            (&[Tool::Rail, Tool::Bulldoze], TileKind::Land, 0, Same),
+            (&[Tool::Tree, Tool::Bulldoze], TileKind::Land, 0, Same),
+            (&[Tool::WaterPipe], TileKind::Land, 0, Same),
+            (&[Tool::WaterPipe, Tool::Bulldoze], TileKind::Land, 0, Same),
+            (
+                &[Tool::Residential, Tool::Bulldoze],
+                TileKind::Land,
+                0,
+                Same,
+            ),
         ];
 
-        for (tools, want_kind, want_flags) in cases {
+        let mut deltas = 0;
+        for (tools, want_kind, want_flags, v4) in cases {
             let mut s = GameState::new(4, 4, 0);
             for &tool in *tools {
                 let r = apply_tool(&mut s, tool, 1, 1);
@@ -451,6 +564,22 @@ mod tests {
                 (*want_kind, *want_flags),
                 "{tools:?} emitted the wrong bytes"
             );
+            // `Same` needs no second assertion — the v4 bytes *are* the
+            // expected bytes, which the assert above just checked. `Was` does:
+            // if a claimed delta has quietly become byte-identical again, the
+            // table is stale and the module note is lying about the count.
+            if let Was(k4, f4) = v4 {
+                assert_ne!(
+                    (kind, f),
+                    (*k4, *f4),
+                    "{tools:?} is marked as a delta from v4 but emits the v4 bytes"
+                );
+                deltas += 1;
+            }
         }
+        assert_eq!(
+            deltas, 3,
+            "the module note names three deltas from v4; this list holds {deltas}"
+        );
     }
 }

@@ -592,18 +592,21 @@ mod tests {
     /// built, and — since step 3 of #177 — is spelled on the wire exactly one
     /// way: `Rail` + `ROAD_UNDERLAY`.
     ///
-    /// **This is the one wire byte the flip could not reproduce.** Build order
-    /// was the only thing distinguishing `Road` + `RAIL_UNDERLAY` from `Rail` +
-    /// `ROAD_UNDERLAY`, and build order is not stored, so `{Road, Rail}` had to
-    /// normalise onto one of them. Rail wins because dragging a railway across
-    /// an existing road network is far commoner than the reverse, so it is the
-    /// spelling most saves already hold. The sprite is unaffected —
+    /// **This is one of the wire bytes the flip could not reproduce** — delta 1
+    /// of the three `display.rs` names. Build order was the only thing
+    /// distinguishing `Road` + `RAIL_UNDERLAY` from `Rail` + `ROAD_UNDERLAY`,
+    /// and build order is not stored, so `{Road, Rail}` had to normalise onto
+    /// one of them. Rail wins because dragging a railway across an existing
+    /// road network is far commoner than the reverse, so it is the spelling
+    /// most saves already hold. The sprite is unaffected —
     /// `resolveBaseTileSprite` tests `(Rail && roadUnderlay) || (Road &&
     /// railUnderlay)` and `pickRailCrossingTexture` orients off the rail axis
-    /// either way — and so are the renderer's debug labels. The single
-    /// user-visible delta is the minimap base colour of a road-last crossing,
-    /// which goes rail-brown instead of road-grey (`minimap.ts` checks
-    /// `railUnderlay` before `roadUnderlay`).
+    /// either way — and so are the renderer's debug labels. What is visible is
+    /// the *flat* colour of a road-last crossing, and the two consumers move in
+    /// opposite directions: `minimap.ts` tests `railUnderlay` before
+    /// `roadUnderlay`, so it goes rail-brown → road-grey, while
+    /// `getTileColour`'s `palette[kind]` goes road-grey → rail-brown. The
+    /// inspector's Type row reads `rail` where it read `road`.
     #[test]
     fn a_level_crossing_has_one_spelling_in_both_build_orders() {
         for order in [[Tool::Rail, Tool::Road], [Tool::Road, Tool::Rail]] {
@@ -712,6 +715,55 @@ mod tests {
             for dx in 0..2 {
                 assert!(s.tile_at(dx, dy).unwrap().building_id.is_none());
             }
+        }
+    }
+
+    /// **Delta 3 of the flip, through the bulldozer rather than the API.**
+    ///
+    /// `a_bulldozed_park_leaves_bare_ground` covers the same behaviour change
+    /// by calling [`remove_building`] directly on a 1×1 park. This is the
+    /// player's route to it — `Tool::Bulldoze` — and it is where the *user*
+    /// consequence of the ghost lived: at `303897f` one click deleted the
+    /// `BuildingInstance` but left `kind` standing, so every tile of a 2×2
+    /// footprint went on emitting the structure's own kind and a second click
+    /// was needed to actually clear the sprite. Verified against that tree:
+    /// `Park` then `Bulldoze` emitted `Park`, `CoalPlant` then `Bulldoze`
+    /// emitted `CoalPlant`. Here one click clears the whole footprint.
+    ///
+    /// This delta is a gameplay change, not a representation one — it moves
+    /// the wilderness score, which `wilderness::tests::
+    /// a_bulldozed_park_stops_scoring_as_a_park` pins. `display.rs`'s module
+    /// note lists it beside the two normalisations for that reason.
+    #[test]
+    fn one_bulldozer_click_clears_a_whole_footprint() {
+        for (tool, w, h) in [
+            (Tool::Park, 1, 1),
+            (Tool::CoalPlant, 2, 2),
+            (Tool::ElementarySchool, 2, 2),
+        ] {
+            let mut s = gs(8, 8);
+            assert!(apply_tool(&mut s, tool, 4, 4).success, "{tool:?} refused");
+            assert_ne!(wire_kind_at(&s, 4, 4), TileKind::Land, "{tool:?} not built");
+
+            assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4).success);
+            for dy in 0..h {
+                for dx in 0..w {
+                    let (x, y) = (4 + dx, 4 + dy);
+                    let t = s.tile_at(x, y).unwrap();
+                    assert!(
+                        !t.has_occupant(Occupant::Structure),
+                        "{tool:?} ({x}, {y}): the tag outlived its development"
+                    );
+                    assert!(t.building_id.is_none(), "{tool:?} ({x}, {y}): dangling id");
+                    // v4 emitted the structure's own kind on all four here.
+                    assert_eq!(
+                        wire_kind_at(&s, x, y),
+                        TileKind::Land,
+                        "{tool:?} ({x}, {y}): one click did not clear it"
+                    );
+                }
+            }
+            assert!(s.buildings.is_empty(), "{tool:?}: the instance survived");
         }
     }
 
