@@ -208,12 +208,18 @@ describe('WasmSimBridge undo/redo', () => {
     expect(result).toEqual({ type: 'CommandResult', success: false, message: 'Not enough funds' });
   });
 
-  it('forwards each step_result alert as FromSim::Alert plus its paired narrative event', () => {
-    const { worker, events } = makeBridge();
+  it('forwards each step_result alert as FromSim::Alert plus its paired narrative event, once step() flushes it', () => {
+    const { worker, bridge, events } = makeBridge();
     worker.emit({
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0,
       alerts: [{ kind: 'WaterDeficit', message: 'Water deficit detected.', sticky: true }],
     });
+    // Alerts are staged like pendingStats/pendingTileBuffer, not dispatched
+    // on arrival — see pendingAlerts' field doc for why (undo/redo/load must
+    // be able to discard a stale one before it ever reaches the player).
+    expect(events.find(e => e.type === 'Alert')).toBeUndefined();
+
+    bridge.step(1 / 20);
 
     const alert = events.find(e => e.type === 'Alert');
     expect(alert).toMatchObject({
@@ -225,6 +231,28 @@ describe('WasmSimBridge undo/redo', () => {
     expect(narrative).toMatchObject({
       type: 'Narrative',
       data: { kind: 'Alert', payload: { type: 'water_deficit_start', category: 'utilities', severity: 'alert' } },
+    });
+  });
+
+  it('discards a pending alert when an undo lands before step() flushes it', () => {
+    const { worker, bridge, events } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0,
+      alerts: [{ kind: 'PowerDeficit', message: 'Power deficit detected.', sticky: true }],
+    });
+
+    const pending = bridge.undo();
+    worker.emit({
+      type: 'undo_result', happened: true,
+      bytes: emptyTileBuffer(), stats: zeroStats(), history: flags(false, true)
+    });
+
+    return pending.then(() => {
+      bridge.step(1 / 20);
+      // The undo happened before the deficit-carrying step_result was ever
+      // flushed — since the Rust engine resyncs its latch silently on
+      // restore, no alert (deficit or restore) should surface for it.
+      expect(events.find(e => e.type === 'Alert')).toBeUndefined();
     });
   });
 
