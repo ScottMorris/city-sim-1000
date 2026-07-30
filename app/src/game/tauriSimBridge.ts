@@ -21,23 +21,26 @@
  *     serialisation arrives in P5-1.
  *   • The tick payload carries terrain/occupants/POWERED/WATERED/ABANDONED
  *     per tile (see `TickEvent.tiles` in `guest-js/index.ts`), but not
- *     happiness, elevation, wilderness or per-tile `building_id` — those
- *     still need the Rust sim to serialise them (P3+).
- *   • Because per-tile `building_id` is absent, `tile.buildingId` is never
- *     set on this path — anything keyed off it (a developed zone lot's
- *     `isDevelopedZone` check, the HUD tile inspector) silently sees an
- *     undeveloped tile. `event.buildings` (id/kind/origin, no footprint)
- *     isn't enough on its own to fix this; it would need `building_id` on
- *     the wire too.
+ *     happiness, elevation or wilderness — those wait on #204, which unifies
+ *     this wire on the shared SoA tile buffer.
+ *   • Per-tile `building_id` is likewise absent from the wire, so `onTick`
+ *     paints `tile.buildingId` from `event.buildings` origins and the TS
+ *     template footprints instead — the inspector and `isDevelopedZone` see
+ *     the same facts as on the WASM path. A footprint drift between the
+ *     Rust and TS templates would mis-paint coverage; the SoA unification
+ *     (#204) retires that risk along with this derivation.
  */
 
 import type { GameState, Tile } from './gameState';
 import { TileKind } from './gameState';
+import { BuildingStatus, createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
+import { recomputeEducation } from './education';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileKindToU8 } from './protocol/tileKind';
-import { Terrain, ZoneDensity } from './protocol/occupants';
+import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { STATUS } from './protocol/tileBuffer';
 import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
@@ -275,7 +278,58 @@ export class TauriSimBridge implements SimBridge {
       tile.watered = (status & STATUS.WATERED) !== 0;
       tile.abandoned = (status & STATUS.ABANDONED) !== 0;
       tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
+      // Cleared each tick and repainted from `event.buildings` below —
+      // a razed building's id must not linger on its old footprint.
+      tile.buildingId = undefined;
     }
+
+    // Buildings — rebuild the display mirror from the wire list, mirroring
+    // `applyTileBuffer` in `wasmSimBridge.ts`. The wire carries no per-tile
+    // `building_id` (see the limitation note above), so footprint coverage
+    // is painted from each building's TS template until #204 unifies this
+    // wire on the shared SoA tile buffer.
+    // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
+    // until a pump, tower, or pipe exists, buildings don't require water.
+    let hasWaterSystem = event.buildings.some((b) => {
+      const kind = tileKindFromU8(b.kind);
+      return kind === TileKind.WaterPump || kind === TileKind.WaterTower;
+    });
+    for (let i = 0; i < n && !hasWaterSystem; i++) {
+      if (hasOccupant(s.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
+    }
+    s.buildings = event.buildings.map((b) => {
+      const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
+      // Derive status from the tile flags the status byte already set —
+      // same derivation as the WASM path, for the same reason.
+      const originTile = s.tiles[b.originY * s.width + b.originX];
+      const template = getBuildingTemplate(kind as string);
+      const bstate = createBuildingState();
+      const needsPower = template ? template.requiresPower !== false : false;
+      const needsWater =
+        hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
+      if (needsPower && !originTile?.powered) {
+        bstate.status = BuildingStatus.InactiveNoPower;
+      } else if (needsWater && !originTile?.watered) {
+        bstate.status = BuildingStatus.InactiveNoWater;
+      }
+      const w = template?.footprint.width ?? 1;
+      const h = template?.footprint.height ?? 1;
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+          if (b.originX + dx >= s.width || b.originY + dy >= s.height) continue;
+          s.tiles[(b.originY + dy) * s.width + (b.originX + dx)].buildingId = b.id;
+        }
+      }
+      return {
+        id: b.id,
+        templateId: kind as string,
+        origin: { x: b.originX, y: b.originY },
+        state: bstate
+      };
+    });
+
+    // Education coverage keys off the rebuilt buildings list.
+    s.education = recomputeEducation(s);
 
     // Forward TickStats to the UI handler
     this.handler?.({
