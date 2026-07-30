@@ -32,14 +32,14 @@ bun run dev                    # Vite dev server
 bun run build                  # Production bundle (app/dist/)
 bun run preview                # Preview a production build
 bun run lint                   # tsc --noEmit (no separate eslint setup)
-bun run test                   # vitest run (singleThread baked in — always safe)
+bun run test                   # vitest run (singleThread baked in — never needs a parallelism flag)
 bun run test -- app/src/game/economy.test.ts  # run a single test file
 bun run build:favicon          # regenerate PWA icons/favicon from the 🏙️ emoji
 bun run build:radio-playlist   # scan app/public/audio/radio/<station> folders, emit playlist.json/stations.json
 bun run build:wasm             # compile crates/city-sim-wasm → app/src/wasm/sim_wasm/ (run after Rust changes)
 ```
 
-**Important:** `app/src/wasm/` is gitignored (generated output). Run `bun run build:wasm` once after a fresh clone before `bun run dev` or `bun run build`, otherwise the WASM Worker will fail to load. There is no longer a pure-TS fallback — WASM is the required browser runtime since P5-4.
+**Important:** `app/src/wasm/` is gitignored (generated output). Run `bun run build:wasm` once after a fresh clone before `bun run dev`, `bun run build` or `bun run test`, otherwise the WASM Worker will fail to load. There is no longer a pure-TS fallback — WASM is the required browser runtime since P5-4. `bun run test` needs it too: the cross-engine parity harness (`app/src/game/parity/`) loads the real `SimHost` cdylib out of `app/src/wasm/` in its `beforeAll`, so on a fresh clone every test in that file fails with an actionable message. That failure is deliberate — a parity harness that can quietly skip is worse than none — so build the WASM rather than working around it.
 
 **Also after a fresh clone/worktree:** `crates/tauri-plugin-city-sim/dist-js/` is gitignored too — run `bun run build` inside `crates/tauri-plugin-city-sim` once, or the Vite dev server fails to resolve the `tauri-plugin-city-sim` package import in `tauriSimBridge.ts`.
 

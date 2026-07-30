@@ -19,6 +19,10 @@ npm run dev
 
 Then open the provided local URL. The service worker caches assets after first load so the game keeps running offline. Use `npm run build` for a production bundle.
 
+### Tests
+
+`bun run test` (TypeScript), `cargo test --workspace` (Rust) and `bun run test:e2e` (Playwright) are the three gates. On top of the unit tests there are four **architecture harnesses** — a golden city, a cross-engine parity replay, a visual regression over the derived wire bytes, and a long-run soak. `docs/testing.md` describes what each one covers, what it deliberately does not, how to run it, and how to regenerate its baseline.
+
 ### Testing on a phone (LAN dev loop)
 
 ```bash

@@ -1,0 +1,300 @@
+# golden_city.script — the city the golden dump is taken from.
+#
+# (c) Copyright 2026 Liminal HQ, Scott Morris
+# SPDX-License-Identifier: MIT
+#
+# This file is DATA, not code. `tests/golden_city.rs` replays it against a
+# fresh `Simulation` and dumps everything observable to
+# `golden_city.expected`. Adding a case means adding lines here — no Rust.
+#
+# Grammar, one directive per line, `#` starts a comment:
+#
+#   grid <w> <h>          the map size. Once, first.
+#   seed <n>              the PRNG seed. Once.
+#   tick <n>              advance the sim by n fixed ticks (1/20 s each).
+#   <Tool> <x> <y>        apply a tool. MUST succeed, or the harness panics.
+#   refuse <Tool> <x> <y> apply a tool that MUST be refused. The refusal
+#                         message is recorded in the dump, so the guard text
+#                         is pinned too.
+#
+# `<Tool>` is the Rust `Tool` enum spelled exactly as it is declared in
+# `city_sim_protocol::commands` (case-insensitive here). The harness derives
+# the name table from the enum, so a renamed tool fails loudly rather than
+# silently mismatching.
+#
+# The map is 24 wide × 16 tall on purpose — not square, so a transposed x/y
+# cannot pass unnoticed.
+
+grid 24 16
+seed 20260729
+
+# ===========================================================================
+# 1. The ground, before anything is built on it
+# ===========================================================================
+# A 2×2 lake in the south-west. (1,9) gets bulldozed later and must still be
+# a lake afterwards — the bulldozer is not a terraformer.
+Water 0 8
+Water 1 8
+Water 0 9
+Water 1 9
+
+# A forest block, so the wilderness patch bonus and the fragmentation penalty
+# both have something to say.
+Tree 5 10
+Tree 6 10
+Tree 7 10
+Tree 5 11
+Tree 6 11
+Tree 7 11
+Tree 5 12
+Tree 6 12
+
+# ===========================================================================
+# 2. The spine, and both build orders of a level crossing
+# ===========================================================================
+# The high street runs the full width at y=2 — except x=9, which is left bare
+# so the rail can get there first.
+Road 0 2
+Road 1 2
+Road 2 2
+Road 3 2
+Road 4 2
+Road 5 2
+Road 6 2
+Road 7 2
+Road 8 2
+Road 10 2
+Road 11 2
+Road 12 2
+Road 13 2
+Road 14 2
+Road 15 2
+Road 16 2
+Road 17 2
+Road 18 2
+Road 19 2
+Road 20 2
+Road 21 2
+Road 22 2
+Road 23 2
+
+# Crossing A — ROAD LAST. The rail goes down first, then the road crosses it.
+Rail 9 0
+Rail 9 1
+Rail 9 2
+Rail 9 3
+Rail 9 4
+Road 9 2
+
+# Crossing B — RAIL LAST. The road at (6,2) is already part of the spine.
+Rail 6 0
+Rail 6 1
+Rail 6 2
+Rail 6 3
+Rail 6 4
+
+# Both crossings must come off the wire spelled the same way. That is
+# normalisation 1 of `display.rs`, checked in situ rather than in a unit test.
+
+# ===========================================================================
+# 3. Zones, north and south of the spine
+# ===========================================================================
+Residential 0 1
+Residential 1 1
+Residential 2 1
+Residential 3 1
+Residential 4 1
+Residential 5 1
+Commercial 7 1
+Commercial 8 1
+Residential 10 1
+Residential 11 1
+Residential 12 1
+Residential 13 1
+
+# (11,1)–(14,1) are the lots that will carry a hydro line while they develop
+# — see §6.
+Residential 14 1
+Commercial 15 1
+Commercial 16 1
+Commercial 17 1
+Industrial 18 1
+Industrial 19 1
+Industrial 20 1
+
+Commercial 0 3
+Commercial 1 3
+Commercial 2 3
+Industrial 3 3
+Industrial 4 3
+Industrial 5 3
+Residential 7 3
+Residential 8 3
+Residential 10 3
+Residential 11 3
+Residential 12 3
+Residential 13 3
+Residential 14 3
+Residential 15 3
+Commercial 16 3
+Commercial 17 3
+Commercial 18 3
+Industrial 19 3
+Industrial 20 3
+
+# ===========================================================================
+# 4. Power — a coal plant in the south-east, wired to the spine
+# ===========================================================================
+CoalPlant 21 12
+
+# The conductor column. (21,11) touches the plant, (21,3) touches the spine
+# road at (21,2), and a road conducts power, so the whole street is live.
+PowerLine 21 11
+PowerLine 21 10
+PowerLine 21 9
+PowerLine 21 8
+PowerLine 21 7
+PowerLine 21 6
+PowerLine 21 5
+PowerLine 21 4
+PowerLine 21 3
+
+# A spur west along y=10 that peters out in open country — a bare conductor
+# run with nothing under it and nothing at the end of it.
+PowerLine 20 10
+PowerLine 19 10
+PowerLine 18 10
+
+# A wind turbine left deliberately OFF the network, in the south-west. An
+# isolated power source is ordinary play and its wilderness penalty still
+# counts, so the dump should show it doing exactly that and no more.
+WindTurbine 0 12
+
+# ===========================================================================
+# 5. Water — a pump piped up to the spine
+# ===========================================================================
+WaterPump 22 9
+WaterPipe 22 8
+WaterPipe 22 7
+WaterPipe 22 6
+WaterPipe 22 5
+WaterPipe 22 4
+WaterPipe 22 3
+
+# ===========================================================================
+# 6. Civic footprints — 1×1 and 2×2
+# ===========================================================================
+# School coverage is a BFS along roads and zones — not a radius — so both
+# schools sit one zone back from the high street rather than out in the field,
+# and the education block dumps real numbers instead of zeroes.
+# 2×2 elementary school at (10,4)–(11,5).
+ElementarySchool 10 4
+# 2×2 high school at (13,4)–(14,5).
+HighSchool 13 4
+# 2×2 park at (18,6)–(19,7).
+ParkLarge 18 6
+# 1×1 park at (20,6).
+Park 20 6
+
+# The lots that carry a line while they develop. The line has to go on before
+# a lot builds — `Tool::PowerLine` refuses a developed tile — which is
+# precisely why "a developed lot carrying a line" is a state worth pinning.
+# Four lots rather than one so the case does not hinge on which lot the growth
+# RNG happens to pick first.
+PowerLine 11 1
+PowerLine 12 1
+PowerLine 13 1
+PowerLine 14 1
+
+# ===========================================================================
+# 7. Let the city run
+# ===========================================================================
+tick 100
+
+# ===========================================================================
+# 8. The awkward states. Everything below is built into a LIVE city.
+# ===========================================================================
+
+# --- a hydro line over each kind of carriageway ---------------------------
+# over a road
+PowerLine 12 2
+# over a rail
+PowerLine 6 4
+# over a level crossing of its own — road AND rail underlay on one tile. The
+# two crossings on the spine are left bare deliberately: they are the pair the
+# harness compares to prove build order has not leaked back onto the wire.
+Rail 17 6
+Road 17 6
+PowerLine 17 6
+# the other build order: line first, road across it
+PowerLine 12 5
+Road 12 5
+
+# --- a hydro line on its own, and the two ways to spoil it ----------------
+# a lone line on open ground
+PowerLine 2 6
+# a line demoted to its flag by a later regrade, with a pipe under it
+PowerLine 3 6
+TerraformRaise 3 6
+WaterPipe 3 6
+# trees planted straight through a live line
+PowerLine 4 6
+Tree 4 6
+# water brushed over a live line
+PowerLine 5 6
+Water 5 6
+
+# --- a hydro line over a zone, in both build orders -----------------------
+Commercial 7 6
+PowerLine 7 6
+PowerLine 8 6
+Commercial 8 6
+
+# --- pipes ----------------------------------------------------------------
+# a pipe under a road
+WaterPipe 13 2
+# a lone pipe, nothing above it
+WaterPipe 2 7
+# a pipe under water
+WaterPipe 4 9
+Water 4 9
+
+# --- terrain --------------------------------------------------------------
+# a bulldozed lake is still a lake
+Bulldoze 1 9
+# but paving a lake and razing the pavement leaves land — the cheapest
+# regrade on the palette, and deliberate
+Water 3 9
+Road 3 9
+Bulldoze 3 9
+
+# --- what the bulldozer leaves behind -------------------------------------
+# a 1×1 park razed. Under the strata this leaves bare ground; the v4 tree
+# left a ghost `Park` that went on scoring +4.0 for ever.
+Park 20 8
+Bulldoze 20 8
+# one click anywhere in a 2×2 footprint clears the whole thing
+ParkLarge 2 10
+Bulldoze 3 11
+
+# ===========================================================================
+# 9. Guards — commands that must be REFUSED, and their message
+# ===========================================================================
+# a structure over a road and a live line
+refuse Park 12 2
+# a zone over rail
+refuse Residential 6 2
+# anything over a live building
+refuse Road 21 12
+refuse PowerLine 10 4
+# a regrade that would strand a live building
+refuse TerraformLower 21 12
+# a tree over a live building
+refuse Tree 0 12
+# a footprint that runs off the edge of the map
+refuse CoalPlant 23 15
+
+# ===========================================================================
+# 10. Run it out
+# ===========================================================================
+tick 300
