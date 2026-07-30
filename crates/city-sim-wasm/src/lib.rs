@@ -44,6 +44,11 @@ pub fn build_sha() -> String {
 pub struct SimHost {
     sim: Simulation,
     history: History,
+    /// The `message` from the most recent `apply_tool` call's `CommandResult`
+    /// — `apply_tool` itself can only return `bool` across the wasm-bindgen
+    /// boundary without a breaking signature change, so the message is read
+    /// separately via `last_apply_message()` right after each call.
+    last_apply_message: Option<String>,
 }
 
 impl SimHost {
@@ -64,6 +69,7 @@ impl SimHost {
         SimHost {
             sim: Simulation::new(width, height, seed),
             history: History::new(HistoryConfig::default()),
+            last_apply_message: None,
         }
     }
 
@@ -281,6 +287,7 @@ impl SimHost {
     /// insufficient funds, invalid placement).
     pub fn apply_tool(&mut self, tool_idx: u8, x: u32, y: u32, stroke_id: u32) -> bool {
         let Ok(tool) = Tool::try_from(tool_idx) else {
+            self.last_apply_message = None;
             return false;
         };
         let pending = self.history.prepare(&self.sim.state, stroke_id as u64);
@@ -290,7 +297,21 @@ impl SimHost {
                 self.history.commit(bytes, stroke_id as u64);
             }
         }
+        self.last_apply_message = result.message;
         result.success
+    }
+
+    /// The `message` from the most recent `apply_tool` call, if any — `Some`
+    /// on both a refused command ("Not enough funds") and, occasionally, a
+    /// successful one; `None` otherwise. Read this right after `apply_tool`.
+    pub fn last_apply_message(&self) -> Option<String> {
+        self.last_apply_message.clone()
+    }
+
+    /// Alerts raised since the last call — drains the queue. Call once per
+    /// `step()` from the host and forward each entry as `FromSim::Alert`.
+    pub fn take_alerts_json(&mut self) -> String {
+        serde_json::to_string(&self.sim.take_alerts()).unwrap_or_default()
     }
 
     /// Set the simulation speed multiplier (0.0 = paused, 1.0 = normal).

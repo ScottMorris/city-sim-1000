@@ -19,6 +19,8 @@ pub enum Error {
     Snapshot(String),
     #[error("timed out waiting for snapshot from sim thread")]
     SnapshotTimeout,
+    #[error("timed out waiting for apply_tool result from sim thread")]
+    ApplyToolTimeout,
     #[error(transparent)]
     Tauri(#[from] tauri::Error),
 }

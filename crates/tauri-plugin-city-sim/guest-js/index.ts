@@ -60,6 +60,19 @@ export interface TickEvent {
   /** Whether an undo/redo step is currently available — drives button state. */
   canUndo:            boolean
   canRedo:            boolean
+  /**
+   * Utility deficit/restore alerts raised since the previous tick — see
+   * `city_sim_core::sim::Simulation::take_alerts`. Empty on most ticks; only
+   * non-empty the tick a power/water balance actually crosses zero.
+   */
+  alerts:             SimAlert[]
+}
+
+/** Mirrors `city_sim_protocol::events::SimAlert`. */
+export interface SimAlert {
+  kind:    'PowerDeficit' | 'PowerRestored' | 'WaterDeficit' | 'WaterRestored' | 'BudgetWarning' | 'Abandonment' | 'Info'
+  message: string
+  sticky:  boolean
 }
 
 /** One entry in {@link TickEvent.buildings}. */
@@ -130,11 +143,18 @@ export async function start(
   await invoke('plugin:city-sim|start', { width, height, seed, onTick: channel })
 }
 
+/** Mirrors `city_sim_protocol::commands::CommandResult`. */
+export interface CommandResult {
+  success: boolean
+  message: string | null
+}
+
 /**
  * Apply a player tool at tile coordinates (x, y).
  *
- * Fire-and-forget: the command is queued into the sim thread and applied
- * before the next tick. Returns once the command is enqueued (not applied).
+ * Resolves once the sim thread has actually processed the command (not just
+ * enqueued it) — the sim thread drains all pending commands before ticking,
+ * so this normally resolves within one frame (≤50 ms).
  *
  * @param tool     A `TOOL_ID` value — the u8 discriminant from `sim_protocol::commands::Tool`.
  * @param x        Tile column (0-indexed from left).
@@ -142,8 +162,8 @@ export async function start(
  * @param strokeId Groups the calls of one drag-paint gesture into a single
  *                 undo step; bump it on every new gesture.
  */
-export async function applyTool(tool: ToolId, x: number, y: number, strokeId: number): Promise<void> {
-  await invoke('plugin:city-sim|apply_tool', { tool, x, y, strokeId })
+export async function applyTool(tool: ToolId, x: number, y: number, strokeId: number): Promise<CommandResult> {
+  return await invoke('plugin:city-sim|apply_tool', { tool, x, y, strokeId })
 }
 
 /**
