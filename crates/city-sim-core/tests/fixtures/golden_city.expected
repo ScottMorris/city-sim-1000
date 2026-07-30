@@ -35,7 +35,7 @@ jobs 117
 buildings 32
 next_building_id 36
 tile_revision 188
-state_hash 0xff77a3d369c16465
+state_hash 0xd5d375861afacd14
 
 [utilities]
 power 24
