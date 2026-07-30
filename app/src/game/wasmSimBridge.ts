@@ -64,7 +64,7 @@ type WorkerToMain =
       type: 'ready';
       history: WorkerHistoryFlags;
       /** Absent on an older worker bundle; the overlay then reports "unknown". */
-      build?: { version: string | null; lastModified: string | null };
+      build?: { version: string | null; sha: string | null; lastModified: string | null };
     }
   | { type: 'init_error';   message: string }
   | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; mutationSeq: number }

@@ -33,20 +33,25 @@ export interface BuildInfo {
   wasmLastModified: string | null;
   /** `CARGO_PKG_VERSION` of the running `city-sim-wasm`. */
   engineVersion: string | null;
+  /** Git revision the running WASM was compiled from, `-dirty` if unclean. */
+  engineSha: string | null;
 }
 
 const pageLoadedAt = new Date().toISOString();
 
 let wasmLastModified: string | null = null;
 let engineVersion: string | null = null;
+let engineSha: string | null = null;
 
 /** Recorded by the bridge once the worker reports what it loaded. */
 export function recordEngineBuild(info: {
   lastModified?: string | null;
   version?: string | null;
+  sha?: string | null;
 }): void {
   if (info.lastModified !== undefined) wasmLastModified = info.lastModified;
   if (info.version !== undefined) engineVersion = info.version;
+  if (info.sha !== undefined) engineSha = info.sha;
 }
 
 export function getBuildInfo(): BuildInfo {
@@ -56,8 +61,25 @@ export function getBuildInfo(): BuildInfo {
     wasmBuiltAtBundleTime: typeof __WASM_BUILT_AT__ === 'string' ? __WASM_BUILT_AT__ : null,
     pageLoadedAt,
     wasmLastModified,
-    engineVersion
+    engineVersion,
+    engineSha
   };
+}
+
+/**
+ * Whether the app bundle and the engine were built from different commits.
+ *
+ * Independent of [`isEngineStale`], which compares *times*: these two can carry
+ * the same timestamp and still disagree, if the WASM was rebuilt from a
+ * different checkout. `null` when either side is unknown, or when either is
+ * `-dirty` — an uncommitted tree says nothing useful about whether the two
+ * halves match, and claiming a mismatch there would cry wolf on every edit.
+ */
+export function isBuildMismatched(info: BuildInfo = getBuildInfo()): boolean | null {
+  const { sha, engineSha: eng } = info;
+  if (!eng || eng === 'unknown' || sha === 'unknown') return null;
+  if (sha.endsWith('-dirty') || eng.endsWith('-dirty')) return null;
+  return sha !== eng;
 }
 
 /**

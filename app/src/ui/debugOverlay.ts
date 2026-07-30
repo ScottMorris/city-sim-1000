@@ -1,4 +1,4 @@
-import { getBuildInfo, isEngineStale } from '../buildInfo';
+import { getBuildInfo, isBuildMismatched, isEngineStale } from '../buildInfo';
 import { DemandDetails, getSimulationDebugStats } from '../game/debugStats';
 import { GameState } from '../game/gameState';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
@@ -111,10 +111,6 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   overlay.id = 'debug-overlay';
   overlay.className = 'debug-overlay hidden';
   root.appendChild(overlay);
-  // The overlay lives inside canvas-wrapper (for positioning), whose delegated
-  // pointerdown handler treats any tap as a map interaction regardless of
-  // target — stop it here so tapping the overlay doesn't also paint/inspect
-  // the tile underneath. Matches minimap.ts/hud.ts's existing overlay guard.
   // The overlay sits inside `#canvas-wrapper`, whose delegated handlers treat
   // any pointer activity as map interaction regardless of target — so every
   // event that can *start or continue* a map action has to stop here, or the
@@ -192,6 +188,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   const buildSection = () => {
     const b = getBuildInfo();
     const stale = isEngineStale(b);
+    const mismatch = isBuildMismatched(b);
     const clock = (iso: string | null) =>
       iso ? new Date(iso).toLocaleTimeString(undefined, { hour12: false }) : '—';
     const staleRow =
@@ -200,13 +197,20 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         : stale === null
           ? `<div class="debug-hint">Engine freshness unknown (no build timestamp).</div>`
           : '';
+    // Distinct from staleness on purpose: these can share a timestamp and still
+    // be built from different checkouts, which is the harder case to spot.
+    const mismatchRow =
+      mismatch === true
+        ? `<div class="debug-hint debug-warn">App and engine are from DIFFERENT commits — run \`bun run build:wasm\`.</div>`
+        : '';
     return `
     <div class="debug-section">
       <div class="debug-heading">Build</div>
       <div class="debug-row"><span>App</span><strong>${b.sha}</strong></div>
       <div class="debug-hint">Bundle built ${clock(b.builtAt)} · page loaded ${clock(b.pageLoadedAt)}</div>
-      <div class="debug-row"><span>Engine</span><strong>${b.engineVersion ?? '—'}</strong></div>
-      <div class="debug-hint">WASM built ${clock(b.wasmLastModified ?? b.wasmBuiltAtBundleTime)}</div>
+      <div class="debug-row"><span>Engine</span><strong>${b.engineSha ?? '—'}</strong></div>
+      <div class="debug-hint">v${b.engineVersion ?? '—'} · WASM built ${clock(b.wasmLastModified ?? b.wasmBuiltAtBundleTime)}</div>
+      ${mismatchRow}
       ${staleRow}
     </div>`;
   };
