@@ -413,6 +413,14 @@ jobs:
       - name: Build WASM target
         run: bun run build:wasm
 
+      # `tauriSimBridge.test.ts` imports `tauriSimBridge.ts`, which statically
+      # imports `tauri-plugin-city-sim` for its default (non-test) plugin
+      # bindings — Vite resolves that package's `dist-js/` output at
+      # transform time regardless of the test's injected fakes, so this job
+      # needs the build exactly as `mobile-e2e` does.
+      - name: Build Tauri plugin JS
+        run: bun run build:plugin-js
+
       - name: Run TypeScript tests
         id: ts_tests
         run: bun run test:ci

@@ -21,23 +21,26 @@
  *     serialisation arrives in P5-1.
  *   • The tick payload carries terrain/occupants/POWERED/WATERED/ABANDONED
  *     per tile (see `TickEvent.tiles` in `guest-js/index.ts`), but not
- *     happiness, elevation, wilderness or per-tile `building_id` — those
- *     still need the Rust sim to serialise them (P3+).
- *   • Because per-tile `building_id` is absent, `tile.buildingId` is never
- *     set on this path — anything keyed off it (a developed zone lot's
- *     `isDevelopedZone` check, the HUD tile inspector) silently sees an
- *     undeveloped tile. `event.buildings` (id/kind/origin, no footprint)
- *     isn't enough on its own to fix this; it would need `building_id` on
- *     the wire too.
+ *     happiness, elevation or wilderness — those wait on #204, which unifies
+ *     this wire on the shared SoA tile buffer.
+ *   • Per-tile `building_id` is likewise absent from the wire, so `onTick`
+ *     paints `tile.buildingId` from `event.buildings` origins and the TS
+ *     template footprints instead — the inspector and `isDevelopedZone` see
+ *     the same facts as on the WASM path. A footprint drift between the
+ *     Rust and TS templates would mis-paint coverage; the SoA unification
+ *     (#204) retires that risk along with this derivation.
  */
 
 import type { GameState, Tile } from './gameState';
 import { TileKind } from './gameState';
+import { BuildingStatus, createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
+import { recomputeEducation } from './education';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileKindToU8 } from './protocol/tileKind';
-import { Terrain, ZoneDensity } from './protocol/occupants';
+import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { STATUS } from './protocol/tileBuffer';
 import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
@@ -57,6 +60,49 @@ import {
   type ToolId,
   type TickEvent,
 } from 'tauri-plugin-city-sim';
+
+/**
+ * Every plugin call `TauriSimBridge` makes, as one injectable bundle.
+ *
+ * Mirrors `WasmSimBridgeConfig`'s `createWorker` seam: the real plugin
+ * bindings go through Tauri's `invoke`/`Channel`, unusable outside a Tauri
+ * shell (and requiring `dist-js/` to be built), so tests substitute fakes
+ * here directly instead of mocking the `tauri-plugin-city-sim` module
+ * specifier — which would otherwise force every test runner to resolve the
+ * real package regardless of the substitution.
+ */
+export interface TauriPluginBindings {
+  start: typeof pluginStart;
+  applyTool: typeof pluginApplyTool;
+  setSpeed: typeof pluginSetSpeed;
+  setPolicies: typeof pluginSetPolicies;
+  setNaturalTerrain: typeof pluginSetNaturalTerrain;
+  stop: typeof pluginStop;
+  undo: typeof pluginUndo;
+  redo: typeof pluginRedo;
+  getSnapshot: typeof pluginGetSnapshot;
+  loadSnapshot: typeof pluginLoadSnapshot;
+  importLegacy: typeof pluginImportLegacy;
+}
+
+export interface TauriSimBridgeConfig {
+  /** Defaults to the real `tauri-plugin-city-sim` bindings. */
+  plugin?: TauriPluginBindings;
+}
+
+const REAL_PLUGIN: TauriPluginBindings = {
+  start: pluginStart,
+  applyTool: pluginApplyTool,
+  setSpeed: pluginSetSpeed,
+  setPolicies: pluginSetPolicies,
+  setNaturalTerrain: pluginSetNaturalTerrain,
+  stop: pluginStop,
+  undo: pluginUndo,
+  redo: pluginRedo,
+  getSnapshot: pluginGetSnapshot,
+  loadSnapshot: pluginLoadSnapshot,
+  importLegacy: pluginImportLegacy,
+};
 
 // ---------------------------------------------------------------------------
 // Tool mapping: TS Tool string enum → plugin u8 discriminant
@@ -104,8 +150,10 @@ export class TauriSimBridge implements SimBridge {
   // the finer-grained tick/mutationSeq check WasmSimBridge does. Correct,
   // just without the render-skip's savings on this path.
   private dirty = false;
+  private plugin: TauriPluginBindings;
 
-  constructor(state: GameState) {
+  constructor(state: GameState, config: TauriSimBridgeConfig = {}) {
+    this.plugin = config.plugin ?? REAL_PLUGIN;
     this.state = structuredClone(state);
     void this.startPlugin(this.state);
   }
@@ -124,18 +172,18 @@ export class TauriSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool': {
         const id = TOOL_TO_ID[cmd.tool];
-        void pluginApplyTool(id, cmd.x, cmd.y, cmd.strokeId);
+        void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId);
         // Optimistic: the Rust side will reject invalid placements silently;
         // a proper async result is deferred to P5 when we wire CommandResult
         // events back through the Channel.
         return { success: true };
       }
       case 'SetSpeed':
-        void pluginSetSpeed(cmd.multiplier);
+        void this.plugin.setSpeed(cmd.multiplier);
         return { success: true };
       case 'SetPolicies':
         this.state.policies = cmd.policies;
-        void pluginSetPolicies(cmd.policies);
+        void this.plugin.setPolicies(cmd.policies);
         return { success: true };
     }
   }
@@ -149,15 +197,15 @@ export class TauriSimBridge implements SimBridge {
   }
 
   getSnapshot(): Promise<Uint8Array> {
-    return pluginGetSnapshot();
+    return this.plugin.getSnapshot();
   }
 
   async loadSnapshot(bytes: Uint8Array): Promise<void> {
-    await pluginLoadSnapshot(bytes);
+    await this.plugin.loadSnapshot(bytes);
   }
 
   async importLegacy(imp: import('./simBridge').LegacyEngineImport): Promise<void> {
-    await pluginImportLegacy(imp);
+    await this.plugin.importLegacy(imp);
   }
 
   async newCity(fresh: GameState): Promise<void> {
@@ -166,15 +214,15 @@ export class TauriSimBridge implements SimBridge {
   }
 
   setSpeed(multiplier: number): void {
-    void pluginSetSpeed(multiplier);
+    void this.plugin.setSpeed(multiplier);
   }
 
   undo(): Promise<boolean> {
-    return pluginUndo();
+    return this.plugin.undo();
   }
 
   redo(): Promise<boolean> {
-    return pluginRedo();
+    return this.plugin.redo();
   }
 
   canUndo(): boolean { return this.canUndoFlag; }
@@ -182,7 +230,7 @@ export class TauriSimBridge implements SimBridge {
   canRedo(): boolean { return this.canRedoFlag; }
 
   dispose(): void {
-    void pluginStop();
+    void this.plugin.stop();
   }
 
   // ---------------------------------------------------------------------------
@@ -193,7 +241,7 @@ export class TauriSimBridge implements SimBridge {
   getMetadata() { return null; }
 
   private async startPlugin(state: GameState): Promise<void> {
-    await pluginStart(state.width, state.height, state.seed, (event) =>
+    await this.plugin.start(state.width, state.height, state.seed, (event) =>
       this.onTick(event),
     );
     await this.seedEngine(state);
@@ -201,7 +249,7 @@ export class TauriSimBridge implements SimBridge {
   }
 
   private async restartPlugin(width: number, height: number, seed: number): Promise<void> {
-    await pluginStart(width, height, seed, (event) => this.onTick(event));
+    await this.plugin.start(width, height, seed, (event) => this.onTick(event));
     await this.seedEngine(this.state);
   }
 
@@ -211,8 +259,8 @@ export class TauriSimBridge implements SimBridge {
     for (let i = 0; i < terrain.length; i++) {
       terrain[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
     }
-    await pluginSetNaturalTerrain(terrain);
-    await pluginSetPolicies(state.policies);
+    await this.plugin.setNaturalTerrain(terrain);
+    await this.plugin.setPolicies(state.policies);
   }
 
   private onTick(event: TickEvent): void {
@@ -275,7 +323,58 @@ export class TauriSimBridge implements SimBridge {
       tile.watered = (status & STATUS.WATERED) !== 0;
       tile.abandoned = (status & STATUS.ABANDONED) !== 0;
       tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
+      // Cleared each tick and repainted from `event.buildings` below —
+      // a razed building's id must not linger on its old footprint.
+      tile.buildingId = undefined;
     }
+
+    // Buildings — rebuild the display mirror from the wire list, mirroring
+    // `applyTileBuffer` in `wasmSimBridge.ts`. The wire carries no per-tile
+    // `building_id` (see the limitation note above), so footprint coverage
+    // is painted from each building's TS template until #204 unifies this
+    // wire on the shared SoA tile buffer.
+    // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
+    // until a pump, tower, or pipe exists, buildings don't require water.
+    let hasWaterSystem = event.buildings.some((b) => {
+      const kind = tileKindFromU8(b.kind);
+      return kind === TileKind.WaterPump || kind === TileKind.WaterTower;
+    });
+    for (let i = 0; i < n && !hasWaterSystem; i++) {
+      if (hasOccupant(s.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
+    }
+    s.buildings = event.buildings.map((b) => {
+      const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
+      // Derive status from the tile flags the status byte already set —
+      // same derivation as the WASM path, for the same reason.
+      const originTile = s.tiles[b.originY * s.width + b.originX];
+      const template = getBuildingTemplate(kind as string);
+      const bstate = createBuildingState();
+      const needsPower = template ? template.requiresPower !== false : false;
+      const needsWater =
+        hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
+      if (needsPower && !originTile?.powered) {
+        bstate.status = BuildingStatus.InactiveNoPower;
+      } else if (needsWater && !originTile?.watered) {
+        bstate.status = BuildingStatus.InactiveNoWater;
+      }
+      const w = template?.footprint.width ?? 1;
+      const h = template?.footprint.height ?? 1;
+      for (let dy = 0; dy < h; dy++) {
+        for (let dx = 0; dx < w; dx++) {
+          if (b.originX + dx >= s.width || b.originY + dy >= s.height) continue;
+          s.tiles[(b.originY + dy) * s.width + (b.originX + dx)].buildingId = b.id;
+        }
+      }
+      return {
+        id: b.id,
+        templateId: kind as string,
+        origin: { x: b.originX, y: b.originY },
+        state: bstate
+      };
+    });
+
+    // Education coverage keys off the rebuilt buildings list.
+    s.education = recomputeEducation(s);
 
     // Forward TickStats to the UI handler
     this.handler?.({
