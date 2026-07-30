@@ -1,6 +1,6 @@
 # Simulation Feedback Channel — Alerts, Command Results, and Failure Icons
 
-**Status:** regressed in the Rust migration. Audit items B2 and B5 in `docs/wasm-sim-audit.md`, plus a renderer gate bug that compounds them.
+**Status:** fixed (#199). Audit items B2 and B5 in `docs/wasm-sim-audit.md`, plus a renderer gate bug that compounded them, are resolved — all three paths described below are live on both bridges.
 
 ## Purpose
 
@@ -8,24 +8,23 @@ When the simulation refuses a command or the city starts failing, the player mus
 
 ## The three broken paths
 
-### 1. Utility deficit alerts never fire (B2)
+### 1. Utility deficit alerts never fire (B2) — fixed
 
 * Promise: `app/public/manual.html` — "When power or water drops below zero you'll see a sticky warning toast; it clears with a follow-up notice once supply returns", plus persistent news-ticker alerts (`manual.html`, `SPEC.md`, `docs/game-parameters.md` all repeat it).
 * Old: the TS sim ran a deficit state machine and raised alerts + narrative events (`app/src/game/simulation.ts:746-800` at `1f8140a`; oracle removed 2026-07-30, view with `git show 1f8140a:app/src/game/simulation.ts`).
-* Now: no Rust code constructs `FromSim::Alert` — `app/src/main.ts:441-447` is a dead handler, and the `power_deficit_*` narrative event types (`narrative/types.ts:6-9`) have no producer.
-* Recovery: port the deficit state machine into the engine tick, emit `Alert` events over both bridges (WASM worker message + Tauri channel), and reconnect the toast/ticker/narrative consumers that are already sitting there waiting.
+* Fix: the edge-triggered deficit state machine now lives in `crates/city-sim-core/src/sim.rs`'s `Simulation::handle_resource_alerts` (ported from the TS oracle above), raising `city_sim_protocol::events::SimAlert`s into a `pending_alerts` queue drained once per host step/tick via `Simulation::take_alerts`. `SimHost::take_alerts_json` (WASM, forwarded through `wasmSim.worker.ts`'s `step_result`) and `TickEvent.alerts` (Tauri, built in `build_tick_event`) both carry it to `main.ts`'s previously-dead `Alert` handler. Each alert's paired ticker event (`power_deficit_start`/`_end` etc.) is derived TS-side, in `protocol/deficitNarrative.ts`'s `deriveNarrativeEventFromAlert` — shared by both bridges rather than reimplemented per transport.
 
-### 2. Command results are swallowed (B5)
+### 2. Command results are swallowed (B5) — fixed
 
 * Old: the in-process TS sim returned `ChangeResult` synchronously — a refused or underfunded placement produced an immediate toast.
-* Now: both bridges are optimistic — `wasmSimBridge.send` always returns `{success: true}` (`wasmSimBridge.ts:257`) and the real result arrives async as `apply_result`, where only the success flag crosses the worker boundary; `tauriSimBridge` is optimistic the same way. `main.ts:732`'s failure toast can never fire on the production paths.
-* Recovery: route the async `apply_result` (success **and** message) back into the toast/SFX path keyed by stroke, so "Not enough funds" / "Bulldoze first" reach the player again. This is also a prerequisite for the layer-scoped bulldozer's "Nothing to demolish here" no-op message (see `layer-scoped-bulldozer.md`).
+* Was: both bridges were optimistic — `wasmSimBridge.send` always returned `{success: true}` and the real result arrived async as `apply_result`, where only the success flag crossed the worker boundary; Tauri's `apply_tool` was fire-and-forget with no result path at all.
+* Fix: `send()` still answers synchronously/optimistically (the `SimBridge` interface contract), but the real result now reaches `main.ts` asynchronously as a `FromSim::CommandResult` message. WASM: `SimHost::last_apply_message` exposes the `CommandResult.message` Rust already computed, read by `wasmSim.worker.ts` right after `apply_tool` and forwarded by `wasmSimBridge.ts`. Tauri: `SimCmd::ApplyTool` gained a reply channel (`mpsc::SyncSender<CommandResult>`, mirroring the existing `Undo`/`Redo`/`GetSnapshot` pattern), so the `apply_tool` Tauri command — and `tauriSimBridge.ts`'s `.applyTool()` promise — now resolve with the real result instead of `void`. `main.ts`'s failure toast fires on the `CommandResult` message now, not on `bridge.send()`'s (still-optimistic) return value. Not done: correcting the immediate/optimistic SFX cue to match the async result — left as a known limitation, since it needs per-stroke correlation the drag-paint gesture model doesn't cleanly support yet.
 
-### 3. The no-water icon is suppressed exactly when it's needed most
+### 3. The no-water icon is suppressed exactly when it's needed most — fixed
 
 * Promise: `manual.html` — "Buildings without water will stop working and show a water-drop icon", and water becomes a requirement "until you place your first pump, water tower, or pipe".
-* Now: the engine opts a city into the water requirement on pipes too (`crates/city-sim-core/src/state.rs:518-523`, `has_water_system`), but the renderer's icon gate only scans for pump/tower templates (`app/src/rendering/renderer.ts:571-580`), so a pipes-only city flips every building to `InactiveNoWater` — production and growth stop — with no icon, no alert (path 1 is dead), and no explanation anywhere in the UI. This is the worst compound failure of the three: two independent regressions overlapping to make a fully silent city-killer.
-* Recovery: make the renderer's gate ask the same question as the engine (mirror `has_water_system` — pipes included), ideally by reading an engine-provided flag rather than re-deriving it client-side.
+* Was: the engine opts a city into the water requirement on pipes too (`crates/city-sim-core/src/state.rs:518-523`, `has_water_system`), but the renderer's icon gate only scanned for pump/tower templates, so a pipes-only city flipped every building to `InactiveNoWater` — production and growth stopped — with no icon, no alert, and no explanation anywhere in the UI.
+* Fix: both bridges already mirrored `has_water_system` correctly (pipes included) as a side effect of the #177 TS/wire follow-up — a building can only ever reach `BuildingStatus.InactiveNoWater` when that mirror decided a water system exists. `app/src/rendering/renderer.ts`'s icon gate now reads that status directly instead of re-deriving "does the map have water infra" from a second, pump/tower-only template scan.
 
 ## Codifying
 
