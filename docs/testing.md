@@ -195,7 +195,7 @@ SOAK=20000 cargo test -p city-sim-core --test soak -- --nocapture
 
 The map is small on purpose. Every system in `tick_fixed` is a full-map pass, so cost is linear in tiles, and what surfaces a leak is *elapsed ticks*, not area. Spending the budget on days rather than on area is what makes a CI-sized run long enough to be worth running.
 
-The soak also models the **20 Hz host emit loop**. Both hosts — `city_sim_wasm::SimHost::tile_buffer` and the Tauri plugin's tick event — build a `StructureLookup` and derive the wire bytes for every tile on *every* tick, because since #177 those bytes are derived rather than persisted. A soak that only called `step` would miss the busiest allocation path in the product.
+The soak also models the **20 Hz host emit loop**. Both hosts — `city_sim_wasm::SimHost::tile_buffer` and the Tauri plugin's tick event — write the wire bytes for every tile on *every* tick (both now call the same `city_sim_core::wire::encode_tile_buffer`), and that allocation and full-map pass is real cost `Simulation::step` alone wouldn't show. It no longer needs a `StructureLookup` to do it — #177's TS/wire follow-up deleted that derivation from this path entirely — but writing and iterating the whole tile array every tick is still work a soak that only called `step` would miss.
 
 ### What it asserts
 
@@ -292,7 +292,7 @@ Two things were checked by experiment rather than assumed, because they decide w
 - **Removing `.max(state.next_building_id)` is not a fix.** With it removed the probe still reports 77 B → 203 B: the highest *live* id climbs with the counter, because a freshly developed lot holds a freshly minted id and under churn there is nearly always one alive. Both halves of that `max` are unbounded.
 - **Sizing the index by the live building count is a fix, and a behaviour-preserving one.** Swapping the `Vec` for a map keyed by id holds the allocation flat at 304 B across the whole run and leaves every `state_hash` in the checkpoint table byte-for-byte identical.
 
-The allocation sits on the 20 Hz host emit path (`SimHost::tile_buffer` and the Tauri tick event) as well as on `state_hash` and `compute_wilderness`, so it is hot.
+The allocation used to sit on the 20 Hz host emit path (`SimHost::tile_buffer` and the Tauri tick event) as well as on `state_hash` and `compute_wilderness` — #177's TS/wire follow-up deleted the `StructureLookup`-driven derivation the emit path and `state_hash` used to need, so `compute_wilderness` is the one remaining call site the soak's probe measures.
 
 This is an engine change, and the harness branch deliberately does not make it. Until it lands, the soak prints the finding under a `KNOWN DEFECT #180` banner — excused by that one signature and nothing else, and with the *absence* of the finding treated as a failure so the exception cannot outlive the defect. The acceptance test is `allocation_per_call_tracks_live_buildings_not_the_id_space`, `#[ignore]`d until the fix lands.
 
