@@ -189,26 +189,30 @@ Tiles include:
 
 ### Tile Interface
 
+Superseded by the stratum model — see `docs/tile-model.md` for the design reasoning. A tile is not one `kind`; it is what ground it is, plus what independently occupies each physical layer:
+
 ```ts
-export enum TileKind {
-  Land, Water, Road, Rail, Tree, Park,
-  PowerLine, HydroPlant, WaterPump,
-  Residential, Commercial, Industrial,
-  WaterPipe
+enum Occupant {
+  Pipe, Subway, Fibre,                              // underground
+  Road, Rail, ZoneResidential, ZoneCommercial,
+  ZoneIndustrial, Structure,                        // surface
+  PowerLine, Trees                                  // overhead
 }
 
-export interface Tile {
-  kind: TileKind;
-  height: number;     // 0 = water, 1+ = land elevations
-  zoneLevel?: 0 | 1 | 2 | 3;
-  population?: number;
-  jobs?: number;
+interface Tile {
+  terrain: Terrain;        // Land | Water
+  underground: number;     // Occupant bitset
+  surface: number;         // Occupant bitset
+  overhead: number;        // Occupant bitset
+  buildingId?: number;     // which BuildingInstance, if any occupies this tile
+  elevation: number;
   powered: boolean;
   watered: boolean;
   happiness: number;
-  underground?: TileKind; // e.g. WaterPipe
 }
 ```
+
+`TileKind` still exists (`gameState.ts`) but only as a building-template key (`Residential`, `WaterPump`, `HydroPlant`, ...) and in the frozen legacy `.citysim` save format — never as a per-tile field. A level crossing (road + rail on the same tile), a hydro line strung over a road, or a zoned lot developed under a power line are all just multiple bits in the relevant stratum, not special cases.
 
 ### Tile Rendering Requirements
 

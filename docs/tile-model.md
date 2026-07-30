@@ -1,6 +1,6 @@
 # Tile model — a stratum-based design note
 
-**Status:** proposal, not implemented. Written to be argued with. Implementation is tracked in #177.
+**Status:** implemented, both sides. `crates/city-sim-core`'s `Tile` moved off `kind` onto `terrain` + `underground`/`surface`/`overhead` occupant sets in #177/#181. The wire protocol and every TypeScript consumer — the gap this note's own Migration section originally left open — closed in a nine-phase follow-up (PR stack `legacy-wire-fork` → `docs`, 2026-07): the live wire buffer carries occupant bits directly (no more per-tick precedence derivation), `app/src/game/gameState.ts`'s `Tile` mirrors the Rust shape field-for-field, and the `kind`/`roadUnderlay`/`railUnderlay`/`powerOverlay`/`legacyUnderground` shim that bridged the two during the migration is deleted. Kept below for the reasoning, which is still the reasoning; see *Migration* for what each step actually shipped as.
 
 This note proposes replacing the single `kind` field with a set of *strata*, each holding a set of *occupants*. It exists because the same class of bug has now been found four times in three separate systems, and each time it was found by accident rather than by a test.
 
@@ -267,15 +267,24 @@ Aeroplanes in particular sit *entirely* outside the tile layer — they are not 
 
 ## Migration
 
-Strangler, not big bang. Feature work continues throughout.
+Strangler, not big bang. Feature work continued throughout, on both sides of the wire, in that order.
 
-1. Add a derived accessor (`tile.occupants(stratum)`) computed from today's `kind` + flags. No behaviour change.
-2. Convert consumers one at a time to the accessor. Each conversion is individually testable, and each gets a coverage-matrix-style test pinning its behaviour.
-3. When no consumer reads `kind` for a multi-valued question, reverse the derivation: the strata become canonical, and the `kind` + flags the wire has always carried become the derived projection rather than the source of truth. `kind` narrows to terrain. The snapshot version bumps here, and only here — that is a consequence of the tile's fields changing shape, not the point of the step.
+**Rust (#177/#181, landed first).** `city-sim-core`'s `Tile` moved off `kind` onto `terrain` + per-stratum `OccupantSet`s. `display.rs`'s `wire_kind`/`wire_flags`/`wire_underground` reconstructed a v4-shaped projection from the new strata for the wire, so the flip was invisible outside the crate at first — TS kept reading the same flattened bytes it always had.
 
-**Sizing the sweep**, measured rather than guessed: 180 references to `tile.kind` / `TileKind::` across nine non-test files in `city-sim-core` (`wilderness.rs` 49, `commands.rs` 42, `economy.rs` 23, `education.rs` 19, and the rest in single digits), plus 27 TypeScript files in `app/src/game` and `app/src/rendering`. Not all of them are multi-valued questions — many legitimately ask about terrain — but that is the search space, and step 2 is what shrinks it before anything breaks.
+**TS and the wire (nine-phase follow-up, 2026-07)** closed the gap that left open: the wire protocol and every TypeScript consumer converting from the flattened `kind`+flags spelling to strata, mirroring the Rust-side steps this section originally sketched —
 
-Step 3 is where the compiler earns its keep: narrowing `kind` makes every stale `TileKind::Road` comparison fail to compile, so the remaining wilderness-shaped bugs are found by `cargo check` rather than by a screenshot six months later.
+1. Fork the legacy save-import wire layout off the live one (`legacy_tile_buffer.rs`), so the byte format backing old `.citysim` saves could be frozen without also freezing the live wire.
+2. Flip the live wire buffer to carry occupant bits directly, deleting `display.rs`'s precedence derivation — the live format goes from 8 to 9 bytes/tile (one byte per stratum rather than packed, deliberately: see *Compatibility is mostly derivable* for why two concepts sharing a slot is the thing this whole model exists to avoid).
+3. Decode the new wire into TS `Tile`'s `terrain`/`underground`/`surface`/`overhead` fields, behind a temporary shim that kept `kind`/`roadUnderlay`/`railUnderlay`/`powerOverlay`/`legacyUnderground` populated for not-yet-converted consumers.
+4–7. Convert every consumer — shared predicates (`adjacency.ts`), the renderer, the UI layer and `mcpBridge.ts`, then the TS-only test oracle (`tools.ts`, `simulation.ts`, `stateHash.ts`, the parity harness) — one phase at a time, each independently tested.
+8. Delete the shim fields from `Tile` and let `tsc --noEmit` prove every consumer had actually converted.
+9. This doc.
+
+`kind` narrows to what `legacyKind`/`legacyFlags` in `protocol/legacyProjection.ts` still need it for: importing old `.citysim` saves, and exporting the current strata back into the byte-exact-forever legacy format the frozen importer expects. Nothing else reads it — there is no field left to read.
+
+Two originally-anticipated bugs came bundled with the TS-side conversion, both fixed as part of the rendering-layer phase: an undeveloped zoned lot crossed by a power line drew a debug "P" glyph instead of the wire (the renderer bailed out of compositing an overlay before a base sprite existed), and a power pole rendered straight through an already-built house instead of severing at the tile edge.
+
+Step 8's compiler sweep is where the payoff showed up in practice: every remaining `tile.kind`/`.roadUnderlay` reference became a compile error, not a screenshot found six months later — including two genuine oracle-fidelity bugs in `tools.ts` (an errant happiness bump on every terraform/infrastructure tool, and a bulldozer that only reached the buried pipe when a specific minimap mode was open) that had nothing to do with the shim removal itself and would have been easy to miss without it forcing a full re-read of every call site.
 
 ## Open questions
 
