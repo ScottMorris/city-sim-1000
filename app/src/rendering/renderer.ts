@@ -6,6 +6,7 @@
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Camera } from './camera';
 import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
+import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
 import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
@@ -197,9 +198,26 @@ export class MapRenderer {
               this.tilesWithSprites.add(coveredIdx);
             }
           }
-        } else if (spriteInfo?.skip) {
+        } else if (spriteInfo && 'skip' in spriteInfo) {
           this.hideSprite(idx);
           this.hideOverlaySprite(idx);
+          this.tilesWithSprites.add(idx);
+        } else if (spriteInfo && 'overlayOnly' in spriteInfo) {
+          // No base texture (an undeveloped zoned lot, drawn as a flat
+          // colour) but hydro crosses it — draw the fill, then the wire
+          // overlay on top, and count it as sprited so the debug label
+          // doesn't also stamp a "P" over it.
+          this.hideSprite(idx);
+          const color = getTileColour(tile, this.palette);
+          this.mapLayer
+            .rect(this.camera.x + x * size, this.camera.y + y * size, size, size)
+            .fill({ color, alpha: 0.95 * surfaceAlpha });
+          const overlaySprite = this.getOrCreateOverlaySprite(idx, spriteInfo.overlayOnly);
+          overlaySprite.position.set(this.camera.x + x * size, this.camera.y + y * size);
+          overlaySprite.width = spriteSize;
+          overlaySprite.height = spriteSize;
+          overlaySprite.visible = true;
+          overlaySprite.alpha = surfaceAlpha;
           this.tilesWithSprites.add(idx);
         } else {
           this.hideSprite(idx);
@@ -215,7 +233,7 @@ export class MapRenderer {
             .fill({ color, alpha: 0.95 * surfaceAlpha });
         }
 
-        if (isUnderground && tile.underground) {
+        if (isUnderground && hasOccupant(tile.underground, Occupant.Pipe)) {
           // Draw underground layer (pipes)
           // Simple visual for now: grey pipe, blue if watered (handled by overlay)
           const px = this.camera.x + x * size + size * 0.25;
@@ -232,9 +250,10 @@ export class MapRenderer {
 
           const hasNeighbour = (dx: number, dy: number) => {
             const t = getTile(state, x + dx, y + dy);
-            return t?.legacyUnderground === TileKind.WaterPipe
-              || t?.kind === TileKind.WaterPump
-              || t?.kind === TileKind.WaterTower;
+            if (!t) return false;
+            if (hasOccupant(t.underground, Occupant.Pipe)) return true;
+            const templateKind = t.buildingId !== undefined ? buildingLookup.get(t.buildingId)?.template?.tileKind : undefined;
+            return templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower;
           };
 
           this.mapLayer.rect(cx - offset, cy - offset, pipeWidth, pipeWidth).fill({ color: 0x555555 });
@@ -253,7 +272,7 @@ export class MapRenderer {
     this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
-    this.drawOverlayTints(state, size, overlayMode, buildingStatuses);
+    this.drawOverlayTints(state, size, overlayMode, buildingStatuses, buildingLookup);
     const educationPreview = this.pickEducationPreview(state, hovered, selected, activeTool, buildingLookup);
     if (educationPreview) {
       this.drawEducationPreview(
@@ -366,16 +385,20 @@ export class MapRenderer {
     state: GameState,
     size: number,
     overlayMode: MinimapMode,
-    buildingStatuses: Map<number, BuildingStatus>
+    buildingStatuses: Map<number, BuildingStatus>,
+    buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ) {
     if (overlayMode === 'base') return;
+
+    const templateKindOf = (tile: NonNullable<ReturnType<typeof getTile>>) =>
+      tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
 
     const pickTint = (tile: ReturnType<typeof getTile>) => {
       if (!tile) return null;
 
       if (overlayMode === 'power') {
         if (tile.powerPlantType) return { color: 0x81e8ff, alpha: 0.35 };
-        if (tile.kind === TileKind.PowerLine || tile.powerOverlay) {
+        if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
           return { color: tile.powered ? 0x7bf0ff : 0xff99c2, alpha: 0.35 };
         }
         const carrier = isPowerCarrier(tile);
@@ -385,13 +408,13 @@ export class MapRenderer {
       }
 
       if (overlayMode === 'water' || overlayMode === 'underground') {
-        if (tile.kind === TileKind.Water) return { color: 0x2f7be5, alpha: 0.32 };
-        if (tile.legacyUnderground === TileKind.WaterPipe) {
+        if (tile.terrain === Terrain.Water) return { color: 0x2f7be5, alpha: 0.32 };
+        if (hasOccupant(tile.underground, Occupant.Pipe)) {
           return { color: tile.watered ? WATER_OVERLAY_COLOUR : 0x888888, alpha: 0.6 };
         }
-        if (tile.kind === TileKind.WaterPipe) return { color: WATER_OVERLAY_COLOUR, alpha: 0.38 }; // Legacy check
 
-        if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
+        const templateKind = templateKindOf(tile);
+        if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
           return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
         }
         // Show watered status on buildings/zones
@@ -419,7 +442,7 @@ export class MapRenderer {
       }
 
       if (overlayMode === 'wilderness') {
-        if (tile.kind === TileKind.Water) return null;
+        if (tile.terrain === Terrain.Water) return null;
         // 0–1 with 0.5 neutral (see tileBuffer decodeEco); tint strength
         // scales with distance from neutral — lush green up, urban grey down.
         const delta = (tile.wilderness ?? 0.5) - 0.5;
@@ -429,7 +452,8 @@ export class MapRenderer {
       }
 
       if (overlayMode === 'education') {
-        if (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) {
+        const templateKind = templateKindOf(tile);
+        if (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) {
           return { color: 0x8f7bff, alpha: 0.4 };
         }
         if (isZone(tile)) {
@@ -542,7 +566,8 @@ export class MapRenderer {
     // show "no service" indicators when the player has actually built that service.
     let hasWaterInfra = false;
     for (const tile of state.tiles) {
-      if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
+      const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
+      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
         hasWaterInfra = true;
         break;
       }
@@ -716,9 +741,9 @@ export class MapRenderer {
         let label = '';
         const idx = y * state.width + x;
         if (this.tilesWithSprites.has(idx)) continue;
-        if (tile.kind === TileKind.PowerLine || tile.powerOverlay) label += 'P';
-        if (tile.kind === TileKind.Road || tile.roadUnderlay) label += 'R';
-        if (tile.kind === TileKind.Rail || tile.railUnderlay) label += 'L';
+        if (hasOccupant(tile.overhead, Occupant.PowerLine)) label += 'P';
+        if (hasOccupant(tile.surface, Occupant.Road)) label += 'R';
+        if (hasOccupant(tile.surface, Occupant.Rail)) label += 'L';
         if (!label) continue;
         let text = this.tileLabels.get(idx);
         if (!text) {

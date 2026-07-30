@@ -23,10 +23,19 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Texture } from 'pixi.js';
-import { createInitialState, getTile, setTile, TileKind, type GameState } from '../game/gameState';
+import { createInitialState, getTile, setTile as rawSetTile, TileKind, type GameState } from '../game/gameState';
+import { resyncTileStrata } from '../game/protocol/legacyProjection';
 import { resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
 import { CARRIAGEWAY_CLASSES, isSquareCrossing } from './tileAtlas';
 import type { TileTextures, RoadVariant, CarriagewayClass, HydroVariant } from './tileAtlas';
+
+/** `setTile` only ever wrote the v4 shim fields — resync the real strata
+ *  every case in this matrix is built from, same as `tools.ts`'s `applyTool`
+ *  does after every tool call. */
+function setTile(state: GameState, x: number, y: number, kind: TileKind): void {
+  rawSetTile(state, x, y, kind);
+  resyncTileStrata(getTile(state, x, y)!);
+}
 
 const VARIANTS: RoadVariant[] = [
   'ns', 'ew',
@@ -147,11 +156,13 @@ function buildCase(hydro: HydroCase, sub: Substrate, rec: Recording = 'line-last
     const laid = getTile(state, CX, CY)!;
     if (sub.rail && sub.road) laid.roadUnderlay = true;
     laid.powerOverlay = true;
+    resyncTileStrata(laid);
   } else {
     setTile(state, CX, CY, TileKind.PowerLine);
     const centre = getTile(state, CX, CY)!;
     if (sub.road) centre.roadUnderlay = true;
     if (sub.rail) centre.railUnderlay = true;
+    resyncTileStrata(centre);
   }
 
   for (const edge of ['n', 'e', 's', 'w'] as const) {
@@ -169,6 +180,7 @@ function buildCase(hydro: HydroCase, sub: Substrate, rec: Recording = 'line-last
     const tile = getTile(state, x, y)!;
     if (road && tile.kind !== TileKind.Road) tile.roadUnderlay = true;
     if (rail && tile.kind !== TileKind.Rail) tile.railUnderlay = true;
+    resyncTileStrata(tile);
   }
   return state;
 }
@@ -178,6 +190,9 @@ type Resolved = { base?: string; overlay?: string };
 function resolve(state: GameState, textures: TileTextures): Resolved {
   const info = resolveTileSprite(state, getTile(state, CX, CY), CX, CY, textures, emptyLookup);
   if (!info || 'skip' in info) return {};
+  if ('overlayOnly' in info) {
+    return { overlay: (info.overlayOnly as unknown as { name: string }).name };
+  }
   return {
     base: (info.texture as unknown as { name: string }).name,
     overlay: (info.overlayTexture as unknown as { name: string } | undefined)?.name
