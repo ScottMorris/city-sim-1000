@@ -394,8 +394,14 @@ function resolveBaseTileSprite(
 export function getTileColour(tile: ReturnType<typeof getTile>, palette: Record<TileKind, number>) {
   if (!tile) return 0x000000;
   const base = palette[tile.kind];
-  const isPowerTile =
-    hasOccupant(tile.overhead, Occupant.PowerLine) || !!tile.powerPlantType || tileKindToPowerPlantType(tile.kind) !== undefined;
+  // `tile.powerPlantType` alone, matching `resolveBaseTileSprite`'s plant-type
+  // derivation below — `placeBuilding`'s `decorateTile` callback sets it on
+  // every tile of a plant's footprint, not just the origin, so there is no
+  // live plant tile this can miss. A `tile.kind`-based fallback here used to
+  // let this function call a tile "power infrastructure" that
+  // `resolveBaseTileSprite` didn't recognise as a plant, tinting a tile
+  // whose own sprite never resolved as one.
+  const isPowerTile = hasOccupant(tile.overhead, Occupant.PowerLine) || !!tile.powerPlantType;
   if (!isPowerTile) return base;
   const factor = tile.powered ? 1.35 : 0.7;
   return scaleColor(base, factor);
@@ -406,16 +412,6 @@ export function scaleColor(color: number, factor: number): number {
   const g = Math.max(0, Math.min(255, ((color >> 8) & 0xff) * factor));
   const b = Math.max(0, Math.min(255, (color & 0xff) * factor));
   return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
-}
-
-function tileKindToPowerPlantType(kind: TileKind): PowerPlantType | undefined {
-  switch (kind) {
-    case TileKind.HydroPlant:  return PowerPlantType.Hydro;
-    case TileKind.CoalPlant:   return PowerPlantType.Coal;
-    case TileKind.WindTurbine: return PowerPlantType.Wind;
-    case TileKind.SolarFarm:   return PowerPlantType.Solar;
-    default:                   return undefined;
-  }
 }
 
 function pickRoadTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
@@ -504,7 +500,7 @@ function carriesWires(tile: ReturnType<typeof getTile>): boolean {
   if (!tile) return false;
   if (isDevelopedZone(tile)) return false;
   if (hasOccupant(tile.overhead, Occupant.PowerLine)) return true;
-  return (tile.powerPlantType ?? tileKindToPowerPlantType(tile.kind)) !== undefined;
+  return tile.powerPlantType !== undefined;
 }
 
 function hasAnyWireNeighbour(state: GameState, x: number, y: number): boolean {

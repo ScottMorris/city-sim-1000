@@ -8,7 +8,7 @@ import type { Texture } from 'pixi.js';
 import { createInitialState, getTile, setTile as rawSetTile, TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
 import { resyncTileStrata } from '../game/protocol/legacyProjection';
-import { resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
+import { getTileColour, resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
 import type { TileTextures } from './tileAtlas';
 
 /**
@@ -384,5 +384,41 @@ describe('crossing selection by axis', () => {
     tile.roadUnderlay = true;
     resyncTileStrata(tile);
     expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
+  });
+});
+
+describe('getTileColour agrees with the sprite/connectivity derivation on what counts as a plant', () => {
+  it('tints a tile with powerPlantType set, differently powered vs unpowered', () => {
+    const state = createInitialState(3, 3);
+    const tile = getTile(state, 1, 1)!;
+    tile.kind = TileKind.Land; // pin the palette key regardless of createInitialState's terrain pattern
+    tile.powerPlantType = PowerPlantType.Coal;
+    const palette = { [TileKind.Land]: 0x804020 } as Record<TileKind, number>;
+
+    tile.powered = false;
+    const unpowered = getTileColour(tile, palette);
+    tile.powered = true;
+    const powered = getTileColour(tile, palette);
+
+    expect(unpowered).not.toBe(palette[TileKind.Land]);
+    expect(powered).not.toBe(palette[TileKind.Land]);
+    expect(unpowered).not.toBe(powered);
+  });
+
+  it('does not treat a bare kind match as power infrastructure without powerPlantType', () => {
+    // Regression: `getTileColour` and the wire-connectivity predicate used to
+    // fall back to a `tile.kind`-based plant-type lookup, diverging from
+    // `resolveBaseTileSprite`'s buildingLookup-only derivation for the same
+    // question. `setTile` here sets `kind` to a plant kind but — matching a
+    // real placed plant only ever getting `powerPlantType` through
+    // `placeBuilding`'s `decorateTile` callback — leaves `powerPlantType`
+    // unset, so this tile must read as plain ground, not a plant.
+    const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.CoalPlant);
+    const tile = getTile(state, 1, 1)!;
+    expect(tile.powerPlantType).toBeUndefined();
+    const palette = { [TileKind.CoalPlant]: 0x804020 } as Record<TileKind, number>;
+
+    expect(getTileColour(tile, palette)).toBe(palette[TileKind.CoalPlant]);
   });
 });
