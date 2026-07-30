@@ -50,6 +50,15 @@ Examples:
 - ✅ `Switch package manager from npm to bun`
 - ❌ `feat(p4-2): TauriSimBridge — native sim via Tauri IPC Channel`
 
+## Branch Naming
+
+**Requirement:** Every new branch name starts with a type prefix — the same types as Conventional Commits — followed by a slash and a short kebab-case description.
+
+- Allowed prefixes: `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, `chore/`, `infra/`.
+- ✅ `fix/bulldoze-underground-view`, `docs/feature-recovery`, `refactor/live-wire-flip`
+- ❌ `shim-removal`, `ts-migration-docs`, `feature-recovery-docs` (real examples — the tile-model stack and its docs branch predate this rule and are grandfathered; everything after them must carry a prefix)
+- Pick the prefix that matches what the branch's PR will be labelled: a bug fix is `fix/`, docs-only is `docs/`, and so on. Stacked branches each carry their own prefix; there is no stack-wide exception.
+
 ## Pull Request Merge Format
 
 **Requirement:** Always merge with `--no-ff`. Never squash.
