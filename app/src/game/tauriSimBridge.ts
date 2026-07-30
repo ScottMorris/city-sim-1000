@@ -61,6 +61,49 @@ import {
   type TickEvent,
 } from 'tauri-plugin-city-sim';
 
+/**
+ * Every plugin call `TauriSimBridge` makes, as one injectable bundle.
+ *
+ * Mirrors `WasmSimBridgeConfig`'s `createWorker` seam: the real plugin
+ * bindings go through Tauri's `invoke`/`Channel`, unusable outside a Tauri
+ * shell (and requiring `dist-js/` to be built), so tests substitute fakes
+ * here directly instead of mocking the `tauri-plugin-city-sim` module
+ * specifier — which would otherwise force every test runner to resolve the
+ * real package regardless of the substitution.
+ */
+export interface TauriPluginBindings {
+  start: typeof pluginStart;
+  applyTool: typeof pluginApplyTool;
+  setSpeed: typeof pluginSetSpeed;
+  setPolicies: typeof pluginSetPolicies;
+  setNaturalTerrain: typeof pluginSetNaturalTerrain;
+  stop: typeof pluginStop;
+  undo: typeof pluginUndo;
+  redo: typeof pluginRedo;
+  getSnapshot: typeof pluginGetSnapshot;
+  loadSnapshot: typeof pluginLoadSnapshot;
+  importLegacy: typeof pluginImportLegacy;
+}
+
+export interface TauriSimBridgeConfig {
+  /** Defaults to the real `tauri-plugin-city-sim` bindings. */
+  plugin?: TauriPluginBindings;
+}
+
+const REAL_PLUGIN: TauriPluginBindings = {
+  start: pluginStart,
+  applyTool: pluginApplyTool,
+  setSpeed: pluginSetSpeed,
+  setPolicies: pluginSetPolicies,
+  setNaturalTerrain: pluginSetNaturalTerrain,
+  stop: pluginStop,
+  undo: pluginUndo,
+  redo: pluginRedo,
+  getSnapshot: pluginGetSnapshot,
+  loadSnapshot: pluginLoadSnapshot,
+  importLegacy: pluginImportLegacy,
+};
+
 // ---------------------------------------------------------------------------
 // Tool mapping: TS Tool string enum → plugin u8 discriminant
 // ---------------------------------------------------------------------------
@@ -107,8 +150,10 @@ export class TauriSimBridge implements SimBridge {
   // the finer-grained tick/mutationSeq check WasmSimBridge does. Correct,
   // just without the render-skip's savings on this path.
   private dirty = false;
+  private plugin: TauriPluginBindings;
 
-  constructor(state: GameState) {
+  constructor(state: GameState, config: TauriSimBridgeConfig = {}) {
+    this.plugin = config.plugin ?? REAL_PLUGIN;
     this.state = structuredClone(state);
     void this.startPlugin(this.state);
   }
@@ -127,18 +172,18 @@ export class TauriSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool': {
         const id = TOOL_TO_ID[cmd.tool];
-        void pluginApplyTool(id, cmd.x, cmd.y, cmd.strokeId);
+        void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId);
         // Optimistic: the Rust side will reject invalid placements silently;
         // a proper async result is deferred to P5 when we wire CommandResult
         // events back through the Channel.
         return { success: true };
       }
       case 'SetSpeed':
-        void pluginSetSpeed(cmd.multiplier);
+        void this.plugin.setSpeed(cmd.multiplier);
         return { success: true };
       case 'SetPolicies':
         this.state.policies = cmd.policies;
-        void pluginSetPolicies(cmd.policies);
+        void this.plugin.setPolicies(cmd.policies);
         return { success: true };
     }
   }
@@ -152,15 +197,15 @@ export class TauriSimBridge implements SimBridge {
   }
 
   getSnapshot(): Promise<Uint8Array> {
-    return pluginGetSnapshot();
+    return this.plugin.getSnapshot();
   }
 
   async loadSnapshot(bytes: Uint8Array): Promise<void> {
-    await pluginLoadSnapshot(bytes);
+    await this.plugin.loadSnapshot(bytes);
   }
 
   async importLegacy(imp: import('./simBridge').LegacyEngineImport): Promise<void> {
-    await pluginImportLegacy(imp);
+    await this.plugin.importLegacy(imp);
   }
 
   async newCity(fresh: GameState): Promise<void> {
@@ -169,15 +214,15 @@ export class TauriSimBridge implements SimBridge {
   }
 
   setSpeed(multiplier: number): void {
-    void pluginSetSpeed(multiplier);
+    void this.plugin.setSpeed(multiplier);
   }
 
   undo(): Promise<boolean> {
-    return pluginUndo();
+    return this.plugin.undo();
   }
 
   redo(): Promise<boolean> {
-    return pluginRedo();
+    return this.plugin.redo();
   }
 
   canUndo(): boolean { return this.canUndoFlag; }
@@ -185,7 +230,7 @@ export class TauriSimBridge implements SimBridge {
   canRedo(): boolean { return this.canRedoFlag; }
 
   dispose(): void {
-    void pluginStop();
+    void this.plugin.stop();
   }
 
   // ---------------------------------------------------------------------------
@@ -196,7 +241,7 @@ export class TauriSimBridge implements SimBridge {
   getMetadata() { return null; }
 
   private async startPlugin(state: GameState): Promise<void> {
-    await pluginStart(state.width, state.height, state.seed, (event) =>
+    await this.plugin.start(state.width, state.height, state.seed, (event) =>
       this.onTick(event),
     );
     await this.seedEngine(state);
@@ -204,7 +249,7 @@ export class TauriSimBridge implements SimBridge {
   }
 
   private async restartPlugin(width: number, height: number, seed: number): Promise<void> {
-    await pluginStart(width, height, seed, (event) => this.onTick(event));
+    await this.plugin.start(width, height, seed, (event) => this.onTick(event));
     await this.seedEngine(this.state);
   }
 
@@ -214,8 +259,8 @@ export class TauriSimBridge implements SimBridge {
     for (let i = 0; i < terrain.length; i++) {
       terrain[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
     }
-    await pluginSetNaturalTerrain(terrain);
-    await pluginSetPolicies(state.policies);
+    await this.plugin.setNaturalTerrain(terrain);
+    await this.plugin.setPolicies(state.policies);
   }
 
   private onTick(event: TickEvent): void {

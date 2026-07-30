@@ -11,43 +11,42 @@ import { STATUS } from './protocol/tileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
 import type { FromSim } from './protocol/events';
 import { Tool } from './toolTypes';
-import { TauriSimBridge } from './tauriSimBridge';
-import { TOOL_ID, type TickEvent, type WireBuilding } from 'tauri-plugin-city-sim';
+import { TauriSimBridge, type TauriPluginBindings } from './tauriSimBridge';
 
-const plugin = vi.hoisted(() => ({
-  start: vi.fn(),
-  applyTool: vi.fn(),
-  setSpeed: vi.fn(),
-  setPolicies: vi.fn(),
-  setNaturalTerrain: vi.fn(),
-  stop: vi.fn(),
-  undo: vi.fn(),
-  redo: vi.fn(),
-  getSnapshot: vi.fn(),
-  loadSnapshot: vi.fn(),
-  importLegacy: vi.fn()
-}));
+// `tauri-plugin-city-sim`'s real bindings go through `@tauri-apps/api`'s
+// `invoke`/`Channel`, unusable outside a Tauri shell (and require its
+// `dist-js/` to be built, which CI's test job doesn't do) — so this file
+// never imports that package at all. It injects a fake `TauriPluginBindings`
+// through the same constructor seam `WasmSimBridgeConfig.createWorker` uses
+// for the sibling bridge, instead of `vi.mock`-ing the module specifier
+// (which would force Vite to resolve the real package regardless of the
+// mock). `TOOL_ID` and the tick-payload shapes below are local mirrors of the
+// real ones, not re-exports.
+const TOOL_ID = {
+  Inspect: 0, TerraformRaise: 1, TerraformLower: 2, Water: 3, Tree: 4,
+  Road: 5, Rail: 6, PowerLine: 7, HydroPlant: 8, CoalPlant: 9,
+  WindTurbine: 10, SolarFarm: 11, WaterPump: 12, WaterTower: 13,
+  WaterPipe: 14, ElementarySchool: 15, HighSchool: 16, Residential: 17,
+  Commercial: 18, Industrial: 19, Park: 20, Bulldoze: 21, ParkLarge: 22
+} as const;
 
-vi.mock('tauri-plugin-city-sim', () => ({
-  start: plugin.start,
-  applyTool: plugin.applyTool,
-  setSpeed: plugin.setSpeed,
-  setPolicies: plugin.setPolicies,
-  setNaturalTerrain: plugin.setNaturalTerrain,
-  stop: plugin.stop,
-  undo: plugin.undo,
-  redo: plugin.redo,
-  getSnapshot: plugin.getSnapshot,
-  loadSnapshot: plugin.loadSnapshot,
-  importLegacy: plugin.importLegacy,
-  TOOL_ID: {
-    Inspect: 0, TerraformRaise: 1, TerraformLower: 2, Water: 3, Tree: 4,
-    Road: 5, Rail: 6, PowerLine: 7, HydroPlant: 8, CoalPlant: 9,
-    WindTurbine: 10, SolarFarm: 11, WaterPump: 12, WaterTower: 13,
-    WaterPipe: 14, ElementarySchool: 15, HighSchool: 16, Residential: 17,
-    Commercial: 18, Industrial: 19, Park: 20, Bulldoze: 21, ParkLarge: 22
-  }
-}));
+interface WireBuilding {
+  id: number;
+  kind: number;
+  originX: number;
+  originY: number;
+}
+
+interface TickEvent {
+  tick: number; day: number; population: number; jobs: number; money: number;
+  power: number; water: number; powerProduced: number; waterProduced: number;
+  demandResidential: number; demandCommercial: number; demandIndustrial: number;
+  wildernessScore: number; wildernessTrend: number;
+  width: number; height: number;
+  tiles: number[];
+  buildings: WireBuilding[];
+  canUndo: boolean; canRedo: boolean;
+}
 
 function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   return {
@@ -63,32 +62,48 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   };
 }
 
+function makeFakePlugin(): TauriPluginBindings {
+  return {
+    start: vi.fn(),
+    applyTool: vi.fn(),
+    setSpeed: vi.fn(),
+    setPolicies: vi.fn(),
+    setNaturalTerrain: vi.fn(),
+    stop: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    getSnapshot: vi.fn(),
+    loadSnapshot: vi.fn(),
+    importLegacy: vi.fn()
+  };
+}
+
 /** Constructs the bridge and flushes the async startPlugin/seedEngine/Ready chain. */
 async function makeBridge(width = 8, height = 8, seed = 1) {
-  for (const fn of Object.values(plugin)) fn.mockClear();
+  const plugin = makeFakePlugin();
 
   let onTick: ((event: TickEvent) => void) | undefined;
-  plugin.start.mockImplementation(async (_w: number, _h: number, _s: number, cb: (event: TickEvent) => void) => {
-    onTick = cb;
+  vi.mocked(plugin.start).mockImplementation(async (_w, _h, _s, cb) => {
+    onTick = cb as (event: TickEvent) => void;
   });
 
   const state = createInitialState(width, height, seed);
   const events: FromSim[] = [];
-  const bridge = new TauriSimBridge(state);
+  const bridge = new TauriSimBridge(state, { plugin });
   bridge.onMessage((msg) => events.push(msg));
   // Let the constructor's startPlugin()/seedEngine()/Ready chain resolve.
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 
-  return { bridge, events, emit: (event: TickEvent) => onTick!(event) };
+  return { bridge, events, plugin, emit: (event: TickEvent) => onTick!(event) };
 }
 
 describe('TauriSimBridge command routing', () => {
   it('maps every Tool to its TOOL_ID discriminant when sending ApplyTool', async () => {
-    const { bridge } = await makeBridge();
+    const { bridge, plugin } = await makeBridge();
     for (const tool of Object.values(Tool)) {
-      plugin.applyTool.mockClear();
+      vi.mocked(plugin.applyTool).mockClear();
       const stroke = nextStrokeId();
       bridge.send(applyToolCmd(tool, 3, 4, stroke));
       expect(plugin.applyTool).toHaveBeenCalledWith(TOOL_ID[toolIdKey(tool)], 3, 4, stroke);
@@ -96,7 +111,7 @@ describe('TauriSimBridge command routing', () => {
   });
 
   it('delegates SetSpeed and SetPolicies to the plugin', async () => {
-    const { bridge } = await makeBridge();
+    const { bridge, plugin } = await makeBridge();
     bridge.send({ type: 'SetSpeed', multiplier: 2 });
     expect(plugin.setSpeed).toHaveBeenCalledWith(2);
 
@@ -113,19 +128,19 @@ describe('TauriSimBridge command routing', () => {
   });
 
   it('delegates undo/redo/getSnapshot/loadSnapshot/importLegacy/dispose to the plugin', async () => {
-    const { bridge } = await makeBridge();
+    const { bridge, plugin } = await makeBridge();
 
-    plugin.undo.mockResolvedValueOnce(true);
+    vi.mocked(plugin.undo).mockResolvedValueOnce(true);
     await expect(bridge.undo()).resolves.toBe(true);
 
-    plugin.redo.mockResolvedValueOnce(false);
+    vi.mocked(plugin.redo).mockResolvedValueOnce(false);
     await expect(bridge.redo()).resolves.toBe(false);
 
     const blob = new Uint8Array([1, 2, 3]);
-    plugin.getSnapshot.mockResolvedValueOnce(blob);
+    vi.mocked(plugin.getSnapshot).mockResolvedValueOnce(blob);
     await expect(bridge.getSnapshot()).resolves.toBe(blob);
 
-    plugin.loadSnapshot.mockResolvedValueOnce(undefined);
+    vi.mocked(plugin.loadSnapshot).mockResolvedValueOnce(undefined);
     await bridge.loadSnapshot(new Uint8Array([9]));
     expect(plugin.loadSnapshot).toHaveBeenCalledWith(new Uint8Array([9]));
 
@@ -256,7 +271,7 @@ describe('TauriSimBridge onTick decode', () => {
   });
 
   it('emits Ready once the plugin has started and the engine is seeded', async () => {
-    const { events } = await makeBridge();
+    const { events, plugin } = await makeBridge();
     expect(events.filter((e) => e.type === 'Ready')).toHaveLength(1);
     expect(plugin.setNaturalTerrain).toHaveBeenCalledTimes(1);
     expect(plugin.setPolicies).toHaveBeenCalledTimes(1);
