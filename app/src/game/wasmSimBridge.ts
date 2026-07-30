@@ -22,14 +22,7 @@ import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/command
 import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
-import {
-  tileBufferOffsets,
-  decodeHappiness,
-  decodeUndergroundBits,
-  decodeSurfaceBits,
-  decodeOverheadBits,
-  STATUS
-} from './protocol/tileBuffer';
+import { decodeTileBuffer } from './protocol/tileBuffer';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
@@ -576,7 +569,6 @@ export class WasmSimBridge implements SimBridge {
 
   private applyTileBuffer(bytes: Uint8Array, buildingsJson: string): void {
     const n = this.state.tiles.length;
-    const o = tileBufferOffsets(n);
 
     // The live wire no longer carries a resolved kind byte per tile (#177's
     // TS/wire follow-up) — a `Structure` occupant says only that a building
@@ -584,25 +576,7 @@ export class WasmSimBridge implements SimBridge {
     // that now.
     const wireBuildings: WireBuilding[] = buildingsJson ? JSON.parse(buildingsJson) : [];
 
-    for (let i = 0; i < n; i++) {
-      const tile = this.state.tiles[i];
-      tile.underground = decodeUndergroundBits(bytes[o.underground + i]);
-      tile.surface = decodeSurfaceBits(bytes[o.surface + i]);
-      tile.overhead = decodeOverheadBits(bytes[o.overhead + i]);
-      const status = bytes[o.status + i];
-      tile.terrain = (status & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
-      tile.powered = (status & STATUS.POWERED) !== 0;
-      tile.watered = (status & STATUS.WATERED) !== 0;
-      tile.abandoned = (status & STATUS.ABANDONED) !== 0;
-      tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
-      tile.happiness = decodeHappiness(bytes[o.happiness + i]);
-      tile.elevation = bytes[o.elevation + i];
-      const bidBase = o.buildingId + i * 2;
-      const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
-      tile.buildingId = bid === 0 ? undefined : bid;
-      // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
-      tile.wilderness = bytes[o.wilderness + i] / 255;
-    }
+    decodeTileBuffer(this.state.tiles, bytes);
 
     // Rebuild state.buildings directly from the parsed list — Rust is
     // authoritative; TS state.buildings is a display mirror only. No more

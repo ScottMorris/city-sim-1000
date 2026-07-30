@@ -13,9 +13,7 @@ use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
-use city_sim_core::wire::{
-    wire_overhead_byte, wire_status_byte, wire_surface_byte, wire_underground_byte,
-};
+use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::{Policies, Tool};
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
@@ -48,18 +46,22 @@ pub struct TickEvent {
     pub wilderness_trend: f32,
     pub width: u32,
     pub height: u32,
-    /// Occupant/status bytes, four per tile, row-major, array-of-structs
-    /// (not the SoA layout `city_sim_protocol::tile_buffer` uses — this is a
-    /// separate, simpler encoding for the per-tick push). Per tile:
-    /// `[underground, surface, overhead, status]`, each byte meaning exactly
-    /// what the same-named field means in `city_sim_protocol::tile_buffer`
-    /// (see `city_sim_core::wire`).
+    /// The exact SoA wire buffer `city_sim_protocol::tile_buffer` describes —
+    /// `underground[N] | surface[N] | overhead[N] | status[N] | happiness[N]
+    /// | elevation[N] | building_id[N×2] | wilderness[N]`, encoded by
+    /// `city_sim_core::wire::encode_tile_buffer`, the same function the WASM
+    /// host's `tile_buffer()` calls. Per-tile `building_id` lets the desktop
+    /// client read `tile.buildingId` straight off the wire, the same as WASM,
+    /// instead of re-deriving tile coverage from `buildings` below and a TS
+    /// template footprint that could disagree with the engine's own.
     pub tiles: Vec<u8>,
     /// The building list — `Structure` occupant tiles carry a `building_id`
     /// but not a template kind (since #177's TS/wire follow-up, that lives
     /// here, not on the tile). Mirrors `SimHost::buildings_json` on the WASM
     /// path, sent as real values rather than a JSON string since Tauri IPC
-    /// serialises the whole `TickEvent` natively.
+    /// serialises the whole `TickEvent` natively. No longer used to derive
+    /// per-tile coverage — only to resolve a `building_id` to its template
+    /// kind (power/water gating, the HUD inspector's building name).
     pub buildings: Vec<WireBuilding>,
     /// Whether an undo/redo step is currently available — drives button state.
     pub can_undo: bool,
@@ -137,15 +139,9 @@ impl SimState {
 
 fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
     let s = &sim.state;
-    // Same per-stratum encode helpers the WASM tile buffer uses — no lookup,
-    // no precedence, just each stratum's bits rebased to a dense byte.
-    let mut tiles: Vec<u8> = Vec::with_capacity(s.tiles.len() * 4);
-    for t in &s.tiles {
-        tiles.push(wire_underground_byte(t));
-        tiles.push(wire_surface_byte(t));
-        tiles.push(wire_overhead_byte(t));
-        tiles.push(wire_status_byte(t));
-    }
+    // Same encoder the WASM host's `tile_buffer()` calls — one wire format,
+    // shared, so this transport cannot silently drift from that one.
+    let tiles = encode_tile_buffer(s);
     let buildings: Vec<WireBuilding> = s
         .buildings
         .iter()

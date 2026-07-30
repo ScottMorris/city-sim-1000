@@ -9,11 +9,11 @@ use city_sim_core::{
     import::{from_tile_buffer, ImportStats},
     sim::Simulation,
     snapshot,
-    wire::{wire_overhead_byte, wire_status_byte, wire_surface_byte, wire_underground_byte},
+    wire::encode_tile_buffer,
 };
 use city_sim_protocol::{
     commands::{Policies, Tool},
-    tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE},
+    tile_buffer::BYTES_PER_TILE,
 };
 use wasm_bindgen::prelude::*;
 
@@ -413,35 +413,12 @@ impl SimHost {
     /// Serialise current tile state as a flat SoA buffer.
     ///
     /// Layout: `underground[N] | surface[N] | overhead[N] | status[N] | happiness[N] | elevation[N] | building_id[N×2] | wilderness[N]`
+    ///
+    /// Delegates to `city_sim_core::wire::encode_tile_buffer` — the same
+    /// encoder the Tauri plugin's tick event uses, so the two transports
+    /// cannot silently drift onto different byte layouts.
     pub fn tile_buffer(&self) -> Vec<u8> {
-        let tiles = &self.sim.state.tiles;
-        let n = tiles.len();
-        let o = TileBufferOffsets::for_size(n);
-        let mut buf = vec![0u8; n * BYTES_PER_TILE];
-        for (i, tile) in tiles.iter().enumerate() {
-            // Each stratum's occupant bits, rebased to a dense byte — no
-            // lookup, no precedence; see `city_sim_core::wire`.
-            buf[o.underground + i] = wire_underground_byte(tile);
-            buf[o.surface + i] = wire_surface_byte(tile);
-            buf[o.overhead + i] = wire_overhead_byte(tile);
-            buf[o.status + i] = wire_status_byte(tile);
-            buf[o.happiness + i] = encode_happiness(tile.happiness);
-            buf[o.elevation + i] = tile.elevation;
-            let bid = tile.building_id.unwrap_or(0);
-            let base = o.building_id + i * 2;
-            buf[base] = (bid & 0xFF) as u8;
-            buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
-            // 128 = neutral until the first wilderness recompute fills the field.
-            buf[o.wilderness + i] = self
-                .sim
-                .state
-                .wilderness
-                .local_field
-                .get(i)
-                .copied()
-                .unwrap_or(128);
-        }
-        buf
+        encode_tile_buffer(&self.sim.state)
     }
 
     /// The building list as JSON (`Vec<WireBuilding>`) — `id`, template

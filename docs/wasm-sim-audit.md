@@ -102,7 +102,7 @@ The "Option B" Rust `building_metadata()` export was never implemented (`wasmSim
 ## C. Bridge/mirror integrity
 
 ### C1. Building mirror loses runtime state (P2)
-`applyTileBuffer` rebuilds `state.buildings` every frame from the tile buffer with `createBuildingState()` defaults (`wasmSimBridge.ts:364–393`): `troubleTicks`, `health`, and real statuses are invisible to the UI. Status is re-derived from `powered`/`watered` flags only. The tile buffer also carries no per-tile service coverage (layout: kind|flags|happiness|elevation|building_id|underground — `tile_buffer.rs`), so:
+`applyTileBuffer` rebuilds `state.buildings` every frame from the tile buffer with `createBuildingState()` defaults (`wasmSimBridge.ts:364–393`): `troubleTicks`, `health`, and real statuses are invisible to the UI. Status is re-derived from `powered`/`watered` flags only. The tile buffer also carries no per-tile service coverage (layout: underground|surface|overhead|status|happiness|elevation|building_id|wilderness — `tile_buffer.rs`; the pre-#177 `kind`/`flags`/`underground_kind` spelling this line originally named no longer exists), so:
 
 ### C2. Education recomputed twice, in two languages (P2)
 Rust computes education for demand/decay (`education.rs`, wired in `sim.rs:133`); the bridge *also* runs the TS `recomputeEducation` against the mirror every buffer apply (`wasmSimBridge.ts:396`) to feed the HUD/overlay. Two implementations of the same coverage algorithm will drift; the HUD could show "served" while the Rust decay logic disagrees. Fix direction: put service coverage (or at least the two served bits + scores) into the tile buffer / stats.

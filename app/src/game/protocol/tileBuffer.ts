@@ -1,3 +1,6 @@
+import type { Tile } from '../gameState';
+import { Terrain, ZoneDensity } from './occupants';
+
 /**
  * SoA tile buffer layout — TS mirror of crates/city-sim-protocol/src/tile_buffer.rs.
  *
@@ -20,8 +23,12 @@
  * underground, 3-8 surface, 9-10 overhead — so a reader reconstructs the
  * tile's full occupant set as `underground | (surface << 3) | (overhead << 9)`.
  *
- * On the web path the buffer is a SharedArrayBuffer owned by the Worker.
- * The main thread reads it via typed array views without copying.
+ * On the web path the buffer is a SharedArrayBuffer owned by the Worker,
+ * read via typed array views without copying. On the desktop path it's the
+ * same byte layout, sent as a plain `number[]` over a Tauri IPC Channel
+ * (`TickEvent.tiles` in `tauri-plugin-city-sim`'s `guest-js/index.ts`) —
+ * `decodeTileBuffer` below takes `ArrayLike<number>` so it works against
+ * either representation without either bridge needing its own decoder.
  */
 
 export const BYTES_PER_TILE = 9;
@@ -89,4 +96,34 @@ export function decodeEco(v: number): number {
 export function encodeEco(eco: number): number {
   const clamped = Math.min(Math.max(eco, -ECO_RANGE), ECO_RANGE);
   return Math.trunc((clamped / ECO_RANGE) * 127 + 128);
+}
+
+/**
+ * Decode one SoA tile buffer into `tiles`, in place — shared by every bridge
+ * that receives this wire (`wasmSimBridge.ts`, `tauriSimBridge.ts`), so a
+ * decode bug fixed here is fixed on both transports at once. `bytes` covers
+ * exactly `tiles.length` tiles.
+ */
+export function decodeTileBuffer(tiles: Tile[], bytes: ArrayLike<number>): void {
+  const n = tiles.length;
+  const o = tileBufferOffsets(n);
+  for (let i = 0; i < n; i++) {
+    const tile = tiles[i];
+    tile.underground = decodeUndergroundBits(bytes[o.underground + i]);
+    tile.surface = decodeSurfaceBits(bytes[o.surface + i]);
+    tile.overhead = decodeOverheadBits(bytes[o.overhead + i]);
+    const status = bytes[o.status + i];
+    tile.terrain = (status & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
+    tile.powered = (status & STATUS.POWERED) !== 0;
+    tile.watered = (status & STATUS.WATERED) !== 0;
+    tile.abandoned = (status & STATUS.ABANDONED) !== 0;
+    tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
+    tile.happiness = decodeHappiness(bytes[o.happiness + i]);
+    tile.elevation = bytes[o.elevation + i];
+    const bidBase = o.buildingId + i * 2;
+    const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
+    tile.buildingId = bid === 0 ? undefined : bid;
+    // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
+    tile.wilderness = bytes[o.wilderness + i] / 255;
+  }
 }

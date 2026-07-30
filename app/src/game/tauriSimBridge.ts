@@ -19,16 +19,14 @@
  * Limitations (Phase 4; lifted in Phase 5):
  *   • loadState() restarts the sim from scratch (seed-only); full GameState
  *     serialisation arrives in P5-1.
- *   • The tick payload carries terrain/occupants/POWERED/WATERED/ABANDONED
- *     per tile (see `TickEvent.tiles` in `guest-js/index.ts`), but not
- *     happiness, elevation or wilderness — those wait on #204, which unifies
- *     this wire on the shared SoA tile buffer.
- *   • Per-tile `building_id` is likewise absent from the wire, so `onTick`
- *     paints `tile.buildingId` from `event.buildings` origins and the TS
- *     template footprints instead — the inspector and `isDevelopedZone` see
- *     the same facts as on the WASM path. A footprint drift between the
- *     Rust and TS templates would mis-paint coverage; the SoA unification
- *     (#204) retires that risk along with this derivation.
+ *
+ * The tick payload (`TickEvent.tiles` in `guest-js/index.ts`) is the exact
+ * SoA wire buffer `city_sim_protocol::tile_buffer` describes — the same
+ * format and decode helpers (`protocol/tileBuffer.ts`'s `decodeTileBuffer`)
+ * the WASM path uses, including per-tile `building_id`. No client-side
+ * derivation: `tile.buildingId` is read straight off the wire, the same as
+ * WASM, not re-painted from `event.buildings` and a TS template footprint
+ * that could disagree with the engine's own.
  */
 
 import type { GameState, Tile } from './gameState';
@@ -41,7 +39,7 @@ import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
-import { STATUS } from './protocol/tileBuffer';
+import { decodeTileBuffer } from './protocol/tileBuffer';
 import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
 import {
@@ -288,8 +286,10 @@ export class TauriSimBridge implements SimBridge {
     s.demand.commercial  = event.demandCommercial;
     s.demand.industrial  = event.demandIndustrial;
 
-    // Wilderness (breakdown stays zeroed on desktop until TickEvent carries it,
-    // matching the budget breakdown limitation above)
+    // Aggregate wilderness — the per-category breakdown still stays zeroed
+    // on desktop; TickEvent doesn't carry it (matching the loadState()
+    // limitation above). Per-tile wilderness is decoded below with the rest
+    // of the tile buffer.
     s.wilderness.score = event.wildernessScore;
     s.wilderness.trend = event.wildernessTrend;
 
@@ -311,28 +311,16 @@ export class TauriSimBridge implements SimBridge {
       s.tiles = Array.from({ length: n }, () => makeBlankTile());
     }
 
-    for (let i = 0; i < n; i++) {
-      const tile = s.tiles[i];
-      const base = i * 4;
-      tile.underground = event.tiles[base];
-      tile.surface = event.tiles[base + 1] << 3;
-      tile.overhead = event.tiles[base + 2] << 9;
-      const status = event.tiles[base + 3];
-      tile.terrain = (status & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
-      tile.powered = (status & STATUS.POWERED) !== 0;
-      tile.watered = (status & STATUS.WATERED) !== 0;
-      tile.abandoned = (status & STATUS.ABANDONED) !== 0;
-      tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
-      // Cleared each tick and repainted from `event.buildings` below —
-      // a razed building's id must not linger on its old footprint.
-      tile.buildingId = undefined;
-    }
+    // Tile strata, status, happiness, elevation, buildingId and wilderness —
+    // one decode shared with the WASM path (`wasmSimBridge.ts`), off the
+    // exact same wire buffer `city_sim_core::wire::encode_tile_buffer` writes
+    // for both transports.
+    decodeTileBuffer(s.tiles, event.tiles);
 
     // Buildings — rebuild the display mirror from the wire list, mirroring
-    // `applyTileBuffer` in `wasmSimBridge.ts`. The wire carries no per-tile
-    // `building_id` (see the limitation note above), so footprint coverage
-    // is painted from each building's TS template until #204 unifies this
-    // wire on the shared SoA tile buffer.
+    // `applyTileBuffer` in `wasmSimBridge.ts`. Tile coverage came from the
+    // wire buffer above; `event.buildings` only resolves each `building_id`
+    // to its template kind (status gating, the HUD inspector's name).
     // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
     // until a pump, tower, or pipe exists, buildings don't require water.
     let hasWaterSystem = event.buildings.some((b) => {
@@ -356,14 +344,6 @@ export class TauriSimBridge implements SimBridge {
         bstate.status = BuildingStatus.InactiveNoPower;
       } else if (needsWater && !originTile?.watered) {
         bstate.status = BuildingStatus.InactiveNoWater;
-      }
-      const w = template?.footprint.width ?? 1;
-      const h = template?.footprint.height ?? 1;
-      for (let dy = 0; dy < h; dy++) {
-        for (let dx = 0; dx < w; dx++) {
-          if (b.originX + dx >= s.width || b.originY + dy >= s.height) continue;
-          s.tiles[(b.originY + dy) * s.width + (b.originX + dx)].buildingId = b.id;
-        }
       }
       return {
         id: b.id,

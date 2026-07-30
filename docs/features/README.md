@@ -22,5 +22,5 @@ The TS→Rust simulation migration and the tile-model PR stack (#186–#196) sil
 - [Growth Gating](growth-gating.md) — hard-gate promises vs soft-multiplier reality; pick one and document it.
 - [Rail Benefit](rail-benefit.md) — give rail a reason to exist.
 - [Terraform and Elevation](terraform-elevation.md) — decide what Raise/Lower/Water mean; elevation is currently dead data.
-- [Desktop Building Identity](tauri-building-identity.md) — fixed via client-side derivation; the wire itself still isn't unified (#204).
+- [Desktop Building Identity](tauri-building-identity.md) — fixed; the Tauri wire shares WASM's exact SoA tile buffer and decode helpers, no client-side derivation left.
 - [Documentation Truth Sweep](docs-truth-sweep.md) — the batch of places where docs, comments, or UI strings contradict the code.
