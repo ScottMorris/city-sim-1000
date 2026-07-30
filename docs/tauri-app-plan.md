@@ -160,6 +160,12 @@ When this doc is promoted (the #61 mobile-web pattern, upgraded to GitHub's nati
 ### Motivation
 City Sim 1000 (ScottMorris/city-sim-1000, see `docs/tauri-app-plan.md` Phase T4) needs Steamworks for a Steam release: achievements, stats, rich presence, cloud saves, overlay. Nothing in the org wraps Steamworks today, and every future Tauri game or Steam-shipped app will need the same surface — this belongs in the workspace as a reusable plugin, not in an app repo.
 
+### Prior art (surveyed 2026-07)
+- [`tauri-plugin-hal-steamworks`](https://crates.io/crates/tauri-plugin-hal-steamworks) is the only published Tauri Steamworks plugin: v0.0.4, purpose-built for the HAL Launcher project, 0 stars / 17 commits, no visible app-agnostic design or workspace-grade JS/permissions surface. Worth a source read for wiring details; not a dependency candidate.
+- [`steamworks.js`](https://github.com/ceifa/steamworks.js) is why "just use Electron" is the standing advice for JS games on Steam — it has no Tauri equivalent. That gap is exactly what this plugin closes.
+- [`steamworks-rs`](https://crates.io/crates/steamworks) is the settled Rust binding; [`bevy-steamworks`](https://github.com/james7132/bevy-steamworks) wraps the same crate and is prior art for the callback-pump-owned-by-the-framework pattern.
+- **Steam overlay over Tauri is known-broken upstream** ([tauri#6196](https://github.com/tauri-apps/tauri/issues/6196), closed as not planned): the overlay must hook the graphics device before creation, which webview initialisation timing prevents. Design the overlay commands as best-effort with a documented caveat — achievements, stats, presence, and cloud need no overlay.
+
 ### Shape
 - **Rust core** over the [`steamworks`](https://crates.io/crates/steamworks) crate. `Builder`-config takes the AppId; `init` is fallible-by-design: if Steam isn't running or the SDK fails to load, the plugin resolves to an explicit *unavailable* state (queryable from JS) rather than panicking — apps ship one binary that degrades gracefully outside Steam. Optional `restart_app_if_necessary` support for launch-outside-Steam correctness.
 - **Callback pump** owned by the plugin (interval on a plugin thread, `run_callbacks` at ~10 Hz, configurable), so consumers never think about it.
