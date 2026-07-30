@@ -566,17 +566,6 @@ export class MapRenderer {
     size: number,
     buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ) {
-    // Determine which service types have infrastructure on the map so we only
-    // show "no service" indicators when the player has actually built that service.
-    let hasWaterInfra = false;
-    for (const tile of state.tiles) {
-      const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
-      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
-        hasWaterInfra = true;
-        break;
-      }
-    }
-
     // Target display size = half a tile; sprite texture is 128×128.
     const iconPx = 128;
     const iconScale = (size * 0.5) / iconPx;
@@ -590,7 +579,12 @@ export class MapRenderer {
       let texture: import('pixi.js').Texture | undefined;
       if (status === BuildingStatus.InactiveNoPower) {
         texture = this.tileTextures.indicators.noPower;
-      } else if (status === BuildingStatus.InactiveNoWater && hasWaterInfra) {
+      } else if (status === BuildingStatus.InactiveNoWater) {
+        // No separate "does the map have water infra" check needed: both
+        // bridges only ever assign this status when their own hasWaterSystem
+        // scan (pipes included, mirroring `GameState::has_water_system`) was
+        // already true — re-deriving it here was both redundant and, because
+        // it only looked for pumps/towers, missed pipes-only cities entirely.
         texture = this.tileTextures.indicators.noWater;
       }
       if (!texture) continue;
