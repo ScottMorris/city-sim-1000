@@ -26,7 +26,7 @@ These four decisions supersede the corresponding open questions in earlier draft
 1. **Scoring**: natural capital (P) and urban pressure (U) are summed **separately** and combined as `score = 100 · P / (P + U + k)`. No clamp-and-scale against a theoretical all-nature maximum — that formula pinned built-up cities at 0 and scored an untouched map ~17, both dead zones where player action stops moving the number. The ratio form always responds to marginal change, an untouched map lands naturally mid-high, and the P/U split falls straight out as the top-level tooltip breakdown.
 2. **Budget consequence (MVP)**: **tourism dividend only** — a monthly income line in the City Ledger when the score clears a threshold. Cleanup costs / environmental penalties are deferred to the Environmental Crisis follow-up (#9).
 3. **Happiness consequence (MVP)**: **global-only** — one citywide happiness modifier derived from the global score. The per-tile local field is used for the overlay heatmap only; local neighbourhood happiness effects are a later phase.
-4. **Parity**: wilderness is **excluded from the TS parity oracle** (`simulation.ts`). The oracle exists to verify ported pre-Rust behaviour; wilderness is Rust-first and its Rust unit/scenario tests are the spec. Wilderness-derived stats are carved out of parity assertions.
+4. **Parity**: wilderness was **excluded from the TS parity oracle** (`simulation.ts` at `1f8140a`; the oracle was removed 2026-07-30 — `git show 1f8140a:app/src/game/simulation.ts`). The oracle existed to verify ported pre-Rust behaviour; wilderness is Rust-first and its Rust unit/scenario tests are the spec. Wilderness-derived stats were carved out of parity assertions.
 
 ---
 

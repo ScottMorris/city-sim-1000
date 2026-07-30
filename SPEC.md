@@ -74,7 +74,6 @@ Game saves are stored in **IndexedDB** as binary CSAV containers (engine snapsho
 │  ├─ main.ts
 │  ├─ game/
 │  │  ├─ gameState.ts
-│  │  ├─ simulation.ts  ← test-only oracle; production sim is Rust
 │  │  ├─ tools.ts
 │  │  ├─ toolTypes.ts
 │  │  ├─ persistence.ts

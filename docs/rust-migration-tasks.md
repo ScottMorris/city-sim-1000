@@ -121,6 +121,10 @@ Add a Rust-to-Rust golden hash + tick-by-tick hash log to binary-search divergen
   mirror + protocol + narrative/services UI only. `deps:` P3-10, P5-1.
   **DoD:** `LocalSimBridge` removed; `simulation.ts` demoted to test-only oracle; app
   ships on Rust core; CLAUDE.md, SPEC.md, rust-migration-plan.md updated.
+  **Completion note (2026-07-30):** `simulation.ts` and the cross-engine parity harness
+  that checked it were later removed outright, not just demoted — see
+  `docs/rust-migration-plan.md` §9 and `docs/testing.md`'s "Harness 2" section. Last
+  version of the oracle preserved at commit `1f8140a`.
 - [x] **P5-5 · Undo via `CommandLog.pop()` + replay** (Ctrl+Z / Cmd+Z). `deps:` P5-2.
   **DoD:** `CommandLog::pop()` in core; `UndoLast` `SimCmd` + `undo_last_command()` Tauri
   command; `SimBridge.undo()` interface; `TauriSimBridge` (real) + `WasmSimBridge` (no-op)

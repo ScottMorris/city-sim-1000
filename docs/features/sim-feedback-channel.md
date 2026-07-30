@@ -11,7 +11,7 @@ When the simulation refuses a command or the city starts failing, the player mus
 ### 1. Utility deficit alerts never fire (B2)
 
 * Promise: `app/public/manual.html` — "When power or water drops below zero you'll see a sticky warning toast; it clears with a follow-up notice once supply returns", plus persistent news-ticker alerts (`manual.html`, `SPEC.md`, `docs/game-parameters.md` all repeat it).
-* Old: the TS sim ran a deficit state machine and raised alerts + narrative events (`app/src/game/simulation.ts:746-800`, still in the oracle).
+* Old: the TS sim ran a deficit state machine and raised alerts + narrative events (`app/src/game/simulation.ts:746-800` at `1f8140a`; oracle removed 2026-07-30, view with `git show 1f8140a:app/src/game/simulation.ts`).
 * Now: no Rust code constructs `FromSim::Alert` — `app/src/main.ts:441-447` is a dead handler, and the `power_deficit_*` narrative event types (`narrative/types.ts:6-9`) have no producer.
 * Recovery: port the deficit state machine into the engine tick, emit `Alert` events over both bridges (WASM worker message + Tauri channel), and reconnect the toast/ticker/narrative consumers that are already sitting there waiting.
 

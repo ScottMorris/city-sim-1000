@@ -1,19 +1,19 @@
+// tools.test.ts — placement rules and power/road-carrier behaviour for applyTool.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect } from 'vitest';
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from './constants';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { recomputePowerNetwork } from './utilities/power';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
-import { Simulation } from './simulation';
 import { BuildingStatus } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
 import { placeZoneBuilding } from './buildings/manager';
-import { Occupant, Terrain, hasOccupant, setTileOccupant, zoneOccupant } from './protocol/occupants';
+import { Occupant, Terrain, hasOccupant, zoneOccupant } from './protocol/occupants';
 import { hasRoadAccess } from './adjacency';
-import { SeededRng } from './rng';
-
-/** RNG that always returns 0 — forces every growth roll to pass. */
-const zeroRng = () => SeededRng.fromState([0, 0, 0, 0]);
 
 describe('tools', () => {
   it('blocks tool usage when funds are insufficient', () => {
@@ -82,62 +82,6 @@ describe('tools', () => {
     expect(state.money).toBe(moneyAfterFirst);
   });
 
-  it('places pumps as building instances with template-driven costs and output', () => {
-    const state = createInitialState(6, 6);
-    const template = getBuildingTemplate(TileKind.WaterPump)!;
-    const initialMoney =
-      template.cost + 200 + BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3;
-    state.money = initialMoney;
-    applyTool(state, Tool.WindTurbine, 2, 0);
-    applyTool(state, Tool.PowerLine, 1, 0);
-    applyTool(state, Tool.PowerLine, 1, 1);
-    applyTool(state, Tool.PowerLine, 0, 1);
-    const result = applyTool(state, Tool.WaterPump, 0, 0);
-    expect(result.success).toBe(true);
-    const pump = state.buildings.find((b) => b.templateId === template.id);
-    expect(pump).toBeDefined();
-    const pumpConnection = getTile(state, 0, 1)!;
-    setTileOccupant(pumpConnection, Occupant.Pipe, true);
-    const spent = initialMoney - state.money;
-    expect(spent).toBeCloseTo(
-      BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3 + template.cost
-    );
-    const pumpTile = getTile(state, 0, 0)!;
-    expect(pumpTile.buildingId).toBe(pump?.id);
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(1);
-    expect(state.utilities.water).toBeGreaterThan(0);
-  });
-
-  it('adds a water tower with a 2x2 footprint that supplies water when powered and connected', () => {
-    const state = createInitialState(8, 8);
-    const template = getBuildingTemplate(TileKind.WaterTower)!;
-    state.money = template.cost + BUILD_COST[Tool.WindTurbine] + 500;
-    applyTool(state, Tool.WindTurbine, 1, 3);
-    const result = applyTool(state, Tool.WaterTower, 3, 3);
-    expect(result.success).toBe(true);
-    expect(state.buildings.filter((building) => building.templateId === template.id).length).toBe(1);
-    const towerPipe = getTile(state, 5, 3)!;
-    setTileOccupant(towerPipe, Occupant.Pipe, true);
-    const ids = new Set<number>();
-    const footprint: Array<[number, number]> = [
-      [3, 3],
-      [4, 3],
-      [3, 4],
-      [4, 4]
-    ];
-    footprint.forEach(([x, y]) => {
-      const tile = getTile(state, x, y)!;
-      expect(hasOccupant(tile.surface, Occupant.Structure)).toBe(true);
-      ids.add(tile.buildingId ?? -1);
-    });
-    expect(ids.size).toBe(1);
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(1);
-    expect(state.buildings[0].state.status).toBe(BuildingStatus.Active);
-    expect(state.utilities.water).toBeGreaterThan(0);
-  });
-
   it('blocks zoning over transport tiles', () => {
     const state = createInitialState(5, 5);
     const cost = BUILD_COST[Tool.Commercial];
@@ -192,23 +136,6 @@ describe('tools', () => {
 });
 
 describe('simulation', () => {
-  it('advances ticks and day in fixed steps', () => {
-    const state = createInitialState(4, 4);
-    const sim = new Simulation(state, { ticksPerSecond: 20 });
-    sim.update(1); // 1 second = 20 ticks
-    expect(state.tick).toBe(20);
-    expect(state.day).toBeGreaterThan(1);
-  });
-
-  it('accumulates partial frames before ticking', () => {
-    const state = createInitialState(4, 4);
-    const sim = new Simulation(state, { ticksPerSecond: 20 });
-    sim.update(0.02); // less than dt (0.05)
-    expect(state.tick).toBe(0);
-    sim.update(0.03);
-    expect(state.tick).toBe(1);
-  });
-
   it('counts a multi-tile power plant once when computing production', () => {
     const state = createInitialState(6, 6);
     const template = getBuildingTemplate(PowerPlantType.Hydro)!;
@@ -218,27 +145,6 @@ describe('simulation', () => {
     expect(state.utilities.powerProduced).toBe(
       POWER_PLANT_CONFIGS[PowerPlantType.Hydro].outputMw
     );
-  });
-
-  it('spawns zone buildings that consume utilities and provide capacity', () => {
-    const state = createInitialState(6, 6);
-    state.money = 100000;
-    applyTool(state, Tool.WindTurbine, 0, 0);
-    applyTool(state, Tool.PowerLine, 2, 0);
-    applyTool(state, Tool.PowerLine, 2, 1);
-    applyTool(state, Tool.PowerLine, 2, 2);
-    applyTool(state, Tool.WaterTower, 0, 2); // Add water
-    applyTool(state, Tool.WaterPipe, 2, 2); // Connect water
-    applyTool(state, Tool.Road, 3, 1);
-    applyTool(state, Tool.Residential, 3, 2);
-    state.demand.residential = 80;
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(2.5);
-    const zoneBuilding = state.buildings.find((b) => b.templateId === 'zone-residential');
-    expect(zoneBuilding).toBeDefined();
-    const template = getBuildingTemplate(zoneBuilding!.templateId)!;
-    expect(state.utilities.powerUsed).toBeCloseTo(template.powerUse ?? 0);
-    expect(state.utilities.water).toBeGreaterThanOrEqual(0);
   });
 
   it('propagates power across contiguous zone tiles', () => {
@@ -307,25 +213,6 @@ describe('simulation', () => {
     expect(getTile(state, 8, 3)?.powered).toBe(true);
   });
 
-  it('allows growth to continue when water is in deficit (should only dampen demand)', () => {
-    const state = createInitialState(6, 6);
-    state.money = 50000;
-    applyTool(state, Tool.WindTurbine, 0, 0);
-    applyTool(state, Tool.PowerLine, 1, 0);
-    applyTool(state, Tool.Road, 2, 0);
-    applyTool(state, Tool.Residential, 3, 0);
-    state.demand.residential = 90;
-    // Simulate a pre-existing water deficit
-    state.utilities.water = -100;
-
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.rng = zeroRng(); // force every growth roll to pass
-    sim.update(2.5);
-
-    const built = state.buildings.find((b) => b.templateId === 'zone-residential');
-    expect(built).toBeDefined();
-  });
-
   it('removes transport underlays when bulldozing a crossing', () => {
     const state = createInitialState(8, 8);
     state.money = 50000;
@@ -348,71 +235,5 @@ describe('simulation', () => {
     const cleared = getTile(state, 3, 3)!;
     expect(cleared.surface).toBe(0);
     expect(cleared.overhead).toBe(0);
-  });
-
-  it('grows frontier zones even without roads, but roads still trigger growth', () => {
-    const state = createInitialState(6, 6);
-    state.money = 50000;
-    applyTool(state, Tool.HydroPlant, 1, 2); // powers zones at (3,3) and (4,3) via adjacency
-    applyTool(state, Tool.Residential, 3, 3);
-    state.demand.residential = 80;
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.rng = zeroRng(); // force growth when utility factors are low
-    sim.update(2.5);
-    expect(hasRoadAccess(state, 3, 3)).toBe(false);
-    expect(state.buildings.find((b) => b.templateId === 'zone-residential')).toBeDefined();
-
-    // Second tile grows once road is added (still valid path)
-    applyTool(state, Tool.Residential, 4, 3);
-    applyTool(state, Tool.Road, 4, 2);
-    sim.update(2.5);
-    const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
-    expect(secondZone.length).toBeGreaterThan(1);
-  });
-
-  it('allows frontier zones to grow without roads but blocks fully enclosed interiors', () => {
-    const state = createInitialState(8, 8);
-    state.money = 50000;
-    // 3x3 block of zones with no roads
-    for (let y = 2; y <= 4; y++) {
-      for (let x = 2; x <= 4; x++) {
-        applyTool(state, Tool.Residential, x, y);
-      }
-    }
-    state.demand.residential = 80;
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.rng = zeroRng();
-    sim.update(2.5);
-    const built = state.buildings.filter((b) => b.templateId === 'zone-residential');
-    expect(built.length).toBeGreaterThan(0);
-    const centerTile = getTile(state, 3, 3)!;
-    expect(centerTile.buildingId).toBeUndefined();
-  });
-
-  it('provides starter demand when city is empty', () => {
-    const state = createInitialState(6, 6);
-    state.money = 50000;
-    applyTool(state, Tool.Residential, 2, 2);
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.update(0.1);
-    expect(state.demand.residential).toBeGreaterThan(0);
-  });
-
-  it('allows interior zone tiles to grow when adjacent to a road-served zone', () => {
-    const state = createInitialState(8, 8);
-    state.money = 50000;
-    applyTool(state, Tool.HydroPlant, 0, 1); // powers road at (2,2) and zones via adjacency
-    applyTool(state, Tool.Road, 2, 2);
-    applyTool(state, Tool.Residential, 2, 3); // edge tile with road access
-    applyTool(state, Tool.Residential, 3, 3); // interior tile with no road access
-    state.demand.residential = 80;
-    const sim = new Simulation(state, { ticksPerSecond: 1 });
-    sim.rng = zeroRng();
-    sim.update(2.5);
-    const firstZone = state.buildings.find((b) => b.templateId === 'zone-residential');
-    expect(firstZone).toBeDefined();
-    sim.update(2.5);
-    const secondZone = state.buildings.filter((b) => b.templateId === 'zone-residential');
-    expect(secondZone.length).toBeGreaterThan(1);
   });
 });

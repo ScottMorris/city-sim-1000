@@ -8,7 +8,7 @@ City-wide lighting policy is a real trade-off lever: energy-efficient lighting t
 
 ## Old behaviour
 
-The TS sim applied the active policy every tick: scaled zone/civic power use and maintenance and nudged tile happiness toward the policy's target (`applyLightingPolicy`, oracle `app/src/game/simulation.ts:152-154, 281-343`). `docs/game-parameters.md` documents it as live ("trims civic/zone power use (~18%) and upkeep (~10%)"), and `app/public/manual.html` promises "toggles apply immediately".
+The TS sim applied the active policy every tick: scaled zone/civic power use and maintenance and nudged tile happiness toward the policy's target (`applyLightingPolicy`, oracle `app/src/game/simulation.ts:152-154, 281-343` at `1f8140a`; oracle removed 2026-07-30, view with `git show 1f8140a:app/src/game/simulation.ts`). `docs/game-parameters.md` documents it as live ("trims civic/zone power use (~18%) and upkeep (~10%)"), and `app/public/manual.html` promises "toggles apply immediately".
 
 ## Current behaviour
 

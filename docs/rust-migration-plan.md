@@ -156,7 +156,9 @@ TypeScript UI (src/)
   └─ SimBridge (interface)  ← renderer reads tile mirror; sends SimCommands; gets events/stats
         ├─ WasmSimBridge   (web:  Worker + SharedArrayBuffer — default browser path)
         └─ TauriSimBridge  (desktop: invoke + Channel — auto-detected or ?bridge=tauri)
-        // LocalSimBridge removed in P5-4; simulation.ts retained as test-only oracle
+        // LocalSimBridge removed in P5-4; simulation.ts retained as test-only oracle,
+        // then fully removed 2026-07-30 once Rust became the sole engine (§9) — last
+        // version preserved at commit 1f8140a
 
 crates/                     (all stay in this repo)
   sim_core      pure, deterministic, no I/O. Owns GameState, step(), systems, RNG,
@@ -229,6 +231,11 @@ Two *different* guarantees, don't conflate them:
   parity oracle — still imported by `tools.test.ts`, `regression.test.ts`, and
   `stateHash.test.ts` but marked off-limits to production code. WASM is now the required
   browser runtime; no pure-TS fallback exists.
+- **Completed 2026-07-30:** `simulation.ts` and the cross-engine parity harness that
+  checked it against Rust (`app/src/game/parity/`, `stateHash.test.ts`,
+  `regression.test.ts`, `budgetPolicy.test.ts`) were removed outright — the Rust engine
+  had been the sole production engine since P5-4, so the oracle no longer had a second
+  engine to keep honest. Its last version is preserved at commit `1f8140a`.
 - **Saves**: JSON `GameState` in localStorage is still supported via the existing
   `deserialize` back-fill path. Postcard binary snapshots (`get_snapshot`/`load_snapshot`)
   are the new primary save format on Tauri/WASM.

@@ -8,7 +8,7 @@ Population moves toward its target at a bounded rate — people trickle in and t
 
 ## Old behaviour
 
-The TS sim clamped per-tick growth to ±2: `growth = clamp(desiredPop − pop, −2, 2)` (oracle: `app/src/game/simulation.ts:351-360`). Cutting capacity below current population produced a visible decline over many ticks, giving the player time to notice and react, and giving the narrative/demand systems a real signal to describe.
+The TS sim clamped per-tick growth to ±2: `growth = clamp(desiredPop − pop, −2, 2)` (oracle: `app/src/game/simulation.ts:351-360` at `1f8140a`; oracle removed 2026-07-30, view with `git show 1f8140a:app/src/game/simulation.ts`). Cutting capacity below current population produced a visible decline over many ticks, giving the player time to notice and react, and giving the narrative/demand systems a real signal to describe.
 
 ## Current behaviour
 

@@ -9,6 +9,8 @@
 
 **Update (2026-07-22):** the undo/save rework (#109) resolved four more items. **A4** — `money_frac` accumulator added to `GameState` (golden hash regenerated). **B1** — `SimHost` gained `get_snapshot`/`load_snapshot`/`import_legacy`; saves are CSAV containers carrying the engine snapshot, and the 120-tick replay cap is gone along with the whole command-log replay path (`CommandLog` deleted). **B4** — resolved structurally: there is no TS-side command-log mirror any more. **B7** — ratified as intentional full-rewind semantics (snapshot-stack `History`; documented in the manual). Also fixed while there: `day_frac` moved into `GameState` so restores keep sub-day progress, and D4's `LocalSimBridge` contradiction is gone (the file is actually deleted now).
 
+**Update (2026-07-30):** the TS parity oracle (`app/src/game/simulation.ts`), its dedicated tests (`stateHash.test.ts`, `regression.test.ts`, `budgetPolicy.test.ts`), and the cross-engine parity harness (`app/src/game/parity/`) have all been removed — the oracle's last version is preserved at commit `1f8140a`. The Rust engine is now the sole production engine and the sole spec; every behavioural-drift finding below is historical.
+
 ---
 
 ## Executive summary
