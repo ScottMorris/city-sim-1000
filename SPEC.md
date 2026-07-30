@@ -74,16 +74,13 @@ Game saves are stored in **IndexedDB** as binary CSAV containers (engine snapsho
 │  ├─ main.ts
 │  ├─ game/
 │  │  ├─ gameState.ts
-│  │  ├─ tools.ts
 │  │  ├─ toolTypes.ts
 │  │  ├─ persistence.ts
 │  │  ├─ constants.ts
 │  │  ├─ utilities/
-│  │  │  ├─ power.ts
 │  │  │  └─ water.ts
 │  │  └─ buildings/
 │  │     ├─ state.ts
-│  │     ├─ manager.ts
 │  │     └─ templates.ts
 │  ├─ rendering/
 │  │  ├─ renderer.ts

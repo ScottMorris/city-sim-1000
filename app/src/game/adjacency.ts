@@ -1,9 +1,9 @@
-// adjacency.ts — orthogonal neighbour queries: road access, network carriers.
+// adjacency.ts — orthogonal neighbour queries: zone/network-carrier predicates.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { GameState, Tile, getTile } from './gameState';
+import { GameState, Tile } from './gameState';
 import { Network, conducts, tileOccupants, zoneOccupant } from './protocol/occupants';
 
 const ORTHOGONAL_DIRS: Array<[number, number]> = [
@@ -28,48 +28,9 @@ export function getOrthogonalNeighbourCoords(
   return coords;
 }
 
-/**
- * Returns true if any orthogonal neighbour of (x, y) carries traffic — that
- * is, has a `Road` occupant, whether recorded as the tile's own kind or as an
- * underlay in the old vocabulary; here, directly as the occupant bit.
- *
- * Mirrors `has_road_access()` in `crates/city-sim-core/src/adjacency.rs`, which
- * asks `Tile::conducts(Network::Traffic)`.
- *
- * **Behaviour change, step 2 of #177.** This used to accept a third case,
- * `kind === TileKind.PowerLine`. That clause was compensation, not a rule: when
- * a hydro line is strung over a road the tile is recorded `kind = PowerLine` +
- * `roadUnderlay`, and its author was reaching for the road hidden underneath.
- * It reached too far — a *bare* hydro line across open country granted road
- * access to every zone beside it, so lots grew, filled and paid tax with no
- * street. The road-under-a-line case answers through the `Road` occupant with
- * no special case at all. A hydro line is not a road.
- */
-export function hasRoadAccess(state: GameState, x: number, y: number): boolean {
-  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
-    const neighbour = getTile(state, nx, ny);
-    if (!neighbour) return false;
-    return conducts(
-      Network.Traffic,
-      tileOccupants(neighbour.underground, neighbour.surface, neighbour.overhead),
-      neighbour.buildingId,
-      false
-    );
-  });
-}
-
 export function isZone(tile: Tile | undefined): boolean {
   if (!tile) return false;
   return zoneOccupant(tile.surface) !== undefined;
-}
-
-export function isFrontierZone(state: GameState, x: number, y: number): boolean {
-  const tile = getTile(state, x, y);
-  if (!isZone(tile)) return false;
-  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
-    const neighbour = getTile(state, nx, ny);
-    return !isZone(neighbour);
-  });
 }
 
 /**
@@ -114,55 +75,4 @@ export function isWaterCarrier(tile: Tile | undefined): boolean {
     tile.buildingId,
     false
   );
-}
-
-/**
- * Returns true if the tile is powered or has an orthogonally adjacent powered carrier.
- */
-export function tileHasPower(state: GameState, x: number, y: number): boolean {
-  const tile = getTile(state, x, y);
-  if (!tile) return false;
-  if (tile.powered) return true;
-  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
-    const neighbour = getTile(state, nx, ny);
-    return neighbour?.powered && isPowerCarrier(neighbour);
-  });
-}
-
-/**
- * Returns true if the tile is watered or has an orthogonally adjacent watered carrier.
- */
-export function tileHasWater(state: GameState, x: number, y: number): boolean {
-  const tile = getTile(state, x, y);
-  if (!tile) return false;
-  if (tile.watered) return true;
-  return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
-    const neighbour = getTile(state, nx, ny);
-    return neighbour?.watered && isWaterCarrier(neighbour);
-  });
-}
-
-/**
- * Returns true if a zone tile can reach a road by walking orthogonally through other zone tiles.
- */
-export function zoneHasRoadPath(state: GameState, startX: number, startY: number): boolean {
-  const start = getTile(state, startX, startY);
-  if (!isZone(start)) return false;
-  if (hasRoadAccess(state, startX, startY)) return true;
-  const visited = new Set<number>();
-  const queue: Array<[number, number]> = [[startX, startY]];
-  const toIndex = (x: number, y: number) => y * state.width + x;
-  while (queue.length) {
-    const [x, y] = queue.shift()!;
-    for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
-      const idx = toIndex(nx, ny);
-      if (visited.has(idx)) continue;
-      visited.add(idx);
-      const neighbour = getTile(state, nx, ny);
-      if (!isZone(neighbour)) continue;
-      if (hasRoadAccess(state, nx, ny)) return true;
-      queue.push([nx, ny]);
-    }
-  }
-  return false;
 }

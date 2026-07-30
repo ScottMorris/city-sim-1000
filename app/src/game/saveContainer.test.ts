@@ -15,10 +15,8 @@ import {
   serialize,
   type SaveContainer
 } from './persistence';
-import { createInitialState } from './gameState';
+import { createInitialState, setTile, TileKind } from './gameState';
 import { extractClientState } from './clientState';
-import { applyTool } from './tools';
-import { Tool } from './toolTypes';
 import { deleteSave, getSave, listSaveMetas, putSave, setIdbFactory } from './saveStore';
 import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
@@ -77,7 +75,7 @@ describe('CSAV container codec', () => {
 describe('buildLegacyEngineImport', () => {
   it('re-encodes tiles into the wire SoA layout with packed flags', () => {
     const state = createInitialState(8, 8, 3);
-    applyTool(state, Tool.Road, 3, 3);
+    setTile(state, 3, 3, TileKind.Road);
     // (4,4) — the only other land tile `createInitialState`'s border carves
     // out of an 8×8 map — for the flags-packing tile, so it doesn't collide
     // with the road tile above.

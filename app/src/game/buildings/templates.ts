@@ -227,3 +227,16 @@ export function registerBuildingTemplate(template: BuildingTemplate) {
 export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
   return POWER_PLANT_TEMPLATES[type];
 }
+
+/**
+ * The HUD/toolbar display cost for `tool` — a building's template cost where
+ * one exists (power plants, civic buildings, zones), else the flat
+ * `BUILD_COST` entry for terrain/transport/utility tools. Placement itself
+ * (and the real cost charged) happens in the Rust engine
+ * (`crates/city-sim-core/src/commands.rs`); this is display-only.
+ */
+export function getToolCost(tool: Tool): number {
+  const templateCost = getBuildingTemplate(tool)?.cost;
+  if (templateCost !== undefined) return templateCost;
+  return BUILD_COST[tool] ?? 0;
+}
