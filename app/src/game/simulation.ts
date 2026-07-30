@@ -8,6 +8,7 @@
 import type { GameState } from './gameState';
 import type { SimEvent } from './narrative/types';
 import { bumpTileRevision, getTile, TileKind } from './gameState';
+import { Occupant, hasOccupant, zoneOccupant } from './protocol/occupants';
 import { SeededRng } from './rng';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import { BuildingStatus } from './buildings/state';
@@ -125,11 +126,7 @@ export class Simulation {
     this.vacantZoneIndices.clear();
     this.state.tiles.forEach((tile, index) => {
       if (tile.buildingId !== undefined) return;
-      if (
-        tile.kind === TileKind.Residential ||
-        tile.kind === TileKind.Commercial ||
-        tile.kind === TileKind.Industrial
-      ) {
+      if (zoneOccupant(tile.surface) !== undefined) {
         this.vacantZoneIndices.add(index);
       }
     });
@@ -191,71 +188,49 @@ export class Simulation {
     let jobCapacity = 0;
     let commercialJobCapacity = 0;
     let industrialJobCapacity = 0;
-    const pumpTemplate = getBuildingTemplate(TileKind.WaterPump);
-    const parkTemplate = getBuildingTemplate(TileKind.Park);
 
-    for (let index = 0; index < this.state.tiles.length; index++) {
-      const tile = this.state.tiles[index];
-      const tileX = index % this.state.width;
-      const tileY = Math.floor(index / this.state.width);
-      if (tile.kind === TileKind.Residential) {
+    for (const tile of this.state.tiles) {
+      const zone = zoneOccupant(tile.surface);
+      if (zone === Occupant.ZoneResidential) {
         residentialZones++;
         if (tile.buildingId !== undefined) developedResidentialZones++;
       }
-      if (tile.kind === TileKind.Commercial) {
+      if (zone === Occupant.ZoneCommercial) {
         commercialZones++;
         if (tile.buildingId !== undefined) developedCommercialZones++;
       }
-      if (tile.kind === TileKind.Industrial) {
+      if (zone === Occupant.ZoneIndustrial) {
         industrialZones++;
         if (tile.buildingId !== undefined) developedIndustrialZones++;
       }
-      // Bill every feature the tile carries, not just whichever one owns its
-      // `kind`. Mirrors `compute_daily_budget` in
-      // `crates/city-sim-core/src/economy.rs` — see there for why the old
+      // Bill every occupant the tile carries, not just whichever one won its
+      // `kind` under the old flattened spelling. Mirrors `compute_daily_budget`
+      // in `crates/city-sim-core/src/economy.rs` — see there for why the old
       // per-kind form made a road get *cheaper* when you strung a line over it.
-      // Water pipes are only ever recorded in `underground`, handled below.
       const bill = (kind: TileKind, present: boolean, add: (u: number) => void) => {
         if (!present) return;
         const upkeep = MAINTENANCE[kind] ?? 0;
         maintenance += upkeep;
         add(upkeep);
       };
-      bill(TileKind.Road, tile.kind === TileKind.Road || !!tile.roadUnderlay,
-        (u) => { maintenanceRoads += u; });
-      bill(TileKind.Rail, tile.kind === TileKind.Rail || !!tile.railUnderlay,
-        (u) => { maintenanceRail += u; });
-      bill(TileKind.PowerLine, tile.kind === TileKind.PowerLine || !!tile.powerOverlay,
-        (u) => { maintenancePowerLines += u; });
+      bill(TileKind.Road, hasOccupant(tile.surface, Occupant.Road), (u) => { maintenanceRoads += u; });
+      bill(TileKind.Rail, hasOccupant(tile.surface, Occupant.Rail), (u) => { maintenanceRail += u; });
+      bill(TileKind.PowerLine, hasOccupant(tile.overhead, Occupant.PowerLine), (u) => { maintenancePowerLines += u; });
 
-      if (tile.legacyUnderground) {
-        const uUpkeep = MAINTENANCE[tile.legacyUnderground];
+      if (hasOccupant(tile.underground, Occupant.Pipe)) {
+        const uUpkeep = MAINTENANCE[TileKind.WaterPipe];
         if (uUpkeep) {
           maintenance += uUpkeep;
-          if (tile.legacyUnderground === TileKind.WaterPipe) maintenancePipes += uUpkeep;
+          maintenancePipes += uUpkeep;
         }
       }
-
-      if (tile.buildingId === undefined && tile.kind === TileKind.WaterPump && pumpTemplate) {
-        const active = pumpTemplate.requiresPower === false ? true : tile.powered;
-        const connected = hasWaterSourceConnection(this.state, { x: tileX, y: tileY }, { width: 1, height: 1 });
-        if (pumpTemplate.maintenance) {
-          buildingMaintenance += pumpTemplate.maintenance;
-          buildingMaintenanceCivic += pumpTemplate.maintenance;
-          civicMaintenanceByType[pumpTemplate.id] =
-            (civicMaintenanceByType[pumpTemplate.id] ?? 0) + pumpTemplate.maintenance;
-        }
-        if (this.waterEnabled && active && connected && pumpTemplate.waterOutput)
-          buildingWaterOutput += pumpTemplate.waterOutput;
-      }
-      if (tile.buildingId === undefined && tile.kind === TileKind.Park && parkTemplate) {
-        if (parkTemplate.maintenance) {
-          buildingMaintenance += parkTemplate.maintenance;
-          buildingMaintenanceCivic += parkTemplate.maintenance;
-          civicMaintenanceByType[parkTemplate.id] =
-            (civicMaintenanceByType[parkTemplate.id] ?? 0) + parkTemplate.maintenance;
-        }
-      }
+      // A `WaterPump`/`Park` tile with no `buildingId` cannot exist under the
+      // strata model — `legacyKind`'s `Structure` tier only spells a kind
+      // that way once `structureKindOf` resolves a live building — so the
+      // "billed by kind, not by BuildingInstance" civic branch this loop used
+      // to carry for those two is unreachable and has no strata equivalent.
+      // Every civic building's maintenance comes from the `state.buildings`
+      // loop below.
     }
 
     for (const building of this.state.buildings) {
@@ -574,11 +549,8 @@ export class Simulation {
         this.vacantZoneIndices.delete(idx);
         continue;
       }
-      if (
-        tile.kind !== TileKind.Residential &&
-        tile.kind !== TileKind.Commercial &&
-        tile.kind !== TileKind.Industrial
-      ) {
+      const zone = zoneOccupant(tile.surface);
+      if (zone === undefined) {
         this.zoneGrowthTimers.delete(idx);
         this.vacantZoneIndices.delete(idx);
         continue;
@@ -604,9 +576,9 @@ export class Simulation {
       }
       this.zoneGrowthTimers.delete(idx);
 
-      if (tile.kind === TileKind.Residential) residentialCandidates.push({ idx, x, y, hasPower, hasWater });
-      if (tile.kind === TileKind.Commercial) commercialCandidates.push({ idx, x, y, hasPower, hasWater });
-      if (tile.kind === TileKind.Industrial) industrialCandidates.push({ idx, x, y, hasPower, hasWater });
+      if (zone === Occupant.ZoneResidential) residentialCandidates.push({ idx, x, y, hasPower, hasWater });
+      if (zone === Occupant.ZoneCommercial) commercialCandidates.push({ idx, x, y, hasPower, hasWater });
+      if (zone === Occupant.ZoneIndustrial) industrialCandidates.push({ idx, x, y, hasPower, hasWater });
     }
 
     const grewResidential = this.applyZoneGrowthForType(

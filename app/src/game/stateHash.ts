@@ -14,6 +14,22 @@
  */
 
 import type { GameState } from './gameState';
+import { Occupant, Terrain, iterSet, tileOccupants } from './protocol/occupants';
+
+/** Mirrors `Occupant`'s variants — the bucket key each contributes to `tileCounts`. */
+const OCCUPANT_LABEL: Record<Occupant, string> = {
+  [Occupant.Pipe]: 'pipe',
+  [Occupant.Subway]: 'subway',
+  [Occupant.Fibre]: 'fibre',
+  [Occupant.Road]: 'road',
+  [Occupant.Rail]: 'rail',
+  [Occupant.ZoneResidential]: 'zone-residential',
+  [Occupant.ZoneCommercial]: 'zone-commercial',
+  [Occupant.ZoneIndustrial]: 'zone-industrial',
+  [Occupant.Structure]: 'structure',
+  [Occupant.PowerLine]: 'power-line',
+  [Occupant.Trees]: 'trees'
+};
 
 export interface StateSnapshot {
   tick: number;
@@ -37,13 +53,28 @@ export interface StateSnapshot {
   buildingCount: number;
 }
 
-/** Extract a deterministic snapshot from GameState for hashing. */
+/**
+ * Extract a deterministic snapshot from GameState for hashing.
+ *
+ * `tileCounts` buckets by occupant (one tile can contribute to several — a
+ * zoned lot crossed by a wire counts under both `zone-residential` and
+ * `power-line`) plus terrain, rather than by the single flattened `kind` a
+ * tile used to have. Bucketing by occupant is strictly more precise: it
+ * stops conflating two tiles that carry the same set of features but used
+ * to derive different — or accidentally the same — `kind` spellings.
+ */
 export function extractSnapshot(state: GameState): StateSnapshot {
   const tileCounts: Record<string, number> = {};
   let abandonedCount = 0;
 
   for (const tile of state.tiles) {
-    tileCounts[tile.kind] = (tileCounts[tile.kind] ?? 0) + 1;
+    const terrainKey = tile.terrain === Terrain.Water ? 'terrain:water' : 'terrain:land';
+    tileCounts[terrainKey] = (tileCounts[terrainKey] ?? 0) + 1;
+    const occupants = tileOccupants(tile.underground, tile.surface, tile.overhead);
+    for (const occupant of iterSet(occupants)) {
+      const key = OCCUPANT_LABEL[occupant];
+      tileCounts[key] = (tileCounts[key] ?? 0) + 1;
+    }
     if (tile.abandoned) abandonedCount++;
   }
 
