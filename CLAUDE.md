@@ -100,8 +100,19 @@ Each station lives under `app/public/audio/radio/<station>/` with audio files + 
 
 ## Conventions
 
+**`AGENTS.md` is the authoritative, fuller source for everything in this section** — commit/PR mechanics, git safety (reflog/gc bans), mutation testing, licence headers. Read it before your first commit in this repo; what follows is a summary, not a substitute.
+
 - **Canadian English** in code comments, docs, and identifiers where not constrained by a web standard: *colour, centre, licence (noun), organise, behaviour, favour*. CSS/DOM properties (`color`, `center`) keep their standard spelling.
-- **Commits**: Conventional Commits, imperative mood, atomic. Backtick all code references in commit bodies. Use a single-quoted heredoc + `git commit -F` when the body contains backticks or special characters to avoid shell interpolation. Update `README.md`, `docs/game-parameters.md`, `app/public/manual.html`, and `SPEC.md` alongside any behaviour change they describe, in the same commit.
+- **Commits**: Conventional Commits (`type(scope): imperative summary`, e.g. `refactor(sim): ...`, `fix(ui): ...`), imperative mood, atomic. **Backtick every code reference in the body — type names, function names, file paths, flags, CLI commands, module names — with no exceptions.** Before running `git commit`, reread the drafted body once specifically hunting for un-backticked identifiers; it is the single most common mistake in this repo's commits. Example:
+  ```
+  refactor(sim): fork the legacy save-import wire layout off the live tile buffer
+
+  Legacy `.citysim` JSON saves are encoded against the current `kind`+`flags`
+  shape, so `import.rs` now decodes a frozen `legacy_tile_buffer` module
+  instead of the live `tile_buffer`. No behaviour change: `cargo test
+  --workspace` passes unchanged.
+  ```
+  Use a single-quoted heredoc + `git commit -F` when the body contains backticks or special characters to avoid shell interpolation, then verify with `git log -1 --pretty=fuller` and amend immediately if interpolation altered content. Update `README.md`, `docs/game-parameters.md`, `app/public/manual.html`, and `SPEC.md` alongside any behaviour change they describe, in the same commit.
 - **PR titles**: Human-readable, no Conventional Commit prefix. Start with a capital letter. Example: `TauriSimBridge — native Rust simulation via Tauri IPC Channel`, not `feat(p4-2): TauriSimBridge`. Do not mention internal planning docs or milestone shorthand (e.g. `M0-3`) in the title.
 - **PR descriptions**: `## Summary` (flat bullets, bold lead-ins) + optional `###` subsections (`User-facing changes`, `Maintainer-facing changes`, `Packaging`, `Workflow and infrastructure`, `Documentation`, `Known limitations`) + `## Test plan` (checklist bullets, concrete commands, explicit gaps if verification is incomplete).
 - **PR merge**: Always `--no-ff`. Never squash. Merge commit format: `PR title (#N)\n\nPR body` — matches GitHub's "Pull request title and description" setting.

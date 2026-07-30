@@ -179,36 +179,90 @@ pub fn from_tile_buffer(
 mod tests {
     use super::*;
     use crate::commands::apply_tool;
-    use crate::display::{wire_flags, wire_kind, wire_underground};
-    use crate::occupants::StructureLookup;
+    use crate::occupants::{zone_template_kind, Occupant, StructureLookup};
     use crate::sim::Simulation;
+    use crate::state::{Tile, DERIVED_FLAG_MASK};
     use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::legacy_tile_buffer::legacy_flags;
     use city_sim_protocol::tile_buffer::encode_happiness;
 
     /// Encode a state's tiles the way the TS legacy exporter does — the exact
     /// inverse of `from_tile_buffer` (wilderness byte left neutral).
     ///
-    /// It goes through `display::wire_*`, which is the same derivation the WASM
-    /// tile buffer uses, so every round trip below is simultaneously a test
-    /// that the wire derivation and the v4 decode are inverses.
+    /// `v4_kind`/`v4_flags` below hand-spell the same precedence
+    /// `display::wire_kind`/`wire_flags` used to run before their deletion
+    /// (#177's TS/wire follow-up) — this test module is the only place left
+    /// that needs to go *from* the strata *to* a v4 spelling, so the
+    /// precedence lives here now, not behind a shared production function.
     fn encode_tiles(state: &GameState) -> Vec<u8> {
         let n = state.tiles.len();
         let o = LegacyTileBufferOffsets::for_size(n);
         let lookup = StructureLookup::new(state);
         let mut buf = vec![0u8; n * LEGACY_BYTES_PER_TILE];
         for (i, tile) in state.tiles.iter().enumerate() {
-            let kind = wire_kind(tile, &lookup);
+            let kind = v4_kind(tile, &lookup);
             buf[o.kind + i] = kind as u8;
-            buf[o.flags + i] = wire_flags(tile, kind);
+            buf[o.flags + i] = v4_flags(tile, kind);
             buf[o.happiness + i] = encode_happiness(tile.happiness);
             buf[o.elevation + i] = tile.elevation;
             let bid = tile.building_id.unwrap_or(0);
             buf[o.building_id + i * 2] = (bid & 0xFF) as u8;
             buf[o.building_id + i * 2 + 1] = ((bid >> 8) & 0xFF) as u8;
-            buf[o.underground_kind + i] = wire_underground(tile);
+            // 0xFF = no underground (0 = TileKind::Land, not a valid sentinel).
+            buf[o.underground_kind + i] = if tile.has_occupant(Occupant::Pipe) {
+                TileKind::WaterPipe as u8
+            } else {
+                0xFF
+            };
             buf[o.wilderness + i] = 128;
         }
         buf
+    }
+
+    /// The v4 `kind` byte for one tile: terrain > structure > zone > trees >
+    /// line > rail > road > land. Same order `display::wire_kind` used to run.
+    fn v4_kind(tile: &Tile, lookup: &StructureLookup) -> TileKind {
+        if tile.terrain == crate::occupants::Terrain::Water {
+            return TileKind::Water;
+        }
+        if let Some(kind) = lookup.structure_kind(tile) {
+            return kind;
+        }
+        if let Some(zone) = tile.zone_occupant() {
+            if let Some(kind) = zone_template_kind(zone) {
+                return kind;
+            }
+        }
+        if tile.has_occupant(Occupant::Trees) {
+            return TileKind::Tree;
+        }
+        if tile.has_occupant(Occupant::PowerLine) {
+            return TileKind::PowerLine;
+        }
+        if tile.has_occupant(Occupant::Rail) {
+            return TileKind::Rail;
+        }
+        if tile.has_occupant(Occupant::Road) {
+            return TileKind::Road;
+        }
+        TileKind::Land
+    }
+
+    /// The v4 `flags` byte for one tile: the three derived flags copied
+    /// verbatim, plus an underlay bit for whichever occupant lost the kind
+    /// byte. Same rules `display::wire_flags` used to run.
+    fn v4_flags(tile: &Tile, kind: TileKind) -> u8 {
+        let mut out = tile.flags & DERIVED_FLAG_MASK;
+        if tile.has_occupant(Occupant::Road) && kind != TileKind::Road {
+            out |= legacy_flags::ROAD_UNDERLAY;
+        }
+        if tile.has_occupant(Occupant::Rail) && kind != TileKind::Rail {
+            out |= legacy_flags::RAIL_UNDERLAY;
+        }
+        if tile.has_occupant(Occupant::PowerLine) {
+            out |= legacy_flags::POWER_OVERLAY;
+        }
+        out
     }
 
     fn import_stats(state: &GameState) -> ImportStats {

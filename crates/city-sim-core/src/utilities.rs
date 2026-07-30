@@ -249,7 +249,7 @@ mod tests {
     use crate::occupants::Occupant;
     use crate::state::Tile;
     use city_sim_protocol::commands::Tool;
-    use city_sim_protocol::tile_buffer::flags;
+    use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
     use city_sim_protocol::tile_kind::TileKind;
 
     fn grid(w: u32, h: u32) -> GameState {

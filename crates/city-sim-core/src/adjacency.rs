@@ -198,11 +198,10 @@ pub fn tile_has_water(state: &GameState, x: u32, y: u32) -> bool {
 mod tests {
     use super::*;
     use crate::commands::apply_tool;
-    use crate::display::wire_kind_at;
     use crate::migrate::{set_v4, set_v4_kind};
     use crate::occupants::Occupant;
     use city_sim_protocol::commands::Tool;
-    use city_sim_protocol::tile_buffer::flags;
+    use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
     use city_sim_protocol::tile_kind::TileKind;
 
     fn g(w: u32, h: u32) -> GameState {
@@ -333,8 +332,8 @@ mod tests {
         kind(&mut s, 0, 0, TileKind::Residential);
         apply_tool(&mut s, Tool::PowerLine, 1, 0);
         apply_tool(&mut s, Tool::Road, 1, 0);
-        assert_eq!(wire_kind_at(&s, 1, 0), TileKind::PowerLine);
         let t = s.tile_at(1, 0).unwrap();
+        assert!(t.has_occupant(Occupant::PowerLine));
         assert!(t.has_occupant(Occupant::Road));
         assert!(has_road_access(&s, 0, 0), "line-then-road");
 

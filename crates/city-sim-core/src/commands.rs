@@ -582,12 +582,20 @@ fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display::{wire_flags_at, wire_kind_at};
     use crate::migrate::set_v4_kind;
-    use city_sim_protocol::tile_buffer::flags;
+    use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
 
     fn gs(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
+    }
+
+    /// The `TileKind` of the `BuildingInstance` covering (x,y), if any — the
+    /// one place a specific structure kind still lives since #177 step 3
+    /// (`Occupant::Structure` is one flat tag; the structure's own kind is on
+    /// its `BuildingInstance`, not the tile).
+    fn structure_kind_at(s: &GameState, x: u32, y: u32) -> Option<TileKind> {
+        let id = s.tile_at(x, y)?.building_id? as u32;
+        s.buildings.iter().find(|b| b.id == id).map(|b| b.kind)
     }
 
     #[test]
@@ -620,29 +628,16 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::Road, 1, 1);
         assert!(r.success);
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Road);
+        assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road));
         assert_eq!(s.money, before - tool_cost(Tool::Road));
     }
 
     /// A level crossing carries both occupants whichever way round it was
-    /// built, and — since step 3 of #177 — is spelled on the wire exactly one
-    /// way: `Rail` + `ROAD_UNDERLAY`.
-    ///
-    /// **This is one of the wire bytes the projection could not reproduce** —
-    /// delta 1 of the three `display.rs` names. Build order was the only thing
-    /// distinguishing `Road` + `RAIL_UNDERLAY` from `Rail` + `ROAD_UNDERLAY`,
-    /// and build order is not a property of the tile, so `{Road, Rail}` had to
-    /// normalise onto one of them. Rail wins because dragging a railway across
-    /// an existing road network is far commoner than the reverse, so it is the
-    /// spelling most saves already hold. The sprite is unaffected —
-    /// `resolveBaseTileSprite` tests `(Rail && roadUnderlay) || (Road &&
-    /// railUnderlay)` and `pickRailCrossingTexture` orients off the rail axis
-    /// either way — and so are the renderer's debug labels. What is visible is
-    /// the *flat* colour of a road-last crossing, and the two consumers move in
-    /// opposite directions: `minimap.ts` tests `railUnderlay` before
-    /// `roadUnderlay`, so it goes rail-brown → road-grey, while
-    /// `getTileColour`'s `palette[kind]` goes road-grey → rail-brown. The
-    /// inspector's Type row reads `rail` where it read `road`.
+    /// built. There is no collision to normalise any more — `Road` and `Rail`
+    /// are two independent bits in the same surface stratum, not two
+    /// candidates for one `kind` slot — so build-order independence now falls
+    /// out of the occupant set being a set, rather than needing a precedence
+    /// rule to manufacture it.
     #[test]
     fn a_level_crossing_has_one_spelling_in_both_build_orders() {
         for order in [[Tool::Rail, Tool::Road], [Tool::Road, Tool::Rail]] {
@@ -653,8 +648,6 @@ mod tests {
             let t = s.tile_at(0, 0).unwrap();
             assert!(t.has_occupant(Occupant::Road), "{order:?}: the road");
             assert!(t.has_occupant(Occupant::Rail), "{order:?}: the rail");
-            assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Rail, "{order:?}");
-            assert_eq!(wire_flags_at(&s, 0, 0), flags::ROAD_UNDERLAY, "{order:?}");
         }
     }
 
@@ -664,7 +657,10 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::Residential, 2, 2);
         assert!(r.success);
-        assert_eq!(wire_kind_at(&s, 2, 2), TileKind::Residential);
+        assert_eq!(
+            s.tile_at(2, 2).unwrap().zone_occupant(),
+            Some(Occupant::ZoneResidential)
+        );
         assert_eq!(s.money, before - tool_cost(Tool::Residential));
     }
 
@@ -674,9 +670,8 @@ mod tests {
         set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
         let r = apply_tool(&mut s, Tool::Residential, 0, 0);
         assert!(!r.success);
-        assert_eq!(
-            wire_kind_at(&s, 0, 0),
-            TileKind::Road,
+        assert!(
+            s.tile_at(0, 0).unwrap().has_occupant(Occupant::Road),
             "tile should not change"
         );
     }
@@ -694,7 +689,7 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::WaterPump, 0, 0);
         assert!(r.success);
-        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::WaterPump);
+        assert_eq!(structure_kind_at(&s, 0, 0), Some(TileKind::WaterPump));
         assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
         assert_eq!(s.buildings.len(), 1);
         assert_eq!(s.money, before - tool_cost(Tool::WaterPump));
@@ -708,7 +703,7 @@ mod tests {
         let bid = s.tile_at(0, 0).unwrap().building_id.unwrap();
         for dy in 0..2 {
             for dx in 0..2 {
-                assert_eq!(wire_kind_at(&s, dx, dy), TileKind::WaterTower);
+                assert_eq!(structure_kind_at(&s, dx, dy), Some(TileKind::WaterTower));
                 assert_eq!(s.tile_at(dx, dy).unwrap().building_id, Some(bid));
             }
         }
@@ -720,7 +715,7 @@ mod tests {
         // WaterTower is 2×2; placing at (2,2) would go to (3,3) which is out of bounds
         let r = apply_tool(&mut s, Tool::WaterTower, 2, 2);
         assert!(!r.success);
-        assert_eq!(wire_kind_at(&s, 2, 2), TileKind::Land);
+        assert_eq!(s.tile_at(2, 2).unwrap().occupants(), 0);
     }
 
     #[test]
@@ -737,7 +732,7 @@ mod tests {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::Road, 0, 0);
         apply_tool(&mut s, Tool::Bulldoze, 0, 0);
-        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Land);
+        assert_eq!(s.tile_at(0, 0).unwrap().occupants(), 0);
     }
 
     /// **The bulldozer clears the tile and leaves the ground (#177 step 4).**
@@ -769,7 +764,6 @@ mod tests {
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.terrain(), Terrain::Land, "bulldozing land drowned it");
         assert_eq!(t.occupants(), 0, "something outlived the bulldozer");
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
 
         // Water, carrying the road a v4 save could leave standing on it.
         let mut s = gs(4, 4);
@@ -792,7 +786,6 @@ mod tests {
             "the road outlived the click"
         );
         assert_eq!(t.occupants(), 0);
-        assert_eq!(wire_kind_at(&s, 2, 2), TileKind::Water);
     }
 
     /// The terrain brushes are the tools *for* changing what the ground is,
@@ -812,7 +805,6 @@ mod tests {
         assert!(apply_tool(&mut s, Tool::Water, 1, 1).success);
         assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
         assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Water);
 
         // …and the brush that *is* priced for it still works.
         assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1).success);
@@ -1053,7 +1045,10 @@ mod tests {
         ] {
             let mut s = gs(8, 8);
             assert!(apply_tool(&mut s, tool, 4, 4).success, "{tool:?} refused");
-            assert_ne!(wire_kind_at(&s, 4, 4), TileKind::Land, "{tool:?} not built");
+            assert!(
+                s.tile_at(4, 4).unwrap().has_occupant(Occupant::Structure),
+                "{tool:?} not built"
+            );
 
             assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4).success);
             for dy in 0..h {
@@ -1067,8 +1062,8 @@ mod tests {
                     assert!(t.building_id.is_none(), "{tool:?} ({x}, {y}): dangling id");
                     // v4 emitted the structure's own kind on all four here.
                     assert_eq!(
-                        wire_kind_at(&s, x, y),
-                        TileKind::Land,
+                        t.occupants(),
+                        0,
                         "{tool:?} ({x}, {y}): one click did not clear it"
                     );
                 }
@@ -1097,11 +1092,6 @@ mod tests {
             apply_tool(&mut s, Tool::PowerLine, 1, 1);
             apply_tool(&mut s, tool, 1, 1);
 
-            assert_eq!(
-                wire_kind_at(&s, 1, 1),
-                TileKind::PowerLine,
-                "{tool:?} severed the line"
-            );
             let t = s.tile_at(1, 1).unwrap();
             assert!(
                 t.has_occupant(Occupant::PowerLine),
@@ -1135,32 +1125,11 @@ mod tests {
             apply_tool(&mut reverse, first, 1, 1);
 
             assert_eq!(
-                (wire_kind_at(&forward, 1, 1), wire_flags_at(&forward, 1, 1)),
-                (wire_kind_at(&reverse, 1, 1), wire_flags_at(&reverse, 1, 1)),
-                "{first:?} then {second:?} disagreed on the wire bytes"
-            );
-            assert_eq!(
                 forward.tile_at(1, 1).unwrap().occupants(),
                 reverse.tile_at(1, 1).unwrap().occupants(),
                 "{first:?} then {second:?} disagreed on the occupant set"
             );
         }
-    }
-
-    /// The rail must not appear as its own underlay on the wire. An underlay
-    /// bit means "present, but not the kind byte"; a rail that is the kind byte
-    /// and sets `RAIL_UNDERLAY` too is a tile spelled twice.
-    #[test]
-    fn rail_over_road_keeps_the_road_but_not_a_stale_rail_underlay() {
-        let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Road, 1, 1);
-        apply_tool(&mut s, Tool::Rail, 1, 1);
-        assert!(
-            s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road),
-            "the road under the rail was lost"
-        );
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Rail);
-        assert_eq!(wire_flags_at(&s, 1, 1), flags::ROAD_UNDERLAY);
     }
 
     #[test]
@@ -1175,8 +1144,6 @@ mod tests {
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::PowerLine));
 
         apply_tool(&mut s, Tool::Bulldoze, 1, 1);
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
-        assert_eq!(wire_flags_at(&s, 1, 1), 0, "a structural bit survived");
         assert_eq!(
             s.tile_at(1, 1).unwrap().visible_occupants(),
             0,
@@ -1188,7 +1155,6 @@ mod tests {
     fn power_line_sets_power_overlay_flag() {
         let mut s = gs(4, 4);
         apply_tool(&mut s, Tool::PowerLine, 0, 0);
-        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::PowerLine);
         assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::PowerLine));
     }
 
@@ -1197,7 +1163,10 @@ mod tests {
         let mut s = gs(4, 4);
         let r = apply_tool(&mut s, Tool::ElementarySchool, 0, 0);
         assert!(r.success);
-        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::ElementarySchool);
+        assert_eq!(
+            structure_kind_at(&s, 0, 0),
+            Some(TileKind::ElementarySchool)
+        );
         assert_eq!(s.buildings.len(), 1);
     }
 
@@ -1250,8 +1219,8 @@ mod tests {
                 "{tool:?} must not charge on rejection"
             );
             assert_eq!(
-                wire_kind_at(&s, 1, 1),
-                TileKind::WaterPump,
+                structure_kind_at(&s, 1, 1),
+                Some(TileKind::WaterPump),
                 "tile should not change"
             );
         }
@@ -1265,7 +1234,10 @@ mod tests {
         let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
         assert!(!r.success, "building should be rejected over a road");
         assert_eq!(s.money, before_money, "must not charge on rejection");
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Road, "road should remain");
+        assert!(
+            s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road),
+            "road should remain"
+        );
     }
 
     #[test]
@@ -1296,7 +1268,10 @@ mod tests {
         assert!(!r.success, "a park was stamped over a live hydro line");
         assert_eq!(s.money, before_money, "must not charge on rejection");
         assert!(s.buildings.is_empty());
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Residential);
+        assert_eq!(
+            s.tile_at(1, 1).unwrap().zone_occupant(),
+            Some(Occupant::ZoneResidential)
+        );
     }
 
     #[test]
@@ -1313,8 +1288,6 @@ mod tests {
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.occupants_in(Stratum::Surface), 0, "the ground is bare");
         assert!(t.has_occupant(Occupant::PowerLine));
-        // …and the wire now spells it the same as any other bare hydro line.
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::PowerLine);
 
         let r = apply_tool(&mut s, Tool::HydroPlant, 1, 1);
         assert!(!r.success, "a plant was stamped over a terraformed line");
@@ -1376,8 +1349,8 @@ mod tests {
             assert_eq!(s.money, before_money, "{tool:?} charged on rejection");
 
             assert_eq!(
-                wire_kind_at(&s, 5, 5),
-                TileKind::CoalPlant,
+                structure_kind_at(&s, 5, 5),
+                Some(TileKind::CoalPlant),
                 "{tool:?} moved the plant"
             );
             let t = s.tile_at(5, 5).unwrap();
@@ -1415,7 +1388,10 @@ mod tests {
             r.message.as_deref(),
             Some("A building occupies this tile. Bulldoze first.")
         );
-        assert_eq!(wire_kind_at(&s, 2, 1), TileKind::Residential);
+        assert_eq!(
+            s.tile_at(2, 1).unwrap().zone_occupant(),
+            Some(Occupant::ZoneResidential)
+        );
         assert_eq!(s.buildings.len(), 1);
     }
 
@@ -1493,7 +1469,7 @@ mod tests {
         let r = apply_tool(&mut s, Tool::TerraformLower, 1, 1);
         assert!(r.success, "a regrade was refused over an undeveloped zone");
         assert_eq!(s.money, before_money - tool_cost(Tool::TerraformLower));
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Water);
+        assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
         assert_eq!(
             s.tile_at(1, 1).unwrap().occupants(),
             0,
@@ -1501,14 +1477,14 @@ mod tests {
         );
 
         for (tool, expected) in [
-            (Tool::TerraformLower, TileKind::Water),
-            (Tool::TerraformRaise, TileKind::Land),
-            (Tool::Water, TileKind::Water),
+            (Tool::TerraformLower, Terrain::Water),
+            (Tool::TerraformRaise, Terrain::Land),
+            (Tool::Water, Terrain::Water),
         ] {
             let before_money = s.money;
             let r = apply_tool(&mut s, tool, 3, 3);
             assert!(r.success, "{tool:?} refused open ground");
-            assert_eq!(wire_kind_at(&s, 3, 3), expected);
+            assert_eq!(s.tile_at(3, 3).unwrap().terrain(), expected);
             assert_eq!(s.money, before_money - tool_cost(tool));
         }
     }
@@ -1538,7 +1514,7 @@ mod tests {
                 assert!(r.success, "{surface:?} (line_first={line_first}) refused");
                 assert_eq!(s.money, before_money - tool_cost(Tool::Tree));
 
-                assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Tree);
+                assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Trees));
                 let after = s.tile_at(1, 1).unwrap();
                 assert!(
                     after.surface.is_empty(),
@@ -1576,12 +1552,12 @@ mod tests {
         let r = apply_tool(&mut s, Tool::Tree, 5, 5);
         assert!(!r.success, "a canopy was planted over a live plant");
         assert_eq!(s.money, before_money, "charged on rejection");
-        assert_eq!(wire_kind_at(&s, 5, 5), TileKind::CoalPlant);
+        assert_eq!(structure_kind_at(&s, 5, 5), Some(TileKind::CoalPlant));
         assert_eq!(s.buildings.len(), 1);
 
         // Open ground still takes a tree.
         assert!(apply_tool(&mut s, Tool::Tree, 0, 0).success);
-        assert_eq!(wire_kind_at(&s, 0, 0), TileKind::Tree);
+        assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Trees));
     }
 
     #[test]
@@ -1600,7 +1576,7 @@ mod tests {
             assert!(apply_tool(&mut s, tool, 1, 1).success);
             let r = apply_tool(&mut s, Tool::Park, 1, 1);
             assert!(r.success, "a park was refused over {tool:?}");
-            assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Park);
+            assert_eq!(structure_kind_at(&s, 1, 1), Some(TileKind::Park));
         }
     }
 
@@ -1642,7 +1618,7 @@ mod tests {
         apply_tool(&mut s, Tool::Tree, 1, 1);
         let r = apply_tool(&mut s, Tool::PowerLine, 1, 1);
         assert!(r.success, "a line was refused over a tree");
-        assert_eq!(wire_kind_at(&s, 1, 1), TileKind::PowerLine);
+        assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::PowerLine));
     }
 
     #[test]
@@ -1657,7 +1633,6 @@ mod tests {
             apply_tool(&mut s, Tool::Park, 1, 1);
             let bid = s.tile_at(1, 1).unwrap().building_id.unwrap();
             remove_building(&mut s, bid as u32);
-            assert_eq!(wire_kind_at(&s, 1, 1), TileKind::Land);
             assert_eq!(s.tile_at(1, 1).unwrap().occupants(), 0);
             assert!(s.tile_at(1, 1).unwrap().building_id.is_none());
 
@@ -1688,8 +1663,8 @@ mod tests {
                 r.message
             );
             assert_eq!(
-                wire_kind_at(&s, 0, 0),
-                expected_kind,
+                structure_kind_at(&s, 0, 0),
+                Some(expected_kind),
                 "{tool:?} should stamp {expected_kind:?}"
             );
             // All four tiles of the 2×2 footprint must carry power_plant_mw

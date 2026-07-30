@@ -18,7 +18,7 @@
 //!   be asked about, as plain diffable text: the wilderness score and its full
 //!   breakdown, every `BudgetStats` field, population, jobs, money, the
 //!   `state_hash`, the building list, and one line per tile giving terrain,
-//!   occupant set, development and the three derived wire bytes.
+//!   density, development and the occupant set.
 //!
 //! ## Running it
 //!
@@ -54,11 +54,10 @@
 //!
 //! ## Why a dump and not assertions
 //!
-//! `display.rs` exists to emit bytes a renderer interprets. Unit tests over it
-//! assert what someone thought to assert; a full dump asserts everything at
-//! once, including the things nobody thought of. The level crossing whose
-//! minimap pixel moved rail-brown to road-grey during #177 changed no unit
-//! test and would have changed one line here.
+//! Unit tests assert what someone thought to assert; a full dump asserts
+//! everything at once, including the things nobody thought of. The level
+//! crossing whose minimap pixel moved rail-brown to road-grey during #177
+//! changed no unit test and would have changed one line here.
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -66,13 +65,10 @@ use std::path::PathBuf;
 
 use city_sim_core::buildings::BuildingInstance;
 use city_sim_core::commands::apply_tool;
-use city_sim_core::display::{wire_flags, wire_kind, wire_underground};
 use city_sim_core::occupants::{iter_set, Network, Occupant, StructureLookup, Terrain};
 use city_sim_core::sim::{state_hash, Simulation};
-use city_sim_core::state::{GameState, Tile};
+use city_sim_core::state::{GameState, Tile, FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
 use city_sim_protocol::commands::Tool;
-use city_sim_protocol::tile_buffer::flags;
-use city_sim_protocol::tile_kind::TileKind;
 
 const SCRIPT: &str = include_str!("fixtures/golden_city.script");
 const EXPECTED: &str = include_str!("fixtures/golden_city.expected");
@@ -283,18 +279,16 @@ fn f(v: f32) -> String {
     format!("{v:.4}")
 }
 
-/// The six protocol flag bits as a fixed six-character column, in bit order:
-/// `POWERED WATERED ABANDONED ROAD_UNDERLAY RAIL_UNDERLAY POWER_OVERLAY`.
-/// Capitals are the derived per-tick bits, lower case the structural ones
-/// `display::wire_flags` re-derives from the occupant set.
+/// `Tile::flags`' three derived per-tick bits as a fixed three-character
+/// column: `POWERED WATERED ABANDONED`. The three structural bits that used
+/// to share this byte (`ROAD_UNDERLAY`/`RAIL_UNDERLAY`/`POWER_OVERLAY`) are
+/// gone — `occ` below is the whole story for what stands on a tile now, with
+/// no "which spelling won the byte" question left to answer.
 fn flag_glyphs(f: u8) -> String {
-    const BITS: [(u8, char); 6] = [
-        (flags::POWERED, 'P'),
-        (flags::WATERED, 'W'),
-        (flags::ABANDONED, 'A'),
-        (flags::ROAD_UNDERLAY, 'r'),
-        (flags::RAIL_UNDERLAY, 'l'),
-        (flags::POWER_OVERLAY, 'p'),
+    const BITS: [(u8, char); 3] = [
+        (FLAG_POWERED, 'P'),
+        (FLAG_WATERED, 'W'),
+        (FLAG_ABANDONED, 'A'),
     ];
     BITS.iter()
         .map(|&(bit, ch)| if f & bit != 0 { ch } else { '-' })
@@ -340,10 +334,11 @@ fn dump(script: &Script, r: &Replay) -> String {
          # not a merge — see the module note in tests/golden_city.rs.\n\
          #\n\
          # Tile line format:\n\
-         #   tile <index> (<x>,<y>) <terrain> kind=<wire kind>(<byte>) flags=<hex>[PWArlp]\n\
-         #       ug=<underground byte> bid=<development> occ=<occupant set>\n\
-         # `kind`, `flags` and `ug` are the DERIVED wire bytes (display.rs); `terrain`,\n\
-         # `occ` and `bid` are the canonical tile. A renderer sees only the derived ones.\n\
+         #   tile <index> (<x>,<y>) terrain=<terrain> flags=[PWA] density=<density>\n\
+         #       bid=<development> occ=<occupant set>\n\
+         # Every field here is canonical tile state — there is no more derived wire\n\
+         # byte to dump separately (#177's TS/wire follow-up deleted the projection;\n\
+         # the wire now carries `occ`/`terrain`/`density` directly, see `crate::wire`).\n\
          \n",
     );
 
@@ -480,19 +475,15 @@ fn dump(script: &Script, r: &Replay) -> String {
     }
 
     // --- tiles -------------------------------------------------------------
-    let lookup = StructureLookup::new(s);
     out.push_str("\n[tiles]\n");
     for (idx, tile) in s.tiles.iter().enumerate() {
         let (x, y) = s.index_to_xy(idx);
-        let kind = wire_kind(tile, &lookup);
-        let wf = wire_flags(tile, kind);
-        let ug = wire_underground(tile);
         writeln!(
             out,
-            "tile {idx:<5} ({x:>2},{y:>2}) {terrain:<5} kind={kind:<20} flags=0x{wf:02x}[{glyphs}] ug={ug:<3} bid={bid:<5} occ={occ}",
+            "tile {idx:<5} ({x:>2},{y:>2}) terrain={terrain:<5} flags=[{glyphs}] density={density:<6} bid={bid:<5} occ={occ}",
             terrain = format!("{:?}", tile.terrain),
-            kind = format!("{kind:?}({})", kind as u8),
-            glyphs = flag_glyphs(wf),
+            glyphs = flag_glyphs(tile.flags),
+            density = format!("{:?}", tile.density),
             bid = tile
                 .building_id
                 .map_or_else(|| "-".to_string(), |b| b.to_string()),
@@ -810,9 +801,7 @@ fn the_golden_city_still_covers_every_awkward_state() {
         // for it — so it is also the one most likely to vanish unnoticed if the
         // decay parameters or the run length move.
         ("an abandoned lot", &|t: &Tile| {
-            t.zone_occupant().is_some()
-                && t.building_id.is_none()
-                && t.flags & flags::ABANDONED != 0
+            t.zone_occupant().is_some() && t.building_id.is_none() && t.flags & FLAG_ABANDONED != 0
         }),
     ];
     for (what, pred) in structural {
@@ -939,8 +928,9 @@ fn the_golden_city_still_covers_every_awkward_state() {
                 "({x},{y}) points at building {bid}, which is not in state.buildings"
             );
         }
-        // A structure tile must resolve to a real structure kind, or
-        // `wire_kind` silently falls through to the rung below it.
+        // A structure tile must resolve to a real structure kind, or a
+        // consumer resolving `Occupant::Structure` to a `TileKind` (the
+        // renderer, the wire's legacy exporter) silently falls through.
         if t.has_occupant(Occupant::Structure) {
             assert!(
                 lookup.structure_kind(t).is_some(),
@@ -949,43 +939,13 @@ fn the_golden_city_still_covers_every_awkward_state() {
         }
     }
 
-    // --- normalisation 1, in situ ----------------------------------------
-    // Both build orders of a *bare* level crossing must come off the wire as
-    // the same bytes. This is the delta that moved a minimap pixel during
-    // #177, and it is the one a unit test over `display.rs` cannot see: it
-    // needs two tiles built two different ways in one city. Crossings that
-    // carry a hydro line are excluded — they are a different physical tile.
-    let crossings: Vec<((u32, u32), TileKind, u8)> = s
-        .tiles
-        .iter()
-        .enumerate()
-        .filter(|(_, t)| {
-            t.has_occupant(Occupant::Road)
-                && t.has_occupant(Occupant::Rail)
-                && !t.has_occupant(Occupant::PowerLine)
-        })
-        .map(|(idx, t)| {
-            let k = wire_kind(t, &lookup);
-            (
-                s.index_to_xy(idx),
-                k,
-                wire_flags(t, k) & !city_sim_core::state::DERIVED_FLAG_MASK,
-            )
-        })
-        .collect();
-    assert!(
-        crossings.len() >= 2,
-        "fewer than two bare level crossings — the script must build one in each order"
-    );
-    let (at0, k0, f0) = crossings[0];
-    for &(at, k, fl) in &crossings[1..] {
-        assert_eq!(
-            (k, fl),
-            (k0, f0),
-            "the crossing at {at:?} emits ({k:?}, {fl:#04x}) but the one at {at0:?} emits \
-             ({k0:?}, {f0:#04x}) — build order has leaked back onto the wire"
-        );
-    }
+    // Build-order independence for a level crossing — the delta that moved a
+    // minimap pixel during #177 — no longer needs a dedicated check here: a
+    // union of occupant bits is commutative, so two tiles built in opposite
+    // orders producing the same `occupants()` is now a fact about how a set
+    // works, not a behaviour a script has to exercise and a test has to catch
+    // regressing. The `orders` assertions above already require the script to
+    // build a crossing both ways; there is nothing left to compare it against.
 }
 
 /// The dump has to actually contain what it promises, or a silently truncated

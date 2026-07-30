@@ -1528,7 +1528,7 @@ mod tests {
     use crate::migrate::{set_v4_kind, tile_from_v4};
     use crate::state::{FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
     use city_sim_protocol::commands::Tool;
-    use city_sim_protocol::tile_buffer::flags::{
+    use city_sim_protocol::legacy_tile_buffer::legacy_flags::{
         POWER_OVERLAY as FLAG_POWER_OVERLAY, RAIL_UNDERLAY as FLAG_RAIL_UNDERLAY,
         ROAD_UNDERLAY as FLAG_ROAD_UNDERLAY,
     };

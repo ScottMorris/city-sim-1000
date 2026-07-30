@@ -273,19 +273,29 @@ impl Simulation {
 /// identical across a snapshot boundary because `tiles` is a `Vec` in
 /// row-major order, never a set. Per tile:
 ///
-/// - the wire `kind` byte ([`crate::display::wire_kind`]), which subsumes the
-///   old histogram and adds position. Derived from the strata since step 3, so
-///   this hash not moving when the derivation reversed is the proof the
-///   projection is byte-neutral;
+/// - `terrain`, `Land` or `Water` — the one authored field a wire `kind` byte
+///   used to carry incidentally (`kind = Water` always won the byte), now
+///   hashed directly since there is no more derived byte to carry it;
 /// - [`Tile::occupants`], what actually stands there — the union of the three
 ///   strata, which is what keeps this hash stable across the tile gaining
 ///   three fields. Deliberately the occupant
 ///   set rather than the raw `flags` byte: the two spellings one physical tile
 ///   used to have hash alike;
-/// - the wire `underground` byte, which the occupant set only reports as
-///   *pipe or no pipe*;
 /// - `building_id`, so a tile losing its link to a live `BuildingInstance` is
 ///   visible — the state defect B of this pass was about.
+///
+/// No `StructureLookup`, no wire `kind`/`underground` bytes — both were
+/// derived from `occupants()`/`terrain` and `building_id` alone
+/// (`display.rs`'s deletion, #177's TS/wire follow-up). **`building_id`
+/// alone is not enough**, though: it names *which* `BuildingInstance` sits
+/// on a tile, not what that instance *is*. Two states differing only in a
+/// stable id's own `BuildingInstance::kind` — a `Park` swapped for a
+/// `CoalPlant` behind the same `building_id`, nothing else touched — hashed
+/// identically until the fix below, exactly the class of silent corruption
+/// this function exists to catch. So `state.buildings` is hashed too, one
+/// `(id, kind)` pair per instance, in the `Vec`'s own push order — stable
+/// because buildings are only ever appended or removed via `retain`, never
+/// reordered.
 ///
 /// The derived flags — `FLAG_POWERED`, `FLAG_WATERED`, `FLAG_ABANDONED` and
 /// the zone density bits — stay out on purpose. They are recomputed from the
@@ -300,11 +310,7 @@ pub fn state_hash(state: &GameState) -> u64 {
         h
     }
 
-    // `Occupant::Structure` is one flat tag, so the kind byte for a structure
-    // tile is resolved through its development. Indexed once, not per tile.
-    let lookup = crate::occupants::StructureLookup::new(state);
-
-    let mut buf: Vec<u8> = Vec::with_capacity(64 + state.tiles.len() * 6);
+    let mut buf: Vec<u8> = Vec::with_capacity(64 + state.tiles.len() * 5);
     buf.extend_from_slice(&state.tick.to_le_bytes());
     buf.extend_from_slice(&state.day.to_le_bytes());
     buf.extend_from_slice(&state.population.to_le_bytes());
@@ -319,10 +325,15 @@ pub fn state_hash(state: &GameState) -> u64 {
     buf.extend_from_slice(&state.height.to_le_bytes());
     // The grid, tile by tile in index order.
     for tile in &state.tiles {
-        buf.push(crate::display::wire_kind(tile, &lookup) as u8);
+        buf.push(tile.terrain as u8);
         buf.extend_from_slice(&tile.occupants().to_le_bytes());
-        buf.push(crate::display::wire_underground(tile));
         buf.extend_from_slice(&tile.building_id.unwrap_or(u16::MAX).to_le_bytes());
+    }
+    // Buildings, in push order — see the doc comment above for why
+    // `building_id` on the grid isn't enough on its own.
+    for building in &state.buildings {
+        buf.extend_from_slice(&building.id.to_le_bytes());
+        buf.push(building.kind as u8);
     }
     // Demand (quantised to i32 for stability)
     buf.extend_from_slice(&(state.demand.residential as i32).to_le_bytes());
@@ -350,7 +361,12 @@ mod tests {
     /// histogram of `kind` and started hashing each tile's occupant set,
     /// `underground` and `building_id`, so the same city hashes to a new — and
     /// far more discriminating — value.
-    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0x755543fc50a48521;
+    ///
+    /// Re-cut again for #177's TS/wire follow-up: `state_hash` dropped the
+    /// derived wire `kind`/`underground` bytes (the functions producing them
+    /// were deleted) in favour of hashing `terrain` directly — see the
+    /// doc comment on [`state_hash`] for what that trades away and keeps.
+    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0xf0e59d797cc623c6;
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;
@@ -468,6 +484,37 @@ mod tests {
             state_hash(&moved.state),
             state_hash(&swapped.state),
             "a kind histogram cannot tell two layouts apart"
+        );
+    }
+
+    /// `building_id` alone names *which* instance a tile is linked to, not
+    /// what that instance *is* — so a hash built only from the grid cannot
+    /// tell a `Park` from a `CoalPlant` behind the same stable id. Caught by
+    /// review during the tile-model migration: two states differing only in
+    /// `BuildingInstance::kind`, same `id`, same tile link, used to hash
+    /// identically.
+    #[test]
+    fn a_buildings_kind_changes_the_hash_even_behind_a_stable_id() {
+        use crate::buildings::BuildingInstance;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut park = Simulation::new(4, 4, 1);
+        park.state.tiles[5].building_id = Some(7);
+        park.state
+            .buildings
+            .push(BuildingInstance::new(7, TileKind::Park, (1, 1)));
+
+        let mut plant = Simulation::new(4, 4, 1);
+        plant.state.tiles[5].building_id = Some(7);
+        plant
+            .state
+            .buildings
+            .push(BuildingInstance::new(7, TileKind::CoalPlant, (1, 1)));
+
+        assert_ne!(
+            state_hash(&park.state),
+            state_hash(&plant.state),
+            "the same building_id resolving to a different BuildingInstance::kind must not hash alike"
         );
     }
 
