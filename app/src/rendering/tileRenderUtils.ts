@@ -8,6 +8,7 @@ import type { Texture } from 'pixi.js';
 import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
+import { Occupant, Terrain, hasOccupant, zoneOccupant } from '../game/protocol/occupants';
 import type { CarriagewayClass, HydroVariant, RoadVariant, TileTextures } from './tileAtlas';
 
 export type BuildingLookupEntry = {
@@ -28,6 +29,10 @@ export type TileSpriteInfo =
       overlayTexture?: Texture;
     }
   | { skip: true }
+  /** No base texture resolved (e.g. an undeveloped zoned lot, drawn as a flat
+   *  colour) but hydro still crosses the tile — draw this over the flat fill
+   *  instead of leaving nothing but a debug label. */
+  | { overlayOnly: Texture }
   | undefined;
 
 const BUILDING_BORDER_WIDTH = 1;
@@ -57,16 +62,35 @@ export function createBuildingLookup(state: GameState) {
   return { buildingLookup, multiTileCoverage };
 }
 
+/** A developed zone lot — the one case a live `PowerLine` occupant and a
+ *  `buildingId` can coexist (a `Structure` occupant refuses to place over a
+ *  line, so a plant/school/park with a buildingId never carries one). */
+function isDevelopedZone(tile: NonNullable<ReturnType<typeof getTile>>): boolean {
+  return zoneOccupant(tile.surface) !== undefined && tile.buildingId !== undefined;
+}
+
 /** True when hydro is strung over this tile and must be drawn as a separate
- *  layer: either a `PowerLine` tile that also carries road/rail, or a zone
- *  that kept its own kind and only recorded `powerOverlay`. A `PowerLine` on
- *  open ground is excluded — its opaque sprite already includes the wires,
- *  and compositing again would double-draw them. */
+ *  layer, rather than being the tile's own opaque wire sprite.
+ *
+ *  A bare `PowerLine` on otherwise-empty land is excluded — its opaque
+ *  sprite already includes the wires, and compositing again would
+ *  double-draw them — which is exactly the case where nothing else occupies
+ *  the tile: no road/rail/zone on the surface, no tree canopy overhead
+ *  (`Occupant::Trees` conflicts with `Occupant::PowerLine` in principle, but
+ *  the tree tool's documented defect can still leave both set), and the
+ *  ground itself isn't water (a line spanning water is a pylon span, always
+ *  drawn over the water sprite).
+ *
+ *  A developed zone lot severs the overlay entirely, regardless of what else
+ *  is on the tile — this is the fix for the pole rendered through a built
+ *  house: once a lot develops, the line is severed at that tile and only
+ *  visibly continues from the neighbour's side (see `carriesWires`). */
 function carriesHydroOverlay(tile: NonNullable<ReturnType<typeof getTile>>): boolean {
-  if (tile.kind === TileKind.PowerLine) {
-    return tile.roadUnderlay === true || tile.railUnderlay === true;
-  }
-  return tile.powerOverlay === true;
+  if (!hasOccupant(tile.overhead, Occupant.PowerLine)) return false;
+  if (isDevelopedZone(tile)) return false;
+  const bareLine =
+    tile.terrain === Terrain.Land && tile.surface === 0 && !hasOccupant(tile.overhead, Occupant.Trees);
+  return !bareLine;
 }
 
 export function resolveTileSprite(
@@ -78,29 +102,30 @@ export function resolveTileSprite(
   buildingLookup: BuildingLookup
 ): TileSpriteInfo {
   const base = resolveBaseTileSprite(state, tile, x, y, tileTextures, buildingLookup);
-  if (!tile || !base || 'skip' in base) return base;
+  if (!tile) return base;
+  if (base && 'skip' in base) return base;
   if (!carriesHydroOverlay(tile)) return base;
   const overlayTexture =
     pickHydroCrossingTexture(state, tile, x, y, tileTextures) ??
     pickHydroKerbsideTexture(state, tile, x, y, tileTextures) ??
     pickPowerLineTexture(state, x, y, tileTextures, true);
-  return overlayTexture ? { ...base, overlayTexture } : base;
+  if (!overlayTexture) return base;
+  // No base texture resolved — an undeveloped zoned lot, drawn as a flat
+  // colour fill — but hydro crosses it. Composite the overlay over that
+  // fill instead of falling through to a debug label with nothing drawn.
+  if (!base) return { overlayOnly: overlayTexture };
+  return { ...base, overlayTexture };
 }
 
-/** Is there a road or rail on this tile, however it came to be recorded?
- *
- *  ORDER MUST NOT MATTER, and testing only the underlay flags meant it did.
- *  String a line and then lay a road across it and the tile's *kind* becomes
- *  the road, with the line reduced to a `powerOverlay` flag — the exact mirror
- *  of laying the road first, which leaves kind `PowerLine` and a
- *  `roadUnderlay` flag. Reading only the flags saw a carriageway in the second
- *  case and nothing in the first, so the pole went back to standing in the
- *  middle of the road. Neighbour detection already worked both ways; only the
- *  tile's own test did not. */
+/** Is there a road or rail on this tile? A direct occupant read — the old
+ *  two-spellings problem this used to guard against (a line built before its
+ *  road versus after leaving different `kind`/underlay combinations) doesn't
+ *  exist for an occupant bit: `Occupant.Road` is either set or it isn't, no
+ *  matter which order the tools ran in. */
 function carriagewayBeneath(tile: NonNullable<ReturnType<typeof getTile>>) {
   return {
-    road: tile.roadUnderlay === true || tile.kind === TileKind.Road,
-    rail: tile.railUnderlay === true || tile.kind === TileKind.Rail
+    road: hasOccupant(tile.surface, Occupant.Road),
+    rail: hasOccupant(tile.surface, Occupant.Rail)
   };
 }
 
@@ -202,11 +227,12 @@ function pickPowerUnderlayTexture(
   y: number,
   tileTextures: TileTextures
 ): Texture | undefined {
-  if (tile.roadUnderlay && tile.railUnderlay) {
+  const { road, rail } = carriagewayBeneath(tile);
+  if (road && rail) {
     return pickRailCrossingTexture(state, x, y, tileTextures);
   }
-  if (tile.railUnderlay) return tileTextures.rail[roadVariant(...railNeighbourFlags(state, x, y))];
-  if (tile.roadUnderlay) return pickRoadTexture(state, x, y, tileTextures);
+  if (rail) return tileTextures.rail[roadVariant(...railNeighbourFlags(state, x, y))];
+  if (road) return pickRoadTexture(state, x, y, tileTextures);
   return undefined;
 }
 
@@ -224,7 +250,8 @@ function resolveBaseTileSprite(
   buildingLookup: BuildingLookup
 ): TileSpriteInfo {
   if (!tile) return undefined;
-  if (tile.kind === TileKind.Residential && tile.buildingId !== undefined) {
+  const zone = zoneOccupant(tile.surface);
+  if (zone === Occupant.ZoneResidential && tile.buildingId !== undefined) {
     const houseTextures = tileTextures.residentialHouses ?? [];
     if (houseTextures.length > 0) {
       const texture = houseTextures[(tile.buildingId - 1) % houseTextures.length];
@@ -233,7 +260,7 @@ function resolveBaseTileSprite(
       }
     }
   }
-  if (tile.kind === TileKind.Commercial && tile.buildingId !== undefined) {
+  if (zone === Occupant.ZoneCommercial && tile.buildingId !== undefined) {
     const baseTextures = tileTextures.commercialBuildings ?? [];
     const geminiEnabled = state.settings?.cosmetics?.geminiBuildingsEnabled ?? false;
     const geminiTextures = geminiEnabled ? tileTextures.commercialGeminiBuildings ?? [] : [];
@@ -245,7 +272,7 @@ function resolveBaseTileSprite(
       }
     }
   }
-  if (tile.kind === TileKind.Industrial && tile.buildingId !== undefined) {
+  if (zone === Occupant.ZoneIndustrial && tile.buildingId !== undefined) {
     const factoryTextures = tileTextures.industrialBuildings ?? [];
     if (factoryTextures.length > 0) {
       const texture = factoryTextures[(tile.buildingId - 1) % factoryTextures.length];
@@ -254,14 +281,11 @@ function resolveBaseTileSprite(
       }
     }
   }
-  const plantType = tile.powerPlantType ?? tileKindToPowerPlantType(tile.kind);
+  const buildingEntry = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId) : undefined;
+  const plantType = tile.powerPlantType ?? buildingEntry?.template?.power?.type;
   if (plantType) {
-    const footprint =
-      (tile.buildingId && buildingLookup.get(tile.buildingId)?.template?.footprint) ??
-      POWER_PLANT_CONFIGS[plantType]?.footprint;
-    const origin =
-      (tile.buildingId && buildingLookup.get(tile.buildingId)?.origin) ??
-      (footprint ? { x, y } : undefined);
+    const footprint = buildingEntry?.template?.footprint ?? POWER_PLANT_CONFIGS[plantType]?.footprint;
+    const origin = buildingEntry?.origin ?? (footprint ? { x, y } : undefined);
     if (footprint && origin) {
       const { width, height } = footprint;
       if (x === origin.x && y === origin.y) {
@@ -277,19 +301,21 @@ function resolveBaseTileSprite(
     if (fallbackTexture)
       return { texture: fallbackTexture, widthTiles: 1, heightTiles: 1, borderWidth: BUILDING_BORDER_WIDTH };
   }
+  // `template.tileKind` — the building-template key, not the per-tile shim —
+  // is the sanctioned surviving use of `TileKind` (see `occupants.ts`).
+  const templateKind = buildingEntry?.template?.tileKind;
   if (
-    (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) &&
+    (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) &&
     tile.buildingId !== undefined
   ) {
-    const entry = buildingLookup.get(tile.buildingId);
-    const template = entry?.template;
-    const origin = entry?.origin;
+    const template = buildingEntry?.template;
+    const origin = buildingEntry?.origin;
     if (template && origin) {
       const width = template.footprint.width;
       const height = template.footprint.height;
       if (x === origin.x && y === origin.y) {
         const texture =
-          tile.kind === TileKind.ElementarySchool
+          templateKind === TileKind.ElementarySchool
             ? tileTextures.schools?.elementary
             : tileTextures.schools?.high;
         if (texture) {
@@ -301,17 +327,16 @@ function resolveBaseTileSprite(
     }
   }
   if (
-    (tile.kind === TileKind.Park || tile.kind === TileKind.ParkLarge) &&
+    (templateKind === TileKind.Park || templateKind === TileKind.ParkLarge) &&
     tile.buildingId !== undefined
   ) {
-    const entry = buildingLookup.get(tile.buildingId);
-    const template = entry?.template;
-    const origin = entry?.origin;
+    const template = buildingEntry?.template;
+    const origin = buildingEntry?.origin;
     if (template && origin) {
       const width = template.footprint.width;
       const height = template.footprint.height;
       if (x === origin.x && y === origin.y) {
-        const texture = tile.kind === TileKind.Park ? tileTextures.parks?.small : tileTextures.parks?.large;
+        const texture = templateKind === TileKind.Park ? tileTextures.parks?.small : tileTextures.parks?.large;
         if (texture) {
           // No borderWidth: unlike schools/power plants, parks are ground-cover —
           // the source art's grass edges are designed to abut seamlessly, like Tree.
@@ -322,30 +347,44 @@ function resolveBaseTileSprite(
       }
     }
   }
-  // Level crossing: a tile carrying both rail and road (either order of
-  // construction) draws the crossing sprite, oriented by the rail axis.
-  if ((tile.kind === TileKind.Rail && tile.roadUnderlay) ||
-      (tile.kind === TileKind.Road && tile.railUnderlay)) {
-    const crossingTexture = pickRailCrossingTexture(state, x, y, tileTextures);
-    if (crossingTexture) return { texture: crossingTexture, widthTiles: 1, heightTiles: 1 };
-  }
-  if (tile.kind === TileKind.Rail) {
-    const railTexture = pickRailTexture(state, x, y, tileTextures);
-    if (railTexture) return { texture: railTexture, widthTiles: 1, heightTiles: 1 };
-  }
-  if (tile.kind === TileKind.Road) {
-    const roadTexture = pickRoadTexture(state, x, y, tileTextures);
-    if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
-  }
-  if (tile.kind === TileKind.PowerLine) {
-    // Hydro crosses infrastructure rather than replacing it. When the tile
-    // also carries a road or rail, draw that here and let the caller
-    // composite the transparent wire twin on top; the opaque wire sprite is
-    // only correct on open ground.
-    const underlay = pickPowerUnderlayTexture(state, tile, x, y, tileTextures);
-    if (underlay) return { texture: underlay, widthTiles: 1, heightTiles: 1 };
-    const powerTexture = pickPowerLineTexture(state, x, y, tileTextures);
-    if (powerTexture) return { texture: powerTexture, widthTiles: 1, heightTiles: 1 };
+  // A zone tag (developed or not), a `Structure` occupant with no dedicated
+  // branch above (e.g. a water pump/tower), or tree canopy always wins the
+  // ground beneath it — mirrors the deleted `display.rs` precedence ladder's
+  // zone/Structure/Trees tiers, all of which outrank hydro/rail/road. An
+  // undeveloped zoned lot has no base texture of its own (`tileTextures.tiles`
+  // has no entry for a bare zone kind), so it still falls through to the
+  // `undefined` return below — the caller composites hydro as an
+  // `overlayOnly` layer in that case rather than this function drawing a
+  // wire sprite as if the lot were open ground.
+  const groundEncumbered =
+    zone !== undefined ||
+    hasOccupant(tile.surface, Occupant.Structure) ||
+    hasOccupant(tile.overhead, Occupant.Trees) ||
+    tile.terrain === Terrain.Water;
+  if (!groundEncumbered) {
+    const { road, rail } = carriagewayBeneath(tile);
+    // Level crossing: a tile carrying both rail and road (either order of
+    // construction) draws the crossing sprite, oriented by the rail axis.
+    if (road && rail) {
+      const crossingTexture = pickRailCrossingTexture(state, x, y, tileTextures);
+      if (crossingTexture) return { texture: crossingTexture, widthTiles: 1, heightTiles: 1 };
+    }
+    if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
+      // Hydro crosses infrastructure rather than replacing it. When the tile
+      // also carries a road or rail, draw that here and let the caller
+      // composite the transparent wire twin on top; the opaque wire sprite is
+      // only correct on open ground.
+      const underlay = pickPowerUnderlayTexture(state, tile, x, y, tileTextures);
+      if (underlay) return { texture: underlay, widthTiles: 1, heightTiles: 1 };
+      const powerTexture = pickPowerLineTexture(state, x, y, tileTextures);
+      if (powerTexture) return { texture: powerTexture, widthTiles: 1, heightTiles: 1 };
+    } else if (rail) {
+      const railTexture = pickRailTexture(state, x, y, tileTextures);
+      if (railTexture) return { texture: railTexture, widthTiles: 1, heightTiles: 1 };
+    } else if (road) {
+      const roadTexture = pickRoadTexture(state, x, y, tileTextures);
+      if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
+    }
   }
   const baseTexture = tileTextures.tiles[tile.kind];
   if (baseTexture) return { texture: baseTexture, widthTiles: 1, heightTiles: 1 };
@@ -355,8 +394,14 @@ function resolveBaseTileSprite(
 export function getTileColour(tile: ReturnType<typeof getTile>, palette: Record<TileKind, number>) {
   if (!tile) return 0x000000;
   const base = palette[tile.kind];
-  const isPowerTile = tile.kind === TileKind.PowerLine || !!tile.powerPlantType
-    || tileKindToPowerPlantType(tile.kind) !== undefined;
+  // `tile.powerPlantType` alone, matching `resolveBaseTileSprite`'s plant-type
+  // derivation below — `placeBuilding`'s `decorateTile` callback sets it on
+  // every tile of a plant's footprint, not just the origin, so there is no
+  // live plant tile this can miss. A `tile.kind`-based fallback here used to
+  // let this function call a tile "power infrastructure" that
+  // `resolveBaseTileSprite` didn't recognise as a plant, tinting a tile
+  // whose own sprite never resolved as one.
+  const isPowerTile = hasOccupant(tile.overhead, Occupant.PowerLine) || !!tile.powerPlantType;
   if (!isPowerTile) return base;
   const factor = tile.powered ? 1.35 : 0.7;
   return scaleColor(base, factor);
@@ -369,20 +414,10 @@ export function scaleColor(color: number, factor: number): number {
   return ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
 }
 
-function tileKindToPowerPlantType(kind: TileKind): PowerPlantType | undefined {
-  switch (kind) {
-    case TileKind.HydroPlant:  return PowerPlantType.Hydro;
-    case TileKind.CoalPlant:   return PowerPlantType.Coal;
-    case TileKind.WindTurbine: return PowerPlantType.Wind;
-    case TileKind.SolarFarm:   return PowerPlantType.Solar;
-    default:                   return undefined;
-  }
-}
-
 function pickRoadTexture(state: GameState, x: number, y: number, tileTextures: TileTextures): Texture | undefined {
   const connectsToRoad = (tx: number, ty: number) => {
     const neighbour = getTile(state, tx, ty);
-    return neighbour?.kind === TileKind.Road || neighbour?.roadUnderlay === true;
+    return !!neighbour && hasOccupant(neighbour.surface, Occupant.Road);
   };
 
   const n = y > 0 && connectsToRoad(x, y - 1);
@@ -420,7 +455,7 @@ function roadVariant(n: boolean, e: boolean, s: boolean, w: boolean): RoadVarian
 
 function connectsToRail(state: GameState, tx: number, ty: number): boolean {
   const neighbour = getTile(state, tx, ty);
-  return neighbour?.kind === TileKind.Rail || neighbour?.railUnderlay === true;
+  return !!neighbour && hasOccupant(neighbour.surface, Occupant.Rail);
 }
 
 function railNeighbours(state: GameState, x: number, y: number) {
@@ -454,12 +489,18 @@ function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTex
  *  using it to choose a sprite made every hydro tile grow a leg toward any
  *  adjacent road, so a line running beside a road reached out and touched it
  *  on every tile. Wires should only be drawn between things that actually
- *  string wires: other hydro tiles, zones with a line over them, and plants. */
+ *  string wires: other hydro tiles, zones with a line over them, and plants.
+ *
+ *  A developed zone lot is excluded even though the line survives there in
+ *  the simulation (the lot's `PowerLine` occupant is unaffected) — visually
+ *  the pole is severed at that tile (see `carriesHydroOverlay`), so a
+ *  neighbour reaching toward it draws a dead-end stub rather than a wire
+ *  running across the roof. */
 function carriesWires(tile: ReturnType<typeof getTile>): boolean {
   if (!tile) return false;
-  if (tile.kind === TileKind.PowerLine) return true;
-  if (tile.powerOverlay) return true;
-  return (tile.powerPlantType ?? tileKindToPowerPlantType(tile.kind)) !== undefined;
+  if (isDevelopedZone(tile)) return false;
+  if (hasOccupant(tile.overhead, Occupant.PowerLine)) return true;
+  return tile.powerPlantType !== undefined;
 }
 
 function hasAnyWireNeighbour(state: GameState, x: number, y: number): boolean {
@@ -484,7 +525,7 @@ function hydroVariant(state: GameState, x: number, y: number): RoadVariant {
 function roadNeighbourFlags(state: GameState, x: number, y: number): [boolean, boolean, boolean, boolean] {
   const connects = (tx: number, ty: number) => {
     const n = getTile(state, tx, ty);
-    return n?.kind === TileKind.Road || n?.roadUnderlay === true;
+    return !!n && hasOccupant(n.surface, Occupant.Road);
   };
   return [
     y > 0 && connects(x, y - 1),

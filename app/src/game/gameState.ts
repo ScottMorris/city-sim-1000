@@ -430,6 +430,15 @@ export function getTile(state: GameState, x: number, y: number): Tile | undefine
   return state.tiles[getIndex(state, x, y)];
 }
 
+/**
+ * Set a tile's v4-shaped `kind`. Does not touch the real strata fields —
+ * `gameState.ts` cannot import `protocol/legacyProjection.ts`'s
+ * `resyncTileStrata` without a circular import that breaks at runtime
+ * (`legacyProjection.ts` has module-scope constants keyed by `TileKind`,
+ * evaluated at import time, before `gameState.ts`'s own `TileKind` export
+ * would exist). Every caller — `tools.ts`'s `applyTool`, and any test that
+ * calls `setTile` directly — must call `resyncTileStrata` itself afterward.
+ */
 export function setTile(state: GameState, x: number, y: number, kind: TileKind) {
   const tile = getTile(state, x, y);
   if (!tile) return;
