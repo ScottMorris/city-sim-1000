@@ -15,8 +15,11 @@ import {
 } from '../game/gameState';
 import { BuildingStatus } from '../game/buildings/state';
 import { isPowerCarrier, isZone } from '../game/adjacency';
+import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
+import { legacyKind, legacyFlags } from '../game/protocol/legacyProjection';
 import { ServiceId } from '../game/services';
 import { TILE_SIZE, palette as tilePalette } from '../rendering/sprites';
+import { createBuildingLookup, type BuildingLookup } from '../rendering/tileRenderUtils';
 
 export interface MinimapOptions {
   root: HTMLElement;
@@ -296,12 +299,17 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     return lookup;
   }
 
-  function pickModeColor(tile: ReturnType<typeof getTile>, buildingStatuses: Map<number, BuildingStatus>) {
+  function pickModeColor(
+    tile: ReturnType<typeof getTile>,
+    buildingStatuses: Map<number, BuildingStatus>,
+    buildingLookup: BuildingLookup
+  ) {
     if (!tile) return '#000';
+    const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
 
     if (settings.mode === 'power') {
       if (tile.powerPlantType) return '#81e8ff';
-      if (tile.kind === TileKind.PowerLine || tile.powerOverlay) {
+      if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
         return tile.powered ? '#7bf0ff' : '#ff99c2';
       }
       const carrier = isPowerCarrier(tile);
@@ -311,9 +319,8 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     }
 
     if (settings.mode === 'water') {
-      if (tile.kind === TileKind.Water) return '#1f68d6';
-      if (tile.kind === TileKind.WaterPipe) return '#4cc3ff';
-      if (tile.kind === TileKind.WaterPump || tile.kind === TileKind.WaterTower) {
+      if (tile.terrain === Terrain.Water) return '#1f68d6';
+      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
         return tile.powered ? '#7ad5ff' : '#ffcc70';
       }
       return tile.powered ? 'rgba(76, 195, 255, 0.25)' : 'rgba(16, 26, 42, 0.92)';
@@ -338,7 +345,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return 'rgba(255, 123, 123, 0.95)';
     }
     if (settings.mode === 'education') {
-      if (tile.kind === TileKind.ElementarySchool || tile.kind === TileKind.HighSchool) {
+      if (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) {
         return '#8f7bff';
       }
       if (isZone(tile)) {
@@ -351,7 +358,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     }
 
     if (settings.mode === 'wilderness') {
-      if (tile.kind === TileKind.Water) return '#1f68d6';
+      if (tile.terrain === Terrain.Water) return '#1f68d6';
       const delta = (tile.wilderness ?? 0.5) - 0.5;
       if (delta > 0.02) return `rgba(94, 230, 160, ${Math.min(0.3 + delta * 1.4, 0.95).toFixed(2)})`;
       if (delta < -0.02) return `rgba(154, 160, 168, ${Math.min(0.3 + -delta * 1.4, 0.95).toFixed(2)})`;
@@ -359,24 +366,39 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     }
 
     if (settings.mode === 'underground') {
-      if (tile.legacyUnderground === TileKind.WaterPipe) return '#4cc3ff';
-      if (tile.kind === TileKind.Water) return '#1f68d6';
+      if (hasOccupant(tile.underground, Occupant.Pipe)) return '#4cc3ff';
+      if (tile.terrain === Terrain.Water) return '#1f68d6';
       if (tile.watered) return 'rgba(76, 195, 255, 0.55)';
       // Fade others
       return 'rgba(16, 26, 42, 0.95)';
     }
 
-    // Base/default mode.
-    if (tile.powerOverlay) return colorToCss(palette[TileKind.PowerLine]);
-    if (tile.railUnderlay) return colorToCss(palette[TileKind.Rail]);
-    if (tile.roadUnderlay) return colorToCss(palette[TileKind.Road]);
-    return colorToCss(palette[tile.kind]);
+    // Base/default mode. `roadUnderlay`/`railUnderlay` are true only when
+    // that occupant did *not* win `kind` (e.g. a plain crossing's `kind` is
+    // always `Rail`, so `railUnderlay` is always false there and this falls
+    // through to the road colour) — order matters and is pinned by
+    // `e2e/visual.spec.ts`'s `d-minimap.png`, so this reuses `legacyKind`/
+    // `legacyFlags` rather than re-deriving that conjunct by hand.
+    const projectionInput = {
+      terrain: tile.terrain,
+      surface: tile.surface,
+      overhead: tile.overhead,
+      buildingId: tile.buildingId,
+      structureKindOf: (id: number) => buildingLookup.get(id)?.template?.tileKind
+    };
+    const derivedKind = legacyKind(projectionInput);
+    const flags = legacyFlags(projectionInput, derivedKind);
+    if (flags.powerOverlay) return colorToCss(palette[TileKind.PowerLine]);
+    if (flags.railUnderlay) return colorToCss(palette[TileKind.Rail]);
+    if (flags.roadUnderlay) return colorToCss(palette[TileKind.Road]);
+    return colorToCss(palette[derivedKind]);
   }
 
   function drawMap(state: GameState) {
     if (!layout) layoutCanvases();
     const frame = layout!;
     const buildingStatuses = createBuildingStatusLookup(state);
+    const { buildingLookup } = createBuildingLookup(state);
     baseCtx.clearRect(0, 0, frame.sizePx, frame.sizePx);
     const targetPixels = Math.max(60, frame.sizePx - 12);
     const step = Math.max(1, Math.ceil(Math.max(state.width, state.height) / targetPixels));
@@ -391,7 +413,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
         const tileX = Math.min(state.width - 1, sx * step);
         const tileY = Math.min(state.height - 1, sy * step);
         const tile = getTile(state, tileX, tileY);
-        baseCtx.fillStyle = pickModeColor(tile, buildingStatuses);
+        baseCtx.fillStyle = pickModeColor(tile, buildingStatuses, buildingLookup);
         baseCtx.fillRect(offsetX + sx * scale, offsetY + sy * scale, scale, scale);
       }
     }
