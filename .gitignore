@@ -21,6 +21,11 @@ app/src/wasm/
 # Playwright MCP session artifacts (screenshots, console logs, page snapshots)
 .playwright-mcp/
 
+# cargo-mutants run output and the diff the CI job feeds it (config is .cargo/mutants.toml)
+mutants.out/
+mutants.out.old/
+mutants.diff
+
 # Playwright/vitest test output (app/test-results/junit.xml is a CI artefact, not a commit)
 app/test-results/
 app/playwright-report/

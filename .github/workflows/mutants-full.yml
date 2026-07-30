@@ -1,0 +1,97 @@
+name: Rust Mutation Coverage (Full)
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+# Deliberately not on `pull_request` or `push`. The workspace has upwards of
+# 1,600 mutants (`cargo mutants --workspace --list | wc -l`) at roughly half a
+# second each, a budget of about fifteen minutes: affordable weekly or on demand,
+# far too slow to sit in front of every push. The per-pull-request slice lives in
+# `ci.yml` as the `rust-mutants-diff` job, where `--in-diff` ties the cost to the
+# change instead.
+#
+# This workflow is also the only writer of the `rust-mutants` build cache, which
+# it can populate because it runs on the default branch. Dispatch it once after
+# this lands, or the first pull requests pay a cold build.
+on:
+  schedule:
+    # 07:00 UTC on Mondays — a report waiting at the start of the week.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: mutants-full-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust-mutants-full:
+    name: Rust mutants (full)
+    runs-on: ubuntu-24.04
+    # The enforced form of the budget above: mutant testing plus toolchain, apt
+    # and cache setup, with room for a cold cache. If this starts tripping, shard
+    # the run with `--shard i/n` across a matrix rather than raising the ceiling.
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          # Shared with the `rust-mutants-diff` job in `ci.yml`. This workflow
+          # runs on the default branch, so the cache it saves is the one every
+          # pull request can restore.
+          shared-key: rust-mutants
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - name: Run cargo-mutants over the workspace
+        id: rust_mutants_full
+        # Never a merge gate: this reports pre-existing gaps across the whole
+        # workspace, which is a work queue rather than a pass/fail signal.
+        continue-on-error: true
+        # Same flags as the diff job so the two runs are directly comparable.
+        # Scope, exclusions and the test command come from `.cargo/mutants.toml`.
+        run: cargo mutants --in-place --workspace --baseline run --timeout 20
+
+      - name: Upload mutants artefacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-mutants-full
+          path: mutants.out/
+          if-no-files-found: warn
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Rust mutants (full)"
+            echo
+            echo "- Runner: \`ubuntu-24.04\`"
+            echo "- Result: \`${{ steps.rust_mutants_full.outcome }}\` (informational — this workflow never gates a merge)"
+            echo "- Command: \`cargo mutants --in-place --workspace --baseline run --timeout 20\`"
+            if [ -f mutants.out/missed.txt ]; then
+              echo "- Caught: \`$(wc -l < mutants.out/caught.txt)\` · missed: \`$(wc -l < mutants.out/missed.txt)\` · timed out: \`$(wc -l < mutants.out/timeout.txt)\` · unviable: \`$(wc -l < mutants.out/unviable.txt)\`"
+            fi
+            echo "- Artefact: \`rust-mutants-full\` (\`mutants.out/\`, including \`missed.txt\` and \`outcomes.json\`)"
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"

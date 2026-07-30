@@ -1,0 +1,60 @@
+# cargo-mutants configuration. Schema: https://json.schemastore.org/cargo-mutants-config.json
+#
+# Mutation testing answers "would any test have noticed?" — it is the automated
+# form of the "Prove a test has teeth" rule in AGENTS.md, which also explains how
+# to read a surviving mutant. Run by `rust-mutants-diff` in
+# .github/workflows/ci.yml and `rust-mutants-full` in
+# .github/workflows/mutants-full.yml.
+#
+# Preview what this file selects without running anything:
+#   cargo mutants --list-files
+#   cargo mutants --list
+
+# Only the in-crate unit tests decide whether a mutant is caught.
+#
+# With no target selection, `cargo test` runs every integration test in `tests/`
+# once per mutant, so a test that takes seconds by design costs those seconds
+# times the mutant count — and a mutant that makes such a test loop instead
+# burns the whole `--timeout`. `--lib` keeps the per-mutant cost tied to the
+# fast, deterministic unit suite, so the CI budget does not silently change when
+# someone adds a long-running integration test.
+#
+# cargo-mutants applies this to the test command, not to its `cargo test
+# --no-run` build, so integration tests are still compiled each mutant even
+# though they do not run. Compiling is incremental; running is not bounded.
+#
+# Consequence to be aware of: a behaviour covered *only* by an integration test
+# or a doctest cannot catch a mutant here, and will be reported MISSED. When a
+# fast integration test should participate, add it explicitly — `--test <name>`,
+# which cargo rejects if the target does not exist, so the list cannot go stale
+# silently. Do not add a soak or benchmark-style target.
+additional_cargo_test_args = ["--lib"]
+
+# Crates with no Rust test suite to be judged against. Every mutant in these is
+# MISSED by construction, which is noise rather than signal: it is not evidence
+# that a test is weak, only that this crate is not tested from Rust.
+#
+# - city-sim-wasm: `wasm-bindgen` shim over city-sim-core, exercised from the
+#   browser. CI already excludes it from `cargo clippy` and `cargo nextest run`.
+# - tauri-plugin-city-sim: Tauri IPC command handlers that delegate to
+#   city-sim-core, exercised by the Playwright e2e suite.
+#
+# Both are thin delegation layers; the logic they forward to is mutated in
+# city-sim-core. Deleting either glob is the right move on the day the crate
+# grows Rust tests of its own.
+#
+# Generated Rust belongs in this list too — nothing in the workspace generates
+# `.rs` today, so check `cargo mutants --list-files` after adding a codegen step
+# rather than assuming its output is invisible here.
+exclude_globs = [
+    "crates/city-sim-wasm/**/*.rs",
+    "crates/tauri-plugin-city-sim/**/*.rs",
+]
+
+# Formatting impls: a mutant that changes what `{:?}` or `{}` prints and is not
+# caught tells us nothing worth acting on, because rendering is not a behaviour
+# this project pins in Rust tests. Excluded by mutant name so the rule applies
+# to any such impl added later, in any file.
+exclude_re = [
+    "<impl [^>]*(Display|Debug) for ",
+]
