@@ -109,8 +109,15 @@ mod tests {
 
     #[test]
     fn encode_tile_buffer_places_every_field_at_its_soa_offset() {
+        // Every field differs between tile 0 and tile 1, and every field is
+        // asserted at BOTH tiles' offsets — a mutant that swaps `+` for `-`
+        // or `*` in any one field's placement must land a wrong byte at a
+        // position this test actually reads, tile 0's or tile 1's.
         let mut s = GameState::new(2, 1, 0);
         s.tiles[1].set_occupant(Occupant::Pipe, true);
+        s.tiles[1].set_occupant(Occupant::Road, true);
+        s.tiles[1].set_occupant(Occupant::Trees, true);
+        s.tiles[1].flags |= FLAG_POWERED;
         s.tiles[1].happiness = 2.0;
         s.tiles[1].elevation = 200;
         s.tiles[1].set_building_id(300);
@@ -125,11 +132,24 @@ mod tests {
         );
         assert_eq!(buf[o.underground], 0);
         assert_eq!(buf[o.underground + 1], 0b001);
+        assert_eq!(buf[o.surface], 0);
+        assert_eq!(buf[o.surface + 1], 0b1);
+        assert_eq!(buf[o.overhead], 0);
+        assert_eq!(buf[o.overhead + 1], 0b10);
+        assert_eq!(buf[o.status], 0);
+        assert_eq!(buf[o.status + 1] & status::POWERED, status::POWERED);
+        assert_eq!(buf[o.happiness], encode_happiness(1.0)); // Tile::default's happiness
         assert_eq!(buf[o.happiness + 1], encode_happiness(2.0));
+        assert_eq!(buf[o.elevation], 0);
         assert_eq!(buf[o.elevation + 1], 200);
-        let bid_base = o.building_id + 2;
+        let bid_base0 = o.building_id;
         assert_eq!(
-            buf[bid_base] as u32 | ((buf[bid_base + 1] as u32) << 8),
+            buf[bid_base0] as u32 | ((buf[bid_base0 + 1] as u32) << 8),
+            0
+        );
+        let bid_base1 = o.building_id + 2;
+        assert_eq!(
+            buf[bid_base1] as u32 | ((buf[bid_base1 + 1] as u32) << 8),
             300
         );
         assert_eq!(buf[o.wilderness], 128);
