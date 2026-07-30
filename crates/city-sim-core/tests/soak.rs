@@ -223,9 +223,11 @@
 //! [`StructureLookup`]-driven derivation this used to need: writing
 //! `n * BYTES_PER_TILE` bytes and reading every tile's occupant bits still
 //! allocates and iterates the whole map, once per tick. A soak that only
-//! called `step` would miss that path. [`emit_wire_frame`] mirrors what those
-//! hosts do, and the soak calls it once per tick. If either host's emit loop
-//! changes shape, this should follow it.
+//! called `step` would miss that path. [`emit_wire_frame`] calls
+//! [`city_sim_core::wire::encode_tile_buffer`] directly — the same function
+//! both hosts call — rather than a second, hand-written copy of it; if
+//! either host's emit loop changes shape, this follows automatically, since
+//! there is only the one shape to change.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -235,11 +237,8 @@ use city_sim_core::occupants::StructureLookup;
 use city_sim_core::sim::{state_hash, Simulation};
 use city_sim_core::state::{BudgetStats, DemandStats, EducationStats, GameState};
 use city_sim_core::wilderness::{WildernessBreakdown, WildernessStats};
-use city_sim_core::wire::{
-    wire_overhead_byte, wire_status_byte, wire_surface_byte, wire_underground_byte,
-};
+use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::Tool;
-use city_sim_protocol::tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE};
 
 // ---------------------------------------------------------------------------
 // The counting allocator
@@ -601,23 +600,12 @@ fn build_soak_city() -> Simulation {
 /// precedence ladder that used to need one here. Returns a checksum so
 /// nothing here can be optimised away.
 fn emit_wire_frame(state: &GameState) -> u64 {
-    let tiles = &state.tiles;
-    let n = tiles.len();
-    let o = TileBufferOffsets::for_size(n);
-    let mut buf = vec![0u8; n * BYTES_PER_TILE];
-    for (i, tile) in tiles.iter().enumerate() {
-        buf[o.underground + i] = wire_underground_byte(tile);
-        buf[o.surface + i] = wire_surface_byte(tile);
-        buf[o.overhead + i] = wire_overhead_byte(tile);
-        buf[o.status + i] = wire_status_byte(tile);
-        buf[o.happiness + i] = encode_happiness(tile.happiness);
-        buf[o.elevation + i] = tile.elevation;
-        let bid = tile.building_id.unwrap_or(0);
-        buf[o.building_id + i * 2] = (bid & 0xFF) as u8;
-        buf[o.building_id + i * 2 + 1] = (bid >> 8) as u8;
-        buf[o.wilderness + i] = state.wilderness.local_field.get(i).copied().unwrap_or(128);
-    }
-    buf.iter().map(|&b| b as u64).sum()
+    // Calls the same encoder both hosts call (`encode_tile_buffer`), rather
+    // than a hand-copied re-implementation — the doc comment above this
+    // function has said "if either host's emit loop changes shape, this
+    // should follow it" since before that was actually true; calling the
+    // shared function directly means it no longer needs to be told.
+    encode_tile_buffer(state).iter().map(|&b| b as u64).sum()
 }
 
 // ---------------------------------------------------------------------------

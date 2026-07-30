@@ -23,8 +23,12 @@ import { Terrain, ZoneDensity } from './occupants';
  * underground, 3-8 surface, 9-10 overhead — so a reader reconstructs the
  * tile's full occupant set as `underground | (surface << 3) | (overhead << 9)`.
  *
- * On the web path the buffer is a SharedArrayBuffer owned by the Worker.
- * The main thread reads it via typed array views without copying.
+ * On the web path the buffer is a SharedArrayBuffer owned by the Worker,
+ * read via typed array views without copying. On the desktop path it's the
+ * same byte layout, sent as a plain `number[]` over a Tauri IPC Channel
+ * (`TickEvent.tiles` in `tauri-plugin-city-sim`'s `guest-js/index.ts`) —
+ * `decodeTileBuffer` below takes `ArrayLike<number>` so it works against
+ * either representation without either bridge needing its own decoder.
  */
 
 export const BYTES_PER_TILE = 9;

@@ -22,8 +22,8 @@ Done. `city_sim_core::wire::encode_tile_buffer` is the one encoder both `city-si
 
 * `crates/city-sim-core/src/wire.rs`: `encode_tile_buffer_places_every_field_at_its_soa_offset` pins every field's byte offset for a multi-tile grid.
 * `app/src/game/tauriSimBridge.test.ts`: direct wire-decode assertions (every field, at its documented offset) replace the old footprint-derivation tests; a dedicated case confirms `buildingId` decodes independent of `event.buildings`' contents.
-* Still open: a real cross-engine parity assertion (inspector-visible facts for a pump tile match between the WASM and Tauri bridges) — the parity harness (`app/src/game/parity/`) has no Tauri-transport coverage at all today. Worth a follow-up; not required to close this gap, since both transports now provably share one encoder and one decoder rather than being asserted to agree by convention.
+* Still open, tracked in #213: a real cross-engine parity assertion (inspector-visible facts for a pump tile match between the WASM and Tauri bridges) — the parity harness (`app/src/game/parity/`) has no Tauri-transport coverage at all today. Not required to close this gap, since both transports now provably share one encoder and one decoder rather than being asserted to agree by convention.
 
 ## Non-goals
 
-* Building Tauri-transport coverage into the cross-engine parity harness — tracked above as a follow-up, not part of this fix.
+* Building Tauri-transport coverage into the cross-engine parity harness — tracked in #213, not part of this fix.
