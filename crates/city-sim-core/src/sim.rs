@@ -784,6 +784,65 @@ mod tests {
         assert!(!alerts[0].sticky);
     }
 
+    /// A balance of exactly zero is not a deficit, and is the exact threshold
+    /// a recovery reads as "restored" — pins the boundary on both sides of
+    /// the `< 0` / `>= 0` comparisons in `handle_resource_alerts`.
+    #[test]
+    fn power_deficit_boundary_is_strictly_negative() {
+        let mut sim = Simulation::new(4, 4, 1);
+        sim.state.utilities.power = 0;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "zero balance must not read as a deficit"
+        );
+
+        sim.state.utilities.power = -1;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerDeficit);
+
+        sim.state.utilities.power = 0;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerRestored);
+    }
+
+    /// Same boundary as `power_deficit_boundary_is_strictly_negative`, for
+    /// water — plus proves the deficit latch actually suppresses a second
+    /// fire while still negative (catches the `!` in
+    /// `!self.water_deficit_active` being dropped).
+    #[test]
+    fn water_deficit_boundary_and_no_refire_while_active() {
+        let mut sim = Simulation::new(4, 4, 1);
+        assert!(sim.water_enabled);
+
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "zero balance must not read as a deficit"
+        );
+
+        sim.state.utilities.water = -1;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::WaterDeficit);
+
+        // Still negative and already active — must not re-fire.
+        sim.handle_resource_alerts();
+        assert!(sim.take_alerts().is_empty());
+
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::WaterRestored);
+    }
+
     #[test]
     fn water_deficit_alert_respects_water_enabled_gate() {
         let mut sim = Simulation::new(4, 4, 1);
@@ -813,6 +872,40 @@ mod tests {
         let alerts = sim.take_alerts();
         assert_eq!(alerts.len(), 1);
         assert_eq!(alerts[0].kind, AlertKind::PowerRestored);
+    }
+
+    /// Pins `load_state`'s latch resync to the same strictly-negative
+    /// boundary as `handle_resource_alerts` itself: a loaded balance of
+    /// exactly zero must resync to "not active", not "active".
+    #[test]
+    fn load_state_resyncs_latches_at_the_strictly_negative_boundary() {
+        let mut sim = Simulation::new(4, 4, 1);
+
+        let mut zero_balance = sim.state.clone();
+        zero_balance.utilities.power = 0;
+        zero_balance.utilities.water = 0;
+        sim.load_state(zero_balance);
+        sim.state.utilities.power = 0;
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "a latch resynced from a zero balance must start inactive, so an unchanged zero balance is not a recovery"
+        );
+
+        let mut negative_balance = sim.state.clone();
+        negative_balance.utilities.power = -1;
+        negative_balance.utilities.water = -1;
+        sim.load_state(negative_balance);
+        sim.state.utilities.power = 0;
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert!(
+            alerts.iter().any(|a| a.kind == AlertKind::PowerRestored),
+            "a latch resynced from a negative balance must start active, so recovering to zero is a restore"
+        );
+        assert!(alerts.iter().any(|a| a.kind == AlertKind::WaterRestored));
     }
 
     #[test]
