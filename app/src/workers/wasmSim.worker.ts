@@ -276,6 +276,42 @@ async function wasmLastModified(): Promise<string | null> {
   }
 }
 
+/**
+ * Interval between re-checks of the WASM's `Last-Modified`.
+ *
+ * Sampling once at boot is useless, which was the first version of this: the
+ * page always loads *after* the binary it loaded, so a single reading can only
+ * ever say "not stale". The whole point is to notice the file changing
+ * underneath a page that is already running — a rebuild during development, or
+ * a deploy landing under a long-open tab — and that can only be seen by asking
+ * again.
+ *
+ * 30 s is chosen against what it costs: a `HEAD` with no body, on a file the
+ * browser already holds, against the origin that is already serving the app.
+ * Fast enough that a rebuild is flagged before you have finished wondering why
+ * your change did nothing.
+ */
+const WASM_FRESHNESS_INTERVAL_MS = 30_000;
+
+/**
+ * Re-check the WASM's timestamp, telling the main thread only when it moves.
+ *
+ * Deliberately not wired into the 20 Hz step loop: this is a network round trip
+ * and belongs on its own slow clock. It also never posts unchanged values, so a
+ * quiet page is a silent one.
+ */
+function startFreshnessWatch(initial: string | null): void {
+  let seen = initial;
+  setInterval(() => {
+    void wasmLastModified().then((lm) => {
+      if (lm && lm !== seen) {
+        seen = lm;
+        self.postMessage({ type: 'build_update', build: { lastModified: lm } });
+      }
+    });
+  }, WASM_FRESHNESS_INTERVAL_MS);
+}
+
 self.onmessage = async (e: MessageEvent<MainToWorker>) => {
   const msg = e.data;
   switch (msg.type) {
@@ -297,10 +333,12 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         // into the catch below, or it would post 'init_error' for a boot that
         // already succeeded.
         startStepLoop();
+        const lastModified = await wasmLastModified();
+        startFreshnessWatch(lastModified);
         self.postMessage({
           type: 'ready',
           history: historyFlags(host),
-          build: { version: engineVersion(), sha: engineSha(), lastModified: await wasmLastModified() }
+          build: { version: engineVersion(), sha: engineSha(), lastModified }
         });
       } catch (err) {
         self.postMessage({ type: 'init_error', message: err instanceof Error ? err.message : String(err) });

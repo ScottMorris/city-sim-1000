@@ -66,6 +66,8 @@ type WorkerToMain =
       /** Absent on an older worker bundle; the overlay then reports "unknown". */
       build?: { version: string | null; sha: string | null; lastModified: string | null };
     }
+  /** Posted only when the WASM's `Last-Modified` changes under a live page. */
+  | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
   | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; mutationSeq: number }
   | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
@@ -348,6 +350,12 @@ export class WasmSimBridge implements SimBridge {
 
   private handleWorkerMsg(msg: WorkerToMain): void {
     switch (msg.type) {
+      case 'build_update':
+        // The binary changed under a page that is already running. Nothing to
+        // reload here — the overlay reads this and tells the player to.
+        recordEngineBuild(msg.build);
+        break;
+
       case 'ready':
         this.ready = true;
         if (msg.build) recordEngineBuild(msg.build);

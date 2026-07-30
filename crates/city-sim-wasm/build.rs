@@ -36,7 +36,19 @@ fn main() {
     // A dirty tree is the normal state while iterating, and exactly when
     // "which engine am I running" gets asked — so say so, rather than implying
     // the binary is that commit.
-    let dirty = git(&["status", "--porcelain"]).is_some_and(|s| !s.is_empty());
+    //
+    // Scoped to `crates/` rather than the whole repo, because whole-repo was
+    // both wrong and self-defeating: editing a `.ts` file does not change this
+    // binary, yet it would mark the engine `-dirty` — and the overlay declines
+    // to compare a dirty SHA against the bundle's, so the app-vs-engine
+    // mismatch check would have been suppressed during essentially all normal
+    // development. `crates/` is what this binary is actually compiled from.
+    // `:/crates` — the leading `:/` is git's top-level pathspec magic. A bare
+    // `crates` would resolve relative to this crate's directory, matching
+    // `crates/city-sim-wasm/crates`, which does not exist: git would report a
+    // clean tree every time and the `-dirty` marker would silently never
+    // appear.
+    let dirty = git(&["status", "--porcelain", "--", ":/crates"]).is_some_and(|s| !s.is_empty());
     let label = if sha == "unknown" {
         sha
     } else if dirty {
