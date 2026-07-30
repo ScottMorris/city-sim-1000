@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createInitialState, TileKind } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
 import { Occupant, Terrain, ZoneDensity } from './protocol/occupants';
-import { STATUS } from './protocol/tileBuffer';
+import { BYTES_PER_TILE, STATUS, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
 import type { FromSim } from './protocol/events';
 import { Tool } from './toolTypes';
@@ -48,6 +48,8 @@ interface TickEvent {
   canUndo: boolean; canRedo: boolean;
 }
 
+const GRID_TILES = 8 * 8;
+
 function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   return {
     tick: 0, day: 0, population: 0, jobs: 0, money: 0,
@@ -55,7 +57,7 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
     demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
     wildernessScore: 0, wildernessTrend: 0,
     width: 8, height: 8,
-    tiles: new Array(8 * 8 * 4).fill(0),
+    tiles: new Array(GRID_TILES * BYTES_PER_TILE).fill(0),
     buildings: [],
     canUndo: false, canRedo: false,
     ...overrides
@@ -179,16 +181,23 @@ describe('TauriSimBridge onTick decode', () => {
     expect(s.wilderness.trend).toBe(-1.5);
   });
 
-  it('decodes each tile stratum from its wire byte at the documented shift', async () => {
+  it('decodes every field from its SoA wire offset, matching the WASM path exactly', async () => {
     const { bridge, emit } = await makeBridge();
-    const tiles = new Array(8 * 8 * 4).fill(0);
+    const n = GRID_TILES;
+    const o = tileBufferOffsets(n);
+    const tiles = new Array(n * BYTES_PER_TILE).fill(0);
     const targetIndex = 5;
-    const base = targetIndex * 4;
-    tiles[base] = 1 << Occupant.Pipe; // underground: absolute bits, no shift
-    tiles[base + 1] = 1 << (Occupant.Road - 3); // surface byte is Occupant bits rebased by -3
-    tiles[base + 2] = 1 << (Occupant.PowerLine - 9); // overhead byte rebased by -9
-    tiles[base + 3] =
+    tiles[o.underground + targetIndex] = 1 << Occupant.Pipe; // underground: absolute bits, no shift
+    tiles[o.surface + targetIndex] = 1 << (Occupant.Road - 3); // surface byte is Occupant bits rebased by -3
+    tiles[o.overhead + targetIndex] = 1 << (Occupant.PowerLine - 9); // overhead byte rebased by -9
+    tiles[o.status + targetIndex] =
       STATUS.POWERED | STATUS.WATERED | STATUS.WATER_TERRAIN | (ZoneDensity.High << STATUS.DENSITY_SHIFT);
+    tiles[o.happiness + targetIndex] = encodeHappiness(1.5);
+    tiles[o.elevation + targetIndex] = 200;
+    const bidBase = o.buildingId + targetIndex * 2;
+    tiles[bidBase] = 42 & 0xff;
+    tiles[bidBase + 1] = (42 >> 8) & 0xff;
+    tiles[o.wilderness + targetIndex] = 64;
 
     emit(baseTickEvent({ tiles }));
 
@@ -201,41 +210,56 @@ describe('TauriSimBridge onTick decode', () => {
     expect(tile.watered).toBe(true);
     expect(tile.abandoned).toBe(false);
     expect(tile.density).toBe(ZoneDensity.High);
+    expect(tile.happiness).toBeCloseTo(1.5, 1);
+    expect(tile.elevation).toBe(200);
+    expect(tile.buildingId).toBe(42);
+    expect(tile.wilderness).toBeCloseTo(64 / 255, 5);
   });
 
-  it('paints buildingId across a multi-tile footprint from event.buildings, and clears a razed building on the next tick', async () => {
+  it('decodes buildingId directly from the wire, independent of event.buildings, and clears it when the wire says none', async () => {
     const { bridge, emit } = await makeBridge();
+    const n = GRID_TILES;
+    const o = tileBufferOffsets(n);
     const coalPlant: WireBuilding = { id: 7, kind: tileKindToU8(TileKind.CoalPlant), originX: 0, originY: 0 };
 
-    emit(baseTickEvent({ buildings: [coalPlant] }));
+    // CoalPlant's real 2x2 footprint, written straight onto the wire — no TS
+    // template footprint is consulted for tile coverage any more.
+    const tiles = new Array(n * BYTES_PER_TILE).fill(0);
+    for (const idx of [0, 1, 8, 9]) {
+      const base = o.buildingId + idx * 2;
+      tiles[base] = 7;
+      tiles[base + 1] = 0;
+    }
+    emit(baseTickEvent({ tiles, buildings: [coalPlant] }));
     const s1 = bridge.getState();
-    // CoalPlant's footprint is 2x2 — every covered tile must carry the id.
-    expect(s1.tiles[0 * 8 + 0].buildingId).toBe(7);
-    expect(s1.tiles[0 * 8 + 1].buildingId).toBe(7);
-    expect(s1.tiles[1 * 8 + 0].buildingId).toBe(7);
-    expect(s1.tiles[1 * 8 + 1].buildingId).toBe(7);
+    expect(s1.tiles[0].buildingId).toBe(7);
+    expect(s1.tiles[1].buildingId).toBe(7);
+    expect(s1.tiles[8].buildingId).toBe(7);
+    expect(s1.tiles[9].buildingId).toBe(7);
     expect(s1.buildings).toHaveLength(1);
     expect(s1.buildings[0]).toMatchObject({ id: 7, templateId: TileKind.CoalPlant, origin: { x: 0, y: 0 } });
 
-    // Razed: the next TickEvent carries no buildings at all.
+    // Razed: the next TickEvent's wire carries building_id 0 everywhere, and no buildings.
     emit(baseTickEvent({ buildings: [] }));
     const s2 = bridge.getState();
-    expect(s2.tiles[0 * 8 + 0].buildingId).toBeUndefined();
-    expect(s2.tiles[0 * 8 + 1].buildingId).toBeUndefined();
-    expect(s2.tiles[1 * 8 + 0].buildingId).toBeUndefined();
-    expect(s2.tiles[1 * 8 + 1].buildingId).toBeUndefined();
+    expect(s2.tiles[0].buildingId).toBeUndefined();
+    expect(s2.tiles[1].buildingId).toBeUndefined();
+    expect(s2.tiles[8].buildingId).toBeUndefined();
+    expect(s2.tiles[9].buildingId).toBeUndefined();
     expect(s2.buildings).toHaveLength(0);
   });
 
   it('marks a power-requiring building InactiveNoPower until its origin tile reads powered', async () => {
     const { bridge, emit } = await makeBridge();
     const pump: WireBuilding = { id: 1, kind: tileKindToU8(TileKind.WaterPump), originX: 2, originY: 2 };
+    const o = tileBufferOffsets(GRID_TILES);
+    const originIndex = 2 * 8 + 2;
 
     emit(baseTickEvent({ buildings: [pump] }));
     expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_power');
 
-    const tiles = new Array(8 * 8 * 4).fill(0);
-    tiles[(2 * 8 + 2) * 4 + 3] = STATUS.POWERED;
+    const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
+    tiles[o.status + originIndex] = STATUS.POWERED;
     emit(baseTickEvent({ tiles, buildings: [pump] }));
     expect(bridge.getState().buildings[0].state.status).toBe('active');
   });
@@ -243,8 +267,10 @@ describe('TauriSimBridge onTick decode', () => {
   it('marks a water-consuming building InactiveNoWater only once a water system exists and it is unwatered', async () => {
     const { bridge, emit } = await makeBridge();
     const house: WireBuilding = { id: 2, kind: tileKindToU8(TileKind.Residential), originX: 5, originY: 5 };
-    const tiles = new Array(8 * 8 * 4).fill(0);
-    tiles[(5 * 8 + 5) * 4 + 3] = STATUS.POWERED; // powered, but not watered
+    const o = tileBufferOffsets(GRID_TILES);
+    const originIndex = 5 * 8 + 5;
+    const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
+    tiles[o.status + originIndex] = STATUS.POWERED; // powered, but not watered
 
     // No water system yet (no pump/tower building, no buried pipe) — water need is not evaluated.
     emit(baseTickEvent({ tiles, buildings: [house] }));
@@ -252,7 +278,7 @@ describe('TauriSimBridge onTick decode', () => {
 
     // A buried pipe brings the water system online; the same unwatered tile now reads InactiveNoWater.
     const tilesWithPipe = tiles.slice();
-    tilesWithPipe[(0 * 8 + 0) * 4] = 1 << Occupant.Pipe;
+    tilesWithPipe[o.underground] = 1 << Occupant.Pipe;
     emit(baseTickEvent({ tiles: tilesWithPipe, buildings: [house] }));
     expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_water');
   });

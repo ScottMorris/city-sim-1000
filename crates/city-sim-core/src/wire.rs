@@ -14,8 +14,8 @@
 //! Byte layout: [`city_sim_protocol::tile_buffer`].
 
 use crate::occupants::Terrain;
-use crate::state::{Tile, DERIVED_FLAG_MASK};
-use city_sim_protocol::tile_buffer::status;
+use crate::state::{GameState, Tile, DERIVED_FLAG_MASK};
+use city_sim_protocol::tile_buffer::{encode_happiness, status, TileBufferOffsets};
 
 /// The `underground` wire byte: bits 0–2, already absolute — no shift needed.
 #[inline]
@@ -48,6 +48,33 @@ pub fn wire_status_byte(tile: &Tile) -> u8 {
     out
 }
 
+/// Serialise the whole grid as the SoA wire buffer `city_sim_protocol::tile_buffer`
+/// describes — one encoder shared by every host that streams tiles to a
+/// client (WASM's `tile_buffer()`, the Tauri plugin's tick event), so a wire
+/// bug fixed here is fixed on every transport at once, and no transport can
+/// silently drift from what the others send.
+pub fn encode_tile_buffer(state: &GameState) -> Vec<u8> {
+    let tiles = &state.tiles;
+    let n = tiles.len();
+    let o = TileBufferOffsets::for_size(n);
+    let mut buf = vec![0u8; n * city_sim_protocol::tile_buffer::BYTES_PER_TILE];
+    for (i, tile) in tiles.iter().enumerate() {
+        buf[o.underground + i] = wire_underground_byte(tile);
+        buf[o.surface + i] = wire_surface_byte(tile);
+        buf[o.overhead + i] = wire_overhead_byte(tile);
+        buf[o.status + i] = wire_status_byte(tile);
+        buf[o.happiness + i] = encode_happiness(tile.happiness);
+        buf[o.elevation + i] = tile.elevation;
+        let bid = tile.building_id.unwrap_or(0);
+        let base = o.building_id + i * 2;
+        buf[base] = (bid & 0xFF) as u8;
+        buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
+        // 128 = neutral until the first wilderness recompute fills the field.
+        buf[o.wilderness + i] = state.wilderness.local_field.get(i).copied().unwrap_or(128);
+    }
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,6 +105,35 @@ mod tests {
         s.tiles[0].set_occupant(Occupant::Trees, true);
         // Trees is bit 10 absolute (bit 1 of the rebased overhead byte).
         assert_eq!(wire_overhead_byte(&s.tiles[0]), 0b10);
+    }
+
+    #[test]
+    fn encode_tile_buffer_places_every_field_at_its_soa_offset() {
+        let mut s = GameState::new(2, 1, 0);
+        s.tiles[1].set_occupant(Occupant::Pipe, true);
+        s.tiles[1].happiness = 2.0;
+        s.tiles[1].elevation = 200;
+        s.tiles[1].set_building_id(300);
+        s.wilderness.local_field = vec![128, 40];
+
+        let buf = encode_tile_buffer(&s);
+        let o = TileBufferOffsets::for_size(2);
+
+        assert_eq!(
+            buf.len(),
+            2 * city_sim_protocol::tile_buffer::BYTES_PER_TILE
+        );
+        assert_eq!(buf[o.underground], 0);
+        assert_eq!(buf[o.underground + 1], 0b001);
+        assert_eq!(buf[o.happiness + 1], encode_happiness(2.0));
+        assert_eq!(buf[o.elevation + 1], 200);
+        let bid_base = o.building_id + 2;
+        assert_eq!(
+            buf[bid_base] as u32 | ((buf[bid_base + 1] as u32) << 8),
+            300
+        );
+        assert_eq!(buf[o.wilderness], 128);
+        assert_eq!(buf[o.wilderness + 1], 40);
     }
 
     #[test]

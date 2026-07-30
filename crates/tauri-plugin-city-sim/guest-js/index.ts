@@ -39,16 +39,22 @@ export interface TickEvent {
   width:              number   // u32 — grid width in tiles
   height:             number   // u32 — grid height in tiles
   /**
-   * Occupant/status bytes, four per tile, row-major, array-of-structs (not
-   * the SoA layout the WASM tile buffer uses — this is a separate, simpler
-   * encoding for the per-tick push). Per tile: `[underground, surface,
-   * overhead, status]` — see `city_sim_core::wire` for what each byte means.
+   * The exact SoA wire buffer `city_sim_protocol::tile_buffer` describes —
+   * `underground[N] | surface[N] | overhead[N] | status[N] | happiness[N] |
+   * elevation[N] | building_id[N×2] | wilderness[N]`, produced by
+   * `city_sim_core::wire::encode_tile_buffer`, the same function the WASM
+   * host's `tile_buffer()` calls. Per-tile `building_id` (u16le, 0 = none)
+   * lets the desktop client read `tile.buildingId` straight off the wire,
+   * the same as WASM, instead of deriving tile coverage from `buildings`
+   * below and a template footprint that could disagree with the engine's own.
    */
   tiles:              number[]
   /**
    * The building list. A `Structure` occupant tile carries a `buildingId`
    * but not a template kind — that lives here, on the matching entry's
-   * `kind` (a `TileKind` u8 discriminant, decode with `tileKindFromU8`).
+   * `kind` (a `TileKind` u8 discriminant, decode with `tileKindFromU8`). Not
+   * used to derive per-tile coverage — only to resolve a `buildingId` to its
+   * template kind (power/water gating, the HUD inspector's building name).
    */
   buildings:          WireBuilding[]
   /** Whether an undo/redo step is currently available — drives button state. */
