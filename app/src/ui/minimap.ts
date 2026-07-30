@@ -359,7 +359,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     }
 
     if (settings.mode === 'underground') {
-      if (tile.underground === TileKind.WaterPipe) return '#4cc3ff';
+      if (tile.legacyUnderground === TileKind.WaterPipe) return '#4cc3ff';
       if (tile.kind === TileKind.Water) return '#1f68d6';
       if (tile.watered) return 'rgba(76, 195, 255, 0.55)';
       // Fade others

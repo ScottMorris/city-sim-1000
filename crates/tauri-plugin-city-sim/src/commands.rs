@@ -55,9 +55,27 @@ pub struct TickEvent {
     /// what the same-named field means in `city_sim_protocol::tile_buffer`
     /// (see `city_sim_core::wire`).
     pub tiles: Vec<u8>,
+    /// The building list — `Structure` occupant tiles carry a `building_id`
+    /// but not a template kind (since #177's TS/wire follow-up, that lives
+    /// here, not on the tile). Mirrors `SimHost::buildings_json` on the WASM
+    /// path, sent as real values rather than a JSON string since Tauri IPC
+    /// serialises the whole `TickEvent` natively.
+    pub buildings: Vec<WireBuilding>,
     /// Whether an undo/redo step is currently available — drives button state.
     pub can_undo: bool,
     pub can_redo: bool,
+}
+
+/// One entry in [`TickEvent::buildings`].
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireBuilding {
+    pub id: u32,
+    /// `TileKind as u8` — decode with `tileKindFromU8` in TS, matching every
+    /// other wire use of `TileKind`.
+    pub kind: u8,
+    pub origin_x: u32,
+    pub origin_y: u32,
 }
 
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
@@ -128,6 +146,16 @@ fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
         tiles.push(wire_overhead_byte(t));
         tiles.push(wire_status_byte(t));
     }
+    let buildings: Vec<WireBuilding> = s
+        .buildings
+        .iter()
+        .map(|b| WireBuilding {
+            id: b.id,
+            kind: b.kind as u8,
+            origin_x: b.origin.0,
+            origin_y: b.origin.1,
+        })
+        .collect();
     TickEvent {
         tick: s.tick,
         day: s.day,
@@ -146,6 +174,7 @@ fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
         width: s.width,
         height: s.height,
         tiles,
+        buildings,
         can_undo: history.can_undo(),
         can_redo: history.can_redo(),
     }

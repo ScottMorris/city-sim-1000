@@ -443,4 +443,44 @@ impl SimHost {
         }
         buf
     }
+
+    /// The building list as JSON (`Vec<WireBuilding>`) — `id`, template
+    /// `kind` (as the `TileKind` u8, matching every other wire use of
+    /// `TileKind`), and footprint origin.
+    ///
+    /// The live tile buffer's `Structure` occupant bit says only that a
+    /// building stands on a tile, not which one — since #177's TS/wire
+    /// follow-up, a structure's `TileKind` lives on its `BuildingInstance`,
+    /// not on the tile. TS needs this list to resolve `building_id` to a
+    /// template; call it alongside `tile_buffer()`. Status/health/trouble are
+    /// deliberately not carried here — TS derives building status locally
+    /// from the tile's `POWERED`/`WATERED` flags, as it already did before
+    /// this method existed.
+    pub fn buildings_json(&self) -> String {
+        let wire: Vec<WireBuilding> = self
+            .sim
+            .state
+            .buildings
+            .iter()
+            .map(|b| WireBuilding {
+                id: b.id,
+                kind: b.kind as u8,
+                origin_x: b.origin.0,
+                origin_y: b.origin.1,
+            })
+            .collect();
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
+}
+
+/// One row of [`SimHost::buildings_json`]'s wire shape.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireBuilding {
+    id: u32,
+    /// `TileKind as u8` — decode with `tileKindFromU8` in TS, matching every
+    /// other wire use of `TileKind`.
+    kind: u8,
+    origin_x: u32,
+    origin_y: u32,
 }

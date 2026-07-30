@@ -197,7 +197,7 @@ describe('adjacency — water carriers exclude hydro lines', () => {
     state.money = 50000;
 
     const piped = getTile(state, 0, 0)!;
-    piped.underground = TileKind.WaterPipe;
+    piped.legacyUnderground = TileKind.WaterPipe;
     expect(isWaterCarrier(piped)).toBe(true);
 
     applyTool(state, Tool.Road, 1, 0);

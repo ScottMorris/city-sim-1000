@@ -19,15 +19,28 @@
  * Limitations (Phase 4; lifted in Phase 5):
  *   • loadState() restarts the sim from scratch (seed-only); full GameState
  *     serialisation arrives in P5-1.
- *   • Tile buffer carries TileKind only — per-tile power/water/happiness
- *     stats are absent until the Rust sim serialises them (P3+).
+ *   • The tick payload carries terrain/occupants/POWERED/WATERED/ABANDONED
+ *     per tile (see `TickEvent.tiles` in `guest-js/index.ts`), but not
+ *     happiness, elevation, wilderness or per-tile `building_id` — those
+ *     still need the Rust sim to serialise them (P3+).
+ *   • Because per-tile `building_id` is absent, a `Structure` occupant's
+ *     specific `TileKind` can never resolve here (`legacyKind`'s structure
+ *     branch needs it) — every structure tile decodes via the same
+ *     kind-precedence fallback a bare zone/road/rail/line tile would.
+ *     `event.buildings` (id/kind/origin, no footprint) isn't enough on its
+ *     own to fix this; it would need `building_id` on the wire too.
  */
 
 import type { GameState, Tile } from './gameState';
+import { TileKind } from './gameState';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { Terrain, ZoneDensity } from './protocol/occupants';
+import { legacyKind, legacyFlags, legacyUndergroundKind } from './protocol/legacyProjection';
+import { STATUS } from './protocol/tileBuffer';
+import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
 import {
   start as pluginStart,
@@ -243,19 +256,53 @@ export class TauriSimBridge implements SimBridge {
       });
     }
 
-    // Tile kinds — resize the tiles array if dimensions changed
+    // Tiles — resize the array if dimensions changed
     const n = event.width * event.height;
     if (s.tiles.length !== n) {
       s.width  = event.width;
       s.height = event.height;
-      const fallback = s.tiles[0]?.kind ?? 'land';
-      s.tiles = Array.from({ length: n }, () => ({ kind: fallback } as Tile));
+      s.tiles = Array.from({ length: n }, () => makeBlankTile());
     }
+
+    // `event.buildings` is the only source for a Structure occupant's
+    // specific TileKind — the tile bytes only say a building stands there
+    // (#177's TS/wire follow-up), same as the WASM path.
+    const structureKindById = new Map<number, TileKind>();
+    for (const b of event.buildings) {
+      const kind = tileKindFromU8(b.kind);
+      if (kind !== undefined) structureKindById.set(b.id, kind);
+    }
+    const structureKindOf = (id: number) => structureKindById.get(id);
+
     for (let i = 0; i < n; i++) {
-      const kind = tileKindFromU8(event.tiles[i]);
-      if (kind !== undefined) {
-        s.tiles[i].kind = kind;
-      }
+      const tile = s.tiles[i];
+      const base = i * 4;
+      tile.underground = event.tiles[base];
+      tile.surface = event.tiles[base + 1] << 3;
+      tile.overhead = event.tiles[base + 2] << 9;
+      const status = event.tiles[base + 3];
+      tile.terrain = (status & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
+      tile.powered = (status & STATUS.POWERED) !== 0;
+      tile.watered = (status & STATUS.WATERED) !== 0;
+      tile.abandoned = (status & STATUS.ABANDONED) !== 0;
+      tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
+
+      // Shim fields — deleted, along with this whole block, once every
+      // consumer reads terrain/underground/surface/overhead directly.
+      const projectionInput = {
+        terrain: tile.terrain,
+        surface: tile.surface,
+        overhead: tile.overhead,
+        buildingId: tile.buildingId,
+        structureKindOf
+      };
+      const kind = legacyKind(projectionInput);
+      tile.kind = kind;
+      const flags = legacyFlags(projectionInput, kind);
+      tile.roadUnderlay = flags.roadUnderlay;
+      tile.railUnderlay = flags.railUnderlay;
+      tile.powerOverlay = flags.powerOverlay;
+      tile.legacyUnderground = legacyUndergroundKind(tile.underground);
     }
 
     // Forward TickStats to the UI handler
@@ -272,4 +319,21 @@ export class TauriSimBridge implements SimBridge {
       },
     });
   }
+}
+
+/** A bare land tile, for growing the mirror array when dimensions change — immediately overwritten by the decode loop. */
+function makeBlankTile(): Tile {
+  return {
+    kind: TileKind.Land,
+    elevation: 0,
+    happiness: 1,
+    powered: false,
+    watered: false,
+    services: createTileServiceState(),
+    terrain: Terrain.Land,
+    underground: 0,
+    surface: 0,
+    overhead: 0,
+    density: ZoneDensity.Low
+  };
 }

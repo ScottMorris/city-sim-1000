@@ -228,11 +228,11 @@ export class Simulation {
       bill(TileKind.PowerLine, tile.kind === TileKind.PowerLine || !!tile.powerOverlay,
         (u) => { maintenancePowerLines += u; });
 
-      if (tile.underground) {
-        const uUpkeep = MAINTENANCE[tile.underground];
+      if (tile.legacyUnderground) {
+        const uUpkeep = MAINTENANCE[tile.legacyUnderground];
         if (uUpkeep) {
           maintenance += uUpkeep;
-          if (tile.underground === TileKind.WaterPipe) maintenancePipes += uUpkeep;
+          if (tile.legacyUnderground === TileKind.WaterPipe) maintenancePipes += uUpkeep;
         }
       }
 

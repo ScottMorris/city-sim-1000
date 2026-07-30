@@ -38,11 +38,31 @@ export interface TickEvent {
   wildernessTrend:    number   // f32 — fast EMA − slow EMA; sign gives the arrow
   width:              number   // u32 — grid width in tiles
   height:             number   // u32 — grid height in tiles
-  /** One byte per tile, row-major. Values are `TileKind` u8 discriminants. */
+  /**
+   * Occupant/status bytes, four per tile, row-major, array-of-structs (not
+   * the SoA layout the WASM tile buffer uses — this is a separate, simpler
+   * encoding for the per-tick push). Per tile: `[underground, surface,
+   * overhead, status]` — see `city_sim_core::wire` for what each byte means.
+   */
   tiles:              number[]
+  /**
+   * The building list. A `Structure` occupant tile carries a `buildingId`
+   * but not a template kind — that lives here, on the matching entry's
+   * `kind` (a `TileKind` u8 discriminant, decode with `tileKindFromU8`).
+   */
+  buildings:          WireBuilding[]
   /** Whether an undo/redo step is currently available — drives button state. */
   canUndo:            boolean
   canRedo:            boolean
+}
+
+/** One entry in {@link TickEvent.buildings}. */
+export interface WireBuilding {
+  id:       number   // u32
+  /** `TileKind` u8 discriminant — decode with `tileKindFromU8`. */
+  kind:     number   // u8
+  originX:  number   // u32
+  originY:  number   // u32
 }
 
 /**

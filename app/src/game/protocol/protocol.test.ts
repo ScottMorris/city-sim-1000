@@ -17,7 +17,8 @@ import {
   tileKindFromU8,
   tileKindToU8,
 } from './tileKind';
-import { BYTES_PER_TILE, FLAGS, tileBufferOffsets, decodeHappiness, encodeHappiness, decodeEco, encodeEco, ECO_RANGE } from './tileBuffer';
+import { BYTES_PER_TILE, STATUS, tileBufferOffsets, decodeHappiness, encodeHappiness, decodeEco, encodeEco, ECO_RANGE } from './tileBuffer';
+import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './legacyTileBuffer';
 import parityFixture from './tileKindParity.json';
 
 // ---------------------------------------------------------------------------
@@ -68,22 +69,23 @@ describe('protocol: TileKind ↔ u8 parity with Rust', () => {
 // ---------------------------------------------------------------------------
 
 describe('protocol: tile buffer layout', () => {
-  it('BYTES_PER_TILE is 8', () => expect(BYTES_PER_TILE).toBe(8));
+  it('BYTES_PER_TILE is 9', () => expect(BYTES_PER_TILE).toBe(9));
 
   it('offsets for 64×64 map', () => {
     const n = 64 * 64;
     const off = tileBufferOffsets(n);
-    expect(off.kind).toBe(0);
-    expect(off.flags).toBe(4096);
-    expect(off.happiness).toBe(8192);
-    expect(off.elevation).toBe(12288);
-    expect(off.buildingId).toBe(16384);
-    expect(off.undergroundKind).toBe(24576);
-    expect(off.wilderness).toBe(28672);
+    expect(off.underground).toBe(0);
+    expect(off.surface).toBe(4096);
+    expect(off.overhead).toBe(8192);
+    expect(off.status).toBe(12288);
+    expect(off.happiness).toBe(16384);
+    expect(off.elevation).toBe(20480);
+    expect(off.buildingId).toBe(24576);
+    expect(off.wilderness).toBe(32768);
   });
 
-  it('FLAGS bitmask values are unique powers of 2', () => {
-    const vals = Object.values(FLAGS);
+  it('STATUS bitmask values (excluding the density field) are unique powers of 2', () => {
+    const vals = [STATUS.POWERED, STATUS.WATERED, STATUS.ABANDONED, STATUS.WATER_TERRAIN];
     const unique = new Set(vals);
     expect(unique.size).toBe(vals.length);
     for (const v of vals) {
@@ -104,5 +106,30 @@ describe('protocol: tile buffer layout', () => {
     expect(encodeEco(0)).toBe(128);
     expect(encodeEco(999)).toBe(encodeEco(ECO_RANGE));
     expect(encodeEco(-999)).toBe(encodeEco(-ECO_RANGE));
+  });
+});
+
+describe('protocol: frozen legacy tile buffer layout', () => {
+  it('LEGACY_BYTES_PER_TILE is 8', () => expect(LEGACY_BYTES_PER_TILE).toBe(8));
+
+  it('offsets for 64×64 map', () => {
+    const n = 64 * 64;
+    const off = legacyTileBufferOffsets(n);
+    expect(off.kind).toBe(0);
+    expect(off.flags).toBe(4096);
+    expect(off.happiness).toBe(8192);
+    expect(off.elevation).toBe(12288);
+    expect(off.buildingId).toBe(16384);
+    expect(off.undergroundKind).toBe(24576);
+    expect(off.wilderness).toBe(28672);
+  });
+
+  it('LEGACY_FLAGS bitmask values are unique powers of 2', () => {
+    const vals = Object.values(LEGACY_FLAGS);
+    const unique = new Set(vals);
+    expect(unique.size).toBe(vals.length);
+    for (const v of vals) {
+      expect(v & (v - 1)).toBe(0); // power of 2
+    }
   });
 });

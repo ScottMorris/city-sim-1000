@@ -132,11 +132,11 @@ function regradeAt(state: GameState, x: number, y: number, spelling: TileKind) {
   const before = getTile(state, x, y);
   if (!before) return;
   const hadLine = before.kind === TileKind.PowerLine || before.powerOverlay === true;
-  const underground = before.underground;
+  const underground = before.legacyUnderground;
   setTile(state, x, y, spelling);
   const tile = getTile(state, x, y);
   if (!tile) return;
-  tile.underground = underground;
+  tile.legacyUnderground = underground;
   if (hadLine) tile.powerOverlay = true;
 }
 
@@ -269,7 +269,7 @@ const registry: ToolRegistry = {
     state.money -= cost;
     const tile = getTile(state, x, y);
     if (tile) {
-      tile.underground = TileKind.WaterPipe;
+      tile.legacyUnderground = TileKind.WaterPipe;
     }
     return { success: true };
   },
@@ -289,9 +289,9 @@ const registry: ToolRegistry = {
     if (!tile) return { success: false };
 
     if (state.settings.minimap.mode === 'underground') {
-      if (tile.underground) {
+      if (tile.legacyUnderground) {
         state.money -= cost;
-        tile.underground = undefined;
+        tile.legacyUnderground = undefined;
         return { success: true };
       }
       return { success: true }; // Nothing to bulldoze underground
@@ -300,13 +300,13 @@ const registry: ToolRegistry = {
     state.money -= cost;
     if (tile.buildingId !== undefined) {
       removeBuilding(state, tile.buildingId);
-    } else if (tile.underground !== undefined) {
+    } else if (tile.legacyUnderground !== undefined) {
       // The engine reaches the buried pipe *before* the surface — `bulldoze`
       // in `commands.rs` tests `building_id`, then `underground`, then the
       // surface, and it has no notion of which minimap view is open. So a
       // click on a road with a pipe under it takes the pipe and leaves the
       // road. Mirrored here rather than corrected: `commands.rs` is canonical.
-      tile.underground = undefined;
+      tile.legacyUnderground = undefined;
     } else {
       // The bulldozer clears what stands on the ground — surface and overhead
       // together — and leaves the ground itself exactly as it was (#177 step

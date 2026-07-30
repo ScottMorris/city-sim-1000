@@ -188,7 +188,11 @@ function startStepLoop(): void {
     host.step(dt);
     const bytes = host.tile_buffer();
     const stats = gatherStats(host);
-    self.postMessage({ type: 'step_result', bytes, stats, mutationSeq }, { transfer: [bytes.buffer as ArrayBuffer] });
+    const buildingsJson = host.buildings_json();
+    self.postMessage(
+      { type: 'step_result', bytes, stats, buildingsJson, mutationSeq },
+      { transfer: [bytes.buffer as ArrayBuffer] },
+    );
   }, STEP_INTERVAL_MS);
 }
 
@@ -371,8 +375,9 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       if (happened) {
         const bytes = host.tile_buffer();
         const stats = gatherStats(host);
+        const buildingsJson = host.buildings_json();
         self.postMessage(
-          { type: 'undo_result', happened: true, bytes, stats, mutationSeq, history: historyFlags(host) },
+          { type: 'undo_result', happened: true, bytes, stats, buildingsJson, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -386,8 +391,9 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       if (happened) {
         const bytes = host.tile_buffer();
         const stats = gatherStats(host);
+        const buildingsJson = host.buildings_json();
         self.postMessage(
-          { type: 'redo_result', happened: true, bytes, stats, mutationSeq, history: historyFlags(host) },
+          { type: 'redo_result', happened: true, bytes, stats, buildingsJson, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -456,6 +462,7 @@ function postLoadResult(h: SimHost, requestId: number): void {
       policies: JSON.parse(h.policies_json()) as WorkerPolicies,
       bytes,
       stats: gatherStats(h),
+      buildingsJson: h.buildings_json(),
       mutationSeq,
       history: historyFlags(h),
     },

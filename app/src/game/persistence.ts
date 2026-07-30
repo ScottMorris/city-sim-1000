@@ -24,8 +24,10 @@ import {
 } from './protocol/commands';
 import type { ClientState } from './clientState';
 import type { LegacyEngineImport } from '../workers/wasmSim.worker';
-import { BYTES_PER_TILE, FLAGS, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
+import { encodeHappiness } from './protocol/tileBuffer';
+import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
+import { tileFromV4 } from './protocol/legacyProjection';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -57,16 +59,32 @@ export function deserialize(payload: string): GameState {
       parsed.services.definitions[id] = def;
     }
   });
-  parsed.tiles = parsed.tiles.map((tile: any) => ({
-    ...tile,
-    powered: tile.powered ?? false,
-    watered: tile.watered ?? false,
-    underground: tile.underground,
-    powerPlantType: tile.powerPlantType,
-    powerPlantId: tile.powerPlantId,
-    buildingId: tile.buildingId ?? tile.powerPlantId,
-    services: tile.services ?? createTileServiceState()
-  }));
+  parsed.tiles = parsed.tiles.map((tile: any) => {
+    const buildingId = tile.buildingId ?? tile.powerPlantId;
+    const base = {
+      ...tile,
+      powered: tile.powered ?? false,
+      watered: tile.watered ?? false,
+      powerPlantType: tile.powerPlantType,
+      powerPlantId: tile.powerPlantId,
+      buildingId,
+      services: tile.services ?? createTileServiceState()
+    };
+    // `terrain` only exists on a tile written after this migration — a save
+    // from before it has no strata at all, and its `underground` key is the
+    // old `TileKind | undefined` field, not the new occupant bitset. Decode
+    // that v4 spelling into strata, same as `migrate::tile_from_v4` does for
+    // the Rust-side importer. A tile that already has `terrain` already has
+    // everything strata-shaped needs — nothing to decode.
+    if (tile.terrain !== undefined) return base;
+    const strata = tileFromV4(
+      tile.kind,
+      { roadUnderlay: tile.roadUnderlay, railUnderlay: tile.railUnderlay, powerOverlay: tile.powerOverlay },
+      tile.underground,
+      buildingId
+    );
+    return { ...base, legacyUnderground: tile.underground, ...strata };
+  });
   parsed.buildings = (parsed.buildings ?? []).map((building: any) => {
     const state = building.state ?? createBuildingState();
     if (state.health === undefined) state.health = 100;
@@ -406,25 +424,25 @@ export function decodeLegacySave(json: string): GameState {
  */
 export function buildLegacyEngineImport(state: GameState): LegacyEngineImport {
   const n = state.width * state.height;
-  const o = tileBufferOffsets(n);
-  const tiles = new Uint8Array(n * BYTES_PER_TILE);
+  const o = legacyTileBufferOffsets(n);
+  const tiles = new Uint8Array(n * LEGACY_BYTES_PER_TILE);
   for (let i = 0; i < n; i++) {
     const tile = state.tiles[i];
     tiles[o.kind + i] = tileKindToU8(tile.kind);
     tiles[o.flags + i] =
-      (tile.powered ? FLAGS.POWERED : 0) |
-      (tile.watered ? FLAGS.WATERED : 0) |
-      (tile.abandoned ? FLAGS.ABANDONED : 0) |
-      (tile.roadUnderlay ? FLAGS.ROAD_UNDERLAY : 0) |
-      (tile.railUnderlay ? FLAGS.RAIL_UNDERLAY : 0) |
-      (tile.powerOverlay ? FLAGS.POWER_OVERLAY : 0);
+      (tile.powered ? LEGACY_FLAGS.POWERED : 0) |
+      (tile.watered ? LEGACY_FLAGS.WATERED : 0) |
+      (tile.abandoned ? LEGACY_FLAGS.ABANDONED : 0) |
+      (tile.roadUnderlay ? LEGACY_FLAGS.ROAD_UNDERLAY : 0) |
+      (tile.railUnderlay ? LEGACY_FLAGS.RAIL_UNDERLAY : 0) |
+      (tile.powerOverlay ? LEGACY_FLAGS.POWER_OVERLAY : 0);
     tiles[o.happiness + i] = encodeHappiness(tile.happiness);
     tiles[o.elevation + i] = tile.elevation & 0xff;
     const buildingId = tile.buildingId ?? 0;
     tiles[o.buildingId + i * 2] = buildingId & 0xff;
     tiles[o.buildingId + i * 2 + 1] = (buildingId >> 8) & 0xff;
     tiles[o.undergroundKind + i] =
-      tile.underground === undefined ? 0xff : tileKindToU8(tile.underground);
+      tile.legacyUnderground === undefined ? 0xff : tileKindToU8(tile.legacyUnderground);
     tiles[o.wilderness + i] = 128; // recomputed by the sim within one interval
   }
   return {
