@@ -1,21 +1,37 @@
 .debug-overlay {
   position: absolute;
   right: 12px;
-  /* --toolbar-visible-height tracks #toolbar (the tool palette, which
-     relocates entirely to the bottom dock in compact mode, correctly going
-     to 0 there) — not .topbar/.news-ticker above canvas-wrapper, which are
-     already cleared for free by normal document flow. The extra margin here
-     is just breathing room so the panel doesn't read as flush against the
-     border under them. */
-  top: calc(
-    var(--toolbar-visible-height, var(--toolbar-base-height, 72px)) + 20px
+  /* Offset by how far the toolbar *overhangs*, not by its whole height.
+     `.toolbar` is `position: absolute; top: 0` inside `#viewport`, and
+     `#viewport` already reserves `--toolbar-base-height` as `padding-top` —
+     so `.canvas-wrapper`, this panel's positioned ancestor, starts below the
+     toolbar for free. Adding the full height on top of that counted the
+     toolbar twice and pushed the panel ~72px down the map, off the bottom of
+     the screen on a short desktop viewport.
+
+     It read as correct in compact mode only by accident: there the toolbar
+     moves to a fixed bottom dock and both variables are set to 0, so the
+     double count was zero and only desktop showed the bug.
+
+     The difference is what actually matters. `--toolbar-visible-height`
+     exceeds `--toolbar-base-height` exactly when a submenu row (Power, Water,
+     Schools, Park) expands the bar past the space `#viewport` reserved, and
+     that overhang really does cover the top of the map — so duck below it,
+     and only by that much. Both vars 0 in compact, equal when no submenu is
+     open: 20px in both cases. */
+  --debug-overlay-top: calc(
+    var(--toolbar-visible-height, 0px) - var(--toolbar-base-height, 0px) + 20px
   );
+  top: var(--debug-overlay-top);
   min-width: 260px;
   max-width: 360px;
   /* Unclamped by default — this is the original, desktop-oriented "full"
      view. It's fine to dominate the screen there since it never has to
-     compete with the map for room the way it does on a phone. */
-  max-height: calc(100% - 24px);
+     compete with the map for room the way it does on a phone. It does still
+     have to *fit*: the height budget is what is left below the top offset,
+     not the full wrapper, or the panel scrolls off the bottom edge instead of
+     scrolling internally. */
+  max-height: calc(100% - var(--debug-overlay-top) - 20px);
   overflow-y: auto;
   background: rgba(10, 16, 32, 0.92);
   border: 1px solid #35507a;
@@ -84,4 +100,11 @@
   color: var(--text-dim);
   font-size: 11px;
   margin-top: 2px;
+}
+
+/* A stale engine is the one line in this panel a reader must not skim past —
+   it means the code being tested is not the code on disk. */
+.debug-hint.debug-warn {
+  color: #ffb454;
+  font-weight: 600;
 }

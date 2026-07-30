@@ -10,6 +10,7 @@
 //
 // Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
+import { recordEngineBuild } from '../buildInfo';
 import type { GameState } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
@@ -59,7 +60,12 @@ interface WorkerHistoryFlags {
 }
 
 type WorkerToMain =
-  | { type: 'ready';        history: WorkerHistoryFlags }
+  | {
+      type: 'ready';
+      history: WorkerHistoryFlags;
+      /** Absent on an older worker bundle; the overlay then reports "unknown". */
+      build?: { version: string | null; lastModified: string | null };
+    }
   | { type: 'init_error';   message: string }
   | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; mutationSeq: number }
   | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
@@ -344,6 +350,7 @@ export class WasmSimBridge implements SimBridge {
     switch (msg.type) {
       case 'ready':
         this.ready = true;
+        if (msg.build) recordEngineBuild(msg.build);
         this.resolveReady();
         if (this.speedMult !== 1) {
           this.worker.postMessage({ type: 'set_speed', payload: { multiplier: this.speedMult } });

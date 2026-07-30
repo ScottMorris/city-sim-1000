@@ -1,3 +1,4 @@
+import { getBuildInfo, isEngineStale } from '../buildInfo';
 import { DemandDetails, getSimulationDebugStats } from '../game/debugStats';
 import { GameState } from '../game/gameState';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
@@ -114,7 +115,26 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   // pointerdown handler treats any tap as a map interaction regardless of
   // target — stop it here so tapping the overlay doesn't also paint/inspect
   // the tile underneath. Matches minimap.ts/hud.ts's existing overlay guard.
-  overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+  // The overlay sits inside `#canvas-wrapper`, whose delegated handlers treat
+  // any pointer activity as map interaction regardless of target — so every
+  // event that can *start or continue* a map action has to stop here, or the
+  // panel paints, bulldozes and pans the tiles it is covering.
+  //
+  // `pointerdown` alone was not enough. Press on the map, drag across the
+  // panel, and `pointermove` kept painting the hidden tiles underneath;
+  // `contextmenu` still reached the wrapper's quick-bulldoze; and a `wheel`
+  // over the panel zoomed the map out from under it.
+  //
+  // **`pointerup` and `pointercancel` are deliberately absent from this list.**
+  // They are bound on both `wrapper` and `window` (see `stopPainting` in
+  // `main.ts`) precisely so a drag can always end, whatever it ends over.
+  // `stopPropagation` on the overlay would stop the event bubbling to *either*,
+  // leaving `isPainting` stuck on and the next mouse move painting a stripe
+  // across the map. Letting them through is the whole point: they only ever
+  // finish an interaction, never begin one.
+  for (const type of ['pointerdown', 'pointermove', 'click', 'dblclick', 'contextmenu'] as const) {
+    overlay.addEventListener(type, (e) => e.stopPropagation());
+  }
   overlay.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
 
   // Kept as stable, persistent elements rather than part of the per-frame
@@ -139,6 +159,38 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
     `(max-width: ${DEFAULT_COMPACT_BREAKPOINT_PX}px), (max-height: ${DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX}px)`
   );
   let mode: DebugOverlayMode = compactQuery.matches ? 'mini' : 'full';
+
+  /**
+   * Which build is actually running — the app bundle and the engine binary,
+   * separately, because they are built by different commands and go stale
+   * independently.
+   *
+   * The load-bearing row is **Engine**: a WASM module is instantiated once and
+   * lives for the tab's lifetime, so `bun run build:wasm` does nothing to an
+   * open page and no amount of reloading the *source* helps. When the binary on
+   * disk is newer than this page, the panel says so in as many words.
+   */
+  const buildSection = () => {
+    const b = getBuildInfo();
+    const stale = isEngineStale(b);
+    const clock = (iso: string | null) =>
+      iso ? new Date(iso).toLocaleTimeString(undefined, { hour12: false }) : '—';
+    const staleRow =
+      stale === true
+        ? `<div class="debug-hint debug-warn">Engine is STALE — the WASM on disk is newer than this page. Reload.</div>`
+        : stale === null
+          ? `<div class="debug-hint">Engine freshness unknown (no build timestamp).</div>`
+          : '';
+    return `
+    <div class="debug-section">
+      <div class="debug-heading">Build</div>
+      <div class="debug-row"><span>App</span><strong>${b.sha}</strong></div>
+      <div class="debug-hint">Bundle built ${clock(b.builtAt)} · page loaded ${clock(b.pageLoadedAt)}</div>
+      <div class="debug-row"><span>Engine</span><strong>${b.engineVersion ?? '—'}</strong></div>
+      <div class="debug-hint">WASM built ${clock(b.wasmLastModified ?? b.wasmBuiltAtBundleTime)}</div>
+      ${staleRow}
+    </div>`;
+  };
 
   const perfAndMemorySections = (heap: HeapSnapshot) => `
     <div class="debug-section">
@@ -242,6 +294,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
           <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
         </div>
         ${perfAndMemorySections(heap)}
+        ${buildSection()}
       `;
     } catch (err) {
       console.error('Debug overlay render failed', err);
