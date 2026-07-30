@@ -908,6 +908,60 @@ mod tests {
         assert!(alerts.iter().any(|a| a.kind == AlertKind::WaterRestored));
     }
 
+    /// Every other alert test calls `handle_resource_alerts()` directly on
+    /// the private method — none of them would notice if a future refactor
+    /// of `compute_utility_use`/`tick_fixed` silently dropped the call that
+    /// wires it into the real tick path (exactly the class of bug #199
+    /// itself was: code that exists but is never actually invoked). This one
+    /// drives a real deficit through `step()` — the same entry point both
+    /// hosts call — via actual zone growth and network connectivity, not a
+    /// hand-set balance.
+    ///
+    /// Same road/plant/zone fixture as
+    /// `water_requirement_is_opt_in_until_infrastructure_exists` below, with
+    /// a 5 MW `SolarFarm` in place of an 80 MW `CoalPlant` — but built
+    /// directly via `place_zone_building` (same helper real zone growth
+    /// calls) instead of waiting on growth's own timing/RNG, since the
+    /// demand-vs-deficit feedback loop this branch's own economy now runs
+    /// (a live balance suppresses further growth) makes waiting for organic
+    /// growth to overshoot 5 MW non-deterministic — it settles into
+    /// equilibrium right at the boundary instead.
+    #[test]
+    fn step_wires_handle_resource_alerts_into_the_real_tick_path() {
+        use crate::commands::apply_tool;
+        use crate::zones::place_zone_building;
+        use city_sim_protocol::commands::Tool;
+
+        let mut sim = Simulation::new(16, 16, 42);
+        for x in 0..12 {
+            apply_tool(&mut sim.state, Tool::Road, x, 5);
+        }
+        apply_tool(&mut sim.state, Tool::SolarFarm, 0, 3);
+        // 5 zoned-and-built residential lots at 1.5 MW each = 7.5 MW,
+        // comfortably past the SolarFarm's 5 MW — not the razor-thin 4.5 MW
+        // (rounds to 5, exactly tying production) that 3 lots would give.
+        for x in 2..7 {
+            apply_tool(&mut sim.state, Tool::Residential, x, 4);
+            assert!(
+                place_zone_building(&mut sim.state, x, 4),
+                "zone tag must place a building on a tile this test just zoned"
+            );
+        }
+
+        let mut alerts = Vec::new();
+        for _ in 0..5 {
+            sim.step(1.0 / 20.0);
+            alerts.extend(sim.take_alerts());
+        }
+
+        assert!(
+            alerts.iter().any(|a| a.kind == AlertKind::PowerDeficit),
+            "5 active 1.5 MW lots against a 5 MW SolarFarm must raise PowerDeficit \
+             via handle_resource_alerts — if this fails, check compute_utility_use \
+             still calls it"
+        );
+    }
+
     #[test]
     fn sim_money_changes_over_time() {
         let mut sim = Simulation::new(8, 8, 0);
