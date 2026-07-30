@@ -145,11 +145,11 @@ export function tileFromV4(
 
 /**
  * Bring one tile's strata fields back in sync with its shim fields, in
- * place. `tools.ts`'s `applyTool` calls this (whole-grid, once per call —
- * see its own `syncStrataFromLegacy`) after every tool, since its handlers
- * are still unconverted v4-shape logic; tests that hand-spell a tile's shim
- * fields directly (bypassing `applyTool`) need the same call so predicates
- * reading the strata directly don't see stale zeros.
+ * place. `buildings/manager.ts`'s `placeBuilding`/`removeBuilding` call this
+ * after writing `kind`/`buildingId` directly, since those two functions are
+ * still shim-authoritative; tests that hand-spell a tile's shim fields
+ * directly (bypassing `applyTool`) need the same call so predicates reading
+ * the strata directly don't see stale zeros.
  */
 export function resyncTileStrata(tile: Tile): void {
   const strata = tileFromV4(
@@ -163,4 +163,36 @@ export function resyncTileStrata(tile: Tile): void {
   tile.surface = strata.surface;
   tile.overhead = strata.overhead;
   tile.density = strata.density;
+}
+
+/**
+ * The inverse of `resyncTileStrata`: bring one tile's shim fields
+ * (`kind`/`roadUnderlay`/`railUnderlay`/`powerOverlay`/`legacyUnderground`)
+ * back in sync with its strata, in place. `tools.ts`'s `applyTool` handlers
+ * are occupant-native (Phase 7 of the strata migration) and call this once
+ * per tool so that anything still reading the shim fields — chiefly
+ * `buildings/manager.ts`'s placement guard — doesn't see stale values.
+ *
+ * `structureKindOf` mirrors `legacyKind`'s own callback: resolve a
+ * `building_id` to its template's `TileKind`, or `undefined` if it isn't
+ * live.
+ */
+export function resyncLegacyFromStrata(
+  tile: Tile,
+  structureKindOf: (buildingId: number) => TileKind | undefined
+): void {
+  const input: LegacyProjectionInput = {
+    terrain: tile.terrain,
+    surface: tile.surface,
+    overhead: tile.overhead,
+    buildingId: tile.buildingId,
+    structureKindOf
+  };
+  const kind = legacyKind(input);
+  const flags = legacyFlags(input, kind);
+  tile.kind = kind;
+  tile.roadUnderlay = flags.roadUnderlay || undefined;
+  tile.railUnderlay = flags.railUnderlay || undefined;
+  tile.powerOverlay = flags.powerOverlay || undefined;
+  tile.legacyUnderground = legacyUndergroundKind(tile.underground);
 }

@@ -96,6 +96,75 @@ export function iterSet(set: number): Occupant[] {
   return ALL_OCCUPANTS.filter((o) => hasOccupant(set, o));
 }
 
+interface TileStrata {
+  underground: number;
+  surface: number;
+  overhead: number;
+}
+
+/**
+ * Set or clear one occupant on the tile-shaped `strata`, in whichever
+ * stratum field the occupant belongs to. Mirrors `Tile::set_occupant` in
+ * Rust — the only write path into the strata, routed by the occupant's own
+ * declaration rather than a stratum the caller names.
+ */
+export function setTileOccupant(strata: TileStrata, occupant: Occupant, on: boolean): void {
+  switch (strataOf(occupant)) {
+    case Stratum.Underground:
+      strata.underground = withOccupant(strata.underground, occupant, on);
+      return;
+    case Stratum.Surface:
+      strata.surface = withOccupant(strata.surface, occupant, on);
+      return;
+    case Stratum.Overhead:
+      strata.overhead = withOccupant(strata.overhead, occupant, on);
+      return;
+  }
+}
+
+/** Clear a whole stratum. Mirrors `Tile::clear_stratum` in Rust. */
+export function clearTileStratum(strata: TileStrata, stratum: Stratum): void {
+  switch (stratum) {
+    case Stratum.Underground:
+      strata.underground = 0;
+      return;
+    case Stratum.Surface:
+      strata.surface = 0;
+      return;
+    case Stratum.Overhead:
+      strata.overhead = 0;
+      return;
+  }
+}
+
+/**
+ * Symmetric conflict masks, one per occupant — mirrors each `OccupantDef.conflicts`
+ * entry in `OCCUPANT_DEFS` (`occupants.rs`). The set of occupants that cannot
+ * share a tile with the key occupant.
+ */
+const CONFLICTS: Record<Occupant, number> = {
+  [Occupant.Pipe]: 0,
+  [Occupant.Subway]: 0,
+  [Occupant.Fibre]: 0,
+  [Occupant.Road]: SURFACE_MASK & ~((1 << Occupant.Road) | (1 << Occupant.Rail)),
+  [Occupant.Rail]: SURFACE_MASK & ~((1 << Occupant.Road) | (1 << Occupant.Rail)),
+  [Occupant.ZoneResidential]: SURFACE_MASK & ~(1 << Occupant.ZoneResidential),
+  [Occupant.ZoneCommercial]: SURFACE_MASK & ~(1 << Occupant.ZoneCommercial),
+  [Occupant.ZoneIndustrial]: SURFACE_MASK & ~(1 << Occupant.ZoneIndustrial),
+  [Occupant.Structure]: (SURFACE_MASK & ~(1 << Occupant.Structure)) | (1 << Occupant.PowerLine),
+  [Occupant.PowerLine]: (1 << Occupant.Trees) | (1 << Occupant.Structure),
+  [Occupant.Trees]: 1 << Occupant.PowerLine
+};
+
+/**
+ * Whether `a` and `b` cannot share a tile. Mirrors `pair_conflicts` in
+ * `occupants.rs`. Always `false` for an occupant against itself — a set
+ * holds at most one of each.
+ */
+export function pairConflicts(a: Occupant, b: Occupant): boolean {
+  return a !== b && (CONFLICTS[a] & (1 << b)) !== 0;
+}
+
 /**
  * The tile's land use, if it is zoned. Zones are mutually exclusive, and all
  * three are surface occupants. Mirrors `Tile::zone_occupant` in Rust.

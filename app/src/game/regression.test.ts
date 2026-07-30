@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createInitialState, TileKind } from './gameState';
+import { createInitialState } from './gameState';
 import { Simulation } from './simulation';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
@@ -100,10 +100,10 @@ describe('regression: scenario 2 — power + residential growth', () => {
     expect(snap.utilities.powerProduced).toBeGreaterThan(0);
   });
   it('land tiles present', () => {
-    expect(snap.tileCounts[TileKind.Land] ?? 0).toBeGreaterThan(0);
+    expect(snap.tileCounts['terrain:land'] ?? 0).toBeGreaterThan(0);
   });
   it('residential tiles present', () => {
-    expect(snap.tileCounts[TileKind.Residential] ?? 0).toBeGreaterThan(0);
+    expect(snap.tileCounts['zone-residential'] ?? 0).toBeGreaterThan(0);
   });
 });
 
@@ -140,7 +140,7 @@ describe('regression: scenario 3 — water + zones', () => {
   it('buildings grew', () => expect(snap.buildingCount).toBeGreaterThan(0));
   it('population grew', () => expect(snap.population).toBeGreaterThan(20));
   it('residential tiles present', () => {
-    expect(snap.tileCounts[TileKind.Residential] ?? 0).toBeGreaterThan(0);
+    expect(snap.tileCounts['zone-residential'] ?? 0).toBeGreaterThan(0);
   });
 });
 
@@ -172,10 +172,15 @@ describe('regression: scenario 4 — power stress + abandonment', () => {
   it('tick count', () => expect(snap.tick).toBe(400));
   it('simulation remained alive (money >= 0)', () => expect(snap.money).toBeGreaterThanOrEqual(0));
   it('tile kinds are populated', () => {
-    const total = Object.values(snap.tileCounts).reduce((a, b) => a + b, 0);
+    // Every tile contributes to exactly one terrain bucket — unlike the
+    // occupant buckets, which a single tile can contribute to several of at
+    // once (a zoned lot crossed by a wire counts under both) — so summing
+    // just those two is the equivalent of the old "every tile accounted
+    // for" sanity check.
+    const total = (snap.tileCounts['terrain:land'] ?? 0) + (snap.tileCounts['terrain:water'] ?? 0);
     expect(total).toBe(16 * 16);
   });
   it('some road tiles present', () => {
-    expect(snap.tileCounts[TileKind.Road] ?? 0).toBeGreaterThan(0);
+    expect(snap.tileCounts['road'] ?? 0).toBeGreaterThan(0);
   });
 });

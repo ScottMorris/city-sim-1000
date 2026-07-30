@@ -334,13 +334,16 @@ describe('simulation', () => {
     applyTool(state, Tool.Rail, 3, 2);
     applyTool(state, Tool.Rail, 3, 3);
     applyTool(state, Tool.Rail, 3, 4);
-    // draw a road across it, creating a rail underlay
+    // draw a road across it, creating a road underlay — `Rail` outranks
+    // `Road` in `legacyKind`'s precedence regardless of build order, so a
+    // road-last crossing is still spelled `Rail` (see `e2e/visual.spec.ts`'s
+    // "delta 1").
     applyTool(state, Tool.Road, 2, 3);
     applyTool(state, Tool.Road, 3, 3);
     applyTool(state, Tool.Road, 4, 3);
     const crossing = getTile(state, 3, 3)!;
-    expect(crossing.kind).toBe(TileKind.Road);
-    expect(crossing.railUnderlay).toBe(true);
+    expect(crossing.kind).toBe(TileKind.Rail);
+    expect(crossing.roadUnderlay).toBe(true);
 
     applyTool(state, Tool.Bulldoze, 3, 3);
 

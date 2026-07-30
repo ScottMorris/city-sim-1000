@@ -17,7 +17,7 @@
  * {@link TileFacts} and {@link Headline}. Neither adapter is allowed to
  * normalise anything on its engine's behalf: every reading comes off the
  * engine's own public surface (`tile_buffer()` for Rust, `GameState` for TS)
- * and goes through the shared `factsFromWire`.
+ * and goes through the shared `factsFromTile`.
  */
 
 import { readFileSync } from 'node:fs';
@@ -35,10 +35,9 @@ import {
   decodeOverheadBits,
   STATUS
 } from '../protocol/tileBuffer';
-import { LEGACY_FLAGS } from '../protocol/legacyTileBuffer';
 import { Terrain } from '../protocol/occupants';
-import { legacyKind, legacyFlags, legacyUndergroundKind } from '../protocol/legacyProjection';
-import { factsFromWire, TileFacts } from './tileFacts';
+import { getBuildingTemplate } from '../buildings/templates';
+import { factsFromTile, TileFacts } from './tileFacts';
 
 interface WireBuilding {
   id: number;
@@ -121,7 +120,7 @@ export interface Engine {
 function naturalTerrain(state: GameState): Uint8Array {
   const out = new Uint8Array(state.tiles.length);
   state.tiles.forEach((tile, i) => {
-    out[i] = tileKindToU8(tile.kind);
+    out[i] = tileKindToU8(tile.terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
   });
   return out;
 }
@@ -234,24 +233,21 @@ export function rustEngine(width: number, height: number, seed: number): Engine 
 
       const out: TileFacts[] = [];
       for (let i = 0; i < n; i++) {
-        const terrain = (buf[off.status + i] & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
-        const surface = decodeSurfaceBits(buf[off.surface + i]);
-        const overhead = decodeOverheadBits(buf[off.overhead + i]);
-        const underground = decodeUndergroundBits(buf[off.underground + i]);
+        const status = buf[off.status + i];
         const buildingIdRaw = view.getUint16(off.buildingId + i * 2, true);
-        const buildingId = buildingIdRaw === 0 ? undefined : buildingIdRaw;
-
-        const kind = legacyKind({ terrain, surface, overhead, buildingId, structureKindOf });
-        const flags = legacyFlags({ terrain, surface, overhead, buildingId, structureKindOf }, kind);
-        const flagBits =
-          ((buf[off.status + i] & STATUS.POWERED) !== 0 ? LEGACY_FLAGS.POWERED : 0) |
-          ((buf[off.status + i] & STATUS.WATERED) !== 0 ? LEGACY_FLAGS.WATERED : 0) |
-          ((buf[off.status + i] & STATUS.ABANDONED) !== 0 ? LEGACY_FLAGS.ABANDONED : 0) |
-          (flags.roadUnderlay ? LEGACY_FLAGS.ROAD_UNDERLAY : 0) |
-          (flags.railUnderlay ? LEGACY_FLAGS.RAIL_UNDERLAY : 0) |
-          (flags.powerOverlay ? LEGACY_FLAGS.POWER_OVERLAY : 0);
-
-        out.push(factsFromWire(kind, flagBits, buildingIdRaw, legacyUndergroundKind(underground)));
+        out.push(
+          factsFromTile({
+            terrain: (status & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land,
+            underground: decodeUndergroundBits(buf[off.underground + i]),
+            surface: decodeSurfaceBits(buf[off.surface + i]),
+            overhead: decodeOverheadBits(buf[off.overhead + i]),
+            buildingId: buildingIdRaw === 0 ? undefined : buildingIdRaw,
+            structureKindOf,
+            powered: (status & STATUS.POWERED) !== 0,
+            watered: (status & STATUS.WATERED) !== 0,
+            abandoned: (status & STATUS.ABANDONED) !== 0
+          })
+        );
       }
       return out;
     }
@@ -271,17 +267,9 @@ export function tsEngine(width: number, height: number, seed: number): Engine {
   const state = createInitialState(width, height, seed);
   const sim = new Simulation(state, { ticksPerSecond: 20 });
 
-  /** Repack a TS `Tile` into the v4 flags byte so both sides read it alike. */
-  const flagsOf = (x: number, y: number): number => {
-    const tile = getTile(state, x, y)!;
-    let bits = 0;
-    if (tile.powered) bits |= LEGACY_FLAGS.POWERED;
-    if (tile.watered) bits |= LEGACY_FLAGS.WATERED;
-    if (tile.abandoned) bits |= LEGACY_FLAGS.ABANDONED;
-    if (tile.roadUnderlay) bits |= LEGACY_FLAGS.ROAD_UNDERLAY;
-    if (tile.railUnderlay) bits |= LEGACY_FLAGS.RAIL_UNDERLAY;
-    if (tile.powerOverlay) bits |= LEGACY_FLAGS.POWER_OVERLAY;
-    return bits;
+  const structureKindOf = (buildingId: number): TileKind | undefined => {
+    const instance = state.buildings.find((b) => b.id === buildingId);
+    return instance ? getBuildingTemplate(instance.templateId)?.tileKind : undefined;
   };
 
   return {
@@ -313,12 +301,17 @@ export function tsEngine(width: number, height: number, seed: number): Engine {
         for (let x = 0; x < width; x++) {
           const tile = getTile(state, x, y)!;
           out.push(
-            factsFromWire(
-              tile.kind,
-              flagsOf(x, y),
-              tile.buildingId ?? 0,
-              tile.legacyUnderground === TileKind.WaterPipe ? TileKind.WaterPipe : undefined
-            )
+            factsFromTile({
+              terrain: tile.terrain,
+              underground: tile.underground,
+              surface: tile.surface,
+              overhead: tile.overhead,
+              buildingId: tile.buildingId,
+              structureKindOf,
+              powered: tile.powered,
+              watered: tile.watered,
+              abandoned: tile.abandoned ?? false
+            })
           );
         }
       }
