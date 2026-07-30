@@ -1,3 +1,4 @@
+import { getBuildInfo, isBuildMismatched, isEngineStale } from '../buildInfo';
 import { DemandDetails, getSimulationDebugStats } from '../game/debugStats';
 import { GameState } from '../game/gameState';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
@@ -110,21 +111,55 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   overlay.id = 'debug-overlay';
   overlay.className = 'debug-overlay hidden';
   root.appendChild(overlay);
-  // The overlay lives inside canvas-wrapper (for positioning), whose delegated
-  // pointerdown handler treats any tap as a map interaction regardless of
-  // target — stop it here so tapping the overlay doesn't also paint/inspect
-  // the tile underneath. Matches minimap.ts/hud.ts's existing overlay guard.
-  overlay.addEventListener('pointerdown', (e) => e.stopPropagation());
+  // The overlay sits inside `#canvas-wrapper`, whose delegated handlers treat
+  // any pointer activity as map interaction regardless of target — so every
+  // event that can *start or continue* a map action has to stop here, or the
+  // panel paints, bulldozes and pans the tiles it is covering.
+  //
+  // `pointerdown` alone was not enough. Press on the map, drag across the
+  // panel, and `pointermove` kept painting the hidden tiles underneath;
+  // `contextmenu` still reached the wrapper's quick-bulldoze; and a `wheel`
+  // over the panel zoomed the map out from under it.
+  //
+  // **`pointerup` and `pointercancel` are deliberately absent from this list.**
+  // They are bound on both `wrapper` and `window` (see `stopPainting` in
+  // `main.ts`) precisely so a drag can always end, whatever it ends over.
+  // `stopPropagation` on the overlay would stop the event bubbling to *either*,
+  // leaving `isPainting` stuck on and the next mouse move painting a stripe
+  // across the map. Letting them through is the whole point: they only ever
+  // finish an interaction, never begin one.
+  for (const type of ['pointerdown', 'pointermove', 'click', 'dblclick', 'contextmenu'] as const) {
+    overlay.addEventListener(type, (e) => e.stopPropagation());
+  }
   overlay.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true });
 
   // Kept as stable, persistent elements rather than part of the per-frame
   // innerHTML rebuild below — recreating an interactive button every frame
   // makes it a moving target for a real tap (the element can be swapped out
   // mid-gesture), not just an automated-test flakiness risk.
+  // One right-aligned row holding both controls, rather than two separately
+  // positioned buttons: the panel is `display: grid`, so a second
+  // `justify-self: end` element would take its own row and stack under the
+  // first instead of sitting beside it.
+  const controlsEl = document.createElement('div');
+  controlsEl.className = 'debug-controls';
+  overlay.appendChild(controlsEl);
+
+  // Hide sits left of Full/Mini — the destructive-ish action furthest from the
+  // one you press repeatedly, so a mistimed tap on a phone re-sizes the panel
+  // rather than dismissing it.
+  const hideBtn = document.createElement('button');
+  hideBtn.type = 'button';
+  hideBtn.className = 'debug-mode-toggle debug-hide-btn';
+  hideBtn.textContent = '✕ Hide';
+  hideBtn.title = 'Hide the debug overlay';
+  hideBtn.setAttribute('aria-label', 'Hide the debug overlay');
+  controlsEl.appendChild(hideBtn);
+
   const modeToggleBtn = document.createElement('button');
   modeToggleBtn.type = 'button';
   modeToggleBtn.className = 'debug-mode-toggle';
-  overlay.appendChild(modeToggleBtn);
+  controlsEl.appendChild(modeToggleBtn);
   const contentEl = document.createElement('div');
   contentEl.className = 'debug-content';
   overlay.appendChild(contentEl);
@@ -139,6 +174,46 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
     `(max-width: ${DEFAULT_COMPACT_BREAKPOINT_PX}px), (max-height: ${DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX}px)`
   );
   let mode: DebugOverlayMode = compactQuery.matches ? 'mini' : 'full';
+
+  /**
+   * Which build is actually running — the app bundle and the engine binary,
+   * separately, because they are built by different commands and go stale
+   * independently.
+   *
+   * The load-bearing row is **Engine**: a WASM module is instantiated once and
+   * lives for the tab's lifetime, so `bun run build:wasm` does nothing to an
+   * open page and no amount of reloading the *source* helps. When the binary on
+   * disk is newer than this page, the panel says so in as many words.
+   */
+  const buildSection = () => {
+    const b = getBuildInfo();
+    const stale = isEngineStale(b);
+    const mismatch = isBuildMismatched(b);
+    const clock = (iso: string | null) =>
+      iso ? new Date(iso).toLocaleTimeString(undefined, { hour12: false }) : '—';
+    const staleRow =
+      stale === true
+        ? `<div class="debug-hint debug-warn">Engine is STALE — the WASM on disk is newer than this page. Reload.</div>`
+        : stale === null
+          ? `<div class="debug-hint">Engine freshness unknown (no build timestamp).</div>`
+          : '';
+    // Distinct from staleness on purpose: these can share a timestamp and still
+    // be built from different checkouts, which is the harder case to spot.
+    const mismatchRow =
+      mismatch === true
+        ? `<div class="debug-hint debug-warn">App and engine are from DIFFERENT commits — run \`bun run build:wasm\`.</div>`
+        : '';
+    return `
+    <div class="debug-section">
+      <div class="debug-heading">Build</div>
+      <div class="debug-row"><span>App</span><strong>${b.sha}</strong></div>
+      <div class="debug-hint">Bundle built ${clock(b.builtAt)} · page loaded ${clock(b.pageLoadedAt)}</div>
+      <div class="debug-row"><span>Engine</span><strong>${b.engineSha ?? '—'}</strong></div>
+      <div class="debug-hint">v${b.engineVersion ?? '—'} · WASM built ${clock(b.wasmLastModified ?? b.wasmBuiltAtBundleTime)}</div>
+      ${mismatchRow}
+      ${staleRow}
+    </div>`;
+  };
 
   const perfAndMemorySections = (heap: HeapSnapshot) => `
     <div class="debug-section">
@@ -242,6 +317,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
           <div class="debug-hint">Balance ${stats.utilities.waterBalance.toFixed(1)} m³</div>
         </div>
         ${perfAndMemorySections(heap)}
+        ${buildSection()}
       `;
     } catch (err) {
       console.error('Debug overlay render failed', err);
@@ -256,14 +332,23 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   });
   overlay.classList.toggle('mode-mini', mode === 'mini');
 
-  toggleBtn.addEventListener('click', () => {
-    visible = !visible;
+  // Single path for both ways in and out — the external toolbar button and the
+  // panel's own Hide. Duplicating it would let `toggleBtn`'s label drift out of
+  // step with the panel: hiding from inside would leave the toolbar still
+  // offering "Hide overlay" for something already gone, and the next press
+  // would then hide it again rather than bring it back.
+  const setVisible = (next: boolean) => {
+    visible = next;
     overlay.classList.toggle('hidden', !visible);
     overlay.classList.toggle('visible', visible);
     toggleBtn.textContent = visible ? 'Hide overlay' : 'Show overlay';
+    toggleBtn.setAttribute('aria-expanded', String(visible));
     if (visible) void sampleHeap(true);
     renderStats(getState());
-  });
+  };
+
+  toggleBtn.addEventListener('click', () => setVisible(!visible));
+  hideBtn.addEventListener('click', () => setVisible(false));
 
   copyBtn.addEventListener('click', async () => {
     const snapshot = getState();

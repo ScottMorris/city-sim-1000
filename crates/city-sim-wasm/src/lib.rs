@@ -23,6 +23,20 @@ pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
+/// Git revision this binary was compiled from, `-dirty` when the tree was not
+/// clean; `unknown` where git was unavailable at build time.
+///
+/// [`version`] cannot answer "which engine am I running": it returns
+/// `CARGO_PKG_VERSION`, which does not move between releases, so a browser
+/// holding a WASM module from hours ago reports the same string as a fresh
+/// one. This does move, and it is directly comparable with the app bundle's own
+/// SHA in the debug overlay — when the two differ, the engine and the UI were
+/// built from different commits.
+#[wasm_bindgen]
+pub fn build_sha() -> String {
+    env!("CITY_SIM_GIT_SHA").to_owned()
+}
+
 /// Production simulation host for the browser Worker.
 ///
 /// Wraps `city-sim-core::Simulation` and a snapshot-stack `History`, wiring

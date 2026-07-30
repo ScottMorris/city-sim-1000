@@ -28,7 +28,21 @@ function mcp(page: Page, method: string, params?: Record<string, unknown>): Prom
 test.describe('mobile emulation', () => {
   test('compact layout renders with current-tool button and undo', async ({ page }) => {
     await boot(page);
-    await expect(page.locator('.toolbar[data-layout-mode="compact"]')).toBeVisible();
+    // The compact shell is a zero-height container: its content lives in
+    // `.toolbar-compact-dock`, which is `position: fixed` at the bottom of the
+    // screen. So assert the mode is active and that the dock the player can
+    // actually see renders — not that the empty shell paints.
+    const shell = page.locator('.toolbar[data-layout-mode="compact"]');
+    await expect(shell).toBeAttached();
+    await expect(page.locator('.toolbar-compact-dock')).toBeVisible();
+
+    // Regression: the shell kept the desktop rule's padding, borders and
+    // background in compact mode, so it painted a 24px empty band
+    // `position: absolute; top: 0` across the top of the map on every
+    // phone-sized viewport — dead space the map could not draw into and the
+    // debug overlay collided with. It must take up no room at all.
+    await expect(shell).toHaveJSProperty('offsetHeight', 0);
+
     await expect(page.locator('.toolbar-current-tool-btn')).toBeVisible();
     const undoBtn = page.locator('.toolbar-undo-btn');
     await expect(undoBtn).toBeVisible();

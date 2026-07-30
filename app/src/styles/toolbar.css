@@ -32,6 +32,29 @@
   flex: 1;
 }
 
+/* In compact mode the shell has no content of its own — everything moved to
+   `.toolbar-compact-dock` below, which is `position: fixed` at the bottom of
+   the screen. The element stayed behind though, and `.toolbar`'s base rule
+   still gave it `padding: 10px 16px`, two 2px borders and a `#0d1a2f`
+   background: a 24px empty dark band `position: absolute; top: 0` over the
+   map, on every phone-sized viewport.
+
+   It could not be `display: none`, because the fixed dock is a *child* — that
+   would take the whole compact toolbar with it. Collapsing the box is what is
+   wanted: a fixed descendant is not laid out by, or clipped by, a zero-height
+   ancestor.
+
+   `overflow: visible` overrides the base rule's `overflow-x: auto`, which on a
+   zero-height box is just a scrollbar waiting to happen. */
+.toolbar[data-layout-mode='compact'] {
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  overflow: visible;
+}
+
 /* Compact toolbar shell (layoutMode: 'compact') — a thumb-zone current-tool
    button that opens a bottom sheet, instead of the full desktop row. All of
    it is position: fixed against the viewport, not `.toolbar`'s own
