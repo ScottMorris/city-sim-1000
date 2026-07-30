@@ -117,6 +117,7 @@ Each station lives under `app/public/audio/radio/<station>/` with audio files + 
 - **PR descriptions**: `## Summary` (flat bullets, bold lead-ins) + optional `###` subsections (`User-facing changes`, `Maintainer-facing changes`, `Packaging`, `Workflow and infrastructure`, `Documentation`, `Known limitations`) + `## Test plan` (checklist bullets, concrete commands, explicit gaps if verification is incomplete).
 - **PR merge**: Always `--no-ff`. Never squash. Merge commit format: `PR title (#N)\n\nPR body` — matches GitHub's "Pull request title and description" setting.
 - **Pull request labels**: Apply at least one label when opening a PR. Available labels: `bug`, `enhancement`, `documentation`, `infrastructure` (CI/CD/tooling), `chore` (maintenance/housekeeping), `refactor`. Use `gh pr edit <number> --add-label "<label>"` after creation.
+- **Branch naming**: Every new branch takes a Conventional-Commit-style type prefix — `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, `chore/`, `infra/` — plus a kebab-case description (e.g. `fix/bulldoze-underground-view`). No exceptions for stacked branches; pre-rule branches are grandfathered.
 - **Git workflow**: Do not push or force-push, and do not commit local planning/scratch files, unless explicitly requested by the user.
 - **Markdown formatting**: Do not manually hard-wrap prose — write each paragraph as one line and let the renderer/editor soft-wrap.
 - The in-game manual is `app/public/manual.html`, opened via a modal iframe — keep it in sync with UI/behaviour changes.
