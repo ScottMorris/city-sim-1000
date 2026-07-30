@@ -27,8 +27,25 @@ import { Simulation } from '../simulation';
 import { applyTool } from '../tools';
 import { Tool } from '../toolTypes';
 import { tileKindFromU8, tileKindToU8 } from '../protocol/tileKind';
-import { BYTES_PER_TILE, FLAGS, tileBufferOffsets } from '../protocol/tileBuffer';
+import {
+  BYTES_PER_TILE,
+  tileBufferOffsets,
+  decodeUndergroundBits,
+  decodeSurfaceBits,
+  decodeOverheadBits,
+  STATUS
+} from '../protocol/tileBuffer';
+import { LEGACY_FLAGS } from '../protocol/legacyTileBuffer';
+import { Terrain } from '../protocol/occupants';
+import { legacyKind, legacyFlags, legacyUndergroundKind } from '../protocol/legacyProjection';
 import { factsFromWire, TileFacts } from './tileFacts';
+
+interface WireBuilding {
+  id: number;
+  kind: number;
+  originX: number;
+  originY: number;
+}
 
 /**
  * TS `Tool` → the Rust `#[repr(u8)]` discriminant.
@@ -118,6 +135,7 @@ interface SimHostInstance {
   set_natural_terrain(kinds: Uint8Array): void;
   step(dt: number): void;
   tile_buffer(): Uint8Array;
+  buildings_json(): string;
   money(): number;
   population(): number;
   jobs(): number;
@@ -202,21 +220,38 @@ export function rustEngine(width: number, height: number, seed: number): Engine 
     facts() {
       const buf = host.tile_buffer();
       const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+      // The live wire no longer carries a resolved kind byte per tile — a
+      // `Structure` occupant says only that a building stands here, not
+      // which one (#177's TS/wire follow-up). `buildings_json` is the only
+      // source for that now, same as `wasmSimBridge.ts`'s decode.
+      const wireBuildings: WireBuilding[] = JSON.parse(host.buildings_json());
+      const structureKindById = new Map<number, TileKind>();
+      for (const b of wireBuildings) {
+        const kind = tileKindFromU8(b.kind);
+        if (kind !== undefined) structureKindById.set(b.id, kind);
+      }
+      const structureKindOf = (id: number) => structureKindById.get(id);
+
       const out: TileFacts[] = [];
       for (let i = 0; i < n; i++) {
-        const kind = tileKindFromU8(buf[off.kind + i]);
-        if (kind === undefined) throw new Error(`rust emitted unknown kind ${buf[off.kind + i]}`);
-        const undergroundByte = buf[off.undergroundKind + i];
-        const underground =
-          undergroundByte === 0xff ? undefined : tileKindFromU8(undergroundByte);
-        out.push(
-          factsFromWire(
-            kind,
-            buf[off.flags + i],
-            view.getUint16(off.buildingId + i * 2, true),
-            underground
-          )
-        );
+        const terrain = (buf[off.status + i] & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
+        const surface = decodeSurfaceBits(buf[off.surface + i]);
+        const overhead = decodeOverheadBits(buf[off.overhead + i]);
+        const underground = decodeUndergroundBits(buf[off.underground + i]);
+        const buildingIdRaw = view.getUint16(off.buildingId + i * 2, true);
+        const buildingId = buildingIdRaw === 0 ? undefined : buildingIdRaw;
+
+        const kind = legacyKind({ terrain, surface, overhead, buildingId, structureKindOf });
+        const flags = legacyFlags({ terrain, surface, overhead, buildingId, structureKindOf }, kind);
+        const flagBits =
+          ((buf[off.status + i] & STATUS.POWERED) !== 0 ? LEGACY_FLAGS.POWERED : 0) |
+          ((buf[off.status + i] & STATUS.WATERED) !== 0 ? LEGACY_FLAGS.WATERED : 0) |
+          ((buf[off.status + i] & STATUS.ABANDONED) !== 0 ? LEGACY_FLAGS.ABANDONED : 0) |
+          (flags.roadUnderlay ? LEGACY_FLAGS.ROAD_UNDERLAY : 0) |
+          (flags.railUnderlay ? LEGACY_FLAGS.RAIL_UNDERLAY : 0) |
+          (flags.powerOverlay ? LEGACY_FLAGS.POWER_OVERLAY : 0);
+
+        out.push(factsFromWire(kind, flagBits, buildingIdRaw, legacyUndergroundKind(underground)));
       }
       return out;
     }
@@ -240,12 +275,12 @@ export function tsEngine(width: number, height: number, seed: number): Engine {
   const flagsOf = (x: number, y: number): number => {
     const tile = getTile(state, x, y)!;
     let bits = 0;
-    if (tile.powered) bits |= FLAGS.POWERED;
-    if (tile.watered) bits |= FLAGS.WATERED;
-    if (tile.abandoned) bits |= FLAGS.ABANDONED;
-    if (tile.roadUnderlay) bits |= FLAGS.ROAD_UNDERLAY;
-    if (tile.railUnderlay) bits |= FLAGS.RAIL_UNDERLAY;
-    if (tile.powerOverlay) bits |= FLAGS.POWER_OVERLAY;
+    if (tile.powered) bits |= LEGACY_FLAGS.POWERED;
+    if (tile.watered) bits |= LEGACY_FLAGS.WATERED;
+    if (tile.abandoned) bits |= LEGACY_FLAGS.ABANDONED;
+    if (tile.roadUnderlay) bits |= LEGACY_FLAGS.ROAD_UNDERLAY;
+    if (tile.railUnderlay) bits |= LEGACY_FLAGS.RAIL_UNDERLAY;
+    if (tile.powerOverlay) bits |= LEGACY_FLAGS.POWER_OVERLAY;
     return bits;
   };
 
@@ -282,7 +317,7 @@ export function tsEngine(width: number, height: number, seed: number): Engine {
               tile.kind,
               flagsOf(x, y),
               tile.buildingId ?? 0,
-              tile.underground === TileKind.WaterPipe ? TileKind.WaterPipe : undefined
+              tile.legacyUnderground === TileKind.WaterPipe ? TileKind.WaterPipe : undefined
             )
           );
         }

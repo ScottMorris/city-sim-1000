@@ -107,7 +107,7 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
  */
 export function isWaterCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
-  if (tile.underground === TileKind.WaterPipe) return true;
+  if (tile.legacyUnderground === TileKind.WaterPipe) return true;
   if (tile.buildingId !== undefined) return true; // Buildings carry water
   if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
   if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;

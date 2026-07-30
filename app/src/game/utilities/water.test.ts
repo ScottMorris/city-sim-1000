@@ -23,7 +23,7 @@ describe('water network', () => {
 
     // Place Pipe at 3,1 (adjacent to tower at 2,1)
     const pipeTile = getTile(state, 3, 1)!;
-    pipeTile.underground = TileKind.WaterPipe;
+    pipeTile.legacyUnderground = TileKind.WaterPipe;
 
     // Ensure building status is active (towers need power)
     updateBuildingStates(state);
@@ -48,8 +48,8 @@ describe('water network', () => {
       tile.powered = true;
     });
 
-    getTile(state, 3, 1)!.underground = TileKind.WaterPipe;
-    getTile(state, 4, 1)!.underground = TileKind.WaterPipe;
+    getTile(state, 3, 1)!.legacyUnderground = TileKind.WaterPipe;
+    getTile(state, 4, 1)!.legacyUnderground = TileKind.WaterPipe;
 
     updateBuildingStates(state);
     recomputeWaterNetwork(state);

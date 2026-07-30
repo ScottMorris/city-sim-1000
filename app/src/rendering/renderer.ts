@@ -232,7 +232,7 @@ export class MapRenderer {
 
           const hasNeighbour = (dx: number, dy: number) => {
             const t = getTile(state, x + dx, y + dy);
-            return t?.underground === TileKind.WaterPipe
+            return t?.legacyUnderground === TileKind.WaterPipe
               || t?.kind === TileKind.WaterPump
               || t?.kind === TileKind.WaterTower;
           };
@@ -386,7 +386,7 @@ export class MapRenderer {
 
       if (overlayMode === 'water' || overlayMode === 'underground') {
         if (tile.kind === TileKind.Water) return { color: 0x2f7be5, alpha: 0.32 };
-        if (tile.underground === TileKind.WaterPipe) {
+        if (tile.legacyUnderground === TileKind.WaterPipe) {
           return { color: tile.watered ? WATER_OVERLAY_COLOUR : 0x888888, alpha: 0.6 };
         }
         if (tile.kind === TileKind.WaterPipe) return { color: WATER_OVERLAY_COLOUR, alpha: 0.38 }; // Legacy check

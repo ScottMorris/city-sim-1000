@@ -22,8 +22,17 @@ import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/command
 import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
-import { tileBufferOffsets, decodeHappiness, FLAGS } from './protocol/tileBuffer';
+import {
+  tileBufferOffsets,
+  decodeHappiness,
+  decodeUndergroundBits,
+  decodeSurfaceBits,
+  decodeOverheadBits,
+  STATUS
+} from './protocol/tileBuffer';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
+import { legacyKind, legacyFlags, legacyUndergroundKind } from './protocol/legacyProjection';
 import { Tool } from './toolTypes';
 
 // Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
@@ -69,20 +78,28 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; mutationSeq: number }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number }
   | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'snapshot_result'; requestId: number; bytes: Uint8Array }
   | { type: 'load_result'; requestId: number; ok: false; error?: string }
   | {
       type: 'load_result'; requestId: number; ok: true;
       width: number; height: number; seed: number;
       policies: GameState['policies'];
-      bytes: Uint8Array; stats: SimStats; mutationSeq: number; history: WorkerHistoryFlags;
+      bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags;
     };
+
+/** One entry decoded from a `buildingsJson` payload — see `SimHost::buildings_json` (Rust). */
+interface WireBuilding {
+  id: number;
+  kind: number;
+  originX: number;
+  originY: number;
+}
 
 export interface WasmSimBridgeConfig {
   ticksPerSecond?: number;
@@ -100,6 +117,7 @@ export class WasmSimBridge implements SimBridge {
   private handler: ((msg: FromSim) => void) | null = null;
   private speedMult = 1;
   private pendingTileBuffer: Uint8Array | null = null;
+  private pendingBuildingsJson = '';
   private pendingStats: SimStats | null = null;
   private pendingMutationSeq = 0;
   private pendingUndo: ((happened: boolean) => void) | null = null;
@@ -196,7 +214,7 @@ export class WasmSimBridge implements SimBridge {
       return this.consumeDirty();
     }
     if (this.pendingTileBuffer !== null) {
-      this.applyTileBuffer(this.pendingTileBuffer);
+      this.applyTileBuffer(this.pendingTileBuffer, this.pendingBuildingsJson);
       this.pendingTileBuffer = null;
       this.dirtySinceLastStep = true;
     }
@@ -373,6 +391,7 @@ export class WasmSimBridge implements SimBridge {
         break;
       case 'step_result':
         this.pendingTileBuffer = msg.bytes;
+        this.pendingBuildingsJson = msg.buildingsJson;
         this.pendingStats = msg.stats;
         this.pendingMutationSeq = msg.mutationSeq;
         break;
@@ -388,7 +407,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingTileBuffer = null;
         this.pendingStats = null;
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -402,7 +421,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingTileBuffer = null;
         this.pendingStats = null;
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -431,7 +450,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.adoptDimensions(msg.width, msg.height, msg.seed);
         this.state.policies = msg.policies;
-        this.applyTileBuffer(msg.bytes);
+        this.applyTileBuffer(msg.bytes, msg.buildingsJson);
         this.updateStats(msg.stats);
         this.lastAppliedTick = msg.stats.tick;
         this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -456,6 +475,11 @@ export class WasmSimBridge implements SimBridge {
       powered: false,
       watered: false,
       services: createTileServiceState(),
+      terrain: Terrain.Land,
+      underground: 0,
+      surface: 0,
+      overhead: 0,
+      density: ZoneDensity.Low,
     }));
   }
 
@@ -551,41 +575,65 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  private applyTileBuffer(bytes: Uint8Array): void {
+  private applyTileBuffer(bytes: Uint8Array, buildingsJson: string): void {
     const n = this.state.tiles.length;
     const o = tileBufferOffsets(n);
+
+    // The live wire no longer carries a resolved kind byte per tile (#177's
+    // TS/wire follow-up) — a `Structure` occupant says only that a building
+    // stands here, not which one. `buildings_json` is the only source for
+    // that now; parse it once and look up by id below.
+    const wireBuildings: WireBuilding[] = buildingsJson ? JSON.parse(buildingsJson) : [];
+    const structureKindById = new Map<number, TileKind>();
+    for (const b of wireBuildings) {
+      const kind = tileKindFromU8(b.kind);
+      if (kind !== undefined) structureKindById.set(b.id, kind);
+    }
+    const structureKindOf = (id: number) => structureKindById.get(id);
+
     for (let i = 0; i < n; i++) {
       const tile = this.state.tiles[i];
-      const rustKind = tileKindFromU8(bytes[o.kind + i]);
-      if (rustKind !== undefined) {
-        // The engine is seeded with natural terrain at init and every load
-        // path restores full state, so the buffer is the single source of
-        // truth for tile kinds — no display-side override.
-        tile.kind = rustKind;
-      }
-      const flags = bytes[o.flags + i];
-      tile.powered      = (flags & FLAGS.POWERED)       !== 0;
-      tile.watered      = (flags & FLAGS.WATERED)        !== 0;
-      tile.abandoned    = (flags & FLAGS.ABANDONED)      !== 0;
-      tile.roadUnderlay = (flags & FLAGS.ROAD_UNDERLAY)  !== 0;
-      tile.railUnderlay = (flags & FLAGS.RAIL_UNDERLAY)  !== 0;
-      tile.powerOverlay = (flags & FLAGS.POWER_OVERLAY)  !== 0;
+      tile.underground = decodeUndergroundBits(bytes[o.underground + i]);
+      tile.surface = decodeSurfaceBits(bytes[o.surface + i]);
+      tile.overhead = decodeOverheadBits(bytes[o.overhead + i]);
+      const status = bytes[o.status + i];
+      tile.terrain = (status & STATUS.WATER_TERRAIN) !== 0 ? Terrain.Water : Terrain.Land;
+      tile.powered = (status & STATUS.POWERED) !== 0;
+      tile.watered = (status & STATUS.WATERED) !== 0;
+      tile.abandoned = (status & STATUS.ABANDONED) !== 0;
+      tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
       tile.happiness = decodeHappiness(bytes[o.happiness + i]);
       tile.elevation = bytes[o.elevation + i];
       const bidBase = o.buildingId + i * 2;
       const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
       tile.buildingId = bid === 0 ? undefined : bid;
-      const ugByte = bytes[o.undergroundKind + i];
-      tile.underground = ugByte === 0xFF ? undefined : tileKindFromU8(ugByte);
       // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
       tile.wilderness = bytes[o.wilderness + i] / 255;
+
+      // Shim fields — deleted, along with this whole block, once every
+      // consumer reads terrain/underground/surface/overhead directly.
+      const kind = legacyKind({
+        terrain: tile.terrain,
+        surface: tile.surface,
+        overhead: tile.overhead,
+        buildingId: tile.buildingId,
+        structureKindOf
+      });
+      tile.kind = kind;
+      const flags = legacyFlags(
+        { terrain: tile.terrain, surface: tile.surface, overhead: tile.overhead, buildingId: tile.buildingId, structureKindOf },
+        kind
+      );
+      tile.roadUnderlay = flags.roadUnderlay;
+      tile.railUnderlay = flags.railUnderlay;
+      tile.powerOverlay = flags.powerOverlay;
+      tile.legacyUnderground = legacyUndergroundKind(tile.underground);
     }
 
-    // Rebuild state.buildings so multi-tile sprite rendering has correct origins.
-    // Rust is authoritative; TS state.buildings is a display mirror only.
-    // Scanning in row-major order means the first occurrence of each buildingId
-    // is always the top-left (origin) tile of its footprint.
-    const seen = new Map<number, { kind: TileKind; x: number; y: number }>();
+    // Rebuild state.buildings directly from the parsed list — Rust is
+    // authoritative; TS state.buildings is a display mirror only. No more
+    // scanning tiles for first-occurrence origins: `buildings_json` already
+    // carries id, kind and origin.
     // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
     // until a pump, tower, or pipe exists, buildings don't require water.
     let hasWaterSystem = false;
@@ -594,22 +642,17 @@ export class WasmSimBridge implements SimBridge {
       if (
         tile.kind === TileKind.WaterPump ||
         tile.kind === TileKind.WaterTower ||
-        tile.underground === TileKind.WaterPipe
+        hasOccupant(tile.underground, Occupant.Pipe)
       ) {
         hasWaterSystem = true;
       }
-      if (tile.buildingId === undefined || seen.has(tile.buildingId)) continue;
-      seen.set(tile.buildingId, {
-        kind: tile.kind,
-        x: i % this.state.width,
-        y: Math.floor(i / this.state.width),
-      });
     }
-    this.state.buildings = Array.from(seen.entries()).map(([id, { kind, x, y }]) => {
+    this.state.buildings = wireBuildings.map((b) => {
+      const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
       // Derive status from the tile flags the Rust buffer already set.
       // Avoids calling updateBuildingStates, which misreads water status for
       // zones in cities without water infrastructure.
-      const originTile = this.state.tiles[y * this.state.width + x];
+      const originTile = this.state.tiles[b.originY * this.state.width + b.originX];
       const template = getBuildingTemplate(kind as string);
       const bstate = createBuildingState();
       const needsPower = template ? template.requiresPower !== false : false;
@@ -620,7 +663,12 @@ export class WasmSimBridge implements SimBridge {
       } else if (needsWater && !originTile?.watered) {
         bstate.status = BuildingStatus.InactiveNoWater;
       }
-      return { id, templateId: kind as string, origin: { x, y }, state: bstate };
+      return {
+        id: b.id,
+        templateId: kind as string,
+        origin: { x: b.originX, y: b.originY },
+        state: bstate
+      };
     });
 
     // Recompute education coverage so the debug overlay and HUD stay current.

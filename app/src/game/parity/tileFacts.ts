@@ -26,7 +26,7 @@
  */
 
 import { TileKind } from '../gameState';
-import { FLAGS } from '../protocol/tileBuffer';
+import { LEGACY_FLAGS as FLAGS } from '../protocol/legacyTileBuffer';
 
 /** Zone tags, in the order the wire kind byte spells them. */
 export const ZONE_KINDS: ReadonlySet<TileKind> = new Set([

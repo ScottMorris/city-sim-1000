@@ -20,7 +20,7 @@ import { extractClientState } from './clientState';
 import { applyTool } from './tools';
 import { Tool } from './toolTypes';
 import { deleteSave, getSave, listSaveMetas, putSave, setIdbFactory } from './saveStore';
-import { BYTES_PER_TILE, FLAGS, tileBufferOffsets } from './protocol/tileBuffer';
+import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
 
 function makeContainer(name?: string): SaveContainer {
@@ -81,10 +81,10 @@ describe('buildLegacyEngineImport', () => {
     state.tiles[10].roadUnderlay = true;
     const imp = buildLegacyEngineImport(state);
     const n = 64;
-    const o = tileBufferOffsets(n);
-    expect(imp.tiles).toHaveLength(n * BYTES_PER_TILE);
+    const o = legacyTileBufferOffsets(n);
+    expect(imp.tiles).toHaveLength(n * LEGACY_BYTES_PER_TILE);
     expect(imp.tiles[o.kind + 3 * 8 + 3]).toBe(tileKindToU8(state.tiles[3 * 8 + 3].kind));
-    expect(imp.tiles[o.flags + 10]).toBe(FLAGS.POWERED | FLAGS.WATERED | FLAGS.ROAD_UNDERLAY);
+    expect(imp.tiles[o.flags + 10]).toBe(LEGACY_FLAGS.POWERED | LEGACY_FLAGS.WATERED | LEGACY_FLAGS.ROAD_UNDERLAY);
     expect(imp.rngState).toEqual(state.rngState);
     expect(imp.seed).toBe(3);
     expect(imp.policies).toEqual(state.policies);
@@ -93,9 +93,9 @@ describe('buildLegacyEngineImport', () => {
   it('writes building ids little-endian and 0xFF for no underground', () => {
     const state = createInitialState(8, 8, 3);
     state.tiles[5].buildingId = 0x1234;
-    state.tiles[6].underground = state.tiles[6].kind; // any kind round-trips
+    state.tiles[6].legacyUnderground = state.tiles[6].kind; // any kind round-trips
     const imp = buildLegacyEngineImport(state);
-    const o = tileBufferOffsets(64);
+    const o = legacyTileBufferOffsets(64);
     expect(imp.tiles[o.buildingId + 5 * 2]).toBe(0x34);
     expect(imp.tiles[o.buildingId + 5 * 2 + 1]).toBe(0x12);
     expect(imp.tiles[o.undergroundKind + 7]).toBe(0xff);

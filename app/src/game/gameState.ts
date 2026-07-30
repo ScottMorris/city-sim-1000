@@ -8,6 +8,7 @@ import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
+import { Terrain, ZoneDensity } from './protocol/occupants';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
@@ -45,9 +46,19 @@ export interface Tile {
   powered: boolean;
   watered: boolean;
   abandoned?: boolean;
-  underground?: TileKind;
+  /**
+   * @deprecated shim field, renamed from `underground` (now the strata
+   * field below) to avoid a name collision. Populated from `underground`/
+   * `Occupant.Pipe` by `wasmSimBridge.ts`/`tauriSimBridge.ts` during the
+   * strangler window — removed once every consumer reads the strata fields
+   * directly.
+   */
+  legacyUnderground?: TileKind;
+  /** @deprecated shim field — see `legacyUnderground`'s note. */
   roadUnderlay?: boolean;
+  /** @deprecated shim field — see `legacyUnderground`'s note. */
   railUnderlay?: boolean;
+  /** @deprecated shim field — see `legacyUnderground`'s note. */
   powerOverlay?: boolean;
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
@@ -55,6 +66,17 @@ export interface Tile {
   /** Per-tile wilderness intensity, 0–1 (0.5 = neutral). From the sim's eco field. */
   wilderness?: number;
   services: TileServiceState;
+
+  /** What the ground itself is, `Land` | `Water`. Mirrors Rust's `Tile::terrain`. */
+  terrain: Terrain;
+  /** Underground stratum occupant bits (`Occupant.Pipe`/`Subway`/`Fibre`). Mirrors Rust's `Tile::underground`. */
+  underground: number;
+  /** Surface stratum occupant bits (`Occupant.Road`/`Rail`/zone tags/`Structure`). Mirrors Rust's `Tile::surface`. */
+  surface: number;
+  /** Overhead stratum occupant bits (`Occupant.PowerLine`/`Trees`). Mirrors Rust's `Tile::overhead`. */
+  overhead: number;
+  /** Zone density — not read by any system yet, carried for parity with Rust. */
+  density: ZoneDensity;
 }
 
 export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'wilderness' | 'underground';
@@ -321,13 +343,19 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     for (let x = 0; x < width; x++) {
       const edge = x < 3 || y < 3 || x > width - 4 || y > height - 4;
       const isWater = (x - width / 2) ** 2 + (y - height / 2) ** 2 < 180 && (x + y) % 5 === 0;
+      const water = edge || isWater;
       tiles.push({
-        kind: edge ? TileKind.Water : isWater ? TileKind.Water : TileKind.Land,
+        kind: water ? TileKind.Water : TileKind.Land,
         elevation: 0,
         happiness: 1,
         powered: false,
         watered: false,
-        services: createTileServiceState()
+        services: createTileServiceState(),
+        terrain: water ? Terrain.Water : Terrain.Land,
+        underground: 0,
+        surface: 0,
+        overhead: 0,
+        density: ZoneDensity.Low
       });
     }
   }
