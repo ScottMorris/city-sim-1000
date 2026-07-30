@@ -5,23 +5,12 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Texture } from 'pixi.js';
-import { createInitialState, getTile, setTile as rawSetTile, TileKind } from '../game/gameState';
+import { createInitialState, getTile, setTile, TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
-import { resyncTileStrata } from '../game/protocol/legacyProjection';
-import { getTileColour, resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
+import { createBuildingState } from '../game/buildings/state';
+import { Occupant, Terrain, setTileOccupant } from '../game/protocol/occupants';
+import { createBuildingLookup, getTileColour, resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
 import type { TileTextures } from './tileAtlas';
-
-/**
- * Every test in this file hand-spells a specific wire scenario, the same way
- * the old wire format could (a line built before its road, a zone that only
- * recorded a hydro overlay, ...). `setTile` only ever wrote the v4 shim
- * fields — resync the real strata it drives sprite selection from, same as
- * `tools.ts`'s `applyTool` does after every tool call.
- */
-function setTile(state: ReturnType<typeof createInitialState>, x: number, y: number, kind: TileKind): void {
-  rawSetTile(state, x, y, kind);
-  resyncTileStrata(getTile(state, x, y)!);
-}
 
 /** Sentinel "textures" — resolveTileSprite only passes them through, so plain
  *  tagged objects are enough to assert which sprite was picked. */
@@ -116,8 +105,7 @@ describe('rail-road level crossings', () => {
     for (const x of [1, 2, 3]) setTile(state, x, 2, TileKind.Road);
     for (const y of [1, 2, 3]) setTile(state, 2, y, TileKind.Rail);
     const crossingTile = getTile(state, 2, 2)!;
-    crossingTile.roadUnderlay = true;
-    resyncTileStrata(crossingTile);
+    setTileOccupant(crossingTile, Occupant.Road, true);
     expect(spriteName(state, 2, 2, textures)).toBe('crossing-ns');
   });
 
@@ -130,8 +118,7 @@ describe('rail-road level crossings', () => {
     setTile(state, 2, 2, TileKind.Road);
     setTile(state, 2, 3, TileKind.Road);
     const crossingTile = getTile(state, 2, 2)!;
-    crossingTile.railUnderlay = true;
-    resyncTileStrata(crossingTile);
+    setTileOccupant(crossingTile, Occupant.Rail, true);
     expect(spriteName(state, 2, 2, textures)).toBe('crossing-ew');
   });
 
@@ -220,8 +207,7 @@ describe('hydro crossing road, rail and zones (issue #169)', () => {
     setTile(state, 2, 5, TileKind.PowerLine);
     setTile(state, 2, 4, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
-    tile.roadUnderlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.Road, true);
 
     expect(spriteName(state, 2, 4, textures)).toBe('road-ew');
     expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
@@ -236,8 +222,7 @@ describe('hydro crossing road, rail and zones (issue #169)', () => {
     setTile(state, 3, 4, TileKind.PowerLine);
     setTile(state, 2, 4, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
-    tile.railUnderlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.Rail, true);
 
     expect(spriteName(state, 2, 4, textures)).toBe('rail-ns');
     expect(overlayName(state, 2, 4, textures)).toBe('xing-ew');
@@ -254,8 +239,7 @@ describe('hydro crossing road, rail and zones (issue #169)', () => {
     const textures = makeTextures();
     setTile(state, 2, 4, TileKind.Residential);
     const tile = getTile(state, 2, 4)!;
-    tile.powerOverlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.PowerLine, true);
     setTile(state, 2, 3, TileKind.PowerLine);
     setTile(state, 2, 5, TileKind.PowerLine);
 
@@ -274,8 +258,7 @@ describe('hydro crossing road, rail and zones (issue #169)', () => {
     setTile(state, 2, 4, TileKind.Residential);
     const tile = getTile(state, 2, 4)!;
     tile.buildingId = 1;
-    tile.powerOverlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.PowerLine, true);
     setTile(state, 2, 3, TileKind.PowerLine);
     setTile(state, 2, 5, TileKind.PowerLine);
 
@@ -304,8 +287,7 @@ describe('hydro crossing poles', () => {
     for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.Road);
     for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
-    tile.roadUnderlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.Road, true);
     expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
   });
 
@@ -319,8 +301,7 @@ describe('hydro crossing poles', () => {
     for (const x of [1, 2, 3]) setTile(state, x, 4, TileKind.PowerLine);
     for (const t of [[1, 4], [2, 4], [3, 4]]) {
       const tile = getTile(state, t[0], t[1])!;
-      tile.roadUnderlay = true;
-      resyncTileStrata(tile);
+      setTileOccupant(tile, Occupant.Road, true);
     }
     expect(overlayName(state, 2, 4, textures)).toBe('kerb-ew-ew');
   });
@@ -334,8 +315,7 @@ describe('hydro crossing poles', () => {
     setTile(state, 2, 3, TileKind.PowerLine);
     setTile(state, 2, 4, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
-    tile.roadUnderlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.Road, true);
     expect(overlayName(state, 2, 4, textures)).toBe('kerb-ew-end-n');
   });
 
@@ -347,8 +327,7 @@ describe('hydro crossing poles', () => {
     for (const t of [[2, 3], [2, 5], [1, 4], [3, 4], [2, 4]]) setTile(state, t[0], t[1], TileKind.PowerLine);
     for (const t of [[2, 3], [2, 5], [1, 4], [3, 4], [2, 4]]) {
       const tile = getTile(state, t[0], t[1])!;
-      tile.roadUnderlay = true;
-      resyncTileStrata(tile);
+      setTileOccupant(tile, Occupant.Road, true);
     }
     expect(overlayName(state, 2, 4, textures)).toBe('kerb-x-cross');
   });
@@ -381,8 +360,7 @@ describe('crossing selection by axis', () => {
     setTile(state, 2, 5, TileKind.Road);          // makes it a T
     for (const y of [3, 4, 5]) setTile(state, 2, y, TileKind.PowerLine);
     const tile = getTile(state, 2, 4)!;
-    tile.roadUnderlay = true;
-    resyncTileStrata(tile);
+    setTileOccupant(tile, Occupant.Road, true);
     expect(overlayName(state, 2, 4, textures)).toBe('xing-ns');
   });
 });
@@ -391,34 +369,44 @@ describe('getTileColour agrees with the sprite/connectivity derivation on what c
   it('tints a tile with powerPlantType set, differently powered vs unpowered', () => {
     const state = createInitialState(3, 3);
     const tile = getTile(state, 1, 1)!;
-    tile.kind = TileKind.Land; // pin the palette key regardless of createInitialState's terrain pattern
+    tile.terrain = Terrain.Land; // pin the palette key regardless of createInitialState's terrain pattern
     tile.powerPlantType = PowerPlantType.Coal;
     const palette = { [TileKind.Land]: 0x804020 } as Record<TileKind, number>;
 
     tile.powered = false;
-    const unpowered = getTileColour(tile, palette);
+    const unpowered = getTileColour(tile, palette, emptyLookup);
     tile.powered = true;
-    const powered = getTileColour(tile, palette);
+    const powered = getTileColour(tile, palette, emptyLookup);
 
     expect(unpowered).not.toBe(palette[TileKind.Land]);
     expect(powered).not.toBe(palette[TileKind.Land]);
     expect(unpowered).not.toBe(powered);
   });
 
-  it('does not treat a bare kind match as power infrastructure without powerPlantType', () => {
+  it('does not treat a live structure as power infrastructure without powerPlantType', () => {
     // Regression: `getTileColour` and the wire-connectivity predicate used to
-    // fall back to a `tile.kind`-based plant-type lookup, diverging from
+    // fall back to a derived-kind plant-type lookup, diverging from
     // `resolveBaseTileSprite`'s buildingLookup-only derivation for the same
-    // question. `setTile` here sets `kind` to a plant kind but — matching a
-    // real placed plant only ever getting `powerPlantType` through
-    // `placeBuilding`'s `decorateTile` callback — leaves `powerPlantType`
-    // unset, so this tile must read as plain ground, not a plant.
+    // question. This tile carries a `Structure` occupant and a `buildingId`
+    // resolving to `TileKind.CoalPlant` via the lookup — matching a real
+    // placed plant only ever getting `powerPlantType` through
+    // `placeBuilding`'s `decorateTile` callback — but `powerPlantType` itself
+    // is left unset, so this tile must read as plain ground, not a plant.
     const state = createInitialState(3, 3);
-    setTile(state, 1, 1, TileKind.CoalPlant);
     const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Land;
+    tile.buildingId = 1;
+    setTileOccupant(tile, Occupant.Structure, true);
+    state.buildings.push({
+      id: 1,
+      templateId: PowerPlantType.Coal,
+      origin: { x: 1, y: 1 },
+      state: createBuildingState()
+    });
     expect(tile.powerPlantType).toBeUndefined();
+    const { buildingLookup } = createBuildingLookup(state);
     const palette = { [TileKind.CoalPlant]: 0x804020 } as Record<TileKind, number>;
 
-    expect(getTileColour(tile, palette)).toBe(palette[TileKind.CoalPlant]);
+    expect(getTileColour(tile, palette, buildingLookup)).toBe(palette[TileKind.CoalPlant]);
   });
 });

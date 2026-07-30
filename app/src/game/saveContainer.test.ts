@@ -22,6 +22,8 @@ import { Tool } from './toolTypes';
 import { deleteSave, getSave, listSaveMetas, putSave, setIdbFactory } from './saveStore';
 import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
+import { Occupant, setTileOccupant } from './protocol/occupants';
+import { legacyKind } from './protocol/legacyProjection';
 
 function makeContainer(name?: string): SaveContainer {
   const state = createInitialState(8, 8, 5);
@@ -76,15 +78,31 @@ describe('buildLegacyEngineImport', () => {
   it('re-encodes tiles into the wire SoA layout with packed flags', () => {
     const state = createInitialState(8, 8, 3);
     applyTool(state, Tool.Road, 3, 3);
-    state.tiles[10].powered = true;
-    state.tiles[10].watered = true;
-    state.tiles[10].roadUnderlay = true;
+    // (4,4) — the only other land tile `createInitialState`'s border carves
+    // out of an 8×8 map — for the flags-packing tile, so it doesn't collide
+    // with the road tile above.
+    const flagsIdx = 4 * 8 + 4;
+    state.tiles[flagsIdx].powered = true;
+    state.tiles[flagsIdx].watered = true;
+    // A road that isn't `kind` — pairing it with rail pushes `legacyKind` to
+    // resolve `Rail` instead (it outranks `Road`), so the road only survives
+    // as the `ROAD_UNDERLAY` flag this test is packing, with nothing else set.
+    setTileOccupant(state.tiles[flagsIdx], Occupant.Road, true);
+    setTileOccupant(state.tiles[flagsIdx], Occupant.Rail, true);
     const imp = buildLegacyEngineImport(state);
     const n = 64;
     const o = legacyTileBufferOffsets(n);
+    const roadTile = state.tiles[3 * 8 + 3];
+    const roadTileKind = legacyKind({
+      terrain: roadTile.terrain,
+      surface: roadTile.surface,
+      overhead: roadTile.overhead,
+      buildingId: roadTile.buildingId,
+      structureKindOf: () => undefined
+    });
     expect(imp.tiles).toHaveLength(n * LEGACY_BYTES_PER_TILE);
-    expect(imp.tiles[o.kind + 3 * 8 + 3]).toBe(tileKindToU8(state.tiles[3 * 8 + 3].kind));
-    expect(imp.tiles[o.flags + 10]).toBe(LEGACY_FLAGS.POWERED | LEGACY_FLAGS.WATERED | LEGACY_FLAGS.ROAD_UNDERLAY);
+    expect(imp.tiles[o.kind + 3 * 8 + 3]).toBe(tileKindToU8(roadTileKind));
+    expect(imp.tiles[o.flags + flagsIdx]).toBe(LEGACY_FLAGS.POWERED | LEGACY_FLAGS.WATERED | LEGACY_FLAGS.ROAD_UNDERLAY);
     expect(imp.rngState).toEqual(state.rngState);
     expect(imp.seed).toBe(3);
     expect(imp.policies).toEqual(state.policies);
@@ -93,7 +111,6 @@ describe('buildLegacyEngineImport', () => {
   it('writes building ids little-endian and 0xFF for no underground', () => {
     const state = createInitialState(8, 8, 3);
     state.tiles[5].buildingId = 0x1234;
-    state.tiles[6].legacyUnderground = state.tiles[6].kind; // any kind round-trips
     const imp = buildLegacyEngineImport(state);
     const o = legacyTileBufferOffsets(64);
     expect(imp.tiles[o.buildingId + 5 * 2]).toBe(0x34);

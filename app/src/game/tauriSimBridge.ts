@@ -23,12 +23,12 @@
  *     per tile (see `TickEvent.tiles` in `guest-js/index.ts`), but not
  *     happiness, elevation, wilderness or per-tile `building_id` — those
  *     still need the Rust sim to serialise them (P3+).
- *   • Because per-tile `building_id` is absent, a `Structure` occupant's
- *     specific `TileKind` can never resolve here (`legacyKind`'s structure
- *     branch needs it) — every structure tile decodes via the same
- *     kind-precedence fallback a bare zone/road/rail/line tile would.
- *     `event.buildings` (id/kind/origin, no footprint) isn't enough on its
- *     own to fix this; it would need `building_id` on the wire too.
+ *   • Because per-tile `building_id` is absent, `tile.buildingId` is never
+ *     set on this path — anything keyed off it (a developed zone lot's
+ *     `isDevelopedZone` check, the HUD tile inspector) silently sees an
+ *     undeveloped tile. `event.buildings` (id/kind/origin, no footprint)
+ *     isn't enough on its own to fix this; it would need `building_id` on
+ *     the wire too.
  */
 
 import type { GameState, Tile } from './gameState';
@@ -36,9 +36,8 @@ import { TileKind } from './gameState';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { tileKindToU8 } from './protocol/tileKind';
 import { Terrain, ZoneDensity } from './protocol/occupants';
-import { legacyKind, legacyFlags, legacyUndergroundKind } from './protocol/legacyProjection';
 import { STATUS } from './protocol/tileBuffer';
 import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
@@ -210,7 +209,7 @@ export class TauriSimBridge implements SimBridge {
   private async seedEngine(state: GameState): Promise<void> {
     const terrain = new Uint8Array(state.tiles.length);
     for (let i = 0; i < terrain.length; i++) {
-      terrain[i] = tileKindToU8(state.tiles[i].kind);
+      terrain[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
     }
     await pluginSetNaturalTerrain(terrain);
     await pluginSetPolicies(state.policies);
@@ -264,16 +263,6 @@ export class TauriSimBridge implements SimBridge {
       s.tiles = Array.from({ length: n }, () => makeBlankTile());
     }
 
-    // `event.buildings` is the only source for a Structure occupant's
-    // specific TileKind — the tile bytes only say a building stands there
-    // (#177's TS/wire follow-up), same as the WASM path.
-    const structureKindById = new Map<number, TileKind>();
-    for (const b of event.buildings) {
-      const kind = tileKindFromU8(b.kind);
-      if (kind !== undefined) structureKindById.set(b.id, kind);
-    }
-    const structureKindOf = (id: number) => structureKindById.get(id);
-
     for (let i = 0; i < n; i++) {
       const tile = s.tiles[i];
       const base = i * 4;
@@ -286,23 +275,6 @@ export class TauriSimBridge implements SimBridge {
       tile.watered = (status & STATUS.WATERED) !== 0;
       tile.abandoned = (status & STATUS.ABANDONED) !== 0;
       tile.density = ((status & STATUS.DENSITY_MASK) >> STATUS.DENSITY_SHIFT) as ZoneDensity;
-
-      // Shim fields — deleted, along with this whole block, once every
-      // consumer reads terrain/underground/surface/overhead directly.
-      const projectionInput = {
-        terrain: tile.terrain,
-        surface: tile.surface,
-        overhead: tile.overhead,
-        buildingId: tile.buildingId,
-        structureKindOf
-      };
-      const kind = legacyKind(projectionInput);
-      tile.kind = kind;
-      const flags = legacyFlags(projectionInput, kind);
-      tile.roadUnderlay = flags.roadUnderlay;
-      tile.railUnderlay = flags.railUnderlay;
-      tile.powerOverlay = flags.powerOverlay;
-      tile.legacyUnderground = legacyUndergroundKind(tile.underground);
     }
 
     // Forward TickStats to the UI handler
@@ -324,7 +296,6 @@ export class TauriSimBridge implements SimBridge {
 /** A bare land tile, for growing the mirror array when dimensions change — immediately overwritten by the decode loop. */
 function makeBlankTile(): Tile {
   return {
-    kind: TileKind.Land,
     elevation: 0,
     happiness: 1,
     powered: false,

@@ -13,7 +13,7 @@ import { SeededRng } from './rng';
 import { BASE_INCOME, MAINTENANCE, POWER_PLANT_CONFIGS } from './constants';
 import { BuildingStatus } from './buildings/state';
 import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
-import { listPowerPlants, placeBuilding, updateBuildingStates } from './buildings/manager';
+import { listPowerPlants, placeZoneBuilding, updateBuildingStates } from './buildings/manager';
 import { recomputePowerNetwork } from './utilities/power';
 import { hasWaterSourceConnection, recomputeWaterNetwork } from './utilities/water';
 import {
@@ -649,9 +649,7 @@ export class Simulation {
       if (needsWater && waterBalance < 0) utilityFactor *= clamp(1 + waterBalance / 30, 0.05, 1);
       const adjustedPGrow = clamp(pGrow * utilityFactor, 0, 1);
       if (adjustedPGrow <= 0 || this.rng.nextF32() > adjustedPGrow) continue;
-      const template = getBuildingTemplate(kind);
-      if (!template) continue;
-      const result = placeBuilding(this.state, template, x, y);
+      const result = placeZoneBuilding(this.state, kind, x, y);
       if (result.success) {
         grown++;
         this.vacantZoneIndices.delete(idx);

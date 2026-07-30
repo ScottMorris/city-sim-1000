@@ -27,7 +27,7 @@ import type { LegacyEngineImport } from '../workers/wasmSim.worker';
 import { encodeHappiness } from './protocol/tileBuffer';
 import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
-import { tileFromV4 } from './protocol/legacyProjection';
+import { legacyFlags, legacyKind, legacyUndergroundKind, tileFromV4 } from './protocol/legacyProjection';
 
 export function serialize(state: GameState): string {
   return JSON.stringify(state);
@@ -426,23 +426,36 @@ export function buildLegacyEngineImport(state: GameState): LegacyEngineImport {
   const n = state.width * state.height;
   const o = legacyTileBufferOffsets(n);
   const tiles = new Uint8Array(n * LEGACY_BYTES_PER_TILE);
+  const structureKindOf = (buildingId: number): TileKind | undefined => {
+    const instance = state.buildings.find((b) => b.id === buildingId);
+    return instance ? getBuildingTemplate(instance.templateId)?.tileKind : undefined;
+  };
   for (let i = 0; i < n; i++) {
     const tile = state.tiles[i];
-    tiles[o.kind + i] = tileKindToU8(tile.kind);
+    const input = {
+      terrain: tile.terrain,
+      surface: tile.surface,
+      overhead: tile.overhead,
+      buildingId: tile.buildingId,
+      structureKindOf
+    };
+    const kind = legacyKind(input);
+    const flags = legacyFlags(input, kind);
+    tiles[o.kind + i] = tileKindToU8(kind);
     tiles[o.flags + i] =
       (tile.powered ? LEGACY_FLAGS.POWERED : 0) |
       (tile.watered ? LEGACY_FLAGS.WATERED : 0) |
       (tile.abandoned ? LEGACY_FLAGS.ABANDONED : 0) |
-      (tile.roadUnderlay ? LEGACY_FLAGS.ROAD_UNDERLAY : 0) |
-      (tile.railUnderlay ? LEGACY_FLAGS.RAIL_UNDERLAY : 0) |
-      (tile.powerOverlay ? LEGACY_FLAGS.POWER_OVERLAY : 0);
+      (flags.roadUnderlay ? LEGACY_FLAGS.ROAD_UNDERLAY : 0) |
+      (flags.railUnderlay ? LEGACY_FLAGS.RAIL_UNDERLAY : 0) |
+      (flags.powerOverlay ? LEGACY_FLAGS.POWER_OVERLAY : 0);
     tiles[o.happiness + i] = encodeHappiness(tile.happiness);
     tiles[o.elevation + i] = tile.elevation & 0xff;
     const buildingId = tile.buildingId ?? 0;
     tiles[o.buildingId + i * 2] = buildingId & 0xff;
     tiles[o.buildingId + i * 2 + 1] = (buildingId >> 8) & 0xff;
-    tiles[o.undergroundKind + i] =
-      tile.legacyUnderground === undefined ? 0xff : tileKindToU8(tile.legacyUnderground);
+    const legacyUnderground = legacyUndergroundKind(tile.underground);
+    tiles[o.undergroundKind + i] = legacyUnderground === undefined ? 0xff : tileKindToU8(legacyUnderground);
     tiles[o.wilderness + i] = 128; // recomputed by the sim within one interval
   }
   return {

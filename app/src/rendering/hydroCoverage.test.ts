@@ -23,19 +23,11 @@
 
 import { describe, it, expect } from 'vitest';
 import type { Texture } from 'pixi.js';
-import { createInitialState, getTile, setTile as rawSetTile, TileKind, type GameState } from '../game/gameState';
-import { resyncTileStrata } from '../game/protocol/legacyProjection';
+import { createInitialState, getTile, setTile, TileKind, type GameState } from '../game/gameState';
+import { Occupant, hasOccupant, setTileOccupant } from '../game/protocol/occupants';
 import { resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
 import { CARRIAGEWAY_CLASSES, isSquareCrossing } from './tileAtlas';
 import type { TileTextures, RoadVariant, CarriagewayClass, HydroVariant } from './tileAtlas';
-
-/** `setTile` only ever wrote the v4 shim fields — resync the real strata
- *  every case in this matrix is built from, same as `tools.ts`'s `applyTool`
- *  does after every tool call. */
-function setTile(state: GameState, x: number, y: number, kind: TileKind): void {
-  rawSetTile(state, x, y, kind);
-  resyncTileStrata(getTile(state, x, y)!);
-}
 
 const VARIANTS: RoadVariant[] = [
   'ns', 'ew',
@@ -151,18 +143,17 @@ function buildCase(hydro: HydroCase, sub: Substrate, rec: Recording = 'line-last
   const railEdges = sub.rail ?? [];
 
   if (rec === 'carriageway-last' && sub.cls) {
-    // The carriageway owns the kind; the line survives only as a flag.
+    // The carriageway owns the kind; the line survives only as an occupant
+    // bit alongside it.
     setTile(state, CX, CY, sub.rail ? TileKind.Rail : TileKind.Road);
     const laid = getTile(state, CX, CY)!;
-    if (sub.rail && sub.road) laid.roadUnderlay = true;
-    laid.powerOverlay = true;
-    resyncTileStrata(laid);
+    if (sub.rail && sub.road) setTileOccupant(laid, Occupant.Road, true);
+    setTileOccupant(laid, Occupant.PowerLine, true);
   } else {
     setTile(state, CX, CY, TileKind.PowerLine);
     const centre = getTile(state, CX, CY)!;
-    if (sub.road) centre.roadUnderlay = true;
-    if (sub.rail) centre.railUnderlay = true;
-    resyncTileStrata(centre);
+    if (sub.road) setTileOccupant(centre, Occupant.Road, true);
+    if (sub.rail) setTileOccupant(centre, Occupant.Rail, true);
   }
 
   for (const edge of ['n', 'e', 's', 'w'] as const) {
@@ -178,9 +169,8 @@ function buildCase(hydro: HydroCase, sub: Substrate, rec: Recording = 'line-last
     // `pickPowerUnderlayTexture` reads a level crossing.
     setTile(state, x, y, wire ? TileKind.PowerLine : rail ? TileKind.Rail : TileKind.Road);
     const tile = getTile(state, x, y)!;
-    if (road && tile.kind !== TileKind.Road) tile.roadUnderlay = true;
-    if (rail && tile.kind !== TileKind.Rail) tile.railUnderlay = true;
-    resyncTileStrata(tile);
+    if (road && !hasOccupant(tile.surface, Occupant.Road)) setTileOccupant(tile, Occupant.Road, true);
+    if (rail && !hasOccupant(tile.surface, Occupant.Rail)) setTileOccupant(tile, Occupant.Rail, true);
   }
   return state;
 }

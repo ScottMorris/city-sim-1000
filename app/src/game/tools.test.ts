@@ -7,8 +7,8 @@ import { Tool } from './toolTypes';
 import { Simulation } from './simulation';
 import { BuildingStatus } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
-import { placeBuilding } from './buildings/manager';
-import { resyncTileStrata } from './protocol/legacyProjection';
+import { placeZoneBuilding } from './buildings/manager';
+import { Occupant, Terrain, hasOccupant, setTileOccupant, zoneOccupant } from './protocol/occupants';
 import { hasRoadAccess } from './adjacency';
 import { SeededRng } from './rng';
 
@@ -30,7 +30,7 @@ describe('tools', () => {
     const before = state.money;
     const result = applyTool(state, Tool.Road, 0, 0);
     expect(result.success).toBe(true);
-    expect(getTile(state, 0, 0)?.kind).toBe(TileKind.Road);
+    expect(hasOccupant(getTile(state, 0, 0)!.surface, Occupant.Road)).toBe(true);
     expect(state.money).toBe(before - BUILD_COST[Tool.Road]);
   });
 
@@ -39,9 +39,9 @@ describe('tools', () => {
     state.money = 100;
     setTile(state, 1, 1, TileKind.Water);
     applyTool(state, Tool.TerraformRaise, 1, 1);
-    expect(getTile(state, 1, 1)?.kind).toBe(TileKind.Land);
+    expect(getTile(state, 1, 1)?.terrain).toBe(Terrain.Land);
     applyTool(state, Tool.TerraformLower, 1, 1);
-    expect(getTile(state, 1, 1)?.kind).toBe(TileKind.Water);
+    expect(getTile(state, 1, 1)?.terrain).toBe(Terrain.Water);
   });
 
   it('places power plants as 2x2 footprints with a shared id and single cost', () => {
@@ -97,8 +97,7 @@ describe('tools', () => {
     const pump = state.buildings.find((b) => b.templateId === template.id);
     expect(pump).toBeDefined();
     const pumpConnection = getTile(state, 0, 1)!;
-    pumpConnection.legacyUnderground = TileKind.WaterPipe;
-    resyncTileStrata(pumpConnection);
+    setTileOccupant(pumpConnection, Occupant.Pipe, true);
     const spent = initialMoney - state.money;
     expect(spent).toBeCloseTo(
       BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3 + template.cost
@@ -119,8 +118,7 @@ describe('tools', () => {
     expect(result.success).toBe(true);
     expect(state.buildings.filter((building) => building.templateId === template.id).length).toBe(1);
     const towerPipe = getTile(state, 5, 3)!;
-    towerPipe.legacyUnderground = TileKind.WaterPipe;
-    resyncTileStrata(towerPipe);
+    setTileOccupant(towerPipe, Occupant.Pipe, true);
     const ids = new Set<number>();
     const footprint: Array<[number, number]> = [
       [3, 3],
@@ -130,7 +128,7 @@ describe('tools', () => {
     ];
     footprint.forEach(([x, y]) => {
       const tile = getTile(state, x, y)!;
-      expect(tile.kind).toBe(TileKind.WaterTower);
+      expect(hasOccupant(tile.surface, Occupant.Structure)).toBe(true);
       ids.add(tile.buildingId ?? -1);
     });
     expect(ids.size).toBe(1);
@@ -148,16 +146,15 @@ describe('tools', () => {
     const before = state.money;
     const result = applyTool(state, Tool.Commercial, 2, 2);
     expect(result.success).toBe(false);
-    expect(getTile(state, 2, 2)?.kind).toBe(TileKind.Road);
+    expect(hasOccupant(getTile(state, 2, 2)!.surface, Occupant.Road)).toBe(true);
     expect(state.money).toBe(before); // no charge on failure
   });
 
   it('rejects placing transport tools over existing buildings', () => {
     const state = createInitialState(6, 6);
-    const template = getBuildingTemplate(TileKind.Residential)!;
-    // seed a zone building manually
+    // seed a developed zone lot manually
     setTile(state, 3, 3, TileKind.Residential);
-    placeBuilding(state, template, 3, 3);
+    placeZoneBuilding(state, TileKind.Residential, 3, 3);
     expect(state.buildings.length).toBe(1);
     const buildingId = state.buildings[0].id;
     const moneyBefore = state.money;
@@ -165,7 +162,7 @@ describe('tools', () => {
     expect(result.success).toBe(false); // building protection — must bulldoze first
     expect(state.buildings.find((b) => b.id === buildingId)).toBeDefined();
     expect(getTile(state, 3, 3)?.buildingId).toBeDefined();
-    expect(getTile(state, 3, 3)?.kind).toBe(TileKind.Residential); // tile unchanged
+    expect(zoneOccupant(getTile(state, 3, 3)!.surface)).toBe(Occupant.ZoneResidential); // tile unchanged
     expect(state.money).toBe(moneyBefore); // no charge on failure
   });
 
@@ -185,7 +182,9 @@ describe('tools', () => {
     ];
     clearedTiles.forEach(([x, y]) => {
       const tile = getTile(state, x, y)!;
-      expect(tile.kind).toBe(TileKind.Land);
+      expect(tile.terrain).toBe(Terrain.Land);
+      expect(tile.surface).toBe(0);
+      expect(tile.overhead).toBe(0);
       expect(tile.buildingId).toBeUndefined();
       expect(tile.powerPlantType).toBeUndefined();
     });
@@ -285,7 +284,7 @@ describe('simulation', () => {
     }
     // drop a power line on the middle tile to simulate an over-road line
     applyTool(state, Tool.PowerLine, 4, 3);
-    expect(getTile(state, 4, 3)?.kind).toBe(TileKind.PowerLine);
+    expect(hasOccupant(getTile(state, 4, 3)!.overhead, Occupant.PowerLine)).toBe(true);
     expect(hasRoadAccess(state, 5, 3)).toBe(true);
   });
 
@@ -334,24 +333,21 @@ describe('simulation', () => {
     applyTool(state, Tool.Rail, 3, 2);
     applyTool(state, Tool.Rail, 3, 3);
     applyTool(state, Tool.Rail, 3, 4);
-    // draw a road across it, creating a road underlay — `Rail` outranks
-    // `Road` in `legacyKind`'s precedence regardless of build order, so a
-    // road-last crossing is still spelled `Rail` (see `e2e/visual.spec.ts`'s
-    // "delta 1").
+    // draw a road across it — both occupy the same surface stratum
+    // regardless of build order, so there is no "underlay" spelling to pin,
+    // only the two bits.
     applyTool(state, Tool.Road, 2, 3);
     applyTool(state, Tool.Road, 3, 3);
     applyTool(state, Tool.Road, 4, 3);
     const crossing = getTile(state, 3, 3)!;
-    expect(crossing.kind).toBe(TileKind.Rail);
-    expect(crossing.roadUnderlay).toBe(true);
+    expect(hasOccupant(crossing.surface, Occupant.Rail)).toBe(true);
+    expect(hasOccupant(crossing.surface, Occupant.Road)).toBe(true);
 
     applyTool(state, Tool.Bulldoze, 3, 3);
 
     const cleared = getTile(state, 3, 3)!;
-    expect(cleared.kind).toBe(TileKind.Land);
-    expect(cleared.railUnderlay).toBeUndefined();
-    expect(cleared.roadUnderlay).toBeUndefined();
-    expect(cleared.powerOverlay).toBeUndefined();
+    expect(cleared.surface).toBe(0);
+    expect(cleared.overhead).toBe(0);
   });
 
   it('grows frontier zones even without roads, but roads still trigger growth', () => {

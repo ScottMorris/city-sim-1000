@@ -9,6 +9,7 @@ import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant, zoneOccupant } from '../game/protocol/occupants';
+import { legacyKind } from '../game/protocol/legacyProjection';
 import type { CarriagewayClass, HydroVariant, RoadVariant, TileTextures } from './tileAtlas';
 
 export type BuildingLookupEntry = {
@@ -67,6 +68,22 @@ export function createBuildingLookup(state: GameState) {
  *  line, so a plant/school/park with a buildingId never carries one). */
 function isDevelopedZone(tile: NonNullable<ReturnType<typeof getTile>>): boolean {
   return zoneOccupant(tile.surface) !== undefined && tile.buildingId !== undefined;
+}
+
+/**
+ * The tile's derived `TileKind` — the terminal fallback for `tileTextures`/
+ * `palette` lookups once every dedicated branch above has passed. Computed
+ * on demand via `legacyKind` rather than stored: there is no shim field
+ * left to read it off.
+ */
+function fallbackKind(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): TileKind {
+  return legacyKind({
+    terrain: tile.terrain,
+    surface: tile.surface,
+    overhead: tile.overhead,
+    buildingId: tile.buildingId,
+    structureKindOf: (id) => buildingLookup.get(id)?.template?.tileKind
+  });
 }
 
 /** True when hydro is strung over this tile and must be drawn as a separate
@@ -386,19 +403,23 @@ function resolveBaseTileSprite(
       if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
     }
   }
-  const baseTexture = tileTextures.tiles[tile.kind];
+  const baseTexture = tileTextures.tiles[fallbackKind(tile, buildingLookup)];
   if (baseTexture) return { texture: baseTexture, widthTiles: 1, heightTiles: 1 };
   return undefined;
 }
 
-export function getTileColour(tile: ReturnType<typeof getTile>, palette: Record<TileKind, number>) {
+export function getTileColour(
+  tile: ReturnType<typeof getTile>,
+  palette: Record<TileKind, number>,
+  buildingLookup: BuildingLookup
+) {
   if (!tile) return 0x000000;
-  const base = palette[tile.kind];
+  const base = palette[fallbackKind(tile, buildingLookup)];
   // `tile.powerPlantType` alone, matching `resolveBaseTileSprite`'s plant-type
   // derivation below — `placeBuilding`'s `decorateTile` callback sets it on
   // every tile of a plant's footprint, not just the origin, so there is no
-  // live plant tile this can miss. A `tile.kind`-based fallback here used to
-  // let this function call a tile "power infrastructure" that
+  // live plant tile this can miss. A `kind`-based fallback here used to let
+  // this function call a tile "power infrastructure" that
   // `resolveBaseTileSprite` didn't recognise as a plant, tinting a tile
   // whose own sprite never resolved as one.
   const isPowerTile = hasOccupant(tile.overhead, Occupant.PowerLine) || !!tile.powerPlantType;

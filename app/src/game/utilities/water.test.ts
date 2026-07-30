@@ -3,7 +3,7 @@ import { createInitialState, getTile, TileKind } from '../gameState';
 import { placeBuilding, updateBuildingStates } from '../buildings/manager';
 import { recomputeWaterNetwork } from './water';
 import { getBuildingTemplate } from '../buildings/templates';
-import { resyncTileStrata } from '../protocol/legacyProjection';
+import { Occupant, setTileOccupant } from '../protocol/occupants';
 
 describe('water network', () => {
   it('propagates water from tower to pipes', () => {
@@ -24,8 +24,7 @@ describe('water network', () => {
 
     // Place Pipe at 3,1 (adjacent to tower at 2,1)
     const pipeTile = getTile(state, 3, 1)!;
-    pipeTile.legacyUnderground = TileKind.WaterPipe;
-    resyncTileStrata(pipeTile);
+    setTileOccupant(pipeTile, Occupant.Pipe, true);
 
     // Ensure building status is active (towers need power)
     updateBuildingStates(state);
@@ -51,11 +50,9 @@ describe('water network', () => {
     });
 
     const pipe1 = getTile(state, 3, 1)!;
-    pipe1.legacyUnderground = TileKind.WaterPipe;
-    resyncTileStrata(pipe1);
+    setTileOccupant(pipe1, Occupant.Pipe, true);
     const pipe2 = getTile(state, 4, 1)!;
-    pipe2.legacyUnderground = TileKind.WaterPipe;
-    resyncTileStrata(pipe2);
+    setTileOccupant(pipe2, Occupant.Pipe, true);
 
     updateBuildingStates(state);
     recomputeWaterNetwork(state);
