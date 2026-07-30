@@ -391,28 +391,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The vitest suite now includes `app/src/game/parity/` — the cross-engine
-      # parity harness, which replays one command script on the real WASM
-      # `SimHost` and on the TS oracle (`simulation.ts` / `applyTool`) and
-      # diffs the observables. Its Rust side is the actual cdylib out of
-      # `app/src/wasm/`, so this job needs the WASM build exactly as
-      # `mobile-e2e` does. Without it the parity tests fail with "run
-      # `bun run build:wasm`" rather than skipping — a parity harness that can
-      # quietly no-op is worse than no parity harness.
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Restore Rust cache
-        uses: swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@wasm-pack
-
-      - name: Build WASM target
-        run: bun run build:wasm
-
       # `tauriSimBridge.test.ts` imports `tauriSimBridge.ts`, which statically
       # imports `tauri-plugin-city-sim` for its default (non-test) plugin
       # bindings — Vite resolves that package's `dist-js/` output at
@@ -449,7 +427,6 @@ jobs:
             echo "- Runner: \`ubuntu-24.04\`"
             echo "- Result: \`${{ steps.ts_tests.outcome }}\`"
             echo "- Command: \`bun run test:ci\` (vitest + JUnit reporter)"
-            echo "- Includes the cross-engine parity harness (\`bun run test:parity\`), which needs \`bun run build:wasm\` first"
             echo "- Test artefact: \`app/test-results/junit.xml\`"
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"

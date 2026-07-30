@@ -1,13 +1,13 @@
 # Testing
 
-This document covers the four **architecture harnesses** — the tests that check the simulation at a higher altitude than a unit test can reach — plus the ordinary gates around them, what they deliberately do not cover, and how to regenerate the committed baselines.
+This document covers the three **architecture harnesses** — the tests that check the simulation at a higher altitude than a unit test can reach — plus the ordinary gates around them, what they deliberately do not cover, and how to regenerate the committed baselines. A fourth harness, cross-engine parity, existed while the TS simulation oracle did; see "Harness 2" below for its retirement.
 
 ## Why these exist
 
 The strata tile model (#177, `docs/tile-model.md`) was verified almost entirely by unit tests, and that turned out to be the wrong altitude. `Tile` went from a single-valued `kind` plus bolt-on flags to per-stratum occupant sets, with the wire `kind`/`flags` bytes now **derived** for the renderer (`crates/city-sim-core/src/display.rs`) and old saves migrated (`migrate.rs`). Four classes of defect were invisible to the tests that shipped with it:
 
 - A **wrong sprite** with every assertion green — `display.rs` exists to emit bytes a renderer interprets, and a numeric assertion cannot see what those bytes draw. One real shift was measured by hand during the work: a level crossing's minimap pixel moved from rail-brown to road-grey, and nothing in CI would have caught it.
-- A **drifting oracle** — `app/src/game/simulation.ts` and `adjacency.ts` mirror engine logic as a test-only parity oracle. They drifted from Rust three times during #177 and were repaired by hand-reading both files. No test failed when they disagreed.
+- A **drifting oracle** — `app/src/game/simulation.ts` and `adjacency.ts` mirrored engine logic as a test-only parity oracle. They drifted from Rust three times during #177 and were repaired by hand-reading both files. No test failed when they disagreed.
 - A **throwaway probe** — a "replay commands on two builds, diff the observables" tool was written, used and deleted three times over the same change.
 - A **long-run defect** — nothing exercised more than a handful of ticks. `StructureLookup::new` allocates a vector sized by `next_building_id`, which climbs for ever under zone churn. Real, unfixed, and exactly what a soak surfaces.
 
@@ -28,10 +28,9 @@ All run from the repo root.
 | Command | What it runs | Cost |
 | --- | --- | --- |
 | `cargo test --workspace` | all Rust, including the golden city and the default soak | ~8 s |
-| `bun run test` | all TypeScript, including cross-engine parity | ~2 s |
+| `bun run test` | all TypeScript | ~2 s |
 | `bun run test:e2e` | all three Playwright projects, including visual regression | ~26 s |
 | `cargo test -p city-sim-core --test golden_city` | harness 1 alone | 0.5 s |
-| `bun run test:parity` | harness 2 alone | 0.6 s |
 | `bun run test:visual` | harness 3 alone | ~13 s |
 | `bun run test:soak` | harness 4 alone, default size | 7.5 s |
 | `bun run test:soak:long` | harness 4, 3 000 simulated days | ~140 s |
@@ -42,7 +41,7 @@ All run from the repo root.
 Two prerequisites after a fresh clone or worktree, both of which produce gitignored output:
 
 ```bash
-bun run build:wasm        # app/src/wasm/ — needed by dev, by e2e, and by the parity harness
+bun run build:wasm        # app/src/wasm/ — needed by dev and by e2e
 bun run build:plugin-js   # crates/tauri-plugin-city-sim/dist-js/ — needed by the Vite dev server and build
 ```
 
@@ -84,53 +83,11 @@ That coverage test asks each case in whichever of four ways can see it — a run
 
 ---
 
-## Harness 2 — cross-engine parity
+## Harness 2 — cross-engine parity (retired)
 
-**Files:** `app/src/game/parity/tileFacts.ts`, `engines.ts`, `replay.ts`, `crossEngineParity.test.ts`.
+This harness compared the Rust engine against `app/src/game/simulation.ts`, a TS parity oracle, over a shared command script and a spelling-agnostic tile-fact vocabulary. It was retired along with the oracle once the Rust engine became the sole production engine: with only one engine left, there was nothing left to compare against, and the oracle itself had cost three hand-repaired drifts during #177 (see the "drifting oracle" bullet above) with no test failing when it happened.
 
-```bash
-bun run test:parity    # 42 tests, ~0.6 s — needs `bun run build:wasm` first
-```
-
-One command script, two engines, one vocabulary of answers. The Rust side is the **real** `SimHost` cdylib out of `app/src/wasm/`, loaded in vitest's node environment by dynamic import; the TS side is `simulation.ts` / `applyTool`, the declared test-only oracle. Both start from an identical map — `createInitialState`'s terrain is pushed into Rust via `set_natural_terrain` — and both answer through the same `factsFromWire`, so the mapping itself cannot hide a disagreement.
-
-`replay(script, opts)` returns a typed `Disagreement[]` over three observable classes: per-command `accepted`, per-tile facts, and headline scalars. The fact vocabulary is deliberately spelling-agnostic (`water`, `trees`, `road`, `rail`, `line`, `zone`, `structure`, `pipe`, `developed`, `powered`, `watered`, `abandoned`).
-
-If `bun run build:wasm` has not been run, the harness **fails with an actionable sentence** rather than skipping. A parity harness that can quietly no-op is worse than no parity harness, which is why the CI job builds WASM rather than tolerating its absence.
-
-### What it covers
-
-9 named placement scenarios, 5 running-city scenarios, 26 fuzz scenarios (a cheap-tool palette ×12 at 300 commands, a footprint palette ×6 at 60 commands and 30 ticks, tick-and-settle ×4, serviced-city ×4 at 80 commands), and 2 pinned known drifts. The fuzz uses a seeded LCG, so a failure is reproducible from the seed printed in the test name.
-
-The twelve-predicate fact vocabulary is covered as follows, and the split is deliberate rather than incidental:
-
-- **The eight structural facts** — `water`, `trees`, `road`, `rail`, `line`, `zone`, `structure`, `pipe` — by every scenario, including all 26 fuzz ones.
-- **`powered`** by the serviced-city family and by the footprint family. The footprint palette carries the carriageways, the line, the pipe and the three zones alongside the stamps, and the family ticks, because `buildings/manager.ts` owns both where a footprint may be stamped *and* what the tick loop then does to it — and a palette of nothing but stamps reaches only the first. Widening it moved the six seeds from 130 accepted commands, 200 structure tiles and 0 powered tiles to 202, 217 and 128.
-- **`watered`** by the serviced-city fuzz family alone. It starts from a fixed nine-command prelude (coal plant, two crossing streets, a lake with a pump on its shore, nine zoned lots) and then lets 80 random commands loose on it, so the two engines' power and water propagation is compared over randomly mangled topologies. That is `adjacency.ts`'s ground, and `adjacency.ts` is the file that drifted twice during #177. The footprint family cannot reach `watered` and does not claim to: its palette has no `Tool.Water`, so nothing it stamps ever stands beside natural water.
-- **`developed` and `abandoned`** by two *deterministic* named scenarios — the serviced city grown for 90 ticks, and the same city with its only plant razed and twelve more ticks run. Both assert the state was actually reached, not merely agreed on: two engines that grew nothing would agree perfectly.
-
-Why those last two are not fuzzed is worth stating plainly, because the earlier version of this harness omitted them without saying so. Zone growth is a Fisher-Yates shuffle plus a per-candidate probability roll, drawn from `SeededRng` on one side and the deliberately matching `rng.rs` on the other. The two streams stay in step only while their *draw counts* do, and the draw count depends on the utility balances through `utilityFactor`. Measured: under a random script two of four seeds disagree on `developed`, every disagreement traceable to a click knocking out the pump and one of the two pinned drifts then moving that engine's water balance; and even undisturbed, the two engines pick different lots somewhere between 100 and 120 ticks. So the deterministic scenarios stop at 90 ticks, inside the reproducible window, and the fuzz families stop at 30, under the growth delay.
-
-The two long deterministic scenarios compare tiles but not the headline scalars, for a third reason that is neither drift nor omission: Rust holds the ledgers as `i32` and `i64 + money_frac`, TypeScript holds them as floats, and over 90 ticks the residues accumulate past a whole credit. Every other scenario compares the headline exactly. All three exclusions are written out in the test file where they are declared.
-
-### Two known drifts, pinned rather than papered over
-
-Both are recorded as assertions that fail if the drift *changes*, so neither can widen unnoticed. Rust is canonical in both cases:
-
-1. **The engine credits water production from a pump that is neither powered nor beside water.** The oracle credits nothing.
-2. **The two engines disagree on whether a lot activates in a city with no water system.** `Simulation::tick_fixed` gates the water requirement on `state.has_water_system()`; `simulation.ts` passes `waterEnabled: true` unconditionally, so every lot in a city that has never seen a pipe sits at `InactiveNoWater`. Closing this means changing `simulation.ts`, which moves the committed goldens in `stateHash.test.ts` and the tolerance bands in `regression.test.ts` — an oracle-calibration decision, not a test one.
-
-### What it does NOT cover
-
-- **The raw `kind` byte.** Every predicate in the vocabulary is spelling-agnostic by construction (`app/src/game/parity/tileFacts.ts` reads occupant bits directly rather than a resolved kind) — the byte itself, where one is still derived for a legacy consumer (`app/src/game/protocol/legacyProjection.ts`'s `legacyKind`), is harness 1's and harness 3's ground instead.
-- **Wilderness.** Excluded by decision 4 of `docs/features/wilderness-score.md`.
-- **Education, the budget breakdown, per-tile happiness, narrative events, undo/redo.** The oracle is not compared on any of these.
-- **Which lot zone growth picks, past ~110 ticks.** Two independent RNG streams, in step only while their draw counts are. See above; the ceiling is in the gap table at the end of this document.
-- **The Tauri bridge.** Only the WASM `SimHost` is driven.
-
-### Regenerating
-
-Nothing to regenerate — there is no baseline file. When it goes red, one of the two engines is wrong, and the fix is in an engine, not in the harness.
+`app/src/game/simulation.ts`, `app/src/game/parity/` (`tileFacts.ts`, `engines.ts`, `replay.ts`, `crossEngineParity.test.ts`), `app/src/game/stateHash.ts`, `app/src/game/regression.test.ts` and `app/src/game/budgetPolicy.test.ts` are all gone. The oracle's last version, and the harness that checked it, are preserved at commit `1f8140a` — `git show 1f8140a:app/src/game/simulation.ts` and `git show 1f8140a -- app/src/game/parity/` recover them if this section's history is ever needed again.
 
 ---
 
@@ -239,7 +196,7 @@ So:
 - **A baseline change and a behaviour change belong in the same commit.** A regeneration committed on its own has no reviewable justification attached to it.
 - **If you cannot explain it, it is a finding.** Report it. Do not adjust the expectation to fit the code.
 
-The same rule holds for the pinned known drifts in harness 2 and the documented normalisations in the v4 migration fixture: they are pinned so a *change* to them fails. Widening a pin is the same act as regenerating a baseline, and needs the same justification.
+The same rule held for the pinned known drifts in the now-retired cross-engine parity harness (see "Harness 2" above), and it still holds for the documented normalisations in the v4 migration fixture: they are pinned so a *change* to them fails. Widening a pin is the same act as regenerating a baseline, and needs the same justification.
 
 `crates/city-sim-core/tests/fixtures/city_v4.csim` is the exception that proves the point — it is a genuine pre-strata save, generated on the commit `fix(sim): read every stratum, so no feature goes uncounted` by a test that was deleted immediately afterwards, and it **cannot be regenerated at all**. A migration you can only demonstrate against your own output is not a migration.
 
@@ -252,7 +209,7 @@ The same rule holds for the pinned known drifts in harness 2 and the documented 
 | Job | Harness it carries | What it added |
 | --- | --- | --- |
 | `rust-test` | golden city, default soak | Nothing to wire — `cargo nextest run --workspace` picks both up. nextest gives each its own process, so the soak's ~8 s is what sets the job's test wall clock and every other test in the workspace is free. Known defect #180 does not fail this job: it is reported under a banner, while the soak's coarse allocation aggregate is enforced and every other allocation finding is a failure. |
-| `ts-test` | cross-engine parity | Needed the WASM build. This job now installs the Rust toolchain with the `wasm32-unknown-unknown` target, restores the Rust cache, installs `wasm-pack` and runs `bun run build:wasm` before `bun run test:ci` — the same shape `mobile-e2e` already used. Roughly +90 s cold, +20 s with a warm cache; still well under the critical path. |
+| `ts-test` | none — carried cross-engine parity until the harness was retired | Nothing to wire — plain `bun run test:ci`. It still runs `bun run build:plugin-js` first, since `tauriSimBridge.test.ts` resolves `tauri-plugin-city-sim`'s `dist-js/` output at transform time regardless of the test's injected fakes. The Rust toolchain / `wasm-pack` / `bun run build:wasm` steps this job carried for the parity harness are gone — no remaining vitest file imports `app/src/wasm/` (`wasmSimBridge.test.ts` uses a fake Worker). |
 | `mobile-e2e` | visual regression | Nothing to wire — the `visual` Playwright project is picked up by the existing `bun run test:e2e`. About +10 s. The job's `name:` was deliberately left alone so branch-protection check names do not move. |
 | `rust-soak-long` | the long soak | New job, `workflow_dispatch` only, so it costs nothing on pull requests and pushes. Run it from the Actions tab before merging anything that touches allocation on the tick or wire-emit paths. |
 
@@ -262,7 +219,7 @@ The visual baselines are Linux-specific, which is why that project has to run on
 
 ## The gaps that remain
 
-Honest rather than reassuring. These four harnesses close four specific holes; they do not make the simulation well-tested.
+Honest rather than reassuring. These three harnesses close three specific holes; they do not make the simulation well-tested.
 
 | Gap | Detail | Cost of closing |
 | --- | --- | --- |
@@ -270,12 +227,10 @@ Honest rather than reassuring. These four harnesses close four specific holes; t
 | **Save/load is only pinned across the v4 migration** | Nothing writes a save on this tree, reloads it, and asserts the city is identical. `city_v4` proves v4 → v5. Round-tripping a v5 CSAV container — engine snapshot plus `ClientState`, settings, bylaws — is unproven. | Low. A golden-city variant that snapshots, reloads and re-dumps would be a day's work and would reuse the existing dump code. |
 | **Cross-platform float determinism of the golden dump** | Only ever verified on x86-64 Linux. The `rust-determinism` matrix runs `golden_hash` on arm64, not the golden city. The `f32::exp` ulp caveat in the fixtures README is theoretical — never actually exercised. Deliberately left out of the blocking matrix rather than added untested. | Low, but it may go red on first contact. Check with `cargo nextest run -p city-sim-core -E 'binary(golden_city)'` on arm64 before wiring it in. |
 | **Renderer above the wire bytes** | Harness 3 pins four clips of one city at one zoom. Sprite variant selection, road/rail/line autotiling across every junction, the 15-variant power-line tileset, every zoom level, and the power/water/wilderness overlays are all unpinned. | Medium. More fixtures in the same spec; the machinery exists. |
-| **Undo/redo and command history** | `history.rs` is unit tested only. No harness replays an undo/redo sequence and compares the result to the state before it, and neither the golden city nor the parity script issues one. | Low. `refuse`/`undo` directives in the golden script, and an `undo` verb in the parity replay. |
-| **Parity's observable set is a chosen subset** | Wilderness, education, budget breakdown, per-tile happiness and narrative events are not compared between engines. Two drifts are knowingly pinned open — the oracle is wrong about the water-system gate and about idle-pump production. | Medium, and it is a calibration decision: fixing the oracle moves committed goldens in `stateHash.test.ts` and the bands in `regression.test.ts`. |
-| **Zone growth selection diverges past ~110 ticks** | The two engines draw from separate RNG streams that stay in step only while their draw counts do, so in an undisturbed, fully serviced city they pick the same lots at 100 ticks and different ones at 120. Everything longer than that is unpinned across the language boundary, and so is any growth after a random script has touched the utilities. Measured, not inferred; the numbers are in `crossEngineParity.test.ts` at `SERVICED_CITY`. | Medium, and it is the same calibration decision as the row above: it needs one engine's RNG consumption made to match the other's exactly, which moves committed goldens. |
+| **Undo/redo and command history** | `history.rs` is unit tested only. No harness replays an undo/redo sequence and compares the result to the state before it, and the golden city script does not issue one either. | Low. A `refuse`/`undo` directive pair in the golden script would close it. |
 | **No performance gate anywhere** | Allocation is bounded; time is not. A tick that gets ten times slower passes every test in this repo. | Medium — a timing gate needs a flake budget, which allocation did not. |
 | **The soak is one city shape** | 24×16, one seed, one command palette, one map. Leaks reachable through terraforming churn, save/load churn or undo/redo churn are out of reach. | Low. `SOAK` already parameterises the length; the shape and palette would need the same treatment. |
-| **Mutation coverage is checked by hand, once** | Every one of the four has now been shown to fail on a deliberate mutation, and each mutation is written down where it belongs: two in `visual.spec.ts` and `playwright.config.ts` (rail/road precedence, the zone rung), four in the fixtures README (deleting each awkward case and regenerating the dump first), three in `soak.rs` (a synthetic clock-sized leak; a never-drained `Vec` leaking at a flat rate; a widened lookup tolerance standing in for a fix), and one in `crossEngineParity.test.ts` (dropping the footprint family's ticks, which fails its `powered` floor on all six seeds). Parity's reach is not only stated as measured numbers — the serviced-city and footprint families assert the state they claim to reach, so a family that goes quiet fails rather than agreeing vacuously. What is still missing is anything that re-checks it — nothing runs these mutations on a schedule, so the record ages. | High to automate properly. In the meantime, re-run the mutation documented next to whichever harness a change touches, and treat a mutation that no longer goes red as a finding. |
+| **Mutation coverage is checked by hand, once** | Every one of the three has now been shown to fail on a deliberate mutation, and each mutation is written down where it belongs: two in `visual.spec.ts` and `playwright.config.ts` (rail/road precedence, the zone rung), four in the fixtures README (deleting each awkward case and regenerating the dump first), and three in `soak.rs` (a synthetic clock-sized leak; a never-drained `Vec` leaking at a flat rate; a widened lookup tolerance standing in for a fix). The now-retired cross-engine parity harness had its own mutation, dropping the footprint family's ticks, which failed its `powered` floor on all six seeds; that record went with the harness. What is still missing is anything that re-checks the survivors on a schedule, so the record ages. | High to automate properly. In the meantime, re-run the mutation documented next to whichever harness a change touches, and treat a mutation that no longer goes red as a finding. |
 
 ---
 

@@ -1,14 +1,14 @@
 # Water Source Gating
 
-**Status:** regressed in the Rust migration — the TS-era rule still lives in the test oracle, the Rust engine dropped it. Tracked as audit item A3 in `docs/wasm-sim-audit.md`.
+**Status:** regressed in the Rust migration — the TS-era rule lived in the test oracle until it was removed 2026-07-30, and the Rust engine dropped it. Tracked as audit item A3 in `docs/wasm-sim-audit.md`.
 
 ## Purpose
 
 A water pump only produces water when it is actually connected to a water source. Pumps are the tool that turns geography into infrastructure; without the gate, terrain stops mattering to the water network and the pump is just a cheaper water tower.
 
-## Old behaviour (pre-migration, still in the oracle)
+## Old behaviour (pre-migration; last captured in the removed TS oracle)
 
-The TS sim gated pump output on `hasWaterSourceConnection()` — a pump adjacent to (or plumbed to) water terrain produced; a pump on dry land did not (`app/src/game/simulation.ts:266-268`, `app/src/game/utilities/water.ts`).
+The TS sim gated pump output on `hasWaterSourceConnection()` — a pump adjacent to (or plumbed to) water terrain produced; a pump on dry land did not (`app/src/game/simulation.ts:266-268` at `1f8140a`; oracle removed 2026-07-30, view with `git show 1f8140a:app/src/game/simulation.ts`; `app/src/game/utilities/water.ts`).
 
 ## Current behaviour (the defect)
 

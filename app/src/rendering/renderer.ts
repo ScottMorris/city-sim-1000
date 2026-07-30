@@ -8,7 +8,7 @@ import { Camera } from './camera';
 import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
 import { BuildingStatus } from '../game/buildings/state';
-import { getBuildingTemplate } from '../game/buildings/templates';
+import { getBuildingTemplate, getToolCost } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
@@ -16,7 +16,6 @@ import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone, isWaterCarrier } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
 import { ServiceId } from '../game/services';
-import { getToolCost } from '../game/tools';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;

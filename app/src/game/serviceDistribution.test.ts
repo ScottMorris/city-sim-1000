@@ -1,6 +1,12 @@
+// serviceDistribution.test.ts — zone load shares and reachable-candidate search.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect } from 'vitest';
-import { createInitialState, setTile, TileKind } from './gameState';
-import { placeZoneBuilding } from './buildings/manager';
+import { createInitialState, getTile, setTile, GameState, TileKind } from './gameState';
+import { createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import {
   computeZoneLoads,
   estimateZoneLoad,
@@ -8,6 +14,21 @@ import {
   DEFAULT_WORKER_SHARE
 } from './serviceDistribution';
 import { ServiceId } from './services';
+
+/**
+ * Stand-in for the deleted `buildings/manager.ts`'s `placeZoneBuilding`: push
+ * an active `BuildingInstance` for an already-zoned lot directly, since
+ * `computeZoneLoads` only walks `state.buildings` and never re-derives it
+ * from tile occupant bits.
+ */
+function developZoneLot(state: GameState, kind: TileKind, x: number, y: number): void {
+  const template = getBuildingTemplate(kind)!;
+  const id = state.nextBuildingId ?? 1;
+  state.buildings.push({ id, templateId: template.id, origin: { x, y }, state: createBuildingState() });
+  const tile = getTile(state, x, y);
+  if (tile) tile.buildingId = id;
+  state.nextBuildingId = id + 1;
+}
 
 describe('serviceDistribution', () => {
   it('computes population and job loads proportional to capacity with worker fallback', () => {
@@ -19,10 +40,10 @@ describe('serviceDistribution', () => {
     setTile(state, 1, 0, TileKind.Residential);
     setTile(state, 3, 0, TileKind.Commercial);
     setTile(state, 4, 0, TileKind.Industrial);
-    placeZoneBuilding(state, TileKind.Residential, 0, 0);
-    placeZoneBuilding(state, TileKind.Residential, 1, 0);
-    placeZoneBuilding(state, TileKind.Commercial, 3, 0);
-    placeZoneBuilding(state, TileKind.Industrial, 4, 0);
+    developZoneLot(state, TileKind.Residential, 0, 0);
+    developZoneLot(state, TileKind.Residential, 1, 0);
+    developZoneLot(state, TileKind.Commercial, 3, 0);
+    developZoneLot(state, TileKind.Industrial, 4, 0);
 
     const loads = computeZoneLoads(state);
 

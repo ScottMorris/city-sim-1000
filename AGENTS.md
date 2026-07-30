@@ -150,8 +150,8 @@ New `.rs` and `.ts`/`.tsx` source files should include a header before `use`/`im
 
 - Run `bun run test` from the repo root after any TypeScript changes.
 - Run `cargo test --workspace` after any Rust changes.
-- After modifying Rust in `crates/`, run `bun run build:wasm` to regenerate `app/src/wasm/` before testing in the browser (gitignored; CI rebuilds it). The cross-engine parity harness needs it too, so run it before `bun run test` as well.
-- `docs/testing.md` is the map: the four architecture harnesses (golden city, cross-engine parity, visual regression, soak), what each does and does not cover, every command, and the remaining gaps.
+- After modifying Rust in `crates/`, run `bun run build:wasm` to regenerate `app/src/wasm/` before testing in the browser (gitignored; CI rebuilds it). `bun run test` no longer needs it: the cross-engine parity harness that required it was retired with the TS oracle, and no test file touches the built WASM artifacts.
+- `docs/testing.md` is the map: the three architecture harnesses (golden city, visual regression, soak), what each does and does not cover, every command, and the remaining gaps.
 - **Regenerating a committed baseline is a deliberate act.** `golden_city.expected` and the screenshots under `app/e2e/__screenshots__/` are derived artefacts, so a wrong derivation and a stale expectation look identical from the outside. Never regenerate to make a build pass; name and justify every line or image that moved, in the same commit as the behaviour change that moved it. See `docs/testing.md`.
 
 ### Prove a test has teeth

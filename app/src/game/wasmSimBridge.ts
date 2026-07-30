@@ -593,9 +593,9 @@ export class WasmSimBridge implements SimBridge {
     }
     this.state.buildings = wireBuildings.map((b) => {
       const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
-      // Derive status from the tile flags the Rust buffer already set.
-      // Avoids calling updateBuildingStates, which misreads water status for
-      // zones in cities without water infrastructure.
+      // Status is derived from the tile flags the Rust buffer already set —
+      // `hasWaterSystem` gates the water check so buildings in cities without
+      // water infrastructure aren't misread as unwatered.
       const originTile = this.state.tiles[b.originY * this.state.width + b.originX];
       const template = getBuildingTemplate(kind as string);
       const bstate = createBuildingState();

@@ -416,10 +416,11 @@ export function getTile(state: GameState, x: number, y: number): Tile | undefine
 
 /**
  * Test-only convenience: stamp a tile to a single-valued `TileKind`,
- * translated to the strata it implies. Not used by `tools.ts` — its
- * `applyTool` handlers are occupant-native and mutate `terrain`/
- * `underground`/`surface`/`overhead` directly — this exists so tests can
- * still set up a tile in one call the way `TileKind` names it.
+ * translated to the strata it implies. Production placement is occupant-
+ * native — it mutates `terrain`/`underground`/`surface`/`overhead` directly,
+ * in the Rust engine (`crates/city-sim-core/src/commands.rs`'s `apply_tool`)
+ * — this exists so tests can still set up a tile in one call the way
+ * `TileKind` names it.
  *
  * Replaces the whole surface and overhead stratum (a bare `TileKind` can
  * only ever mean one thing at a time) but leaves `underground` standing —

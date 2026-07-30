@@ -13,7 +13,6 @@
     "test:e2e": "playwright test",
     "test:visual": "playwright test --project=visual",
     "test:visual:update": "playwright test --project=visual --update-snapshots",
-    "test:parity": "vitest run --pool=threads --poolOptions.threads.singleThread=true src/game/parity",
     "build:favicon": "node scripts/generate-favicon.mjs",
     "build:radio-playlist": "tsx scripts/build-radio-playlist.ts --extract-embedded-covers"
   },

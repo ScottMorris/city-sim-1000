@@ -9,6 +9,7 @@ import { DEFAULT_BYLAWS } from './bylaws';
 import { SeededRng } from './rng';
 import { DEFAULT_SERVICE_DEFINITIONS } from './services';
 import { createEmptyEducationStats } from './education';
+import { createDefaultBudgetPolicy } from './protocol/commands';
 
 // Serialize a fresh state, strip or mutate fields the way an old save would
 // lack them, and hand the result to deserialize. Working on the parsed object
@@ -218,6 +219,33 @@ describe('scalar and structural back-fill', () => {
       delete parsed.services.definitions[firstId];
     });
     expect(state.services.definitions[firstId]).toEqual(DEFAULT_SERVICE_DEFINITIONS[firstId]);
+  });
+});
+
+describe('policy back-fill', () => {
+  it('back-fills the neutral policy on old saves', () => {
+    const state = degrade((parsed) => {
+      delete parsed.policies;
+    });
+    expect(state.policies.budget).toEqual(createDefaultBudgetPolicy());
+  });
+
+  it('folds legacy flat budgetPolicy/wildernessPolicy keys into policies', () => {
+    const state = degrade((parsed) => {
+      delete parsed.policies;
+      parsed.budgetPolicy = { ...createDefaultBudgetPolicy(), taxResidential: 14 };
+      parsed.wildernessPolicy = { natureReserve: true, greenIndustry: false };
+    });
+    expect(state.policies.budget.taxResidential).toBe(14);
+    expect(state.policies.wilderness.natureReserve).toBe(true);
+  });
+
+  it('clamps out-of-range policy values on load', () => {
+    const state = degrade((parsed) => {
+      parsed.policies.budget = { ...parsed.policies.budget, taxResidential: 99, fundPower: 900 };
+    });
+    expect(state.policies.budget.taxResidential).toBe(20);
+    expect(state.policies.budget.fundPower).toBe(100);
   });
 });
 
