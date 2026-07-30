@@ -452,7 +452,12 @@ function wireBridge(b: SimBridge): void {
       // before the engine has actually processed the command. This is the
       // real result, arriving async; surface it the same way.
       if (!msg.success && msg.message) {
-        showToast(msg.message, { severity: 'warning' });
+        // Keyed by message text, same as the Alert branch above keys by
+        // kind: a drag-paint stroke can send one ApplyTool per tile, and a
+        // sustained failure (e.g. running out of funds mid-drag) would
+        // otherwise post one stacked toast per tile instead of one toast
+        // that keeps refreshing.
+        showToast(msg.message, { id: `command-result:${msg.message}`, severity: 'warning' });
       }
     } else if (msg.type === 'HistoryChanged') {
       onHistoryChanged?.(msg.data);
