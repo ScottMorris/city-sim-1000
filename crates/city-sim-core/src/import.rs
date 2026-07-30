@@ -23,7 +23,8 @@
 //!   defaults and are recomputed within one tick / recompute interval.
 
 use city_sim_protocol::commands::Policies;
-use city_sim_protocol::tile_buffer::{decode_happiness, TileBufferOffsets, BYTES_PER_TILE};
+use city_sim_protocol::legacy_tile_buffer::{LegacyTileBufferOffsets, LEGACY_BYTES_PER_TILE};
+use city_sim_protocol::tile_buffer::decode_happiness;
 use city_sim_protocol::tile_kind::TileKind;
 
 use crate::buildings::{
@@ -79,7 +80,7 @@ pub fn from_tile_buffer(
     stats: ImportStats,
 ) -> Result<GameState, ImportError> {
     let n = (width as usize) * (height as usize);
-    let expected = n * BYTES_PER_TILE;
+    let expected = n * LEGACY_BYTES_PER_TILE;
     if buffer.len() != expected {
         return Err(ImportError::BadLength {
             actual: buffer.len(),
@@ -88,7 +89,7 @@ pub fn from_tile_buffer(
             height,
         });
     }
-    let o = TileBufferOffsets::for_size(n);
+    let o = LegacyTileBufferOffsets::for_size(n);
 
     let mut state = GameState::new(width, height, seed);
     state.money = stats.money;
@@ -192,9 +193,9 @@ mod tests {
     /// that the wire derivation and the v4 decode are inverses.
     fn encode_tiles(state: &GameState) -> Vec<u8> {
         let n = state.tiles.len();
-        let o = TileBufferOffsets::for_size(n);
+        let o = LegacyTileBufferOffsets::for_size(n);
         let lookup = StructureLookup::new(state);
-        let mut buf = vec![0u8; n * BYTES_PER_TILE];
+        let mut buf = vec![0u8; n * LEGACY_BYTES_PER_TILE];
         for (i, tile) in state.tiles.iter().enumerate() {
             let kind = wire_kind(tile, &lookup);
             buf[o.kind + i] = kind as u8;
@@ -323,7 +324,7 @@ mod tests {
     #[test]
     fn rejects_invalid_kind_byte() {
         let n = 4 * 4;
-        let mut buf = vec![0u8; n * BYTES_PER_TILE];
+        let mut buf = vec![0u8; n * LEGACY_BYTES_PER_TILE];
         buf[0] = 250; // not a TileKind
         let err = from_tile_buffer(
             4,
