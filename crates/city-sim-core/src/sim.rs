@@ -273,19 +273,20 @@ impl Simulation {
 /// identical across a snapshot boundary because `tiles` is a `Vec` in
 /// row-major order, never a set. Per tile:
 ///
-/// - the wire `kind` byte ([`crate::display::wire_kind`]), which subsumes the
-///   old histogram and adds position. Derived from the strata since step 3, so
-///   this hash not moving when the derivation reversed is the proof the
-///   projection is byte-neutral;
+/// - `terrain`, `Land` or `Water` — the one authored field a wire `kind` byte
+///   used to carry incidentally (`kind = Water` always won the byte), now
+///   hashed directly since there is no more derived byte to carry it;
 /// - [`Tile::occupants`], what actually stands there — the union of the three
 ///   strata, which is what keeps this hash stable across the tile gaining
 ///   three fields. Deliberately the occupant
 ///   set rather than the raw `flags` byte: the two spellings one physical tile
 ///   used to have hash alike;
-/// - the wire `underground` byte, which the occupant set only reports as
-///   *pipe or no pipe*;
 /// - `building_id`, so a tile losing its link to a live `BuildingInstance` is
 ///   visible — the state defect B of this pass was about.
+///
+/// No `StructureLookup`, no wire `kind`/`underground` bytes — both were
+/// derived from `occupants()`/`terrain` and added nothing this hash didn't
+/// already have (`display.rs`'s deletion, #177's TS/wire follow-up).
 ///
 /// The derived flags — `FLAG_POWERED`, `FLAG_WATERED`, `FLAG_ABANDONED` and
 /// the zone density bits — stay out on purpose. They are recomputed from the
@@ -300,11 +301,7 @@ pub fn state_hash(state: &GameState) -> u64 {
         h
     }
 
-    // `Occupant::Structure` is one flat tag, so the kind byte for a structure
-    // tile is resolved through its development. Indexed once, not per tile.
-    let lookup = crate::occupants::StructureLookup::new(state);
-
-    let mut buf: Vec<u8> = Vec::with_capacity(64 + state.tiles.len() * 6);
+    let mut buf: Vec<u8> = Vec::with_capacity(64 + state.tiles.len() * 5);
     buf.extend_from_slice(&state.tick.to_le_bytes());
     buf.extend_from_slice(&state.day.to_le_bytes());
     buf.extend_from_slice(&state.population.to_le_bytes());
@@ -319,9 +316,8 @@ pub fn state_hash(state: &GameState) -> u64 {
     buf.extend_from_slice(&state.height.to_le_bytes());
     // The grid, tile by tile in index order.
     for tile in &state.tiles {
-        buf.push(crate::display::wire_kind(tile, &lookup) as u8);
+        buf.push(tile.terrain as u8);
         buf.extend_from_slice(&tile.occupants().to_le_bytes());
-        buf.push(crate::display::wire_underground(tile));
         buf.extend_from_slice(&tile.building_id.unwrap_or(u16::MAX).to_le_bytes());
     }
     // Demand (quantised to i32 for stability)
@@ -350,7 +346,12 @@ mod tests {
     /// histogram of `kind` and started hashing each tile's occupant set,
     /// `underground` and `building_id`, so the same city hashes to a new — and
     /// far more discriminating — value.
-    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0x755543fc50a48521;
+    ///
+    /// Re-cut again for #177's TS/wire follow-up: `state_hash` dropped the
+    /// derived wire `kind`/`underground` bytes (the functions producing them
+    /// were deleted) in favour of hashing `terrain` directly — see the
+    /// doc comment on [`state_hash`] for what that trades away and keeps.
+    const GOLDEN_HASH_SEED42_8X8_100TICKS: u64 = 0xf0e59d797cc623c6;
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;

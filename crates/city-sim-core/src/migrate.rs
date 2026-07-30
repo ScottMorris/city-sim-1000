@@ -25,7 +25,7 @@
 
 use crate::occupants::{is_structure_kind, Occupant, Terrain};
 use crate::state::{GameState, Tile, ZoneDensity, DERIVED_FLAG_MASK};
-use city_sim_protocol::tile_buffer::flags as wire_flags;
+use city_sim_protocol::legacy_tile_buffer::legacy_flags as wire_flags;
 use city_sim_protocol::tile_kind::TileKind;
 
 /// Zone density lived in flags bits 6–7 before it became a field.

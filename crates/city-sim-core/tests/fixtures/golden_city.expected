@@ -9,10 +9,11 @@
 # not a merge — see the module note in tests/golden_city.rs.
 #
 # Tile line format:
-#   tile <index> (<x>,<y>) <terrain> kind=<wire kind>(<byte>) flags=<hex>[PWArlp]
-#       ug=<underground byte> bid=<development> occ=<occupant set>
-# `kind`, `flags` and `ug` are the DERIVED wire bytes (display.rs); `terrain`,
-# `occ` and `bid` are the canonical tile. A renderer sees only the derived ones.
+#   tile <index> (<x>,<y>) terrain=<terrain> flags=[PWA] density=<density>
+#       bid=<development> occ=<occupant set>
+# Every field here is canonical tile state — there is no more derived wire
+# byte to dump separately (#177's TS/wire follow-up deleted the projection;
+# the wire now carries `occ`/`terrain`/`density` directly, see `crate::wire`).
 
 script grid=24x16 seed=20260729 ticks=400 directives=153 script_hash=0x36cbcc2bdc25997f
 
@@ -34,7 +35,7 @@ jobs 117
 buildings 32
 next_building_id 36
 tile_revision 188
-state_hash 0x03621dda0def11da
+state_hash 0xff77a3d369c16465
 
 [utilities]
 power 24
@@ -146,387 +147,387 @@ building 34   Commercial        at (16, 3) Active           health=100 trouble=0
 building 35   Industrial        at ( 4, 3) Active           health=100 trouble=0.0000
 
 [tiles]
-tile 0     ( 0, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 1     ( 1, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 2     ( 2, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 3     ( 3, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 4     ( 4, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 5     ( 5, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 6     ( 6, 0) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 7     ( 7, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 8     ( 8, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 9     ( 9, 0) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 10    (10, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 11    (11, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 12    (12, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 13    (13, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 14    (14, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 15    (15, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 16    (16, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 17    (17, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 18    (18, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 19    (19, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 20    (20, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 21    (21, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 22    (22, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 23    (23, 0) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 24    ( 0, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=9     occ=ZoneResidential
-tile 25    ( 1, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=22    occ=ZoneResidential
-tile 26    ( 2, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=30    occ=ZoneResidential
-tile 27    ( 3, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=31    occ=ZoneResidential
-tile 28    ( 4, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=33    occ=ZoneResidential
-tile 29    ( 5, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=28    occ=ZoneResidential
-tile 30    ( 6, 1) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 31    ( 7, 1) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=13    occ=ZoneCommercial
-tile 32    ( 8, 1) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=-     occ=ZoneCommercial
-tile 33    ( 9, 1) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 34    (10, 1) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 35    (11, 1) Land  kind=Residential(5)       flags=0x23[PW---p] ug=255 bid=8     occ=ZoneResidential,PowerLine
-tile 36    (12, 1) Land  kind=Residential(5)       flags=0x23[PW---p] ug=255 bid=25    occ=ZoneResidential,PowerLine
-tile 37    (13, 1) Land  kind=Residential(5)       flags=0x23[PW---p] ug=255 bid=-     occ=ZoneResidential,PowerLine
-tile 38    (14, 1) Land  kind=Residential(5)       flags=0x23[PW---p] ug=255 bid=17    occ=ZoneResidential,PowerLine
-tile 39    (15, 1) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=29    occ=ZoneCommercial
-tile 40    (16, 1) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=-     occ=ZoneCommercial
-tile 41    (17, 1) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=26    occ=ZoneCommercial
-tile 42    (18, 1) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=11    occ=ZoneIndustrial
-tile 43    (19, 1) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=-     occ=ZoneIndustrial
-tile 44    (20, 1) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=27    occ=ZoneIndustrial
-tile 45    (21, 1) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 46    (22, 1) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 47    (23, 1) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 48    ( 0, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 49    ( 1, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 50    ( 2, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 51    ( 3, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 52    ( 4, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 53    ( 5, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 54    ( 6, 2) Land  kind=Rail(4)              flags=0x0b[PW-r--] ug=255 bid=-     occ=Road,Rail
-tile 55    ( 7, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 56    ( 8, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 57    ( 9, 2) Land  kind=Rail(4)              flags=0x0b[PW-r--] ug=255 bid=-     occ=Road,Rail
-tile 58    (10, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 59    (11, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 60    (12, 2) Land  kind=PowerLine(8)         flags=0x2b[PW-r-p] ug=255 bid=-     occ=Road,PowerLine
-tile 61    (13, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=12  bid=-     occ=Pipe,Road
-tile 62    (14, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 63    (15, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 64    (16, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 65    (17, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 66    (18, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 67    (19, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 68    (20, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 69    (21, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 70    (22, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 71    (23, 2) Land  kind=Road(3)              flags=0x03[PW----] ug=255 bid=-     occ=Road
-tile 72    ( 0, 3) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=-     occ=ZoneCommercial
-tile 73    ( 1, 3) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=23    occ=ZoneCommercial
-tile 74    ( 2, 3) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=18    occ=ZoneCommercial
-tile 75    ( 3, 3) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=24    occ=ZoneIndustrial
-tile 76    ( 4, 3) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=35    occ=ZoneIndustrial
-tile 77    ( 5, 3) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=14    occ=ZoneIndustrial
-tile 78    ( 6, 3) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 79    ( 7, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 80    ( 8, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=19    occ=ZoneResidential
-tile 81    ( 9, 3) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 82    (10, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 83    (11, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 84    (12, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 85    (13, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 86    (14, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=12    occ=ZoneResidential
-tile 87    (15, 3) Land  kind=Residential(5)       flags=0x03[PW----] ug=255 bid=-     occ=ZoneResidential
-tile 88    (16, 3) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=34    occ=ZoneCommercial
-tile 89    (17, 3) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=10    occ=ZoneCommercial
-tile 90    (18, 3) Land  kind=Commercial(6)        flags=0x03[PW----] ug=255 bid=20    occ=ZoneCommercial
-tile 91    (19, 3) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=32    occ=ZoneIndustrial
-tile 92    (20, 3) Land  kind=Industrial(7)        flags=0x03[PW----] ug=255 bid=-     occ=ZoneIndustrial
-tile 93    (21, 3) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 94    (22, 3) Land  kind=Land(0)              flags=0x02[-W----] ug=12  bid=-     occ=Pipe
-tile 95    (23, 3) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 96    ( 0, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 97    ( 1, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 98    ( 2, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 99    ( 3, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 100   ( 4, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 101   ( 5, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 102   ( 6, 4) Land  kind=PowerLine(8)         flags=0x33[PW--lp] ug=255 bid=-     occ=Rail,PowerLine
-tile 103   ( 7, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 104   ( 8, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 105   ( 9, 4) Land  kind=Rail(4)              flags=0x03[PW----] ug=255 bid=-     occ=Rail
-tile 106   (10, 4) Land  kind=ElementarySchool(13) flags=0x03[PW----] ug=255 bid=4     occ=Structure
-tile 107   (11, 4) Land  kind=ElementarySchool(13) flags=0x03[PW----] ug=255 bid=4     occ=Structure
-tile 108   (12, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 109   (13, 4) Land  kind=HighSchool(14)       flags=0x03[PW----] ug=255 bid=5     occ=Structure
-tile 110   (14, 4) Land  kind=HighSchool(14)       flags=0x03[PW----] ug=255 bid=5     occ=Structure
-tile 111   (15, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 112   (16, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 113   (17, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 114   (18, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 115   (19, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 116   (20, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 117   (21, 4) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 118   (22, 4) Land  kind=Land(0)              flags=0x02[-W----] ug=12  bid=-     occ=Pipe
-tile 119   (23, 4) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 120   ( 0, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 121   ( 1, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 122   ( 2, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 123   ( 3, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 124   ( 4, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 125   ( 5, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 126   ( 6, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 127   ( 7, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 128   ( 8, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 129   ( 9, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 130   (10, 5) Land  kind=ElementarySchool(13) flags=0x03[PW----] ug=255 bid=4     occ=Structure
-tile 131   (11, 5) Land  kind=ElementarySchool(13) flags=0x03[PW----] ug=255 bid=4     occ=Structure
-tile 132   (12, 5) Land  kind=PowerLine(8)         flags=0x2b[PW-r-p] ug=255 bid=-     occ=Road,PowerLine
-tile 133   (13, 5) Land  kind=HighSchool(14)       flags=0x03[PW----] ug=255 bid=5     occ=Structure
-tile 134   (14, 5) Land  kind=HighSchool(14)       flags=0x03[PW----] ug=255 bid=5     occ=Structure
-tile 135   (15, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 136   (16, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 137   (17, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 138   (18, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 139   (19, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 140   (20, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 141   (21, 5) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 142   (22, 5) Land  kind=Land(0)              flags=0x02[-W----] ug=12  bid=-     occ=Pipe
-tile 143   (23, 5) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 144   ( 0, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 145   ( 1, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 146   ( 2, 6) Land  kind=PowerLine(8)         flags=0x20[-----p] ug=255 bid=-     occ=PowerLine
-tile 147   ( 3, 6) Land  kind=PowerLine(8)         flags=0x20[-----p] ug=12  bid=-     occ=Pipe,PowerLine
-tile 148   ( 4, 6) Land  kind=Tree(2)              flags=0x20[-----p] ug=255 bid=-     occ=PowerLine,Trees
-tile 149   ( 5, 6) Water kind=Water(1)             flags=0x20[-----p] ug=255 bid=-     occ=PowerLine
-tile 150   ( 6, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 151   ( 7, 6) Land  kind=Commercial(6)        flags=0x20[-----p] ug=255 bid=-     occ=ZoneCommercial,PowerLine
-tile 152   ( 8, 6) Land  kind=Commercial(6)        flags=0x24[--A--p] ug=255 bid=-     occ=ZoneCommercial,PowerLine
-tile 153   ( 9, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 154   (10, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 155   (11, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 156   (12, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 157   (13, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 158   (14, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 159   (15, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 160   (16, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 161   (17, 6) Land  kind=PowerLine(8)         flags=0x39[P--rlp] ug=255 bid=-     occ=Road,Rail,PowerLine
-tile 162   (18, 6) Land  kind=ParkLarge(19)        flags=0x01[P-----] ug=255 bid=6     occ=Structure
-tile 163   (19, 6) Land  kind=ParkLarge(19)        flags=0x01[P-----] ug=255 bid=6     occ=Structure
-tile 164   (20, 6) Land  kind=Park(15)             flags=0x01[P-----] ug=255 bid=7     occ=Structure
-tile 165   (21, 6) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 166   (22, 6) Land  kind=Land(0)              flags=0x02[-W----] ug=12  bid=-     occ=Pipe
-tile 167   (23, 6) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 168   ( 0, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 169   ( 1, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 170   ( 2, 7) Land  kind=Land(0)              flags=0x00[------] ug=12  bid=-     occ=Pipe
-tile 171   ( 3, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 172   ( 4, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 173   ( 5, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 174   ( 6, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 175   ( 7, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 176   ( 8, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 177   ( 9, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 178   (10, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 179   (11, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 180   (12, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 181   (13, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 182   (14, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 183   (15, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 184   (16, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 185   (17, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 186   (18, 7) Land  kind=ParkLarge(19)        flags=0x01[P-----] ug=255 bid=6     occ=Structure
-tile 187   (19, 7) Land  kind=ParkLarge(19)        flags=0x01[P-----] ug=255 bid=6     occ=Structure
-tile 188   (20, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 189   (21, 7) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 190   (22, 7) Land  kind=Land(0)              flags=0x02[-W----] ug=12  bid=-     occ=Pipe
-tile 191   (23, 7) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 192   ( 0, 8) Water kind=Water(1)             flags=0x00[------] ug=255 bid=-     occ=-
-tile 193   ( 1, 8) Water kind=Water(1)             flags=0x00[------] ug=255 bid=-     occ=-
-tile 194   ( 2, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 195   ( 3, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 196   ( 4, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 197   ( 5, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 198   ( 6, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 199   ( 7, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 200   ( 8, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 201   ( 9, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 202   (10, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 203   (11, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 204   (12, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 205   (13, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 206   (14, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 207   (15, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 208   (16, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 209   (17, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 210   (18, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 211   (19, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 212   (20, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 213   (21, 8) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 214   (22, 8) Land  kind=Land(0)              flags=0x02[-W----] ug=12  bid=-     occ=Pipe
-tile 215   (23, 8) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 216   ( 0, 9) Water kind=Water(1)             flags=0x00[------] ug=255 bid=-     occ=-
-tile 217   ( 1, 9) Water kind=Water(1)             flags=0x00[------] ug=255 bid=-     occ=-
-tile 218   ( 2, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 219   ( 3, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 220   ( 4, 9) Water kind=Water(1)             flags=0x00[------] ug=12  bid=-     occ=Pipe
-tile 221   ( 5, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 222   ( 6, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 223   ( 7, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 224   ( 8, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 225   ( 9, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 226   (10, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 227   (11, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 228   (12, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 229   (13, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 230   (14, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 231   (15, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 232   (16, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 233   (17, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 234   (18, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 235   (19, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 236   (20, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 237   (21, 9) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 238   (22, 9) Land  kind=WaterPump(10)        flags=0x03[PW----] ug=255 bid=3     occ=Structure
-tile 239   (23, 9) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 240   ( 0,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 241   ( 1,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 242   ( 2,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 243   ( 3,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 244   ( 4,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 245   ( 5,10) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 246   ( 6,10) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 247   ( 7,10) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 248   ( 8,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 249   ( 9,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 250   (10,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 251   (11,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 252   (12,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 253   (13,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 254   (14,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 255   (15,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 256   (16,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 257   (17,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 258   (18,10) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 259   (19,10) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 260   (20,10) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 261   (21,10) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 262   (22,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 263   (23,10) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 264   ( 0,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 265   ( 1,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 266   ( 2,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 267   ( 3,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 268   ( 4,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 269   ( 5,11) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 270   ( 6,11) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 271   ( 7,11) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 272   ( 8,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 273   ( 9,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 274   (10,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 275   (11,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 276   (12,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 277   (13,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 278   (14,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 279   (15,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 280   (16,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 281   (17,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 282   (18,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 283   (19,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 284   (20,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 285   (21,11) Land  kind=PowerLine(8)         flags=0x21[P----p] ug=255 bid=-     occ=PowerLine
-tile 286   (22,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 287   (23,11) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 288   ( 0,12) Land  kind=WindTurbine(17)      flags=0x01[P-----] ug=255 bid=2     occ=Structure
-tile 289   ( 1,12) Land  kind=WindTurbine(17)      flags=0x01[P-----] ug=255 bid=2     occ=Structure
-tile 290   ( 2,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 291   ( 3,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 292   ( 4,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 293   ( 5,12) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 294   ( 6,12) Land  kind=Tree(2)              flags=0x00[------] ug=255 bid=-     occ=Trees
-tile 295   ( 7,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 296   ( 8,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 297   ( 9,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 298   (10,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 299   (11,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 300   (12,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 301   (13,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 302   (14,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 303   (15,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 304   (16,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 305   (17,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 306   (18,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 307   (19,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 308   (20,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 309   (21,12) Land  kind=CoalPlant(16)        flags=0x01[P-----] ug=255 bid=1     occ=Structure
-tile 310   (22,12) Land  kind=CoalPlant(16)        flags=0x01[P-----] ug=255 bid=1     occ=Structure
-tile 311   (23,12) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 312   ( 0,13) Land  kind=WindTurbine(17)      flags=0x01[P-----] ug=255 bid=2     occ=Structure
-tile 313   ( 1,13) Land  kind=WindTurbine(17)      flags=0x01[P-----] ug=255 bid=2     occ=Structure
-tile 314   ( 2,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 315   ( 3,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 316   ( 4,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 317   ( 5,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 318   ( 6,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 319   ( 7,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 320   ( 8,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 321   ( 9,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 322   (10,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 323   (11,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 324   (12,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 325   (13,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 326   (14,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 327   (15,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 328   (16,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 329   (17,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 330   (18,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 331   (19,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 332   (20,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 333   (21,13) Land  kind=CoalPlant(16)        flags=0x01[P-----] ug=255 bid=1     occ=Structure
-tile 334   (22,13) Land  kind=CoalPlant(16)        flags=0x01[P-----] ug=255 bid=1     occ=Structure
-tile 335   (23,13) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 336   ( 0,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 337   ( 1,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 338   ( 2,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 339   ( 3,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 340   ( 4,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 341   ( 5,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 342   ( 6,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 343   ( 7,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 344   ( 8,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 345   ( 9,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 346   (10,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 347   (11,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 348   (12,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 349   (13,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 350   (14,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 351   (15,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 352   (16,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 353   (17,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 354   (18,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 355   (19,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 356   (20,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 357   (21,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 358   (22,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 359   (23,14) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 360   ( 0,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 361   ( 1,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 362   ( 2,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 363   ( 3,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 364   ( 4,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 365   ( 5,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 366   ( 6,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 367   ( 7,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 368   ( 8,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 369   ( 9,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 370   (10,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 371   (11,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 372   (12,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 373   (13,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 374   (14,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 375   (15,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 376   (16,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 377   (17,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 378   (18,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 379   (19,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 380   (20,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 381   (21,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 382   (22,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
-tile 383   (23,15) Land  kind=Land(0)              flags=0x00[------] ug=255 bid=-     occ=-
+tile 0     ( 0, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 1     ( 1, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 2     ( 2, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 3     ( 3, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 4     ( 4, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 5     ( 5, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 6     ( 6, 0) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 7     ( 7, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 8     ( 8, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 9     ( 9, 0) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 10    (10, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 11    (11, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 12    (12, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 13    (13, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 14    (14, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 15    (15, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 16    (16, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 17    (17, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 18    (18, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 19    (19, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 20    (20, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 21    (21, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 22    (22, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 23    (23, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 24    ( 0, 1) terrain=Land  flags=[PW-] density=Low    bid=9     occ=ZoneResidential
+tile 25    ( 1, 1) terrain=Land  flags=[PW-] density=Low    bid=22    occ=ZoneResidential
+tile 26    ( 2, 1) terrain=Land  flags=[PW-] density=Low    bid=30    occ=ZoneResidential
+tile 27    ( 3, 1) terrain=Land  flags=[PW-] density=Low    bid=31    occ=ZoneResidential
+tile 28    ( 4, 1) terrain=Land  flags=[PW-] density=Low    bid=33    occ=ZoneResidential
+tile 29    ( 5, 1) terrain=Land  flags=[PW-] density=Low    bid=28    occ=ZoneResidential
+tile 30    ( 6, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 31    ( 7, 1) terrain=Land  flags=[PW-] density=Low    bid=13    occ=ZoneCommercial
+tile 32    ( 8, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneCommercial
+tile 33    ( 9, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 34    (10, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 35    (11, 1) terrain=Land  flags=[PW-] density=Low    bid=8     occ=ZoneResidential,PowerLine
+tile 36    (12, 1) terrain=Land  flags=[PW-] density=Low    bid=25    occ=ZoneResidential,PowerLine
+tile 37    (13, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential,PowerLine
+tile 38    (14, 1) terrain=Land  flags=[PW-] density=Low    bid=17    occ=ZoneResidential,PowerLine
+tile 39    (15, 1) terrain=Land  flags=[PW-] density=Low    bid=29    occ=ZoneCommercial
+tile 40    (16, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneCommercial
+tile 41    (17, 1) terrain=Land  flags=[PW-] density=Low    bid=26    occ=ZoneCommercial
+tile 42    (18, 1) terrain=Land  flags=[PW-] density=Low    bid=11    occ=ZoneIndustrial
+tile 43    (19, 1) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneIndustrial
+tile 44    (20, 1) terrain=Land  flags=[PW-] density=Low    bid=27    occ=ZoneIndustrial
+tile 45    (21, 1) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 46    (22, 1) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 47    (23, 1) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 48    ( 0, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 49    ( 1, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 50    ( 2, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 51    ( 3, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 52    ( 4, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 53    ( 5, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 54    ( 6, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road,Rail
+tile 55    ( 7, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 56    ( 8, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 57    ( 9, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road,Rail
+tile 58    (10, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 59    (11, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 60    (12, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road,PowerLine
+tile 61    (13, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Pipe,Road
+tile 62    (14, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 63    (15, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 64    (16, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 65    (17, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 66    (18, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 67    (19, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 68    (20, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 69    (21, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 70    (22, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 71    (23, 2) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road
+tile 72    ( 0, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneCommercial
+tile 73    ( 1, 3) terrain=Land  flags=[PW-] density=Low    bid=23    occ=ZoneCommercial
+tile 74    ( 2, 3) terrain=Land  flags=[PW-] density=Low    bid=18    occ=ZoneCommercial
+tile 75    ( 3, 3) terrain=Land  flags=[PW-] density=Low    bid=24    occ=ZoneIndustrial
+tile 76    ( 4, 3) terrain=Land  flags=[PW-] density=Low    bid=35    occ=ZoneIndustrial
+tile 77    ( 5, 3) terrain=Land  flags=[PW-] density=Low    bid=14    occ=ZoneIndustrial
+tile 78    ( 6, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 79    ( 7, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 80    ( 8, 3) terrain=Land  flags=[PW-] density=Low    bid=19    occ=ZoneResidential
+tile 81    ( 9, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 82    (10, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 83    (11, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 84    (12, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 85    (13, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 86    (14, 3) terrain=Land  flags=[PW-] density=Low    bid=12    occ=ZoneResidential
+tile 87    (15, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneResidential
+tile 88    (16, 3) terrain=Land  flags=[PW-] density=Low    bid=34    occ=ZoneCommercial
+tile 89    (17, 3) terrain=Land  flags=[PW-] density=Low    bid=10    occ=ZoneCommercial
+tile 90    (18, 3) terrain=Land  flags=[PW-] density=Low    bid=20    occ=ZoneCommercial
+tile 91    (19, 3) terrain=Land  flags=[PW-] density=Low    bid=32    occ=ZoneIndustrial
+tile 92    (20, 3) terrain=Land  flags=[PW-] density=Low    bid=-     occ=ZoneIndustrial
+tile 93    (21, 3) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 94    (22, 3) terrain=Land  flags=[-W-] density=Low    bid=-     occ=Pipe
+tile 95    (23, 3) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 96    ( 0, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 97    ( 1, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 98    ( 2, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 99    ( 3, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 100   ( 4, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 101   ( 5, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 102   ( 6, 4) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail,PowerLine
+tile 103   ( 7, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 104   ( 8, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 105   ( 9, 4) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Rail
+tile 106   (10, 4) terrain=Land  flags=[PW-] density=Low    bid=4     occ=Structure
+tile 107   (11, 4) terrain=Land  flags=[PW-] density=Low    bid=4     occ=Structure
+tile 108   (12, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 109   (13, 4) terrain=Land  flags=[PW-] density=Low    bid=5     occ=Structure
+tile 110   (14, 4) terrain=Land  flags=[PW-] density=Low    bid=5     occ=Structure
+tile 111   (15, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 112   (16, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 113   (17, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 114   (18, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 115   (19, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 116   (20, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 117   (21, 4) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 118   (22, 4) terrain=Land  flags=[-W-] density=Low    bid=-     occ=Pipe
+tile 119   (23, 4) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 120   ( 0, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 121   ( 1, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 122   ( 2, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 123   ( 3, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 124   ( 4, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 125   ( 5, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 126   ( 6, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 127   ( 7, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 128   ( 8, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 129   ( 9, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 130   (10, 5) terrain=Land  flags=[PW-] density=Low    bid=4     occ=Structure
+tile 131   (11, 5) terrain=Land  flags=[PW-] density=Low    bid=4     occ=Structure
+tile 132   (12, 5) terrain=Land  flags=[PW-] density=Low    bid=-     occ=Road,PowerLine
+tile 133   (13, 5) terrain=Land  flags=[PW-] density=Low    bid=5     occ=Structure
+tile 134   (14, 5) terrain=Land  flags=[PW-] density=Low    bid=5     occ=Structure
+tile 135   (15, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 136   (16, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 137   (17, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 138   (18, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 139   (19, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 140   (20, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 141   (21, 5) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 142   (22, 5) terrain=Land  flags=[-W-] density=Low    bid=-     occ=Pipe
+tile 143   (23, 5) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 144   ( 0, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 145   ( 1, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 146   ( 2, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=PowerLine
+tile 147   ( 3, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=Pipe,PowerLine
+tile 148   ( 4, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=PowerLine,Trees
+tile 149   ( 5, 6) terrain=Water flags=[---] density=Low    bid=-     occ=PowerLine
+tile 150   ( 6, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 151   ( 7, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=ZoneCommercial,PowerLine
+tile 152   ( 8, 6) terrain=Land  flags=[--A] density=Low    bid=-     occ=ZoneCommercial,PowerLine
+tile 153   ( 9, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 154   (10, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 155   (11, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 156   (12, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 157   (13, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 158   (14, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 159   (15, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 160   (16, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 161   (17, 6) terrain=Land  flags=[P--] density=Low    bid=-     occ=Road,Rail,PowerLine
+tile 162   (18, 6) terrain=Land  flags=[P--] density=Low    bid=6     occ=Structure
+tile 163   (19, 6) terrain=Land  flags=[P--] density=Low    bid=6     occ=Structure
+tile 164   (20, 6) terrain=Land  flags=[P--] density=Low    bid=7     occ=Structure
+tile 165   (21, 6) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 166   (22, 6) terrain=Land  flags=[-W-] density=Low    bid=-     occ=Pipe
+tile 167   (23, 6) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 168   ( 0, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 169   ( 1, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 170   ( 2, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=Pipe
+tile 171   ( 3, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 172   ( 4, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 173   ( 5, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 174   ( 6, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 175   ( 7, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 176   ( 8, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 177   ( 9, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 178   (10, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 179   (11, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 180   (12, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 181   (13, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 182   (14, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 183   (15, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 184   (16, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 185   (17, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 186   (18, 7) terrain=Land  flags=[P--] density=Low    bid=6     occ=Structure
+tile 187   (19, 7) terrain=Land  flags=[P--] density=Low    bid=6     occ=Structure
+tile 188   (20, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 189   (21, 7) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 190   (22, 7) terrain=Land  flags=[-W-] density=Low    bid=-     occ=Pipe
+tile 191   (23, 7) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 192   ( 0, 8) terrain=Water flags=[---] density=Low    bid=-     occ=-
+tile 193   ( 1, 8) terrain=Water flags=[---] density=Low    bid=-     occ=-
+tile 194   ( 2, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 195   ( 3, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 196   ( 4, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 197   ( 5, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 198   ( 6, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 199   ( 7, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 200   ( 8, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 201   ( 9, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 202   (10, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 203   (11, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 204   (12, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 205   (13, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 206   (14, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 207   (15, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 208   (16, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 209   (17, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 210   (18, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 211   (19, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 212   (20, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 213   (21, 8) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 214   (22, 8) terrain=Land  flags=[-W-] density=Low    bid=-     occ=Pipe
+tile 215   (23, 8) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 216   ( 0, 9) terrain=Water flags=[---] density=Low    bid=-     occ=-
+tile 217   ( 1, 9) terrain=Water flags=[---] density=Low    bid=-     occ=-
+tile 218   ( 2, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 219   ( 3, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 220   ( 4, 9) terrain=Water flags=[---] density=Low    bid=-     occ=Pipe
+tile 221   ( 5, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 222   ( 6, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 223   ( 7, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 224   ( 8, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 225   ( 9, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 226   (10, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 227   (11, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 228   (12, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 229   (13, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 230   (14, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 231   (15, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 232   (16, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 233   (17, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 234   (18, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 235   (19, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 236   (20, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 237   (21, 9) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 238   (22, 9) terrain=Land  flags=[PW-] density=Low    bid=3     occ=Structure
+tile 239   (23, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 240   ( 0,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 241   ( 1,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 242   ( 2,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 243   ( 3,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 244   ( 4,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 245   ( 5,10) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 246   ( 6,10) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 247   ( 7,10) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 248   ( 8,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 249   ( 9,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 250   (10,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 251   (11,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 252   (12,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 253   (13,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 254   (14,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 255   (15,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 256   (16,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 257   (17,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 258   (18,10) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 259   (19,10) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 260   (20,10) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 261   (21,10) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 262   (22,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 263   (23,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 264   ( 0,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 265   ( 1,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 266   ( 2,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 267   ( 3,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 268   ( 4,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 269   ( 5,11) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 270   ( 6,11) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 271   ( 7,11) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 272   ( 8,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 273   ( 9,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 274   (10,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 275   (11,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 276   (12,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 277   (13,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 278   (14,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 279   (15,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 280   (16,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 281   (17,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 282   (18,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 283   (19,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 284   (20,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 285   (21,11) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
+tile 286   (22,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 287   (23,11) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 288   ( 0,12) terrain=Land  flags=[P--] density=Low    bid=2     occ=Structure
+tile 289   ( 1,12) terrain=Land  flags=[P--] density=Low    bid=2     occ=Structure
+tile 290   ( 2,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 291   ( 3,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 292   ( 4,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 293   ( 5,12) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 294   ( 6,12) terrain=Land  flags=[---] density=Low    bid=-     occ=Trees
+tile 295   ( 7,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 296   ( 8,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 297   ( 9,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 298   (10,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 299   (11,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 300   (12,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 301   (13,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 302   (14,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 303   (15,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 304   (16,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 305   (17,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 306   (18,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 307   (19,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 308   (20,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 309   (21,12) terrain=Land  flags=[P--] density=Low    bid=1     occ=Structure
+tile 310   (22,12) terrain=Land  flags=[P--] density=Low    bid=1     occ=Structure
+tile 311   (23,12) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 312   ( 0,13) terrain=Land  flags=[P--] density=Low    bid=2     occ=Structure
+tile 313   ( 1,13) terrain=Land  flags=[P--] density=Low    bid=2     occ=Structure
+tile 314   ( 2,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 315   ( 3,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 316   ( 4,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 317   ( 5,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 318   ( 6,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 319   ( 7,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 320   ( 8,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 321   ( 9,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 322   (10,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 323   (11,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 324   (12,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 325   (13,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 326   (14,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 327   (15,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 328   (16,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 329   (17,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 330   (18,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 331   (19,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 332   (20,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 333   (21,13) terrain=Land  flags=[P--] density=Low    bid=1     occ=Structure
+tile 334   (22,13) terrain=Land  flags=[P--] density=Low    bid=1     occ=Structure
+tile 335   (23,13) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 336   ( 0,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 337   ( 1,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 338   ( 2,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 339   ( 3,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 340   ( 4,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 341   ( 5,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 342   ( 6,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 343   ( 7,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 344   ( 8,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 345   ( 9,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 346   (10,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 347   (11,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 348   (12,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 349   (13,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 350   (14,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 351   (15,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 352   (16,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 353   (17,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 354   (18,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 355   (19,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 356   (20,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 357   (21,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 358   (22,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 359   (23,14) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 360   ( 0,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 361   ( 1,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 362   ( 2,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 363   ( 3,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 364   ( 4,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 365   ( 5,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 366   ( 6,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 367   ( 7,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 368   ( 8,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 369   ( 9,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 370   (10,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 371   (11,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 372   (12,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 373   (13,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 374   (14,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 375   (15,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 376   (16,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 377   (17,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 378   (18,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 379   (19,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 380   (20,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 381   (21,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 382   (22,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 383   (23,15) terrain=Land  flags=[---] density=Low    bid=-     occ=-

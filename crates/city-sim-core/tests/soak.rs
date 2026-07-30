@@ -171,9 +171,14 @@
 //! indexes stays at 28 (1.00×). `occupants.rs` allocates
 //! `vec![None; max(max live id, next_building_id) + 1]`, and develop/abandon
 //! churn drives `next_building_id` up for ever — about 1.2 ids per simulated
-//! day in this city, and it is never reused or compacted. The allocation sits
-//! on the 20 Hz host emit path as well as on `state_hash` and
-//! `compute_wilderness`.
+//! day in this city, and it is never reused or compacted.
+//!
+//! The allocation used to sit on the 20 Hz host emit path and on `state_hash`
+//! too — both built a lookup to derive the wire `kind` byte every tick. Since
+//! #177's TS/wire follow-up deleted that derivation (the wire now carries
+//! occupant bits directly, no lookup needed to write them), those two are
+//! fixed as a side effect. `compute_wilderness` is the call site that remains:
+//! it still resolves a structure's kind, per tick, to score it.
 //!
 //! Two things were checked by experiment rather than assumed, because they
 //! decide what a fix has to be:
@@ -212,23 +217,27 @@
 //! ## Modelling the 20 Hz host loop
 //!
 //! `Simulation::step` is not the whole per-tick cost. Both hosts —
-//! `city_sim_wasm::SimHost::tile_buffer` and
-//! `tauri_plugin_city_sim::commands` — build a [`StructureLookup`] and derive
-//! the wire bytes for every tile on *every* tick, because since #177 the
-//! `kind` and `flags` bytes are derived rather than persisted. A soak that
-//! only called `step` would miss the busiest allocation path in the product.
-//! [`emit_wire_frame`] mirrors what those hosts do, and the soak calls it once
-//! per tick. If either host's emit loop changes shape, this should follow it.
+//! `city_sim_wasm::SimHost::tile_buffer` and `tauri_plugin_city_sim::commands`
+//! — write the tile wire buffer for every tile on *every* tick, and that is
+//! real allocation work even though #177's TS/wire follow-up deleted the
+//! [`StructureLookup`]-driven derivation this used to need: writing
+//! `n * BYTES_PER_TILE` bytes and reading every tile's occupant bits still
+//! allocates and iterates the whole map, once per tick. A soak that only
+//! called `step` would miss that path. [`emit_wire_frame`] mirrors what those
+//! hosts do, and the soak calls it once per tick. If either host's emit loop
+//! changes shape, this should follow it.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
 use city_sim_core::commands::apply_tool;
-use city_sim_core::display::{wire_kind_and_flags, wire_underground};
 use city_sim_core::occupants::StructureLookup;
 use city_sim_core::sim::{state_hash, Simulation};
 use city_sim_core::state::{BudgetStats, DemandStats, EducationStats, GameState};
 use city_sim_core::wilderness::{WildernessBreakdown, WildernessStats};
+use city_sim_core::wire::{
+    wire_overhead_byte, wire_status_byte, wire_surface_byte, wire_underground_byte,
+};
 use city_sim_protocol::commands::Tool;
 use city_sim_protocol::tile_buffer::{encode_happiness, TileBufferOffsets, BYTES_PER_TILE};
 
@@ -586,25 +595,26 @@ fn build_soak_city() -> Simulation {
 /// One frame of the wire tile buffer, exactly as the hosts build it.
 ///
 /// Mirrors `city_sim_wasm::SimHost::tile_buffer` and the `tauri-plugin-city-sim`
-/// tick event: index the building list **once**, then derive `kind`, `flags`
-/// and `underground_kind` per tile. Returns a checksum so nothing here can be
-/// optimised away.
+/// tick event: each stratum's occupant bits, rebased to a dense byte, plus
+/// status/happiness/elevation/building_id/wilderness — no `StructureLookup`,
+/// no per-tile derivation, since #177's TS/wire follow-up deleted the
+/// precedence ladder that used to need one here. Returns a checksum so
+/// nothing here can be optimised away.
 fn emit_wire_frame(state: &GameState) -> u64 {
     let tiles = &state.tiles;
     let n = tiles.len();
     let o = TileBufferOffsets::for_size(n);
-    let lookup = StructureLookup::new(state);
     let mut buf = vec![0u8; n * BYTES_PER_TILE];
     for (i, tile) in tiles.iter().enumerate() {
-        let (kind, flags) = wire_kind_and_flags(tile, &lookup);
-        buf[o.kind + i] = kind as u8;
-        buf[o.flags + i] = flags;
+        buf[o.underground + i] = wire_underground_byte(tile);
+        buf[o.surface + i] = wire_surface_byte(tile);
+        buf[o.overhead + i] = wire_overhead_byte(tile);
+        buf[o.status + i] = wire_status_byte(tile);
         buf[o.happiness + i] = encode_happiness(tile.happiness);
         buf[o.elevation + i] = tile.elevation;
         let bid = tile.building_id.unwrap_or(0);
         buf[o.building_id + i * 2] = (bid & 0xFF) as u8;
         buf[o.building_id + i * 2 + 1] = (bid >> 8) as u8;
-        buf[o.underground_kind + i] = wire_underground(tile);
         buf[o.wilderness + i] = state.wilderness.local_field.get(i).copied().unwrap_or(128);
     }
     buf.iter().map(|&b| b as u64).sum()
@@ -1309,8 +1319,9 @@ fn run_soak() -> (Complaints, Vec<AllocationFinding>, u32) {
              fix: `next_building_id` climbs monotonically, and the max *live* id climbs with \
              it whenever a freshly developed lot is alive — which is every few ticks under \
              churn. The repair is to stop indexing a dense `Vec` by a sparse building id.\n    \
-             This allocation is on the 20 Hz host emit path (`SimHost::tile_buffer` and the \
-             Tauri tick event) as well as on `state_hash` and `compute_wilderness`",
+             The 20 Hz host emit path and `state_hash` no longer allocate one of these — #177's \
+             TS/wire follow-up deleted the derivation that needed a lookup there. \
+             `compute_wilderness` is the call site this run's probe measures.",
                 early.max_lookup_bytes,
                 late.max_lookup_bytes,
                 early.max_live,

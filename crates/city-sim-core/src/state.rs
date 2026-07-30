@@ -20,9 +20,10 @@ use std::collections::VecDeque;
 // `kind` slot, and the strata are the slot now. Deleting them is what makes
 // every stale structural-flag read fail to compile (step 3 of #177).
 //
-// The *wire* still carries all six bits — `city_sim_protocol::tile_buffer::flags`
-// is untouched, and `display::wire_flags` re-derives the three structural ones
-// from the occupant set on the way out.
+// The live wire no longer carries the three structural bits at all — it reads
+// the occupant bits directly (`city_sim_protocol::tile_buffer`, `crate::wire`).
+// They survive only in `city_sim_protocol::legacy_tile_buffer::legacy_flags`,
+// frozen for decoding old saves (`crate::migrate::tile_from_v4`).
 
 pub const FLAG_POWERED: u8 = 0b0000_0001;
 pub const FLAG_WATERED: u8 = 0b0000_0010;
@@ -565,7 +566,6 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::display::wire_kind_at;
     use crate::migrate::set_v4_kind;
 
     #[test]
@@ -649,7 +649,7 @@ mod tests {
     fn tile_at_returns_correct_tile() {
         let mut g = gs();
         set_v4_kind(&mut g.tiles[35], TileKind::Road);
-        assert_eq!(wire_kind_at(&g, 5, 3), TileKind::Road);
+        assert!(g.tile_at(5, 3).unwrap().has_occupant(Occupant::Road));
     }
 
     #[test]
@@ -663,7 +663,10 @@ mod tests {
     fn tile_at_mut_mutates() {
         let mut g = gs();
         set_v4_kind(g.tile_at_mut(2, 3).unwrap(), TileKind::Residential);
-        assert_eq!(wire_kind_at(&g, 2, 3), TileKind::Residential);
+        assert_eq!(
+            g.tile_at(2, 3).unwrap().zone_occupant(),
+            Some(Occupant::ZoneResidential)
+        );
     }
 
     #[test]

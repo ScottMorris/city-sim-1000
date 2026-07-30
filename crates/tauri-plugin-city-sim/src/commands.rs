@@ -8,13 +8,14 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use city_sim_core::commands::apply_tool as sim_apply_tool;
-use city_sim_core::display::wire_kind;
 use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::import::{from_tile_buffer, ImportStats};
-use city_sim_core::occupants::StructureLookup;
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
+use city_sim_core::wire::{
+    wire_overhead_byte, wire_status_byte, wire_surface_byte, wire_underground_byte,
+};
 use city_sim_protocol::commands::{Policies, Tool};
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
@@ -47,7 +48,12 @@ pub struct TickEvent {
     pub wilderness_trend: f32,
     pub width: u32,
     pub height: u32,
-    /// Tile kinds, one byte per tile, row-major. Values match `TileKind` u8 discriminants.
+    /// Occupant/status bytes, four per tile, row-major, array-of-structs
+    /// (not the SoA layout `city_sim_protocol::tile_buffer` uses — this is a
+    /// separate, simpler encoding for the per-tick push). Per tile:
+    /// `[underground, surface, overhead, status]`, each byte meaning exactly
+    /// what the same-named field means in `city_sim_protocol::tile_buffer`
+    /// (see `city_sim_core::wire`).
     pub tiles: Vec<u8>,
     /// Whether an undo/redo step is currently available — drives button state.
     pub can_undo: bool,
@@ -113,14 +119,15 @@ impl SimState {
 
 fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
     let s = &sim.state;
-    // Derived from the strata, never stored — `display::wire_kind` is the one
-    // definition of the wire spelling, shared with the WASM tile buffer.
-    let lookup = StructureLookup::new(s);
-    let tiles: Vec<u8> = s
-        .tiles
-        .iter()
-        .map(|t| wire_kind(t, &lookup) as u8)
-        .collect();
+    // Same per-stratum encode helpers the WASM tile buffer uses — no lookup,
+    // no precedence, just each stratum's bits rebased to a dense byte.
+    let mut tiles: Vec<u8> = Vec::with_capacity(s.tiles.len() * 4);
+    for t in &s.tiles {
+        tiles.push(wire_underground_byte(t));
+        tiles.push(wire_surface_byte(t));
+        tiles.push(wire_overhead_byte(t));
+        tiles.push(wire_status_byte(t));
+    }
     TickEvent {
         tick: s.tick,
         day: s.day,
