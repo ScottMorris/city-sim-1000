@@ -13,6 +13,7 @@ import { createInitialState } from './gameState';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
 import { nextStrokeId } from './protocol/commands';
+import { dominantOccupantLabel } from './protocol/tileLabel';
 
 // Bresenham's line — returns all integer (x,y) pairs from (x0,y0) to (x1,y1).
 function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
@@ -98,7 +99,7 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
     const t = s.tiles[y * s.width + x];
     if (!t) return null;
     return {
-      kind: t.kind as string,
+      kind: dominantOccupantLabel(s, t),
       powered: t.powered,
       watered: t.watered,
       abandoned: t.abandoned ?? false,
@@ -127,7 +128,7 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const s = bridge.getState();
           const kind = params.kind as string;
           const hits = s.tiles.flatMap((t, i) =>
-            (t.kind as string) === kind
+            dominantOccupantLabel(s, t) === kind
               ? [{ x: i % s.width, y: Math.floor(i / s.width) }]
               : [],
           );

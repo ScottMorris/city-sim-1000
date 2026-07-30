@@ -1,6 +1,7 @@
 import { projectLightingPolicy } from '../game/bylawAnalytics';
 import { DEFAULT_BYLAWS, LIGHTING_POLICIES, type LightingBylaw } from '../game/bylaws';
-import { TileKind, type GameState } from '../game/gameState';
+import type { GameState } from '../game/gameState';
+import { Occupant, zoneOccupant } from '../game/protocol/occupants';
 import {
   NATURE_RESERVE_UNLOCK_SCORE,
   type WildernessPolicy
@@ -151,7 +152,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
       const state = getState();
       const policy = state.policies.wilderness;
       const score = state.wilderness.score;
-      const industrialZones = state.tiles.filter((t) => t.kind === TileKind.Industrial).length;
+      const industrialZones = state.tiles.filter((t) => zoneOccupant(t.surface) === Occupant.ZoneIndustrial).length;
       const reserveUnlocked = policy.natureReserve || score >= NATURE_RESERVE_UNLOCK_SCORE;
       wildernessOptions.innerHTML = '';
 
