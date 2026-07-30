@@ -79,25 +79,48 @@ export default defineConfig({
       // defaults `threshold` to 0.2, and left at that default a pixel has to
       // move by a fifth of the colour space before it is counted at all — so
       // `maxDiffPixels: 0` on its own is not an exact match, it is "no pixel
-      // moved a lot". That is not a hypothetical gap here: delta 1 is a single
-      // minimap pixel going rail-brown (#6b4a2f) to road-grey (#555), a YIQ
-      // distance well inside 0.2, and `d-minimap.png` exists precisely to pin
-      // that shift. With the default threshold the harness could not see it.
+      // moved a lot" — it bounds a set that is nearly always empty.
       //
-      // 0 is the honest setting and it is affordable: every clip in
-      // `visual.spec.ts` is canvas — flat dithered pixel art composited by
-      // WebGL at a fixed camera, with the rasteriser, colour profile and DPR all
-      // pinned by the `visual` project above — so there is no antialiasing
-      // jitter to absorb and no font rendering in shot.
+      // That is not a hypothetical gap here. Delta 1 turns one minimap tile from
+      // rail-brown to road-grey — `sprites.ts`'s palette, `0x8c6b3e` to
+      // `0x7f8894` — and `d-minimap.png` exists precisely to pin that shift. Put
+      // through the same YIQ metric Playwright compares against, that pair sits
+      // 844 apart, which is a `threshold` of 0.155: inside the default, so at 0.2
+      // the harness could not see the one delta it was built for.
       //
-      // Measured both ways, by swapping rungs 6 and 7 of `wire_kind` so `Road`
-      // wins a level crossing again and rebuilding the WASM:
-      //   threshold: 0     `d-minimap.png` fails, 11 pixels different, and the
-      //                    other three baselines are untouched — exactly what
-      //                    `display.rs` predicts for delta 1.
-      //   threshold: 0.2   every baseline passes. The only thing that fails is
-      //                    the numeric `kindAt` soft assertion in the spec, so
-      //                    the *visual* harness saw nothing at all.
+      // 0 is the honest setting and it is affordable. `visual.spec.ts` is the
+      // only spec under `e2e/` that screenshots at all, and every clip it takes
+      // is canvas — flat dithered pixel art composited by WebGL at a fixed
+      // camera, with the rasteriser, colour profile and DPR all pinned by the
+      // `visual` project above — so there is no antialiasing jitter to absorb and
+      // no font or DOM text in shot. None of 0's usual *timing* flakiness risks
+      // are here: three parallel repeats run green, and the same run repeats
+      // green on one machine all day.
+      //
+      // It is still not free, and the exception is worth knowing about before
+      // you add a fixture. Reproducible-on-one-machine is not the same as
+      // identical-across-machines: GitHub Actions' Chromium renders a 36-pixel
+      // cluster of one clip differently from a developer machine, up to a YIQ
+      // distance of 0.1032 — a visibly different green, not a rounding step. So
+      // `b-hydro-lines.png` carries a measured per-call `threshold` of its own,
+      // documented at the assertion in `visual.spec.ts`. Every other baseline
+      // holds 0 on both, including `d-minimap.png`, which is the one that
+      // matters: it pins delta 1, and it saw zero CI noise. A new fixture that
+      // fails only on CI wants the same per-image treatment, sized from that
+      // run's artefacts — not a global loosening, which would spend delta 1's
+      // margin to fix an unrelated image.
+      //
+      // Measured both ways, by swapping the `Rail` and `Road` rungs of
+      // `wire_kind` so `Road` wins a level crossing again and rebuilding the
+      // WASM:
+      //   threshold: 0     `d-minimap.png` fails, 11 pixels different (a tile is
+      //                    drawn several pixels wide), and the other three
+      //                    baselines are untouched — exactly what `display.rs`
+      //                    predicts for delta 1. Unmutated, all four pass.
+      //   threshold: 0.2   every baseline passes, no pixel counted as different
+      //                    anywhere. The only thing that fails is the numeric
+      //                    `kindAt` soft assertion in the spec, so the *visual*
+      //                    harness saw nothing at all.
       // Neither mutation is committed; re-running that swap is how to check this
       // has not gone blind again.
       threshold: 0,

@@ -32,13 +32,14 @@
 // The images are known to be *sensitive*, not merely stable: reverting
 // `wire_kind`'s road/rail precedence (delta 1) moves `d-minimap.png` by 11
 // pixels and nothing else, exactly as `display.rs` predicts, and dropping its
-// zone rung moves `b-hydro-lines.png` by 3899 pixels. Neither mutation is
+// zone rung moves `b-hydro-lines.png` by 3919 pixels. Neither mutation is
 // committed; re-running them is the way to check the harness has not gone blind.
 //
 // That first one is only visible because `playwright.config.ts` pins the
 // per-pixel `threshold` at 0. Playwright's default of 0.2 lets a pixel move a
 // fifth of the colour space before it counts as different at all, and delta 1 is
-// one minimap pixel going rail-brown to road-grey — a smaller step than that.
+// one minimap tile going rail-brown to road-grey — a step of 0.155, smaller than
+// that.
 // Measured: with the engine reverted and `threshold: 0.2`, all four baselines
 // pass and only the `kindAt` assertions below notice. If either setting is ever
 // loosened, this spec stops being able to see the delta it exists for.
@@ -268,9 +269,37 @@ test.describe('tile derivation — visual regression', () => {
       .toHaveScreenshot('a-level-crossings.png', { clip: clip(12, 22, 23, 30) });
 
     // Delta 2, plus the three "line over something" controls.
+    //
+    // The one image that cannot hold the project's `threshold: 0`, and the only
+    // one that needs an exception. CI's Chromium renders a 36-pixel cluster in
+    // this clip (around x 95–99, y 185–190) differently from a developer
+    // machine's — worst pair `(170,219,113)` → `(204,233,170)`, a visibly
+    // different green rather than a rounding step. Pinning the rasteriser to
+    // SwiftShader makes a run reproducible *on one machine*; it does not make
+    // two Chromium builds agree bit-for-bit, and `threshold: 0` here fails on
+    // GitHub Actions while passing locally.
+    //
+    // Measured from a failing run's artefacts, through the same YIQ metric
+    // Playwright compares against (`pixelmatch`, `maxDelta = 35215`):
+    //
+    //   0.1032   worst cross-machine noise pixel in this clip (median 0.0277)
+    //   0.1250   this allowance
+    //   0.1549   delta 1, rail-brown 0x8c6b3e → road-grey 0x7f8894
+    //
+    // The allowance is deliberately scoped to this one image rather than set
+    // globally, because delta 1 lives in `d-minimap.png` — which saw *zero* CI
+    // noise, and so keeps exact matching. Spending the delta-1 margin globally
+    // to fix a local problem is how this harness would go blind. What this
+    // image itself exists to catch is unaffected, and that was re-measured
+    // *with this allowance in place* rather than inherited: dropping
+    // `wire_kind`'s zone rung still moves it 3919 pixels — about 100× the noise
+    // being absorbed — and moves `d-minimap.png` by 26.
+    //
+    // Re-derive these numbers from a failing run's `-actual.png` rather than
+    // trusting them if the runner image or Chromium version moves.
     await expect
       .soft(page)
-      .toHaveScreenshot('b-hydro-lines.png', { clip: clip(25, 22, 39, 30) });
+      .toHaveScreenshot('b-hydro-lines.png', { clip: clip(25, 22, 39, 30), threshold: 0.125 });
 
     // Delta 3, plus the water-edge and bulldozed-water tiles.
     await expect

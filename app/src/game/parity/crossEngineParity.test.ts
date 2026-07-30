@@ -565,9 +565,40 @@ describe('cross-engine parity — fuzz', () => {
     });
   }
 
-  // The footprint tools, which the cheap palette leaves out because a 300-click
-  // script would exhaust the treasury in twenty. Short scripts, bigger map:
-  // this is aimed at the bounds and overlap guards, not at the economy.
+  /**
+   * The footprint tools, which the cheap palette leaves out because a 300-click
+   * script would exhaust the treasury in twenty. Short scripts, bigger map: this
+   * family is aimed at the bounds, overlap and road-access guards, not at the
+   * economy.
+   *
+   * ## Why it carries the carriageways and the zones too
+   *
+   * `buildings/manager.ts` is half of the drift this file's header names as its
+   * reason for existing, and it owns two things: where a footprint may be
+   * stamped, and what happens to it on every tick afterwards. A palette of
+   * nothing but stamps reaches the first and not the second — a plant with no
+   * road beside it and no line out of it is refused or inert, so the per-tick
+   * status path never runs on anything this family built.
+   *
+   * So the palette carries `Road`, `Rail`, `PowerLine` and `WaterPipe` to wire
+   * what it stamps, and the three zones to give the stamps neighbours. Measured
+   * against the narrower palette this replaced, over the same six seeds: accepted
+   * commands 130 → 202, structure tiles 200 → 217, powered tiles 80 → 128.
+   *
+   * ## Why it ticks, and why only 30
+   *
+   * Every fuzz family here once ran zero ticks or drew from a palette with no
+   * power source in it, so no fuzz scenario ever reached a *built* footprint that
+   * the tick loop had then looked at. Thirty ticks fixes that — it is past the
+   * point `updateBuildingStatuses` decides a plant's output and a lot's road
+   * access, and under the 40-tick zone-growth delay, which is where the two
+   * engines' RNG streams start to matter. `SERVICED_CITY` sets out why nothing in
+   * this file fuzzes past that delay.
+   *
+   * `watered` stays out of reach here and is *not* claimed: the palette has no
+   * `Tool.Water`, so a pump or tower it stamps never stands beside natural water.
+   * That fact is the serviced-city family's ground, not this one's.
+   */
   const FOOTPRINT_PALETTE: readonly Tool[] = [
     Tool.HydroPlant,
     Tool.CoalPlant,
@@ -576,18 +607,52 @@ describe('cross-engine parity — fuzz', () => {
     Tool.ElementarySchool,
     Tool.HighSchool,
     Tool.WaterTower,
+    Tool.WaterPump,
     Tool.ParkLarge,
     Tool.Road,
+    Tool.Rail,
     Tool.PowerLine,
+    Tool.WaterPipe,
+    Tool.Residential,
+    Tool.Commercial,
+    Tool.Industrial,
     Tool.Bulldoze
   ];
 
   for (const seed of [31, 32, 33, 34, 35, 36]) {
     it(`agrees over a random footprint-building script (seed ${seed})`, () => {
-      expectAgreement(`footprint fuzz seed ${seed}`, fuzzScript(seed, 60, 12, FOOTPRINT_PALETTE), {
+      const script = fuzzScript(seed, 60, 12, FOOTPRINT_PALETTE);
+      expectAgreement(`footprint fuzz seed ${seed}`, script, {
         width: 12,
-        height: 12
+        height: 12,
+        ticks: 30,
+        ignoreHeadline: WATER_PRODUCTION_DRIFT
       });
+
+      // Agreement alone would not show this family still reaches what the
+      // palette was widened for: a random script that built nothing, or built it
+      // and left it dark, agrees perfectly. So the reached state is asserted, in
+      // both engines, the same way the serviced-city scenarios do it.
+      //
+      // The floors are deliberately far below what is measured — every one of
+      // the six seeds reaches at least 33 structure tiles and 20 powered ones in
+      // both engines — because their job is to catch this family going quiet, not
+      // to pin a number that a harmless change to the palette would move.
+      for (const engine of driveBoth([...script, settle(30)], 12, 12)) {
+        const facts = engine.facts();
+        const structures = facts.filter(f => f.structure).length;
+        const powered = facts.filter(f => f.powered).length;
+        expect(
+          structures,
+          `${engine.name} stamped only ${structures} footprint tiles from seed ${seed}, so this ` +
+            'family is no longer exercising placement'
+        ).toBeGreaterThanOrEqual(8);
+        expect(
+          powered,
+          `${engine.name} left every tile of seed ${seed} unpowered, so this family is no longer ` +
+            'exercising the per-tick status path in buildings/manager.ts'
+        ).toBeGreaterThanOrEqual(4);
+      }
     });
   }
 

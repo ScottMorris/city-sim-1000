@@ -100,12 +100,13 @@ If `bun run build:wasm` has not been run, the harness **fails with an actionable
 
 ### What it covers
 
-9 named placement scenarios, 5 running-city scenarios, 26 fuzz scenarios (a cheap-tool palette ×12 at 300 commands, a footprint palette ×6 at 60 commands, tick-and-settle ×4, serviced-city ×4 at 80 commands), and 2 pinned known drifts. The fuzz uses a seeded LCG, so a failure is reproducible from the seed printed in the test name.
+9 named placement scenarios, 5 running-city scenarios, 26 fuzz scenarios (a cheap-tool palette ×12 at 300 commands, a footprint palette ×6 at 60 commands and 30 ticks, tick-and-settle ×4, serviced-city ×4 at 80 commands), and 2 pinned known drifts. The fuzz uses a seeded LCG, so a failure is reproducible from the seed printed in the test name.
 
 The twelve-predicate fact vocabulary is covered as follows, and the split is deliberate rather than incidental:
 
 - **The eight structural facts** — `water`, `trees`, `road`, `rail`, `line`, `zone`, `structure`, `pipe` — by every scenario, including all 26 fuzz ones.
-- **`powered` and `watered`** by the serviced-city fuzz family. It starts from a fixed nine-command prelude (coal plant, two crossing streets, a lake with a pump on its shore, nine zoned lots) and then lets 80 random commands loose on it, so the two engines' power and water propagation is compared over randomly mangled topologies. That is `adjacency.ts`'s ground, and `adjacency.ts` is the file that drifted twice during #177.
+- **`powered`** by the serviced-city family and by the footprint family. The footprint palette carries the carriageways, the line, the pipe and the three zones alongside the stamps, and the family ticks, because `buildings/manager.ts` owns both where a footprint may be stamped *and* what the tick loop then does to it — and a palette of nothing but stamps reaches only the first. Widening it moved the six seeds from 130 accepted commands, 200 structure tiles and 0 powered tiles to 202, 217 and 128.
+- **`watered`** by the serviced-city fuzz family alone. It starts from a fixed nine-command prelude (coal plant, two crossing streets, a lake with a pump on its shore, nine zoned lots) and then lets 80 random commands loose on it, so the two engines' power and water propagation is compared over randomly mangled topologies. That is `adjacency.ts`'s ground, and `adjacency.ts` is the file that drifted twice during #177. The footprint family cannot reach `watered` and does not claim to: its palette has no `Tool.Water`, so nothing it stamps ever stands beside natural water.
 - **`developed` and `abandoned`** by two *deterministic* named scenarios — the serviced city grown for 90 ticks, and the same city with its only plant razed and twelve more ticks run. Both assert the state was actually reached, not merely agreed on: two engines that grew nothing would agree perfectly.
 
 Why those last two are not fuzzed is worth stating plainly, because the earlier version of this harness omitted them without saying so. Zone growth is a Fisher-Yates shuffle plus a per-candidate probability roll, drawn from `SeededRng` on one side and the deliberately matching `rng.rs` on the other. The two streams stay in step only while their *draw counts* do, and the draw count depends on the utility balances through `utilityFactor`. Measured: under a random script two of four seeds disagree on `developed`, every disagreement traceable to a click knocking out the pump and one of the two pinned drifts then moving that engine's water balance; and even undisturbed, the two engines pick different lots somewhere between 100 and 120 ticks. So the deterministic scenarios stop at 90 ticks, inside the reproducible window, and the fuzz families stop at 30, under the growth delay.
@@ -145,7 +146,11 @@ bun run test:e2e              # runs this project alongside the two mobile ones
 
 One city, one page, one fixture build, four images compared with soft assertions so all four report together. Everything sits in rows 22–30, clear of the bottom-anchored HUD panels. The project pins a 1440×900 viewport at `deviceScaleFactor: 1`, forces the sRGB colour profile, disables LCD text, and pins the rasteriser to SwiftShader — a developer machine silently swapping in a real GPU would produce diffs that mean nothing.
 
-An exact match takes **both** `maxDiffPixels: 0` and `threshold: 0`, and it is worth knowing why. `maxDiffPixels` bounds how many pixels may differ; `threshold` decides what "differ" *means*, per pixel, as a perceived YIQ distance — and Playwright defaults it to 0.2, so left alone a pixel has to move a fifth of the colour space before it counts at all. That is not academic here: delta 1 is one minimap pixel going rail-brown to road-grey, a smaller step than that. Measured by reverting `wire_kind`'s rail/road precedence in the engine and rebuilding the WASM: at `threshold: 0` `d-minimap.png` fails by 11 pixels and the other three baselines are untouched; at the default 0.2 every baseline passes and only the spec's numeric `kindAt` assertions notice. The tile art is flat dithered pixel art at a fixed camera with the rasteriser pinned, so 0 costs nothing — there is no antialiasing jitter to absorb and no text in shot.
+An exact match takes **both** `maxDiffPixels: 0` and `threshold: 0`, and it is worth knowing why. `maxDiffPixels` bounds how many pixels may differ; `threshold` decides what "differ" *means*, per pixel, as a perceived YIQ distance — and Playwright defaults it to 0.2, so left alone a pixel has to move a fifth of the colour space before it counts at all. That is not academic here: delta 1 is one minimap pixel going rail-brown to road-grey, a smaller step than that. Measured by reverting `wire_kind`'s rail/road precedence in the engine and rebuilding the WASM: at `threshold: 0` `d-minimap.png` fails by 11 pixels and the other three baselines are untouched; at the default 0.2 every baseline passes and only the spec's numeric `kindAt` assertions notice. The tile art is flat dithered pixel art at a fixed camera with the rasteriser pinned, so 0 costs nothing in *timing* flakiness — there is no antialiasing jitter to absorb and no text in shot.
+
+It does cost something across machines, and one image pays it. Pinning the rasteriser to SwiftShader makes a run reproducible on one machine; it does not make two Chromium builds agree bit-for-bit. GitHub Actions renders a 36-pixel cluster of `b-hydro-lines.png` differently from a developer machine — worst pair `(170,219,113)` → `(204,233,170)`, a visibly different green rather than a rounding step — so `threshold: 0` passed locally and failed CI. Measured from the failing run's own artefacts through pixelmatch's YIQ metric: the noise tops out at **0.1032** (median 0.0277) and delta 1 sits at **0.1549**. That image therefore carries a per-call `threshold: 0.125` of its own, documented at the assertion.
+
+The exception is scoped to one image on purpose. `d-minimap.png` is the baseline that pins delta 1, and it saw **zero** CI noise, so it keeps exact matching — a global loosening would spend delta 1's margin to fix an unrelated image. And the allowance does not blind the image it sits on: re-measured with it in place, dropping `wire_kind`'s zone rung still moves `b-hydro-lines.png` by 3 919 pixels. A new fixture that fails only on CI wants the same per-image treatment, sized from that run's artefacts.
 
 It is organised around `display.rs`'s **three deltas** — the three classes of tile that come off the wire differently than they did at `fix(sim): read every stratum, so no feature goes uncounted` — step 2 of #177, the last commit where `kind` was canonical:
 
@@ -155,7 +160,7 @@ It is organised around `display.rs`'s **three deltas** — the three classes of 
 
 Each fixture names the delta it pins, or says explicitly that it is a control that must NOT have moved.
 
-The images are known to be **sensitive**, not merely stable. Reverting `wire_kind`'s rail/road precedence moves `d-minimap.png` by 11 pixels and nothing else, exactly as `display.rs` predicts; dropping its zone rung moves `b-hydro-lines.png` by 3 899 pixels. Neither mutation is committed — re-running them is how you check the harness has not gone blind, and the first of the two is also what proves `threshold` is still pinned.
+The images are known to be **sensitive**, not merely stable. Reverting `wire_kind`'s rail/road precedence moves `d-minimap.png` by 11 pixels and nothing else, exactly as `display.rs` predicts; dropping its zone rung moves `b-hydro-lines.png` by 3 919 pixels. Neither mutation is committed — re-running them is how you check the harness has not gone blind, and the first of the two is also what proves `threshold` is still pinned.
 
 ### What it does NOT cover
 
@@ -204,11 +209,11 @@ The soak also models the **20 Hz host emit loop**. Both hosts — `city_sim_wasm
 - **Any city but one.** One shape, one seed, one command palette. A leak reachable only through repeated terraforming, repeated save/load, or undo/redo churn is not covered.
 - **Peak memory as a budget.** Peak live heap is printed, not asserted against a ceiling.
 
-### It is GREEN, and it reports a known defect while staying that way
+### It reports a known defect without going red, and without going blind
 
-`bun run test:soak` passes, and prints the `StructureLookup::new` finding under a `KNOWN DEFECT #180` banner. That is the intended arrangement, not a soft-pedal: #180 is a real engine defect this branch deliberately does not fix, and it is excused by its own signature only — every other allocation finding fails the run. See "The finding" under "Current status" at the end of this document for what #180 is.
+A soak run prints the `StructureLookup::new` finding under a `KNOWN DEFECT #180` banner and passes. That is the intended arrangement, not a soft-pedal: #180 is a real engine defect this branch deliberately does not fix, and it is excused by its own signature only — every other allocation finding fails the run. See "Known defect #180" at the end of this document for what it is.
 
-`bun run test:soak:long` also passes, and there the coarse aggregate reads 1.23× against its 1.25× tolerance. A few hundred more simulated days and #180 will trip the enforced aggregate too. That is correct behaviour and the message handles it: the aggregate reports its own growth in B/tick alongside the probe's growth in B per call and asks the reader to check the two are the same order of magnitude before filing one as the other.
+On `SOAK=long` the coarse aggregate reads 1.23× against its 1.25× tolerance. A few hundred more simulated days and #180 will trip the enforced aggregate too. That is correct behaviour and the message handles it: the aggregate reports its own growth in B/tick alongside the probe's growth in B per call and asks the reader to check the two are the same order of magnitude before filing one as the other.
 
 **Do not silence the probe** by widening `LOOKUP_GROWTH_TOLERANCE`, shortening the run, or reducing the churn. The fix belongs in `occupants.rs`.
 
@@ -240,7 +245,7 @@ The same rule holds for the pinned known drifts in harness 2 and the documented 
 
 | Job | Harness it carries | What it added |
 | --- | --- | --- |
-| `rust-test` | golden city, default soak | Nothing to wire — `cargo nextest run --workspace` picks both up. nextest gives each its own process, so the soak's ~8 s is what sets the job's test wall clock and the other 322 tests are free. The job is **green** on this branch: the soak's coarse allocation aggregate is enforced and passes at 1.01×, and known defect #180 is reported under a banner rather than failing. |
+| `rust-test` | golden city, default soak | Nothing to wire — `cargo nextest run --workspace` picks both up. nextest gives each its own process, so the soak's ~8 s is what sets the job's test wall clock and every other test in the workspace is free. Known defect #180 does not fail this job: it is reported under a banner, while the soak's coarse allocation aggregate is enforced and every other allocation finding is a failure. |
 | `ts-test` | cross-engine parity | Needed the WASM build. This job now installs the Rust toolchain with the `wasm32-unknown-unknown` target, restores the Rust cache, installs `wasm-pack` and runs `bun run build:wasm` before `bun run test:ci` — the same shape `mobile-e2e` already used. Roughly +90 s cold, +20 s with a warm cache; still well under the critical path. |
 | `mobile-e2e` | visual regression | Nothing to wire — the `visual` Playwright project is picked up by the existing `bun run test:e2e`. About +10 s. The job's `name:` was deliberately left alone so branch-protection check names do not move. |
 | `rust-soak-long` | the long soak | New job, `workflow_dispatch` only, so it costs nothing on pull requests and pushes. Run it from the Actions tab before merging anything that touches allocation on the tick or wire-emit paths. |
@@ -264,33 +269,13 @@ Honest rather than reassuring. These four harnesses close four specific holes; t
 | **Zone growth selection diverges past ~110 ticks** | The two engines draw from separate RNG streams that stay in step only while their draw counts do, so in an undisturbed, fully serviced city they pick the same lots at 100 ticks and different ones at 120. Everything longer than that is unpinned across the language boundary, and so is any growth after a random script has touched the utilities. Measured, not inferred; the numbers are in `crossEngineParity.test.ts` at `SERVICED_CITY`. | Medium, and it is the same calibration decision as the row above: it needs one engine's RNG consumption made to match the other's exactly, which moves committed goldens. |
 | **No performance gate anywhere** | Allocation is bounded; time is not. A tick that gets ten times slower passes every test in this repo. | Medium — a timing gate needs a flake budget, which allocation did not. |
 | **The soak is one city shape** | 24×16, one seed, one command palette, one map. Leaks reachable through terraforming churn, save/load churn or undo/redo churn are out of reach. | Low. `SOAK` already parameterises the length; the shape and palette would need the same treatment. |
-| **Mutation coverage is checked by hand, once** | Every one of the four has now been shown to fail on a deliberate mutation, and each mutation is written down where it belongs: two in `visual.spec.ts` and `playwright.config.ts` (rail/road precedence, the zone rung), four in the fixtures README (deleting each awkward case and regenerating the dump first), three in `soak.rs` (a synthetic clock-sized leak; a never-drained `Vec` leaking at a flat rate; a widened lookup tolerance standing in for a fix), and the parity families' reach is stated as measured numbers rather than as a claim. What is still missing is anything that re-checks it — nothing runs these mutations on a schedule, so the record ages. | High to automate properly. In the meantime, re-run the mutation documented next to whichever harness a change touches, and treat a mutation that no longer goes red as a finding. |
+| **Mutation coverage is checked by hand, once** | Every one of the four has now been shown to fail on a deliberate mutation, and each mutation is written down where it belongs: two in `visual.spec.ts` and `playwright.config.ts` (rail/road precedence, the zone rung), four in the fixtures README (deleting each awkward case and regenerating the dump first), three in `soak.rs` (a synthetic clock-sized leak; a never-drained `Vec` leaking at a flat rate; a widened lookup tolerance standing in for a fix), and one in `crossEngineParity.test.ts` (dropping the footprint family's ticks, which fails its `powered` floor on all six seeds). Parity's reach is not only stated as measured numbers — the serviced-city and footprint families assert the state they claim to reach, so a family that goes quiet fails rather than agreeing vacuously. What is still missing is anything that re-checks it — nothing runs these mutations on a schedule, so the record ages. | High to automate properly. In the meantime, re-run the mutation documented next to whichever harness a change touches, and treat a mutation that no longer goes red as a finding. |
 
 ---
 
-## Current status
+## Known defect #180 — `StructureLookup::new` is sized by the id space, not by the buildings in it
 
-**Every gate is green, and the soak reports a known engine defect without being blind to anything else.**
-
-The counts below are a **snapshot, taken on 2026-07-29 on x86-64 Linux**, and nothing recomputes them — so read them as "roughly this shape", and read the commands themselves as the authority. A count that no longer matches is a prompt to re-run, not a failure.
-
-```
-cargo test --workspace     324 passed, 0 failed, 2 ignored
-  city-sim-core unit         299 passed
-  golden_city                  4 passed
-  soak                         2 passed, 1 ignored   (the #180 acceptance test)
-  city-sim-protocol           19 passed
-bun run test               348 passed (35 files, including 42 parity tests)
-bun run test:e2e            15 passed (including the visual project's 1 test, 4 images)
-bun run test:soak:long       2 passed, 1 ignored     (~147 s, aggregate 1.23× of 1.25×)
-bun run lint               clean
-cargo clippy --workspace --exclude city-sim-wasm --all-targets -- -D warnings   clean
-cargo fmt --all -- --check clean
-```
-
-The one thing in that list that is *not* just a number: `soak` passing is conditional on the `StructureLookup::new` probe still firing. If #180 is fixed and nobody removes the exception, the soak goes red on purpose and says so — see harness 4 above.
-
-### The finding
+The soak reports this one and stays green; every other allocation finding fails the run. What follows is what #180 *is*, so the banner in a soak run means something to whoever reads it.
 
 `StructureLookup::new`, in `crates/city-sim-core/src/occupants.rs` (named rather than given a line number, which would go stale on the next edit above it) — it allocates `vec![None; max(max_live_id, next_building_id) + 1]`. It is sized by the **building-id space**, not by the buildings in it, and that id space only ever grows: develop/abandon churn mints about 1.2 new ids per simulated day and none are ever reused or compacted.
 
@@ -303,4 +288,14 @@ Two things were checked by experiment rather than assumed, because they decide w
 
 The allocation sits on the 20 Hz host emit path (`SimHost::tile_buffer` and the Tauri tick event) as well as on `state_hash` and `compute_wilderness`, so it is hot.
 
-This is an engine change, and the harness branch deliberately does not make it. Until it lands, `rust-test` stays green and the soak prints the finding under a `KNOWN DEFECT #180` banner — excused by that one signature and nothing else, and with the absence of the finding treated as a failure so the exception cannot outlive the defect. The acceptance test is `allocation_per_call_tracks_live_buildings_not_the_id_space`, `#[ignore]`d until the fix lands.
+This is an engine change, and the harness branch deliberately does not make it. Until it lands, the soak prints the finding under a `KNOWN DEFECT #180` banner — excused by that one signature and nothing else, and with the *absence* of the finding treated as a failure so the exception cannot outlive the defect. The acceptance test is `allocation_per_call_tracks_live_buildings_not_the_id_space`, `#[ignore]`d until the fix lands.
+
+So the soak passing is conditional on the probe still firing. If #180 is fixed and nobody removes the exception, the soak goes red on purpose and says so — see harness 4 above.
+
+---
+
+## There is no status section here, on purpose
+
+Whether the tree is green today is not something a document can know. Every gate is listed in **Every command** at the top of this file; run them, and read the run rather than a paragraph describing a run somebody else did. A committed count is stale from the commit that follows it, and the failure mode is worse than the absence: a reader who trusts a green paragraph does not run the gate.
+
+What this file states instead are the invariants — what each harness pins, what it deliberately does not, which exclusions are pinned so that *closing* them fails a build, and which mutation proves each harness can still see. Those survive a passing build and a failing one alike.
