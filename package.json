@@ -13,7 +13,6 @@
     "test:e2e":              "cd app && bun run test:e2e",
     "test:visual":           "cd app && bun run test:visual",
     "test:visual:update":    "cd app && bun run test:visual:update",
-    "test:parity":           "cd app && bun run test:parity",
     "test:soak":             "cargo test -p city-sim-core --test soak -- --nocapture",
     "test:soak:long":        "SOAK=long cargo test -p city-sim-core --test soak -- --nocapture",
     "build:favicon":         "cd app && bun run build:favicon",
