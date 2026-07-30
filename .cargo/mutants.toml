@@ -55,6 +55,17 @@ exclude_globs = [
 # caught tells us nothing worth acting on, because rendering is not a behaviour
 # this project pins in Rust tests. Excluded by mutant name so the rule applies
 # to any such impl added later, in any file.
+#
+# The second entry is an equivalent mutant proved rather than assumed.
+# `orthogonal_neighbours` walks `DIRS = [(0,-1), (1,0), (0,1), (-1,0)]`, and that
+# set is symmetric under reflection in either axis: negating only `dx` maps it
+# onto itself, and so does negating only `dy`. So `x + dx` mutated to `x - dx`
+# yields the *same four neighbours*, in a different order, and every caller is a
+# flood fill or an "is any neighbour …" test that cannot observe the order. No
+# test can ever kill these two, which is why they are named here instead of
+# being tested around. If `DIRS` ever gains a diagonal, the symmetry breaks and
+# these must come out — the mutants would become real.
 exclude_re = [
     "<impl [^>]*(Display|Debug) for ",
+    "replace \\+ with - in orthogonal_neighbours",
 ]
