@@ -7,6 +7,7 @@ import { BUILD_COST, PowerPlantType } from './constants';
 import { type BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './buildings/templates';
 import { placeBuilding, removeBuilding } from './buildings/manager';
 import { GameState, Tile, TileKind, getTile, setTile } from './gameState';
+import { resyncTileStrata } from './protocol/legacyProjection';
 import { Tool } from './toolTypes';
 
 export interface ChangeResult {
@@ -321,6 +322,27 @@ const registry: ToolRegistry = {
   }
 };
 
+/**
+ * Bring every tile's strata fields (`terrain`/`underground`/`surface`/
+ * `overhead`/`density`) back in sync with its shim fields (`kind`/
+ * `roadUnderlay`/`railUnderlay`/`powerOverlay`/`legacyUnderground`).
+ *
+ * This file's own handlers above are unconverted v4-shape logic — mirroring
+ * `commands.rs` as it was *before* its own occupant migration, since
+ * rewriting them to match `commands.rs` as it is now is Phase 7's job, not
+ * this phase's. Until then, every tool mutates only the shim fields, so
+ * anything reading the real strata directly (`adjacency.ts` since Phase 4)
+ * would see stale zeros without this resync — whole-grid rather than
+ * targeted, since a footprint building or a regrade can touch tiles this
+ * function has no cheap way to enumerate ahead of time. Test-only, never on
+ * the production hot path, so an O(tiles) pass per call is free.
+ */
+function syncStrataFromLegacy(state: GameState): void {
+  for (const tile of state.tiles) {
+    resyncTileStrata(tile);
+  }
+}
+
 export function applyTool(state: GameState, tool: Tool, x: number, y: number): ChangeResult {
   const tile = getTile(state, x, y);
   if (!tile) return { success: false };
@@ -331,5 +353,7 @@ export function applyTool(state: GameState, tool: Tool, x: number, y: number): C
 
   const handler = registry[tool];
   if (!handler) return { success: false };
-  return handler({ state, tile, x, y }, cost);
+  const result = handler({ state, tile, x, y }, cost);
+  syncStrataFromLegacy(state);
+  return result;
 }

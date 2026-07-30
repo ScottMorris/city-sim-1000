@@ -8,6 +8,7 @@ import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { Tool } from './toolTypes';
 import { applyTool } from './tools';
 import { recomputePowerNetwork } from './utilities/power';
+import { resyncTileStrata as resyncStrata } from './protocol/legacyProjection';
 import {
   hasRoadAccess,
   isPowerCarrier,
@@ -80,6 +81,7 @@ describe('adjacency — road access is roads only', () => {
     neighbour.kind = TileKind.Tree;
     neighbour.roadUnderlay = true;
     neighbour.powerOverlay = true;
+    resyncStrata(neighbour);
 
     expect(hasRoadAccess(state, 0, 0)).toBe(true);
   });
@@ -146,6 +148,7 @@ describe('adjacency — a hydro line conducts in either spelling', () => {
     neighbour.kind = TileKind.Tree;
     neighbour.powerOverlay = true;
     neighbour.powered = true;
+    resyncStrata(neighbour);
 
     expect(tileHasPower(state, 0, 0)).toBe(true);
   });
@@ -198,6 +201,7 @@ describe('adjacency — water carriers exclude hydro lines', () => {
 
     const piped = getTile(state, 0, 0)!;
     piped.legacyUnderground = TileKind.WaterPipe;
+    resyncStrata(piped);
     expect(isWaterCarrier(piped)).toBe(true);
 
     applyTool(state, Tool.Road, 1, 0);

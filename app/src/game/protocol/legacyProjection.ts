@@ -17,6 +17,7 @@
  * zone > trees > line > rail > road > land.
  */
 
+import type { Tile } from '../gameState';
 import { TileKind } from '../gameState';
 import { Occupant, Terrain, ZoneDensity, hasOccupant, withOccupant, zoneOccupant } from './occupants';
 
@@ -140,4 +141,26 @@ export function tileFromV4(
     overhead,
     density: ZoneDensity.Low
   };
+}
+
+/**
+ * Bring one tile's strata fields back in sync with its shim fields, in
+ * place. `tools.ts`'s `applyTool` calls this (whole-grid, once per call —
+ * see its own `syncStrataFromLegacy`) after every tool, since its handlers
+ * are still unconverted v4-shape logic; tests that hand-spell a tile's shim
+ * fields directly (bypassing `applyTool`) need the same call so predicates
+ * reading the strata directly don't see stale zeros.
+ */
+export function resyncTileStrata(tile: Tile): void {
+  const strata = tileFromV4(
+    tile.kind,
+    { roadUnderlay: tile.roadUnderlay, railUnderlay: tile.railUnderlay, powerOverlay: tile.powerOverlay },
+    tile.legacyUnderground,
+    tile.buildingId
+  );
+  tile.terrain = strata.terrain;
+  tile.underground = strata.underground;
+  tile.surface = strata.surface;
+  tile.overhead = strata.overhead;
+  tile.density = strata.density;
 }

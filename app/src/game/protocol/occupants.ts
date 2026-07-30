@@ -120,3 +120,60 @@ export enum ZoneDensity {
   Medium = 1,
   High = 2
 }
+
+/** A network an occupant may conduct. Mirrors `Network` in `occupants.rs`. */
+export enum Network {
+  Power = 0,
+  Water = 1,
+  Traffic = 2
+}
+
+/** Occupant bits that conduct `Network.Power` by their own nature — mirrors each `OccupantDef.conducts` entry in `OCCUPANT_DEFS`. */
+const NET_POWER_MASK =
+  (1 << Occupant.Road) |
+  (1 << Occupant.Rail) |
+  (1 << Occupant.ZoneResidential) |
+  (1 << Occupant.ZoneCommercial) |
+  (1 << Occupant.ZoneIndustrial) |
+  (1 << Occupant.PowerLine);
+
+/** Occupant bits that conduct `Network.Water` by their own nature. */
+const NET_WATER_MASK =
+  (1 << Occupant.Pipe) |
+  (1 << Occupant.Road) |
+  (1 << Occupant.Rail) |
+  (1 << Occupant.ZoneResidential) |
+  (1 << Occupant.ZoneCommercial) |
+  (1 << Occupant.ZoneIndustrial);
+
+/** Occupant bits that conduct `Network.Traffic` by their own nature. Road only — no transit network exists yet, and rail is deliberately excluded (see `Occupant::Rail`'s `conducts` note in `occupants.rs`). */
+const NET_TRAFFIC_MASK = 1 << Occupant.Road;
+
+/** The union of everything on the tile — `underground | surface | overhead`. Mirrors `Tile::occupants` in Rust. */
+export function tileOccupants(underground: number, surface: number, overhead: number): number {
+  return underground | surface | overhead;
+}
+
+/**
+ * Whether a tile carries `network`, given its occupant bits and whether it is
+ * developed. Mirrors `Tile::conducts` in `occupants.rs`: a developed lot
+ * conducts power/water by virtue of being developed — a property of the
+ * development, not of any occupant — which is why `Structure` itself
+ * declares `NET_NONE` in `OCCUPANT_DEFS` and this function still needs
+ * `buildingId`/`isPowerPlant` passed in alongside the occupant bits.
+ */
+export function conducts(
+  network: Network,
+  occupants: number,
+  buildingId: number | undefined,
+  isPowerPlant: boolean
+): boolean {
+  switch (network) {
+    case Network.Power:
+      return isPowerPlant || buildingId !== undefined || (occupants & NET_POWER_MASK) !== 0;
+    case Network.Water:
+      return buildingId !== undefined || (occupants & NET_WATER_MASK) !== 0;
+    case Network.Traffic:
+      return (occupants & NET_TRAFFIC_MASK) !== 0;
+  }
+}

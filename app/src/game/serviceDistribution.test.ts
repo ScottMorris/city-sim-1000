@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState, setTile, TileKind } from './gameState';
+import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { getBuildingTemplate } from './buildings/templates';
 import { placeBuilding } from './buildings/manager';
+import { resyncTileStrata } from './protocol/legacyProjection';
 import {
   computeZoneLoads,
   estimateZoneLoad,
@@ -9,6 +10,12 @@ import {
   DEFAULT_WORKER_SHARE
 } from './serviceDistribution';
 import { ServiceId } from './services';
+
+/** `setTile` only writes the old shim `kind` — resync the strata too, same as `tools.ts`'s `applyTool` does after every tool call. */
+function setTileAndSync(state: ReturnType<typeof createInitialState>, x: number, y: number, kind: TileKind): void {
+  setTile(state, x, y, kind);
+  resyncTileStrata(getTile(state, x, y)!);
+}
 
 describe('serviceDistribution', () => {
   it('computes population and job loads proportional to capacity with worker fallback', () => {
@@ -48,12 +55,12 @@ describe('serviceDistribution', () => {
   it('finds reachable zones through roads within a radius and sorts by distance', () => {
     const state = createInitialState(5, 5);
     // service origin at (1,1)
-    setTile(state, 1, 1, TileKind.Road);
-    setTile(state, 1, 2, TileKind.Road);
-    setTile(state, 1, 3, TileKind.Residential); // reachable via road chain, distance 2
-    setTile(state, 2, 1, TileKind.Road);
-    setTile(state, 3, 1, TileKind.Commercial); // reachable via road chain, distance 2
-    setTile(state, 4, 4, TileKind.Industrial); // outside radius / no path
+    setTileAndSync(state, 1, 1, TileKind.Road);
+    setTileAndSync(state, 1, 2, TileKind.Road);
+    setTileAndSync(state, 1, 3, TileKind.Residential); // reachable via road chain, distance 2
+    setTileAndSync(state, 2, 1, TileKind.Road);
+    setTileAndSync(state, 3, 1, TileKind.Commercial); // reachable via road chain, distance 2
+    setTileAndSync(state, 4, 4, TileKind.Industrial); // outside radius / no path
 
     const candidates = getReachableZoneCandidates(
       state,
