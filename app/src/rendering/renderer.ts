@@ -208,7 +208,7 @@ export class MapRenderer {
           // overlay on top, and count it as sprited so the debug label
           // doesn't also stamp a "P" over it.
           this.hideSprite(idx);
-          const color = getTileColour(tile, this.palette);
+          const color = getTileColour(tile, this.palette, buildingLookup);
           this.mapLayer
             .rect(this.camera.x + x * size, this.camera.y + y * size, size, size)
             .fill({ color, alpha: 0.95 * surfaceAlpha });
@@ -222,7 +222,7 @@ export class MapRenderer {
         } else {
           this.hideSprite(idx);
           this.hideOverlaySprite(idx);
-          const color = getTileColour(tile, this.palette);
+          const color = getTileColour(tile, this.palette, buildingLookup);
           this.mapLayer
             .rect(
               this.camera.x + x * size,
@@ -507,7 +507,12 @@ export class MapRenderer {
     const tile = getTile(state, selected.x, selected.y);
     if (!tile || tile.buildingId === undefined) return null;
     const lookup = buildingLookup.get(tile.buildingId);
-    const template = lookup?.template ?? getBuildingTemplate(tile.kind);
+    // Fall back to `state.buildings` directly — `buildingLookup` is built
+    // from the same array (`createBuildingLookup`), so a miss here can only
+    // mean the lookup is stale relative to a `buildingId` this tile already
+    // has.
+    const templateId = state.buildings.find((b) => b.id === tile.buildingId)?.templateId;
+    const template = lookup?.template ?? (templateId !== undefined ? getBuildingTemplate(templateId) : undefined);
     if (!template?.service) return null;
     if (
       template.service.id !== ServiceId.EducationElementary &&

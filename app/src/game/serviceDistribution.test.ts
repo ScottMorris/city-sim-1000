@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState, getTile, setTile, TileKind } from './gameState';
-import { getBuildingTemplate } from './buildings/templates';
-import { placeBuilding } from './buildings/manager';
-import { resyncTileStrata } from './protocol/legacyProjection';
+import { createInitialState, setTile, TileKind } from './gameState';
+import { placeZoneBuilding } from './buildings/manager';
 import {
   computeZoneLoads,
   estimateZoneLoad,
@@ -11,26 +9,20 @@ import {
 } from './serviceDistribution';
 import { ServiceId } from './services';
 
-/** `setTile` only writes the old shim `kind` — resync the strata too, same as `tools.ts`'s `applyTool` does after every tool call. */
-function setTileAndSync(state: ReturnType<typeof createInitialState>, x: number, y: number, kind: TileKind): void {
-  setTile(state, x, y, kind);
-  resyncTileStrata(getTile(state, x, y)!);
-}
-
 describe('serviceDistribution', () => {
   it('computes population and job loads proportional to capacity with worker fallback', () => {
     const state = createInitialState(6, 6);
     state.population = 28;
     state.jobs = 40;
 
-    const resTemplate = getBuildingTemplate(TileKind.Residential)!;
-    const comTemplate = getBuildingTemplate(TileKind.Commercial)!;
-    const indTemplate = getBuildingTemplate(TileKind.Industrial)!;
-
-    placeBuilding(state, resTemplate, 0, 0);
-    placeBuilding(state, resTemplate, 1, 0);
-    placeBuilding(state, comTemplate, 3, 0);
-    placeBuilding(state, indTemplate, 4, 0);
+    setTile(state, 0, 0, TileKind.Residential);
+    setTile(state, 1, 0, TileKind.Residential);
+    setTile(state, 3, 0, TileKind.Commercial);
+    setTile(state, 4, 0, TileKind.Industrial);
+    placeZoneBuilding(state, TileKind.Residential, 0, 0);
+    placeZoneBuilding(state, TileKind.Residential, 1, 0);
+    placeZoneBuilding(state, TileKind.Commercial, 3, 0);
+    placeZoneBuilding(state, TileKind.Industrial, 4, 0);
 
     const loads = computeZoneLoads(state);
 
@@ -55,12 +47,12 @@ describe('serviceDistribution', () => {
   it('finds reachable zones through roads within a radius and sorts by distance', () => {
     const state = createInitialState(5, 5);
     // service origin at (1,1)
-    setTileAndSync(state, 1, 1, TileKind.Road);
-    setTileAndSync(state, 1, 2, TileKind.Road);
-    setTileAndSync(state, 1, 3, TileKind.Residential); // reachable via road chain, distance 2
-    setTileAndSync(state, 2, 1, TileKind.Road);
-    setTileAndSync(state, 3, 1, TileKind.Commercial); // reachable via road chain, distance 2
-    setTileAndSync(state, 4, 4, TileKind.Industrial); // outside radius / no path
+    setTile(state, 1, 1, TileKind.Road);
+    setTile(state, 1, 2, TileKind.Road);
+    setTile(state, 1, 3, TileKind.Residential); // reachable via road chain, distance 2
+    setTile(state, 2, 1, TileKind.Road);
+    setTile(state, 3, 1, TileKind.Commercial); // reachable via road chain, distance 2
+    setTile(state, 4, 4, TileKind.Industrial); // outside radius / no path
 
     const candidates = getReachableZoneCandidates(
       state,

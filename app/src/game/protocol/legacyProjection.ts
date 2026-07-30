@@ -5,19 +5,23 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Temporary strangler-window scaffolding: `wasmSimBridge.ts`/`tauriSimBridge.ts`
- * call this to populate `Tile`'s deprecated `kind`/`roadUnderlay`/`railUnderlay`/
- * `powerOverlay`/`legacyUnderground` shim fields from the real strata, so
- * consumers not yet converted to `terrain`/`underground`/`surface`/`overhead`
- * keep working. Deleted, along with the shim fields themselves, once every
- * consumer reads the strata directly.
+ * The v4 wire format's flattened `kind`+flags spelling, derived on demand
+ * from the real strata. `Tile` itself carries no shim fields any more (the
+ * strangler window they existed for closed once every consumer converted to
+ * reading `terrain`/`underground`/`surface`/`overhead` directly) — this
+ * module survives as the two permanent things a v4 spelling is still needed
+ * for: importing old `.citysim` JSON saves (`tileFromV4`, via
+ * `persistence.ts`'s `deserialize`), and exporting the current strata back
+ * into that format for the frozen legacy importer (`legacyKind`/
+ * `legacyFlags`, via `persistence.ts`'s `buildLegacyEngineImport`) — plus
+ * `dominantOccupantLabel` (`protocol/tileLabel.ts`) and the one minimap
+ * mode that still cares about v4-style precedence for display.
  *
  * Mirrors `city_sim_core::display::{wire_kind, wire_flags, wire_underground}`
  * exactly (as they were before deletion) — precedence: terrain > structure >
  * zone > trees > line > rail > road > land.
  */
 
-import type { Tile } from '../gameState';
 import { TileKind } from '../gameState';
 import { Occupant, Terrain, ZoneDensity, hasOccupant, withOccupant, zoneOccupant } from './occupants';
 
@@ -141,58 +145,4 @@ export function tileFromV4(
     overhead,
     density: ZoneDensity.Low
   };
-}
-
-/**
- * Bring one tile's strata fields back in sync with its shim fields, in
- * place. `buildings/manager.ts`'s `placeBuilding`/`removeBuilding` call this
- * after writing `kind`/`buildingId` directly, since those two functions are
- * still shim-authoritative; tests that hand-spell a tile's shim fields
- * directly (bypassing `applyTool`) need the same call so predicates reading
- * the strata directly don't see stale zeros.
- */
-export function resyncTileStrata(tile: Tile): void {
-  const strata = tileFromV4(
-    tile.kind,
-    { roadUnderlay: tile.roadUnderlay, railUnderlay: tile.railUnderlay, powerOverlay: tile.powerOverlay },
-    tile.legacyUnderground,
-    tile.buildingId
-  );
-  tile.terrain = strata.terrain;
-  tile.underground = strata.underground;
-  tile.surface = strata.surface;
-  tile.overhead = strata.overhead;
-  tile.density = strata.density;
-}
-
-/**
- * The inverse of `resyncTileStrata`: bring one tile's shim fields
- * (`kind`/`roadUnderlay`/`railUnderlay`/`powerOverlay`/`legacyUnderground`)
- * back in sync with its strata, in place. `tools.ts`'s `applyTool` handlers
- * are occupant-native (Phase 7 of the strata migration) and call this once
- * per tool so that anything still reading the shim fields — chiefly
- * `buildings/manager.ts`'s placement guard — doesn't see stale values.
- *
- * `structureKindOf` mirrors `legacyKind`'s own callback: resolve a
- * `building_id` to its template's `TileKind`, or `undefined` if it isn't
- * live.
- */
-export function resyncLegacyFromStrata(
-  tile: Tile,
-  structureKindOf: (buildingId: number) => TileKind | undefined
-): void {
-  const input: LegacyProjectionInput = {
-    terrain: tile.terrain,
-    surface: tile.surface,
-    overhead: tile.overhead,
-    buildingId: tile.buildingId,
-    structureKindOf
-  };
-  const kind = legacyKind(input);
-  const flags = legacyFlags(input, kind);
-  tile.kind = kind;
-  tile.roadUnderlay = flags.roadUnderlay || undefined;
-  tile.railUnderlay = flags.railUnderlay || undefined;
-  tile.powerOverlay = flags.powerOverlay || undefined;
-  tile.legacyUnderground = legacyUndergroundKind(tile.underground);
 }

@@ -32,7 +32,6 @@ import {
 } from './protocol/tileBuffer';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
-import { legacyKind, legacyFlags, legacyUndergroundKind } from './protocol/legacyProjection';
 import { Tool } from './toolTypes';
 
 // Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
@@ -582,14 +581,8 @@ export class WasmSimBridge implements SimBridge {
     // The live wire no longer carries a resolved kind byte per tile (#177's
     // TS/wire follow-up) — a `Structure` occupant says only that a building
     // stands here, not which one. `buildings_json` is the only source for
-    // that now; parse it once and look up by id below.
+    // that now.
     const wireBuildings: WireBuilding[] = buildingsJson ? JSON.parse(buildingsJson) : [];
-    const structureKindById = new Map<number, TileKind>();
-    for (const b of wireBuildings) {
-      const kind = tileKindFromU8(b.kind);
-      if (kind !== undefined) structureKindById.set(b.id, kind);
-    }
-    const structureKindOf = (id: number) => structureKindById.get(id);
 
     for (let i = 0; i < n; i++) {
       const tile = this.state.tiles[i];
@@ -609,25 +602,6 @@ export class WasmSimBridge implements SimBridge {
       tile.buildingId = bid === 0 ? undefined : bid;
       // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
       tile.wilderness = bytes[o.wilderness + i] / 255;
-
-      // Shim fields — deleted, along with this whole block, once every
-      // consumer reads terrain/underground/surface/overhead directly.
-      const kind = legacyKind({
-        terrain: tile.terrain,
-        surface: tile.surface,
-        overhead: tile.overhead,
-        buildingId: tile.buildingId,
-        structureKindOf
-      });
-      tile.kind = kind;
-      const flags = legacyFlags(
-        { terrain: tile.terrain, surface: tile.surface, overhead: tile.overhead, buildingId: tile.buildingId, structureKindOf },
-        kind
-      );
-      tile.roadUnderlay = flags.roadUnderlay;
-      tile.railUnderlay = flags.railUnderlay;
-      tile.powerOverlay = flags.powerOverlay;
-      tile.legacyUnderground = legacyUndergroundKind(tile.underground);
     }
 
     // Rebuild state.buildings directly from the parsed list — Rust is
@@ -636,16 +610,12 @@ export class WasmSimBridge implements SimBridge {
     // carries id, kind and origin.
     // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
     // until a pump, tower, or pipe exists, buildings don't require water.
-    let hasWaterSystem = false;
-    for (let i = 0; i < n; i++) {
-      const tile = this.state.tiles[i];
-      if (
-        tile.kind === TileKind.WaterPump ||
-        tile.kind === TileKind.WaterTower ||
-        hasOccupant(tile.underground, Occupant.Pipe)
-      ) {
-        hasWaterSystem = true;
-      }
+    let hasWaterSystem = wireBuildings.some((b) => {
+      const kind = tileKindFromU8(b.kind);
+      return kind === TileKind.WaterPump || kind === TileKind.WaterTower;
+    });
+    for (let i = 0; i < n && !hasWaterSystem; i++) {
+      if (hasOccupant(this.state.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
     }
     this.state.buildings = wireBuildings.map((b) => {
       const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
@@ -680,7 +650,7 @@ export class WasmSimBridge implements SimBridge {
 function terrainBytes(state: GameState): Uint8Array {
   const bytes = new Uint8Array(state.tiles.length);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = tileKindToU8(state.tiles[i].kind);
+    bytes[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
   }
   return bytes;
 }

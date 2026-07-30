@@ -8,7 +8,7 @@ import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
-import { Terrain, ZoneDensity } from './protocol/occupants';
+import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupants';
 import type { BudgetHistory } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
@@ -40,26 +40,11 @@ export enum TileKind {
 }
 
 export interface Tile {
-  kind: TileKind;
   elevation: number;
   happiness: number;
   powered: boolean;
   watered: boolean;
   abandoned?: boolean;
-  /**
-   * @deprecated shim field, renamed from `underground` (now the strata
-   * field below) to avoid a name collision. Populated from `underground`/
-   * `Occupant.Pipe` by `wasmSimBridge.ts`/`tauriSimBridge.ts` during the
-   * strangler window — removed once every consumer reads the strata fields
-   * directly.
-   */
-  legacyUnderground?: TileKind;
-  /** @deprecated shim field — see `legacyUnderground`'s note. */
-  roadUnderlay?: boolean;
-  /** @deprecated shim field — see `legacyUnderground`'s note. */
-  railUnderlay?: boolean;
-  /** @deprecated shim field — see `legacyUnderground`'s note. */
-  powerOverlay?: boolean;
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
   buildingId?: number;
@@ -345,7 +330,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       const isWater = (x - width / 2) ** 2 + (y - height / 2) ** 2 < 180 && (x + y) % 5 === 0;
       const water = edge || isWater;
       tiles.push({
-        kind: water ? TileKind.Water : TileKind.Land,
         elevation: 0,
         happiness: 1,
         powered: false,
@@ -431,21 +415,35 @@ export function getTile(state: GameState, x: number, y: number): Tile | undefine
 }
 
 /**
- * Set a tile's v4-shaped `kind`. Does not touch the real strata fields —
- * `gameState.ts` cannot import `protocol/legacyProjection.ts`'s
- * `resyncTileStrata` without a circular import that breaks at runtime
- * (`legacyProjection.ts` has module-scope constants keyed by `TileKind`,
- * evaluated at import time, before `gameState.ts`'s own `TileKind` export
- * would exist). Every caller — `tools.ts`'s `applyTool`, and any test that
- * calls `setTile` directly — must call `resyncTileStrata` itself afterward.
+ * Test-only convenience: stamp a tile to a single-valued `TileKind`,
+ * translated to the strata it implies. Not used by `tools.ts` — its
+ * `applyTool` handlers are occupant-native and mutate `terrain`/
+ * `underground`/`surface`/`overhead` directly — this exists so tests can
+ * still set up a tile in one call the way `TileKind` names it.
+ *
+ * Replaces the whole surface and overhead stratum (a bare `TileKind` can
+ * only ever mean one thing at a time) but leaves `underground` standing —
+ * mirrors `tileFromV4`'s treatment of a v4 tile's buried pipe, which this
+ * function cannot call directly: `protocol/legacyProjection.ts` imports
+ * `TileKind` from this module at its own top level, so importing back from
+ * it here would form a cycle whose evaluation order left `TileKind`
+ * `undefined` the one time this was tried (see git history). Duplicated
+ * instead of shared; the mapping is small and `Occupant`'s bit positions
+ * are pinned "never reorder".
  */
 export function setTile(state: GameState, x: number, y: number, kind: TileKind) {
   const tile = getTile(state, x, y);
   if (!tile) return;
-  tile.kind = kind;
-  tile.roadUnderlay = undefined;
-  tile.railUnderlay = undefined;
-  tile.powerOverlay = undefined;
+  tile.terrain = kind === TileKind.Water ? Terrain.Water : Terrain.Land;
+  tile.surface = 0;
+  tile.overhead = 0;
+  tile.surface = withOccupant(tile.surface, Occupant.Road, kind === TileKind.Road);
+  tile.surface = withOccupant(tile.surface, Occupant.Rail, kind === TileKind.Rail);
+  tile.surface = withOccupant(tile.surface, Occupant.ZoneResidential, kind === TileKind.Residential);
+  tile.surface = withOccupant(tile.surface, Occupant.ZoneCommercial, kind === TileKind.Commercial);
+  tile.surface = withOccupant(tile.surface, Occupant.ZoneIndustrial, kind === TileKind.Industrial);
+  tile.overhead = withOccupant(tile.overhead, Occupant.PowerLine, kind === TileKind.PowerLine);
+  tile.overhead = withOccupant(tile.overhead, Occupant.Trees, kind === TileKind.Tree);
   tile.happiness = Math.min(1.5, tile.happiness + 0.05);
   const isPowerPlant = kind === TileKind.HydroPlant || kind === TileKind.CoalPlant
     || kind === TileKind.WindTurbine || kind === TileKind.SolarFarm;

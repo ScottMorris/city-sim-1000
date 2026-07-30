@@ -8,7 +8,7 @@ import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { Tool } from './toolTypes';
 import { applyTool } from './tools';
 import { recomputePowerNetwork } from './utilities/power';
-import { resyncTileStrata as resyncStrata } from './protocol/legacyProjection';
+import { Occupant, Terrain, hasOccupant, setTileOccupant } from './protocol/occupants';
 import {
   hasRoadAccess,
   isPowerCarrier,
@@ -40,8 +40,8 @@ describe('adjacency — road access is roads only', () => {
     applyTool(state, Tool.PowerLine, 1, 0);
 
     const line = getTile(state, 1, 0)!;
-    expect(line.kind).toBe(TileKind.PowerLine);
-    expect(line.roadUnderlay).toBeUndefined(); // no road under this line
+    expect(hasOccupant(line.overhead, Occupant.PowerLine)).toBe(true);
+    expect(hasOccupant(line.surface, Occupant.Road)).toBe(false); // no road under this line
 
     expect(hasRoadAccess(state, 0, 0)).toBe(false);
   });
@@ -57,8 +57,9 @@ describe('adjacency — road access is roads only', () => {
     applyTool(lineFirst, Tool.Residential, 0, 0);
     applyTool(lineFirst, Tool.PowerLine, 1, 0);
     applyTool(lineFirst, Tool.Road, 1, 0);
-    expect(getTile(lineFirst, 1, 0)?.kind).toBe(TileKind.PowerLine);
-    expect(getTile(lineFirst, 1, 0)?.roadUnderlay).toBe(true);
+    const lineFirstTile = getTile(lineFirst, 1, 0)!;
+    expect(hasOccupant(lineFirstTile.overhead, Occupant.PowerLine)).toBe(true);
+    expect(hasOccupant(lineFirstTile.surface, Occupant.Road)).toBe(true);
     expect(hasRoadAccess(lineFirst, 0, 0)).toBe(true);
 
     const roadFirst = createInitialState(4, 3);
@@ -70,18 +71,18 @@ describe('adjacency — road access is roads only', () => {
   });
 
   /**
-   * A road hidden under a hydro *overlay* — the spelling the engine sends over
-   * the wire when a tree or a flood rewrites `kind` and leaves the overlay
-   * standing. No `kind`-only test could see this tile.
+   * A road standing underneath tree canopy and a hydro line all at once — not
+   * reachable through any tool sequence (`Tool.Road`'s `regradeAt` always
+   * clears the canopy), but a real combination the wire can carry, so
+   * `hasRoadAccess` must still see the road through it.
    */
-  it('grants road access through a road underlay beneath a power overlay', () => {
+  it('grants road access through a road buried under trees and a hydro line', () => {
     const state = createInitialState(3, 3);
     applyTool(state, Tool.Residential, 0, 0);
     const neighbour = getTile(state, 1, 0)!;
-    neighbour.kind = TileKind.Tree;
-    neighbour.roadUnderlay = true;
-    neighbour.powerOverlay = true;
-    resyncStrata(neighbour);
+    setTileOccupant(neighbour, Occupant.Road, true);
+    setTileOccupant(neighbour, Occupant.Trees, true);
+    setTileOccupant(neighbour, Occupant.PowerLine, true);
 
     expect(hasRoadAccess(state, 0, 0)).toBe(true);
   });
@@ -125,15 +126,16 @@ describe('adjacency — a hydro line conducts in either spelling', () => {
     state.money = 50000;
     applyTool(state, Tool.PowerLine, 1, 1);
     const tile = getTile(state, 1, 1)!;
-    expect(tile.powerOverlay).toBe(true);
+    expect(hasOccupant(tile.overhead, Occupant.PowerLine)).toBe(true);
 
-    // A tree planted over the line: the engine rewrites `kind` and the overlay
-    // survives, so this is exactly what the display mirror receives.
-    tile.kind = TileKind.Tree;
+    // A tree planted over the line: the canopy joins the overhead stratum and
+    // the line survives — `known_defect_trees_are_planted_through_a_live_hydro_line`.
+    setTileOccupant(tile, Occupant.Trees, true);
     expect(isPowerCarrier(tile)).toBe(true);
 
     // Flooding it is the same story.
-    tile.kind = TileKind.Water;
+    setTileOccupant(tile, Occupant.Trees, false);
+    tile.terrain = Terrain.Water;
     expect(isPowerCarrier(tile)).toBe(true);
   });
 
@@ -145,10 +147,9 @@ describe('adjacency — a hydro line conducts in either spelling', () => {
     const state = createInitialState(3, 3);
     applyTool(state, Tool.Residential, 0, 0);
     const neighbour = getTile(state, 1, 0)!;
-    neighbour.kind = TileKind.Tree;
-    neighbour.powerOverlay = true;
+    setTileOccupant(neighbour, Occupant.Trees, true);
+    setTileOccupant(neighbour, Occupant.PowerLine, true);
     neighbour.powered = true;
-    resyncStrata(neighbour);
 
     expect(tileHasPower(state, 0, 0)).toBe(true);
   });
@@ -166,8 +167,8 @@ describe('adjacency — a hydro line conducts in either spelling', () => {
       applyTool(state, Tool.PowerLine, x, 0);
     }
     const buried = getTile(state, 3, 0)!;
-    buried.kind = TileKind.Tree; // overlay stands, kind is overwritten
-    expect(buried.powerOverlay).toBe(true);
+    setTileOccupant(buried, Occupant.Trees, true); // canopy joins the line, doesn't replace it
+    expect(hasOccupant(buried.overhead, Occupant.PowerLine)).toBe(true);
 
     recomputePowerNetwork(state);
     expect(getTile(state, 5, 0)?.powered).toBe(true);
@@ -190,7 +191,7 @@ describe('adjacency — water carriers exclude hydro lines', () => {
     expect(isPowerCarrier(tile)).toBe(true);
     expect(isWaterCarrier(tile)).toBe(false);
 
-    tile.kind = TileKind.Tree; // overlay-only spelling
+    setTileOccupant(tile, Occupant.Trees, true); // canopy joins the line, doesn't replace it
     expect(isPowerCarrier(tile)).toBe(true);
     expect(isWaterCarrier(tile)).toBe(false);
   });
@@ -200,8 +201,7 @@ describe('adjacency — water carriers exclude hydro lines', () => {
     state.money = 50000;
 
     const piped = getTile(state, 0, 0)!;
-    piped.legacyUnderground = TileKind.WaterPipe;
-    resyncStrata(piped);
+    setTileOccupant(piped, Occupant.Pipe, true);
     expect(isWaterCarrier(piped)).toBe(true);
 
     applyTool(state, Tool.Road, 1, 0);
@@ -214,9 +214,9 @@ describe('adjacency — water carriers exclude hydro lines', () => {
     expect(isWaterCarrier(getTile(state, 3, 0))).toBe(true);
 
     // A road that later had a line strung over it keeps carrying water, because
-    // the road survives as an underlay.
+    // the road survives on the surface — the line lives overhead.
     applyTool(state, Tool.PowerLine, 1, 0);
-    expect(getTile(state, 1, 0)?.roadUnderlay).toBe(true);
+    expect(hasOccupant(getTile(state, 1, 0)!.surface, Occupant.Road)).toBe(true);
     expect(isWaterCarrier(getTile(state, 1, 0))).toBe(true);
 
     // Bare land carries nothing.

@@ -14,7 +14,6 @@ import { BUILD_COST, PowerPlantType } from './constants';
 import { type BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './buildings/templates';
 import { placeBuilding, removeBuilding } from './buildings/manager';
 import { GameState, Tile, TileKind, bumpTileRevision, getTile } from './gameState';
-import { resyncLegacyFromStrata } from './protocol/legacyProjection';
 import {
   Occupant,
   Stratum,
@@ -49,16 +48,6 @@ export function getToolCost(tool: Tool): number {
   const templateCost = getBuildingTemplate(tool)?.cost;
   if (templateCost !== undefined) return templateCost;
   return BUILD_COST[tool] ?? 0;
-}
-
-function structureKindOf(state: GameState, buildingId: number): TileKind | undefined {
-  const instance = state.buildings.find((b) => b.id === buildingId);
-  return instance ? getBuildingTemplate(instance.templateId)?.tileKind : undefined;
-}
-
-/** Bring `tile`'s shim fields back in sync after an occupant-native mutation. */
-function syncLegacy(state: GameState, tile: Tile): void {
-  resyncLegacyFromStrata(tile, (buildingId) => structureKindOf(state, buildingId));
 }
 
 /**
@@ -178,7 +167,6 @@ function zone({ state, x, y }: ToolContext, cost: number, zoneOccupant: Occupant
   regradeAt(state, x, y, Terrain.Land);
   const updated = getTile(state, x, y)!;
   setTileOccupant(updated, zoneOccupant, true);
-  syncLegacy(state, updated);
   return { success: true };
 }
 
@@ -193,7 +181,6 @@ const registry: ToolRegistry = {
     if (refusal) return { success: false, message: refusal };
     state.money -= cost;
     regradeAt(state, x, y, Terrain.Land);
-    syncLegacy(state, getTile(state, x, y)!);
     return { success: true };
   },
   [Tool.TerraformLower]: ({ state, x, y }, cost) => {
@@ -201,7 +188,6 @@ const registry: ToolRegistry = {
     if (refusal) return { success: false, message: refusal };
     state.money -= cost;
     regradeAt(state, x, y, Terrain.Water);
-    syncLegacy(state, getTile(state, x, y)!);
     return { success: true };
   },
   [Tool.Water]: ({ state, x, y }, cost) => {
@@ -209,7 +195,6 @@ const registry: ToolRegistry = {
     if (refusal) return { success: false, message: refusal };
     state.money -= cost;
     regradeAt(state, x, y, Terrain.Water);
-    syncLegacy(state, getTile(state, x, y)!);
     return { success: true };
   },
   [Tool.Tree]: ({ state, x, y }, cost) => {
@@ -225,7 +210,6 @@ const registry: ToolRegistry = {
     regradeAt(state, x, y, Terrain.Land);
     const updated = getTile(state, x, y)!;
     setTileOccupant(updated, Occupant.Trees, true);
-    syncLegacy(state, updated);
     return { success: true };
   },
   [Tool.Road]: ({ state, x, y }, cost) => {
@@ -242,7 +226,6 @@ const registry: ToolRegistry = {
     const updated = getTile(state, x, y)!;
     setTileOccupant(updated, Occupant.Road, true);
     setTileOccupant(updated, Occupant.Rail, hadRail);
-    syncLegacy(state, updated);
     return { success: true };
   },
   [Tool.Rail]: ({ state, x, y }, cost) => {
@@ -256,7 +239,6 @@ const registry: ToolRegistry = {
     const updated = getTile(state, x, y)!;
     setTileOccupant(updated, Occupant.Rail, true);
     setTileOccupant(updated, Occupant.Road, hadRoad);
-    syncLegacy(state, updated);
     return { success: true };
   },
   [Tool.PowerLine]: ({ state, x, y }, cost) => {
@@ -274,7 +256,6 @@ const registry: ToolRegistry = {
     setTileOccupant(updated, Occupant.PowerLine, true);
     setTileOccupant(updated, Occupant.Trees, false);
     bumpTileRevision(state);
-    syncLegacy(state, updated);
     return { success: true };
   },
   [Tool.HydroPlant]: ({ state, x, y }, cost) =>
@@ -297,7 +278,6 @@ const registry: ToolRegistry = {
       // `Tool::WaterPipe` in `commands.rs` — this deliberately does not bump
       // `tileRevision`.
       setTileOccupant(tile, Occupant.Pipe, true);
-      syncLegacy(state, tile);
     }
     return { success: true };
   },
@@ -325,13 +305,11 @@ const registry: ToolRegistry = {
       removeBuilding(state, tile.buildingId);
     } else if (tile.underground !== 0) {
       clearTileStratum(tile, Stratum.Underground);
-      syncLegacy(state, tile);
     } else {
       clearTileStratum(tile, Stratum.Surface);
       clearTileStratum(tile, Stratum.Overhead);
       tile.abandoned = false;
       bumpTileRevision(state);
-      syncLegacy(state, tile);
     }
     return { success: true };
   }

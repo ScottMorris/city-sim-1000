@@ -87,12 +87,8 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
   const elementaryCoverage = state.education?.elementaryCoverage ?? 0;
   const highCoverage = state.education?.highCoverage ?? 0;
 
-  const pumpTemplate = getBuildingTemplate(TileKind.WaterPump);
-
   for (let index = 0; index < state.tiles.length; index++) {
     const tile = state.tiles[index];
-    const tileX = index % state.width;
-    const tileY = Math.floor(index / state.width);
     if (hasOccupant(tile.surface, Occupant.ZoneResidential)) {
       residentialZones++;
       if (tile.buildingId !== undefined) developedResidentialZones++;
@@ -104,22 +100,6 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     if (hasOccupant(tile.surface, Occupant.ZoneIndustrial)) {
       industrialZones++;
       if (tile.buildingId !== undefined) developedIndustrialZones++;
-    }
-
-    // A pump whose `Structure` occupant never got a development behind it —
-    // unrepresentable in the strata model by design (see `docs/tile-model.md`),
-    // so this reads the shim `kind` deliberately: it is the only field a
-    // pre-migration save artifact like this can still be spelled in.
-    const isLegacyPump = tile.buildingId === undefined && tile.kind === TileKind.WaterPump;
-    if (isLegacyPump && pumpTemplate) {
-      const active = pumpTemplate.requiresPower === false ? true : tile.powered;
-      if (
-        active &&
-        pumpTemplate.waterOutput &&
-        hasWaterSourceConnection(state, { x: tileX, y: tileY }, { width: 1, height: 1 })
-      ) {
-        buildingWaterOutput += pumpTemplate.waterOutput;
-      }
     }
   }
 
