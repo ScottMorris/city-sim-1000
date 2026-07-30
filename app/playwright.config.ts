@@ -130,7 +130,22 @@ export default defineConfig({
   projects: [
     { name: 'mobile-portrait', testMatch: /mobile\.spec\.ts/, use: { ...PORTRAIT } },
     { name: 'mobile-landscape', testMatch: /mobile\.spec\.ts/, use: { ...LANDSCAPE } },
-    { name: 'visual', testMatch: /visual\.spec\.ts/, use: VISUAL }
+    {
+      name: 'visual',
+      testMatch: /visual\.spec\.ts/,
+      use: VISUAL,
+      // Playwright's default 30 s is not enough for this one on CI, and the
+      // symptom is misleading: the spec builds a whole fixture city through the
+      // MCP bridge and then takes four screenshots, each of which retries for
+      // up to 5 s to capture two identical frames. Locally that is ~11 s; on a
+      // GitHub Actions runner rendering through SwiftShader it is ~32 s, so the
+      // *test* timeout fires part-way through the last assertion and reports
+      // `d-minimap.png` as the failure with no pixel counts — as though the
+      // image had drifted, when nothing had. The sim is paused (`set_speed 0`)
+      // before any screenshot, so there is no animation to wait out here; this
+      // is pure runner slowness and wants headroom rather than a looser check.
+      timeout: 120_000
+    }
   ],
   webServer: {
     command: 'bun run build && bun run preview -- --port 4173',
