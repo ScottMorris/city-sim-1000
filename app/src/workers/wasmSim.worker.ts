@@ -18,6 +18,13 @@
 import init, { SimHost, version as engineVersion, build_sha as engineSha } from '../wasm/sim_wasm/sim_wasm.js';
 import wasmUrl from '../wasm/sim_wasm/sim_wasm_bg.wasm?url';
 
+/** Mirrors `city_sim_protocol::events::SimAlert` — see `take_alerts_json()`. */
+export interface SimAlertWire {
+  kind: 'PowerDeficit' | 'PowerRestored' | 'WaterDeficit' | 'WaterRestored' | 'BudgetWarning' | 'Abandonment' | 'Info';
+  message: string;
+  sticky: boolean;
+}
+
 export interface SimStats {
   tick: number;
   day: number;
@@ -189,8 +196,9 @@ function startStepLoop(): void {
     const bytes = host.tile_buffer();
     const stats = gatherStats(host);
     const buildingsJson = host.buildings_json();
+    const alerts: SimAlertWire[] = JSON.parse(host.take_alerts_json() || '[]');
     self.postMessage(
-      { type: 'step_result', bytes, stats, buildingsJson, mutationSeq },
+      { type: 'step_result', bytes, stats, buildingsJson, mutationSeq, alerts },
       { transfer: [bytes.buffer as ArrayBuffer] },
     );
   }, STEP_INTERVAL_MS);
@@ -352,11 +360,12 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     case 'apply_tool': {
       if (!host) break;
       const success = host.apply_tool(msg.payload.tool, msg.payload.x, msg.payload.y, msg.payload.strokeId);
+      const message = host.last_apply_message() ?? null;
       // Bump unconditionally (not just on success) — cheap, and keeps this
       // simple; a rejected placement just costs one extra harmless apply on
       // the main thread instead of a missed one.
       mutationSeq++;
-      self.postMessage({ type: 'apply_result', success, history: historyFlags(host) });
+      self.postMessage({ type: 'apply_result', success, message, history: historyFlags(host) });
       break;
     }
     case 'set_speed': {

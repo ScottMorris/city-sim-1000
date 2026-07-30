@@ -446,6 +446,14 @@ function wireBridge(b: SimBridge): void {
       });
     } else if (msg.type === 'Narrative') {
       narrativeManager.onEvent(msg.data.payload as Parameters<typeof narrativeManager.onEvent>[0]);
+    } else if (msg.type === 'CommandResult') {
+      // The synchronous check in applyCurrentTool (bridge.send()'s return
+      // value) can never see a failure — both bridges answer optimistically
+      // before the engine has actually processed the command. This is the
+      // real result, arriving async; surface it the same way.
+      if (!msg.success && msg.message) {
+        showToast(msg.message, { severity: 'warning' });
+      }
     } else if (msg.type === 'HistoryChanged') {
       onHistoryChanged?.(msg.data);
     }
@@ -727,11 +735,13 @@ function applyCurrentTool(tilePos: Position) {
     }
     return;
   }
+  // Both bridges answer this optimistically (success:true, always) before the
+  // engine has actually processed the command — the real result, including
+  // any failure message, arrives async as a `CommandResult` FromSim message
+  // (see `wireBridge` above), not through this return value.
   const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y, strokeId));
   sfx?.playToolResult(activeTool, result.success);
-  if (!result.success && result.message) {
-    showToast(result.message);
-  } else if (result.success) {
+  if (result.success) {
     minimap?.markDirty();
     const now = Date.now();
     const message = getPlayerActionMessage(activeTool);

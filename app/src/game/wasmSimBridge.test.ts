@@ -175,8 +175,8 @@ describe('WasmSimBridge undo/redo', () => {
     const historyEvents = () => events.filter(e => e.type === 'HistoryChanged');
     const before = historyEvents().length;
     bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
-    worker.emit({ type: 'apply_result', success: true, history: flags(true, false) });
-    worker.emit({ type: 'apply_result', success: true, history: flags(true, false) });
+    worker.emit({ type: 'apply_result', success: true, message: null, history: flags(true, false) });
+    worker.emit({ type: 'apply_result', success: true, message: null, history: flags(true, false) });
     const after = historyEvents();
     expect(after.length).toBe(before + 1);
     expect(after[after.length - 1]).toMatchObject({ data: { canUndo: true, canRedo: false } });
@@ -185,7 +185,7 @@ describe('WasmSimBridge undo/redo', () => {
   it('discards a pending step_result when an undo lands', async () => {
     const { worker, state, bridge } = makeBridge();
     const staleStats = { ...zeroStats(), money: 424242 };
-    worker.emit({ type: 'step_result', bytes: emptyTileBuffer(), stats: staleStats });
+    worker.emit({ type: 'step_result', bytes: emptyTileBuffer(), stats: staleStats, alerts: [] });
     const pending = bridge.undo();
     const undoneStats = { ...zeroStats(), money: 1111 };
     worker.emit({
@@ -197,6 +197,35 @@ describe('WasmSimBridge undo/redo', () => {
     // step_result must be gone, leaving the undone stats in place.
     bridge.step(1 / 20);
     expect(state.money).toBe(1111);
+  });
+
+  it('forwards a refused apply_result as a CommandResult with the message', () => {
+    const { worker, bridge, events } = makeBridge();
+    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
+    worker.emit({ type: 'apply_result', success: false, message: 'Not enough funds', history: flags(false, false) });
+
+    const result = events.find(e => e.type === 'CommandResult');
+    expect(result).toEqual({ type: 'CommandResult', success: false, message: 'Not enough funds' });
+  });
+
+  it('forwards each step_result alert as FromSim::Alert plus its paired narrative event', () => {
+    const { worker, events } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0,
+      alerts: [{ kind: 'WaterDeficit', message: 'Water deficit detected.', sticky: true }],
+    });
+
+    const alert = events.find(e => e.type === 'Alert');
+    expect(alert).toMatchObject({
+      type: 'Alert',
+      data: { kind: 'WaterDeficit', message: 'Water deficit detected.', sticky: true },
+    });
+
+    const narrative = events.find(e => e.type === 'Narrative');
+    expect(narrative).toMatchObject({
+      type: 'Narrative',
+      data: { kind: 'Alert', payload: { type: 'water_deficit_start', category: 'utilities', severity: 'alert' } },
+    });
   });
 
   it('translates a worker init_error message into an InitError event', () => {

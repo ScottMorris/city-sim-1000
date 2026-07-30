@@ -21,7 +21,8 @@ import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
 import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
-import type { SimStats } from '../workers/wasmSim.worker';
+import type { SimStats, SimAlertWire } from '../workers/wasmSim.worker';
+import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
@@ -70,8 +71,8 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number }
-  | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; alerts: SimAlertWire[] }
+  | { type: 'apply_result'; success: boolean; message: string | null; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
@@ -386,11 +387,13 @@ export class WasmSimBridge implements SimBridge {
         this.pendingBuildingsJson = msg.buildingsJson;
         this.pendingStats = msg.stats;
         this.pendingMutationSeq = msg.mutationSeq;
+        // Dispatched immediately, not gated behind step()'s "nothing changed"
+        // skip — alerts are rare, edge-triggered events, not per-tick state
+        // the mirror can just re-derive next frame if one were dropped.
+        this.dispatchAlerts(msg.alerts);
         break;
       case 'apply_result':
-        if (!msg.success) {
-          console.warn('[WasmSimBridge] apply_tool rejected by Rust sim');
-        }
+        this.handler?.({ type: 'CommandResult', success: msg.success, message: msg.message ?? undefined });
         this.syncHistoryFlags(msg.history);
         break;
       case 'undo_result':
@@ -473,6 +476,17 @@ export class WasmSimBridge implements SimBridge {
       overhead: 0,
       density: ZoneDensity.Low,
     }));
+  }
+
+  /** Forward each alert as `FromSim::Alert`, plus its paired narrative event if any. */
+  private dispatchAlerts(alerts: SimAlertWire[]): void {
+    for (const alert of alerts) {
+      this.handler?.({ type: 'Alert', data: alert });
+      const narrative = deriveNarrativeEventFromAlert(alert, Date.now());
+      if (narrative) {
+        this.handler?.({ type: 'Narrative', data: { kind: 'Alert', payload: narrative } });
+      }
+    }
   }
 
   private syncHistoryFlags(flags: WorkerHistoryFlags): void {
