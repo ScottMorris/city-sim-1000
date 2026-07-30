@@ -281,7 +281,9 @@ impl Simulation {
             self.power_deficit_active = true;
             self.pending_alerts.push(SimAlert {
                 kind: AlertKind::PowerDeficit,
-                message: "Power deficit detected. Build more plants or reduce demand to restore growth.".into(),
+                message:
+                    "Power deficit detected. Build more plants or reduce demand to restore growth."
+                        .into(),
                 sticky: true,
             });
         } else if power_balance >= 0 && self.power_deficit_active {

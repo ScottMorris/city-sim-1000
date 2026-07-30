@@ -299,7 +299,10 @@ pub fn start(
             sim.step(dt);
             let alerts = sim.take_alerts();
 
-            if on_tick.send(build_tick_event(&sim, &history, alerts)).is_err() {
+            if on_tick
+                .send(build_tick_event(&sim, &history, alerts))
+                .is_err()
+            {
                 break; // JS side closed the channel
             }
 
