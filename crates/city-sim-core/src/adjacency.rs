@@ -117,7 +117,13 @@ pub fn zone_has_road_path(state: &GameState, start_x: u32, start_y: u32) -> bool
 
     while let Some((x, y)) = queue.pop_front() {
         for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
-            let idx = (ny * state.width + nx) as usize;
+            // `tile_index` rather than the arithmetic spelled out again: this is
+            // the `visited` key, so a wrong one silently aliases two tiles onto
+            // each other and drops half the search. `orthogonal_neighbours` has
+            // already bounds-checked, so the `None` arm is unreachable.
+            let Some(idx) = state.tile_index(nx, ny) else {
+                continue;
+            };
             if visited.contains(&idx) {
                 continue;
             }
@@ -204,6 +210,71 @@ mod tests {
     }
     fn kind(state: &mut GameState, x: u32, y: u32, k: TileKind) {
         set_v4_kind(state.tile_at_mut(x, y).unwrap(), k);
+    }
+
+    fn neighbours(w: u32, h: u32, x: u32, y: u32) -> Vec<(u32, u32)> {
+        let mut v: Vec<_> = orthogonal_neighbours(w, h, x, y).collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// Every caller of `orthogonal_neighbours` indexes the grid with what it
+    /// yields, so a coordinate off any edge is an out-of-bounds read waiting to
+    /// happen. The four corners and the interior pin all four bounds at once:
+    /// loosening either `<` to `<=`, or the `&&` chain to `||`, or deleting a
+    /// sign in `DIRS`, changes one of these lists.
+    #[test]
+    fn neighbours_never_leave_the_grid() {
+        // Interior: all four, and they are the four orthogonals rather than
+        // any diagonal.
+        assert_eq!(neighbours(4, 4, 2, 2), vec![(1, 2), (2, 1), (2, 3), (3, 2)]);
+
+        // Corners: two each, and never a wrapped or negative coordinate.
+        assert_eq!(neighbours(4, 4, 0, 0), vec![(0, 1), (1, 0)]);
+        assert_eq!(neighbours(4, 4, 3, 0), vec![(2, 0), (3, 1)]);
+        assert_eq!(neighbours(4, 4, 0, 3), vec![(0, 2), (1, 3)]);
+        assert_eq!(neighbours(4, 4, 3, 3), vec![(2, 3), (3, 2)]);
+
+        // Edges: three each.
+        assert_eq!(neighbours(4, 4, 1, 0), vec![(0, 0), (1, 1), (2, 0)]);
+        assert_eq!(neighbours(4, 4, 0, 1), vec![(0, 0), (0, 2), (1, 1)]);
+
+        // A non-square grid, so a transposed width/height cannot pass: the
+        // right edge is x = 4 and the bottom is y = 1.
+        assert_eq!(neighbours(5, 2, 4, 1), vec![(3, 1), (4, 0)]);
+        assert_eq!(neighbours(5, 2, 4, 0), vec![(3, 0), (4, 1)]);
+
+        // A 1x1 grid has nowhere to go — the degenerate case that a `<=` bound
+        // turns into two phantom neighbours.
+        assert!(neighbours(1, 1, 0, 0).is_empty());
+    }
+
+    /// The `visited` key in `zone_has_road_path` is a flat index, and two tiles
+    /// sharing one silently drops half the search. A 1xN strip makes the
+    /// aliasing visible: every tile has a distinct index only if the row stride
+    /// is applied the one correct way.
+    #[test]
+    fn a_long_thin_zone_strip_still_reaches_its_road() {
+        let mut s = g(6, 3);
+        // Road at the far end, a chain of zoned lots leading to it.
+        kind(&mut s, 5, 1, TileKind::Road);
+        for x in 0..5 {
+            kind(&mut s, x, 1, TileKind::Residential);
+        }
+        assert!(
+            zone_has_road_path(&s, 0, 1),
+            "a zoned strip ending at a road must find it"
+        );
+
+        // The same strip with the road removed must not find one.
+        let mut s2 = g(6, 3);
+        for x in 0..6 {
+            kind(&mut s2, x, 1, TileKind::Residential);
+        }
+        assert!(
+            !zone_has_road_path(&s2, 0, 1),
+            "a zoned strip with no road anywhere must not find one"
+        );
     }
 
     #[test]

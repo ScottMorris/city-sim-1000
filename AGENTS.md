@@ -145,6 +145,66 @@ New `.rs` and `.ts`/`.tsx` source files should include a header before `use`/`im
 - `docs/testing.md` is the map: the four architecture harnesses (golden city, cross-engine parity, visual regression, soak), what each does and does not cover, every command, and the remaining gaps.
 - **Regenerating a committed baseline is a deliberate act.** `golden_city.expected` and the screenshots under `app/e2e/__screenshots__/` are derived artefacts, so a wrong derivation and a stale expectation look identical from the outside. Never regenerate to make a build pass; name and justify every line or image that moved, in the same commit as the behaviour change that moved it. See `docs/testing.md`.
 
+### Prove a test has teeth
+
+**When you add or change a test, break the thing it covers and confirm the test goes red. Then revert, and state the mutation and its result.** A test that cannot fail is worse than no test: it reports safety that does not exist, and it is invisible without this step.
+
+This is not optional diligence, it is the deliverable. Real examples from this repo, all found only because someone mutated the source:
+
+- `a_line_in_the_overlay_flag_alone_carries_power` passed `Some(1)` for `building_id`, which short-circuits `Tile::conducts` before the occupant set is read. Setting `OCCUPANT_DEFS[PowerLine].conducts` to `NET_NONE` left it green while the power grid went dark.
+- The soak advertised "Allocation stays bounded" as an enforced property. Both checks only pushed strings into a report the test printed and passed.
+- A visual regression test set `maxDiffPixels: 0` and documented an exact match, but left Playwright's per-pixel `threshold` at its default `0.2` — so it could not see the colour shift it existed to catch.
+
+**Choose the mutation to match the failure mode, not just to be red.** A mutation that passes is only evidence about the mutation you picked. The soak's allocation check was proved to have teeth with a leak sized by the tick counter, went red, and was written up as sound — but the check compares a *rate*, so it was blind to a leak of constant size by construction. A never-drained `Vec` taking peak heap from 0.05 MiB to 100.05 MiB kept the ratio at 1.01× and passed, while the doc comment above it advertised "bounded heap". Ask what the check is *shaped* to miss, then mutate that.
+
+The same trap applies to where you run it: `threshold: 0` in the visual harness was verified locally, three parallel repeats green, and still failed CI — reproducible on one machine is not identical across machines. A property that only holds on your hardware has not been proved.
+
+`cargo mutants` automates this for Rust (see **Mutation testing** below); it does not replace doing it deliberately for the specific property you just claimed to pin.
+
+### Mutation testing
+
+`cargo mutants` changes one thing in the Rust source — an operator, a return value, a whole function body — and reruns the tests. If they still pass, that line is covered in the sense that something executed it and in no sense that anything checked it.
+
+Run it on your own change before pushing, which is the same slice CI runs:
+
+```bash
+git diff origin/main...HEAD > mutants.diff
+cargo mutants --in-diff mutants.diff --baseline run --timeout 20
+```
+
+Configuration lives in `.cargo/mutants.toml`, which records why each exclusion is there. Preview what it selects with `cargo mutants --list-files` and `cargo mutants --list`. `mutants.out/` is the run report and is gitignored.
+
+Two CI jobs use it. Both are configured `continue-on-error`, so neither can fail a merge:
+
+- **`rust-mutants-diff`** in `.github/workflows/ci.yml`, on every pull request. `--in-diff` mutates only code the pull request touched, so the cost tracks the change rather than the codebase. Surviving mutants land in the job summary, as GitHub annotations on the diff, and as a count in the CI summary comment.
+- **`rust-mutants-full`** in `.github/workflows/mutants-full.yml`, weekly and on `workflow_dispatch`. Whole workspace, uploaded as an artefact — a work queue, not a verdict.
+
+The advisory setting is deliberate rather than timid, for two reasons that both have to stop being true before `rust-mutants-diff` becomes a gate. `--in-diff` covers whole functions the diff touched, not only the lines, so a one-line edit inside a thinly tested function surfaces that function's pre-existing gaps as if they were yours. And equivalent mutants are common enough here to fail honest work: `DERIVED_FLAG_MASK` in `state.rs` is three disjoint bits joined with `|`, and rewriting that `|` as `^` produces the identical byte, so no test can ever distinguish it. Combining disjoint flag bits is a shape this codebase uses in a dozen places, and every one of them is a survivor by construction. Flip it to blocking when a full-run triage has emptied the inherited backlog and the equivalent-mutant families are excluded by name in `.cargo/mutants.toml`, not before.
+
+**A surviving mutant is a question, not a defect.** Before writing a test, work out which kind you have:
+
+- *A real gap* — the mutated behaviour is one a reader would expect a test to pin. Write the test.
+- *An equivalent mutant* — the mutation cannot change behaviour, so no test can ever kill it. `FLAG_A | FLAG_B` mutated to `FLAG_A ^ FLAG_B` over disjoint bits is the same value. Say so in the pull request rather than adding a test that proves nothing.
+
+Answering in the pull request is the deliverable either way; a silent survivor is indistinguishable from an unexamined one.
+
+Two limits worth knowing, because they change what MISSED means:
+
+- Mutants are judged by the crate's unit tests only (`--lib`). Behaviour covered solely by an integration test or a doctest will be reported MISSED.
+- Diffs that only change test code produce no mutants at all, so this cannot tell you a new test is weak — that is what breaking the code by hand is for.
+
+## Claims must be checkable
+
+Prose describing code is written from *intent*, and nothing makes it meet the code again afterwards. Reviews of this repo have repeatedly found more wrong explanations than wrong code — a comment asserting a safety mechanism the code did not have, a test named for a property it did not check, figures that reproduced only under a different scenario than the one described. A confident wrong comment is worse than no comment, because it tells the next reader not to check.
+
+Prefer claims the build can check over claims a reader must trust.
+
+- **Put load-bearing behaviour in a doctest, not a paragraph.** A ` ```rust ` block in a doc comment runs under `cargo test`, so it cannot drift. Reach for one whenever you catch yourself explaining *what happens when*.
+- **Measured numbers belong in generated artefacts, never in prose.** If a figure came from running something, it goes in a fixture that is regenerated — like `golden_city.expected` — so it cannot disagree with itself. A hand-copied number is stale the moment the code moves, and nothing will tell you.
+- **Never cite a commit hash in code or docs.** Rebases delete them: nine references to one hash died in a single day. Cite the commit *subject*, a tag, or the behaviour itself.
+- **Never write a "current status" section.** "The soak is currently red", "this test fails at the moment" — these rot within the hour and then actively mislead. State the invariant, not the weather. If a status genuinely must be recorded, generate it or date it explicitly.
+- **When you change behaviour, grep for what described it.** The nearby comment is the one you will remember; the doc file, the test name, and the comment 1,700 lines away are the ones that drift.
+
 ## Project Notes
 
 - Water simulation is temporarily stubbed to a high balance; only power deficits gate growth until pipes/underground view ship.

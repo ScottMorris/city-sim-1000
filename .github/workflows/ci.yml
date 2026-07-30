@@ -238,6 +238,117 @@ jobs:
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+  rust-mutants-diff:
+    name: Rust mutants (diff)
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'pull_request'
+    outputs:
+      missed: ${{ steps.rust_mutants_count.outputs.missed }}
+      outcome: ${{ steps.rust_mutants_diff.outcome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # `--in-diff` needs the merge base, which a shallow clone lacks.
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          # Read the cache the scheduled full run writes on the default branch.
+          # A cache saved from a pull-request branch is only visible to that
+          # branch, so this job restores and never saves.
+          shared-key: rust-mutants
+          save-if: 'false'
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+
+      - name: Diff against the base branch
+        # Redirected rather than piped through `tee`: the default shell is
+        # `bash -e` without `pipefail`, so a pipeline would hide a failing
+        # `git diff` behind tee's exit code and mutate nothing at all.
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git diff "${base}...HEAD" > mutants.diff
+          git diff --stat "${base}...HEAD" -- 'crates/**/*.rs'
+
+      - name: Run cargo-mutants over the diff
+        id: rust_mutants_diff
+        # Advisory: a surviving mutant is reported on the pull request and in
+        # the job summary, but does not block the merge. See AGENTS.md
+        # "Mutation testing" for what a surviving mutant means and the condition
+        # for turning this into a gate.
+        continue-on-error: true
+        # `--in-place` builds in the checkout so the restored cache is reused;
+        # it also disables the automatic timeout, which is why `--timeout` is
+        # explicit. `--baseline run` proves the unmutated tree passes first, so
+        # a MISSED result cannot be an already-failing suite.
+        #
+        # Exit codes: 0 all caught, 2 mutants survived, 3 a mutant hung,
+        # 4 the baseline itself is red, 5/6 a malformed diff.
+        run: cargo mutants --in-place --in-diff mutants.diff --baseline run --timeout 20
+
+      - name: Count surviving mutants
+        id: rust_mutants_count
+        if: always()
+        run: |
+          missed=0
+          if [ -f mutants.out/missed.txt ]; then
+            missed=$(wc -l < mutants.out/missed.txt)
+          fi
+          echo "missed=${missed}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload mutants artefacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-mutants-diff
+          path: mutants.out/
+          if-no-files-found: ignore
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## Rust mutants (diff)"
+            echo
+            echo "- Runner: \`ubuntu-24.04\`"
+            echo "- Result: \`${{ steps.rust_mutants_diff.outcome }}\` (advisory — does not block merge)"
+            echo "- Command: \`cargo mutants --in-place --in-diff mutants.diff --baseline run --timeout 20\`"
+            if [ -f mutants.out/missed.txt ]; then
+              echo "- Caught: \`$(wc -l < mutants.out/caught.txt)\` · missed: \`$(wc -l < mutants.out/missed.txt)\` · timed out: \`$(wc -l < mutants.out/timeout.txt)\` · unviable: \`$(wc -l < mutants.out/unviable.txt)\`"
+              if [ -s mutants.out/missed.txt ]; then
+                echo
+                echo "Mutants no test noticed — each is either a missing assertion or an"
+                echo "equivalent mutant that cannot change behaviour. Say which, in the PR."
+                echo
+                echo '```'
+                cat mutants.out/missed.txt
+                echo '```'
+                echo
+              fi
+              echo "- Artefact: \`rust-mutants-diff\` (\`mutants.out/\`)"
+            else
+              echo "- No mutants generated: the diff touches no mutable Rust source, so there is no report to upload."
+            fi
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   ts-typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-24.04
@@ -485,6 +596,7 @@ jobs:
       - rust-clippy
       - rust-test
       - rust-determinism
+      - rust-mutants-diff
       - ts-typecheck
       - ts-test
       - wasm-build
@@ -505,6 +617,10 @@ jobs:
             const rustCliffy = '${{ needs.rust-clippy.result }}';
             const rustTests  = '${{ needs.rust-test.result }}';
             const rustDeterm = '${{ needs.rust-determinism.result }}';
+            // The mutants step is advisory, so the job result is green either
+            // way. Report the surviving-mutant count, which is the real signal.
+            const mutantsOutcome = '${{ needs.rust-mutants-diff.outputs.outcome }}';
+            const mutantsMissed  = '${{ needs.rust-mutants-diff.outputs.missed }}';
             const tsCheck    = '${{ needs.ts-typecheck.result }}';
             const tsTests    = '${{ needs.ts-test.result }}';
             const wasmBuild  = '${{ needs.wasm-build.result }}';
@@ -519,6 +635,9 @@ jobs:
               `- ${label(rustCliffy)} Rust clippy: \`${rustCliffy}\``,
               `- ${label(rustTests)} Rust tests: \`${rustTests}\``,
               `- ${label(rustDeterm)} Rust determinism (x64 + arm64): \`${rustDeterm}\``,
+              mutantsMissed === ''
+                ? `- [SKIP] Rust mutants in this diff (advisory): no result — the job did not reach the mutants step`
+                : `- ${mutantsMissed === '0' ? '[PASS]' : '[WARN]'} Rust mutants in this diff (advisory): \`${mutantsMissed}\` survived (step: \`${mutantsOutcome}\`)`,
               `- ${label(tsCheck)} TypeScript typecheck: \`${tsCheck}\``,
               `- ${label(tsTests)} TypeScript tests: \`${tsTests}\``,
               `- ${label(wasmBuild)} WASM build: \`${wasmBuild}\``,
