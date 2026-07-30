@@ -59,9 +59,24 @@
   overflow-y: visible;
 }
 
+/* Both header controls share one right-aligned grid cell. `.debug-overlay` is
+   display:grid, so giving each button its own `justify-self: end` would put
+   them on separate rows, stacked, rather than side by side. */
+.debug-controls {
+  justify-self: end;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.debug-hide-btn:hover {
+  border-color: #a8506a;
+  color: #ffb3c4;
+}
+
 .debug-mode-toggle {
-  /* .debug-overlay is display:grid — justify-self (not margin-left:auto)
-     is what right-aligns a single grid item within its own row/cell. */
+  /* Right-aligned by `.debug-controls` above; kept as its own rule so the
+     button still looks right if it is ever used outside that row. */
   justify-self: end;
   background: none;
   border: 1px solid var(--border-subtle);

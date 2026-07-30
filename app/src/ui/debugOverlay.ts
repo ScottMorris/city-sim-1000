@@ -141,10 +141,29 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   // innerHTML rebuild below — recreating an interactive button every frame
   // makes it a moving target for a real tap (the element can be swapped out
   // mid-gesture), not just an automated-test flakiness risk.
+  // One right-aligned row holding both controls, rather than two separately
+  // positioned buttons: the panel is `display: grid`, so a second
+  // `justify-self: end` element would take its own row and stack under the
+  // first instead of sitting beside it.
+  const controlsEl = document.createElement('div');
+  controlsEl.className = 'debug-controls';
+  overlay.appendChild(controlsEl);
+
+  // Hide sits left of Full/Mini — the destructive-ish action furthest from the
+  // one you press repeatedly, so a mistimed tap on a phone re-sizes the panel
+  // rather than dismissing it.
+  const hideBtn = document.createElement('button');
+  hideBtn.type = 'button';
+  hideBtn.className = 'debug-mode-toggle debug-hide-btn';
+  hideBtn.textContent = '✕ Hide';
+  hideBtn.title = 'Hide the debug overlay';
+  hideBtn.setAttribute('aria-label', 'Hide the debug overlay');
+  controlsEl.appendChild(hideBtn);
+
   const modeToggleBtn = document.createElement('button');
   modeToggleBtn.type = 'button';
   modeToggleBtn.className = 'debug-mode-toggle';
-  overlay.appendChild(modeToggleBtn);
+  controlsEl.appendChild(modeToggleBtn);
   const contentEl = document.createElement('div');
   contentEl.className = 'debug-content';
   overlay.appendChild(contentEl);
@@ -309,14 +328,23 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
   });
   overlay.classList.toggle('mode-mini', mode === 'mini');
 
-  toggleBtn.addEventListener('click', () => {
-    visible = !visible;
+  // Single path for both ways in and out — the external toolbar button and the
+  // panel's own Hide. Duplicating it would let `toggleBtn`'s label drift out of
+  // step with the panel: hiding from inside would leave the toolbar still
+  // offering "Hide overlay" for something already gone, and the next press
+  // would then hide it again rather than bring it back.
+  const setVisible = (next: boolean) => {
+    visible = next;
     overlay.classList.toggle('hidden', !visible);
     overlay.classList.toggle('visible', visible);
     toggleBtn.textContent = visible ? 'Hide overlay' : 'Show overlay';
+    toggleBtn.setAttribute('aria-expanded', String(visible));
     if (visible) void sampleHeap(true);
     renderStats(getState());
-  });
+  };
+
+  toggleBtn.addEventListener('click', () => setVisible(!visible));
+  hideBtn.addEventListener('click', () => setVisible(false));
 
   copyBtn.addEventListener('click', async () => {
     const snapshot = getState();
