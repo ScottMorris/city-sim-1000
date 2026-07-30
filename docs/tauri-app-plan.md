@@ -144,7 +144,7 @@
 - **Radio delivery on Android** — on-demand fetch vs Play Asset Delivery. *Needed by T5-4.*
 
 ## Promotion to a GitHub epic
-When this doc is promoted (the #61 mobile-web pattern, upgraded to GitHub's native relationship APIs):
+Promoted: epic [#190](https://github.com/ScottMorris/city-sim-1000/issues/190) under the `tauri-app` label. Sub-issues are created per phase as it approaches, not up front, using the mechanics below (the #61 mobile-web pattern, upgraded to GitHub's native relationship APIs):
 - One **epic issue** linking this doc, with each phase as a checklist entry.
 - One **sub-issue per task** (`T0-1`…), attached to the epic via the **native sub-issue relationships API** (not checklist links), title = task line, body = DoD + deps + anchor link here; rationale stays in this doc.
 - **`deps:` become blocked-by relationships** via the issue-dependencies API, so GitHub surfaces blocker status on each issue.
