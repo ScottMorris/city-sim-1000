@@ -8,6 +8,7 @@ import { Simulation } from './simulation';
 import { BuildingStatus } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
 import { placeBuilding } from './buildings/manager';
+import { resyncTileStrata } from './protocol/legacyProjection';
 import { hasRoadAccess } from './adjacency';
 import { SeededRng } from './rng';
 
@@ -97,6 +98,7 @@ describe('tools', () => {
     expect(pump).toBeDefined();
     const pumpConnection = getTile(state, 0, 1)!;
     pumpConnection.legacyUnderground = TileKind.WaterPipe;
+    resyncTileStrata(pumpConnection);
     const spent = initialMoney - state.money;
     expect(spent).toBeCloseTo(
       BUILD_COST[Tool.WindTurbine] + BUILD_COST[Tool.PowerLine] * 3 + template.cost
@@ -116,7 +118,9 @@ describe('tools', () => {
     const result = applyTool(state, Tool.WaterTower, 3, 3);
     expect(result.success).toBe(true);
     expect(state.buildings.filter((building) => building.templateId === template.id).length).toBe(1);
-    getTile(state, 5, 3)!.legacyUnderground = TileKind.WaterPipe;
+    const towerPipe = getTile(state, 5, 3)!;
+    towerPipe.legacyUnderground = TileKind.WaterPipe;
+    resyncTileStrata(towerPipe);
     const ids = new Set<number>();
     const footprint: Array<[number, number]> = [
       [3, 3],

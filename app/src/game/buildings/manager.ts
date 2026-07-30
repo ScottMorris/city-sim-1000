@@ -1,6 +1,7 @@
 import { PowerPlantType } from '../constants';
 import { GameState, Tile, getTile, TileKind } from '../gameState';
 import { tileHasPower, tileHasWater } from '../adjacency';
+import { resyncTileStrata } from '../protocol/legacyProjection';
 import { BuildingTemplate, getBuildingTemplate, getPowerPlantTemplate } from './templates';
 import { BuildingInstance, createBuildingState, BuildingStatus } from './state';
 
@@ -64,6 +65,7 @@ export function placeBuilding(
     tile.powerPlantId = undefined;
     tile.happiness = Math.min(1.5, tile.happiness + 0.05);
     decorateTile?.(tile, buildingId);
+    resyncTileStrata(tile);
   }
 
   state.nextBuildingId = buildingId + 1;
@@ -79,6 +81,7 @@ export function removeBuilding(state: GameState, buildingId: number) {
       tile.powerPlantType = undefined;
       tile.powerPlantId = undefined;
       tile.happiness = Math.min(1.5, tile.happiness + 0.05);
+      resyncTileStrata(tile);
     }
   }
 }

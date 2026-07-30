@@ -3,7 +3,8 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { GameState, Tile, TileKind, getTile } from './gameState';
+import { GameState, Tile, getTile } from './gameState';
+import { Network, conducts, tileOccupants, zoneOccupant } from './protocol/occupants';
 
 const ORTHOGONAL_DIRS: Array<[number, number]> = [
   [0, -1],
@@ -28,8 +29,9 @@ export function getOrthogonalNeighbourCoords(
 }
 
 /**
- * Returns true if any orthogonal neighbour of (x, y) carries traffic — that is,
- * has a road, whether recorded as `kind` or as `roadUnderlay`.
+ * Returns true if any orthogonal neighbour of (x, y) carries traffic — that
+ * is, has a `Road` occupant, whether recorded as the tile's own kind or as an
+ * underlay in the old vocabulary; here, directly as the occupant bit.
  *
  * Mirrors `has_road_access()` in `crates/city-sim-core/src/adjacency.rs`, which
  * asks `Tile::conducts(Network::Traffic)`.
@@ -40,23 +42,25 @@ export function getOrthogonalNeighbourCoords(
  * `roadUnderlay`, and its author was reaching for the road hidden underneath.
  * It reached too far — a *bare* hydro line across open country granted road
  * access to every zone beside it, so lots grew, filled and paid tax with no
- * street. The road-under-a-line case answers through `roadUnderlay` with no
- * special case at all. A hydro line is not a road.
+ * street. The road-under-a-line case answers through the `Road` occupant with
+ * no special case at all. A hydro line is not a road.
  */
 export function hasRoadAccess(state: GameState, x: number, y: number): boolean {
   return getOrthogonalNeighbourCoords(state, x, y).some(([nx, ny]) => {
     const neighbour = getTile(state, nx, ny);
-    return neighbour?.kind === TileKind.Road || neighbour?.roadUnderlay === true;
+    if (!neighbour) return false;
+    return conducts(
+      Network.Traffic,
+      tileOccupants(neighbour.underground, neighbour.surface, neighbour.overhead),
+      neighbour.buildingId,
+      false
+    );
   });
 }
 
 export function isZone(tile: Tile | undefined): boolean {
   if (!tile) return false;
-  return (
-    tile.kind === TileKind.Residential ||
-    tile.kind === TileKind.Commercial ||
-    tile.kind === TileKind.Industrial
-  );
+  return zoneOccupant(tile.surface) !== undefined;
 }
 
 export function isFrontierZone(state: GameState, x: number, y: number): boolean {
@@ -83,15 +87,12 @@ export function isFrontierZone(state: GameState, x: number, y: number): boolean 
  */
 export function isPowerCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
-  if (tile.powerPlantType) return true;
-  if (tile.buildingId !== undefined) return true;
-  if (tile.kind === TileKind.PowerLine || tile.powerOverlay) return true;
-  if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
-  if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;
-  if (isZone(tile)) {
-    return true;
-  }
-  return false;
+  return conducts(
+    Network.Power,
+    tileOccupants(tile.underground, tile.surface, tile.overhead),
+    tile.buildingId,
+    !!tile.powerPlantType
+  );
 }
 
 /**
@@ -107,12 +108,12 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
  */
 export function isWaterCarrier(tile: Tile | undefined): boolean {
   if (!tile) return false;
-  if (tile.legacyUnderground === TileKind.WaterPipe) return true;
-  if (tile.buildingId !== undefined) return true; // Buildings carry water
-  if (tile.kind === TileKind.Road || tile.roadUnderlay) return true;
-  if (tile.kind === TileKind.Rail || tile.railUnderlay) return true;
-  if (isZone(tile)) return true;
-  return false;
+  return conducts(
+    Network.Water,
+    tileOccupants(tile.underground, tile.surface, tile.overhead),
+    tile.buildingId,
+    false
+  );
 }
 
 /**

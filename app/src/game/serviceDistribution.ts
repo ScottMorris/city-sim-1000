@@ -3,6 +3,7 @@ import { BuildingStatus } from './buildings/state';
 import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import type { GameState, Tile } from './gameState';
 import { getTile, TileKind } from './gameState';
+import { Occupant, hasOccupant } from './protocol/occupants';
 import { ServiceId } from './services';
 
 export const DEFAULT_WORKER_SHARE = 0.55;
@@ -14,7 +15,7 @@ export type ZoneLoadMap = {
 
 function isRoadish(tile: Tile | undefined): boolean {
   if (!tile) return false;
-  return tile.kind === TileKind.Road || tile.roadUnderlay === true;
+  return hasOccupant(tile.surface, Occupant.Road);
 }
 
 /**
