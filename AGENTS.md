@@ -133,13 +133,25 @@ When rewriting history (which requires the branch to be unpushed, and should be 
 
 ## Licence and Copyright
 
-New `.rs` and `.ts`/`.tsx` source files should include a header before `use`/`import` statements:
+Every `.rs`, `.ts`/`.tsx`, and `.sh` file — including extensionless shebang scripts like git hooks — carries a header. This applies whenever such a file is created *or* edited: if it's missing the header, add it as part of that same change, not just on brand-new files.
+
+Rust/TypeScript headers go before `use`/`import` statements:
 
 ```rust
 // Brief one-line summary of what this file does.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
+```
+
+Shell script headers go after the `#!` line:
+
+```bash
+#!/usr/bin/env bash
+# Brief one-line summary of what this script does.
+#
+# (c) Copyright 2026 Liminal HQ, Scott Morris
+# SPDX-License-Identifier: MIT
 ```
 
 - One blank line between the header and the first code line.
