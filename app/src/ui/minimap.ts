@@ -6,10 +6,12 @@
 import { Camera } from '../rendering/camera';
 import {
   GameState,
-  MinimapMode,
+  MINIMAP_OVERLAYS,
+  MinimapOverlay,
   MinimapSettings,
   MinimapSize,
   TileKind,
+  ViewStratum,
   createDefaultMinimapSettings,
   getTile
 } from '../game/gameState';
@@ -27,14 +29,16 @@ export interface MinimapOptions {
   onSettingsChange: (settings: MinimapSettings) => void;
   onJumpToTile: (tile: { x: number; y: number }) => void;
   getViewportSize: () => { width: number; height: number };
+  /** Stratum lives outside `ClientState` (see `ViewStratum`), so toggling it is a plain callback rather than a settings patch. */
+  onStratumToggle: () => void;
   palette?: Record<TileKind, number>;
 }
 
 export interface MinimapController {
-  update: (state: GameState, camera: Camera) => void;
+  update: (state: GameState, camera: Camera, stratum: ViewStratum) => void;
   toggleOpen: () => void;
   setSize: (size: MinimapSize) => void;
-  setMode: (mode: MinimapMode) => void;
+  setOverlay: (overlay: MinimapOverlay) => void;
   markDirty: () => void;
   syncSettings: (settings: MinimapSettings) => void;
 }
@@ -45,7 +49,7 @@ const SIZE_PRESETS: Record<MinimapSize, number> = {
 };
 const MIN_PANEL_WIDTH = 220;
 const PANEL_PADDING = 10 * 2; // matches .minimap-panel padding
-const MODE_COPY: Record<MinimapMode, { subtitle: string; hint: string }> = {
+const OVERLAY_COPY: Record<MinimapOverlay, { subtitle: string; hint: string }> = {
   base: { subtitle: 'Base view', hint: 'Terrain, zones, transport, and power lines.' },
   power: { subtitle: 'Power overlay', hint: 'Green = powered, red = unpowered; teal = generation/lines.' },
   water: { subtitle: 'Water overlay', hint: 'Water tiles, pumps, towers, and pipes pop in blue for now.' },
@@ -57,10 +61,8 @@ const MODE_COPY: Record<MinimapMode, { subtitle: string; hint: string }> = {
   wilderness: {
     subtitle: 'Wilderness overlay',
     hint: 'Heatmap of the eco field: lush green for thriving nature, grey for urban pressure.'
-  },
-  underground: { subtitle: 'Underground', hint: 'View pipes and subsurface infrastructure.' }
+  }
 };
-const ALLOWED_MODES: MinimapMode[] = ['base', 'power', 'water', 'alerts', 'education', 'wilderness', 'underground'];
 
 interface LayoutInfo {
   sizePx: number;
@@ -97,43 +99,41 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   const header = document.createElement('div');
   header.className = 'minimap-header';
 
+  let stratum: ViewStratum = 'surface';
+
   const titleBlock = document.createElement('div');
   const title = document.createElement('div');
   title.className = 'minimap-title';
   title.textContent = 'Minimap';
   const subtitle = document.createElement('div');
   subtitle.className = 'minimap-subtitle';
-  subtitle.textContent = MODE_COPY[settings.mode].subtitle;
+  subtitle.textContent = subtitleText();
   titleBlock.append(title, subtitle);
 
   const baseModeBtn = document.createElement('button');
   baseModeBtn.className = 'chip-button';
   baseModeBtn.textContent = 'Base';
-  baseModeBtn.addEventListener('click', () => setMode('base'));
+  baseModeBtn.addEventListener('click', () => setOverlay('base'));
   const powerModeBtn = document.createElement('button');
   powerModeBtn.className = 'chip-button';
   powerModeBtn.textContent = 'Power';
-  powerModeBtn.addEventListener('click', () => setMode('power'));
+  powerModeBtn.addEventListener('click', () => setOverlay('power'));
   const waterModeBtn = document.createElement('button');
   waterModeBtn.className = 'chip-button';
   waterModeBtn.textContent = 'Water';
-  waterModeBtn.addEventListener('click', () => setMode('water'));
+  waterModeBtn.addEventListener('click', () => setOverlay('water'));
   const alertsModeBtn = document.createElement('button');
   alertsModeBtn.className = 'chip-button';
   alertsModeBtn.textContent = 'Alerts';
-  alertsModeBtn.addEventListener('click', () => setMode('alerts'));
+  alertsModeBtn.addEventListener('click', () => setOverlay('alerts'));
   const educationModeBtn = document.createElement('button');
   educationModeBtn.className = 'chip-button';
   educationModeBtn.textContent = 'Education';
-  educationModeBtn.addEventListener('click', () => setMode('education'));
+  educationModeBtn.addEventListener('click', () => setOverlay('education'));
   const wildernessModeBtn = document.createElement('button');
   wildernessModeBtn.className = 'chip-button';
   wildernessModeBtn.textContent = 'Wilderness';
-  wildernessModeBtn.addEventListener('click', () => setMode('wilderness'));
-  const undergroundModeBtn = document.createElement('button');
-  undergroundModeBtn.className = 'chip-button';
-  undergroundModeBtn.textContent = 'Underground';
-  undergroundModeBtn.addEventListener('click', () => setMode('underground'));
+  wildernessModeBtn.addEventListener('click', () => setOverlay('wilderness'));
 
   const sizeBtn = document.createElement('button');
   sizeBtn.className = 'chip-button';
@@ -155,9 +155,19 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   const body = document.createElement('div');
   body.className = 'minimap-body';
 
+  // The edit stratum is a different axis from the overlay chips below (see
+  // `docs/features/view-layers.md`) — its own row keeps it from reading as a
+  // seventh overlay choice.
+  const stratumRow = document.createElement('div');
+  stratumRow.className = 'minimap-stratum-row';
+  const stratumBtn = document.createElement('button');
+  stratumBtn.className = 'chip-button minimap-stratum-button';
+  stratumBtn.addEventListener('click', () => options.onStratumToggle());
+  stratumRow.append(stratumBtn);
+
   const actions = document.createElement('div');
   actions.className = 'minimap-actions';
-  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, wildernessModeBtn, undergroundModeBtn, sizeBtn].forEach((btn) => {
+  [baseModeBtn, powerModeBtn, waterModeBtn, alertsModeBtn, educationModeBtn, wildernessModeBtn, sizeBtn].forEach((btn) => {
     if (btn === sizeBtn) {
       btn.classList.add('minimap-span');
     }
@@ -171,7 +181,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   const overlayCanvas = document.createElement('canvas');
   overlayCanvas.className = 'minimap-overlay-canvas';
   canvasWrapper.append(baseCanvas, overlayCanvas);
-  body.append(actions, canvasWrapper);
+  body.append(stratumRow, actions, canvasWrapper);
 
   const legendDetails = document.createElement('details');
   legendDetails.className = 'minimap-legend';
@@ -182,7 +192,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   const hint = document.createElement('div');
   hint.className = 'minimap-hint';
-  hint.textContent = MODE_COPY[settings.mode].hint;
+  hint.textContent = OVERLAY_COPY[settings.overlay].hint;
   legendDetails.append(legendSummary, hint);
   body.append(legendDetails);
 
@@ -214,12 +224,17 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       ...createDefaultMinimapSettings(),
       ...(next ?? {})
     };
-    const safeMode = ALLOWED_MODES.includes(merged.mode) ? merged.mode : 'base';
-    return { ...merged, mode: safeMode };
+    const safeOverlay = MINIMAP_OVERLAYS.includes(merged.overlay) ? merged.overlay : 'base';
+    return { ...merged, overlay: safeOverlay };
   }
 
-  function setMode(mode: MinimapMode) {
-    settings = { ...settings, mode };
+  function subtitleText(): string {
+    const base = OVERLAY_COPY[settings.overlay].subtitle;
+    return stratum === 'underground' ? `${base} · Underground` : base;
+  }
+
+  function setOverlay(overlay: MinimapOverlay) {
+    settings = { ...settings, overlay };
     dirty = true;
     syncUi();
     options.onSettingsChange(settings);
@@ -248,18 +263,19 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
   function syncUi() {
     container.classList.toggle('minimap-collapsed', !settings.open);
-    baseModeBtn.classList.toggle('active', settings.mode === 'base');
-    powerModeBtn.classList.toggle('active', settings.mode === 'power');
-    waterModeBtn.classList.toggle('active', settings.mode === 'water');
-    alertsModeBtn.classList.toggle('active', settings.mode === 'alerts');
-    educationModeBtn.classList.toggle('active', settings.mode === 'education');
-    wildernessModeBtn.classList.toggle('active', settings.mode === 'wilderness');
-    undergroundModeBtn.classList.toggle('active', settings.mode === 'underground');
+    baseModeBtn.classList.toggle('active', settings.overlay === 'base');
+    powerModeBtn.classList.toggle('active', settings.overlay === 'power');
+    waterModeBtn.classList.toggle('active', settings.overlay === 'water');
+    alertsModeBtn.classList.toggle('active', settings.overlay === 'alerts');
+    educationModeBtn.classList.toggle('active', settings.overlay === 'education');
+    wildernessModeBtn.classList.toggle('active', settings.overlay === 'wilderness');
+    stratumBtn.textContent = stratum === 'underground' ? 'View: Underground' : 'View: Surface';
+    stratumBtn.classList.toggle('active', stratum === 'underground');
     sizeBtn.textContent = settings.size === 'small' ? 'Size: Small' : 'Size: Medium';
     toggleBtn.textContent = settings.open ? 'Hide' : 'Show';
     body.style.display = settings.open ? 'block' : 'none';
-    subtitle.textContent = MODE_COPY[settings.mode].subtitle;
-    hint.textContent = MODE_COPY[settings.mode].hint;
+    subtitle.textContent = subtitleText();
+    hint.textContent = OVERLAY_COPY[settings.overlay].hint;
     const widthPx = Math.max(SIZE_PRESETS[settings.size] + PANEL_PADDING + 12, MIN_PANEL_WIDTH);
     container.style.width = `${widthPx}px`;
   }
@@ -307,7 +323,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     if (!tile) return '#000';
     const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
 
-    if (settings.mode === 'power') {
+    if (settings.overlay === 'power') {
       if (tile.powerPlantType) return '#81e8ff';
       if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
         return tile.powered ? '#7bf0ff' : '#ff99c2';
@@ -318,7 +334,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return 'rgba(20, 32, 50, 0.9)';
     }
 
-    if (settings.mode === 'water') {
+    if (settings.overlay === 'water') {
       if (tile.terrain === Terrain.Water) return '#1f68d6';
       if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
         return tile.powered ? '#7ad5ff' : '#ffcc70';
@@ -326,7 +342,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return tile.powered ? 'rgba(76, 195, 255, 0.25)' : 'rgba(16, 26, 42, 0.92)';
     }
 
-    if (settings.mode === 'alerts') {
+    if (settings.overlay === 'alerts') {
       const zone = isZone(tile);
       const buildingStatus = tile.buildingId !== undefined ? buildingStatuses.get(tile.buildingId) : undefined;
       let severity = 0;
@@ -344,7 +360,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       if (severity === 1) return 'rgba(255, 204, 112, 0.95)';
       return 'rgba(255, 123, 123, 0.95)';
     }
-    if (settings.mode === 'education') {
+    if (settings.overlay === 'education') {
       if (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) {
         return '#8f7bff';
       }
@@ -357,7 +373,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return 'rgba(16, 26, 42, 0.9)';
     }
 
-    if (settings.mode === 'wilderness') {
+    if (settings.overlay === 'wilderness') {
       if (tile.terrain === Terrain.Water) return '#1f68d6';
       const delta = (tile.wilderness ?? 0.5) - 0.5;
       if (delta > 0.02) return `rgba(94, 230, 160, ${Math.min(0.3 + delta * 1.4, 0.95).toFixed(2)})`;
@@ -365,7 +381,10 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return 'rgba(16, 26, 42, 0.9)';
     }
 
-    if (settings.mode === 'underground') {
+    // `overlay === 'base'` beyond this point: the "base look" itself still
+    // depends on the stratum axis — underground has its own base rendering
+    // (pipes as objects), independent of any overlay tint.
+    if (stratum === 'underground') {
       if (hasOccupant(tile.underground, Occupant.Pipe)) return '#4cc3ff';
       if (tile.terrain === Terrain.Water) return '#1f68d6';
       if (tile.watered) return 'rgba(76, 195, 255, 0.55)';
@@ -470,8 +489,13 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     options.onJumpToTile({ x: tileX, y: tileY });
   }
 
-  function update(state: GameState, camera: Camera) {
+  function update(state: GameState, camera: Camera, nextStratum: ViewStratum) {
     latestState = state;
+    if (nextStratum !== stratum) {
+      stratum = nextStratum;
+      dirty = true;
+      syncUi();
+    }
     const sizeChanged = state.width !== lastMapWidth || state.height !== lastMapHeight;
     if (sizeChanged) {
       lastMapWidth = state.width;
@@ -502,7 +526,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
   return {
     update,
     toggleOpen,
-    setMode,
+    setOverlay,
     setSize,
     markDirty,
     syncSettings

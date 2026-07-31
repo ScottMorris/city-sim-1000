@@ -172,7 +172,7 @@ The tile stays a dumb container. `development: Option<BuildingId>` points at an 
 
 ## Bulldoze
 
-The bulldozer works on **what you can see**: surface and overhead together, restoring the tile to its terrain. Underground occupants are only removable from the underground view — which **already exists** (`minimap.ts`, mode `underground`) and is how water pipes are laid today. So this is not a new interaction to design, it is an existing one the model has to keep expressible, and it is expressible only because terrain is a separate field.
+The bulldozer works on **what you can see**: surface and overhead together, restoring the tile to its terrain. Underground occupants are only removable from the underground view — which **already exists** (`main.ts`'s `ViewStratum`, `'underground'`) and is how water pipes are laid today. So this is not a new interaction to design, it is an existing one the model has to keep expressible, and it is expressible only because terrain is a separate field.
 
 ## Scoring becomes a sum
 

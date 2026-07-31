@@ -16,8 +16,11 @@ import {
   createDefaultMinimapSettings,
   createDefaultNarrativeSettings,
   createDefaultUiSettings,
+  MINIMAP_OVERLAYS,
   type GameSettings,
-  type GameState
+  type GameState,
+  type MinimapOverlay,
+  type MinimapSettings
 } from './gameState';
 import { DEFAULT_BYLAWS, type BylawState } from './bylaws';
 import { defaultHotkeys } from '../ui/hotkeys';
@@ -35,13 +38,19 @@ export interface ClientState {
  */
 export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSettings {
   const minimapDefaults = createDefaultMinimapSettings();
-  const minimapSettings = {
-    ...minimapDefaults,
-    ...(settings?.minimap ?? {})
+  // A save's `minimap` may still carry an old `mode: 'underground'` key from
+  // before the stratum/overlay split. Picking fields explicitly (rather than
+  // spreading the incoming object) both drops that stray key — instead of
+  // letting it round-trip into every future save — and drops the old
+  // edit-stratum value itself rather than migrating it (stratum was never
+  // meant to persist anyway).
+  const incomingMinimap = settings?.minimap;
+  const incomingOverlay = incomingMinimap?.overlay as MinimapOverlay | undefined;
+  const minimapSettings: MinimapSettings = {
+    open: incomingMinimap?.open ?? minimapDefaults.open,
+    size: incomingMinimap?.size ?? minimapDefaults.size,
+    overlay: incomingOverlay && MINIMAP_OVERLAYS.includes(incomingOverlay) ? incomingOverlay : minimapDefaults.overlay
   };
-  if (!['base', 'power', 'water', 'alerts', 'education', 'underground'].includes(minimapSettings.mode)) {
-    minimapSettings.mode = 'base';
-  }
   const inputDefaults = createDefaultInputSettings();
   const accessibilityDefaults = createDefaultAccessibilitySettings();
   const audioDefaults = createDefaultAudioSettings();

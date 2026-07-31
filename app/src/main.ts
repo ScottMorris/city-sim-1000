@@ -16,9 +16,11 @@ import {
   createInitialState,
   GameState,
   getTile,
-  MinimapMode
+  MinimapOverlay,
+  ViewStratum
 } from './game/gameState';
 import { Tool } from './game/toolTypes';
+import { resolveStratumForTool } from './game/viewStratum';
 import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
 import type { SimBridge } from './game/simBridge';
@@ -385,6 +387,10 @@ function cancelPendingTouchApply() {
 let activeTool: Tool = Tool.Inspect;
 let selectedTool: Tool = Tool.Inspect;
 let temporaryTool: Tool | null = null;
+// Edit stratum: app state alongside the active tool, not part of
+// `state.settings` — never persisted, always starts at `surface`. See
+// `docs/features/view-layers.md`.
+let viewStratum: ViewStratum = 'surface';
 // The bridge always boots a fresh city; any browser save (CSAV in
 // IndexedDB, or a legacy localStorage JSON) is loaded asynchronously right
 // after the engine is ready — see `bootLoadSave` below.
@@ -1030,7 +1036,8 @@ let lastRenderCameraScale = camera.scale;
 let lastRenderHovered: Position | null = hovered;
 let lastRenderSelected: Position | null = selected;
 let lastRenderTool: Tool = activeTool;
-let lastRenderOverlayMode: MinimapMode | null = null;
+let lastRenderOverlay: MinimapOverlay | null = null;
+let lastRenderStratum: ViewStratum | null = null;
 let lastRenderPointerActive = pointerActive;
 let hasRenderedOnce = false;
 
@@ -1064,7 +1071,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       narrativeManager.gc(nowMs);
       lastNarrativeGc = nowMs;
     }
-    const overlayMode = state.settings?.minimap?.mode ?? 'base';
+    const overlay = state.settings?.minimap?.overlay ?? 'base';
     const canSkipRender =
       hasRenderedOnce &&
       isPaused &&
@@ -1075,23 +1082,25 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       positionsEqual(hovered, lastRenderHovered) &&
       positionsEqual(selected, lastRenderSelected) &&
       activeTool === lastRenderTool &&
-      overlayMode === lastRenderOverlayMode &&
+      overlay === lastRenderOverlay &&
+      viewStratum === lastRenderStratum &&
       pointerActive === lastRenderPointerActive;
     if (!canSkipRender) {
-      renderer.render(state, hovered, selected, overlayMode, pointerActive, activeTool);
+      renderer.render(state, hovered, selected, viewStratum, overlay, pointerActive, activeTool);
       lastRenderCameraX = camera.x;
       lastRenderCameraY = camera.y;
       lastRenderCameraScale = camera.scale;
       lastRenderHovered = hovered;
       lastRenderSelected = selected;
       lastRenderTool = activeTool;
-      lastRenderOverlayMode = overlayMode;
+      lastRenderOverlay = overlay;
+      lastRenderStratum = viewStratum;
       lastRenderPointerActive = pointerActive;
       hasRenderedOnce = true;
     }
     hud.update(state);
     hud.renderOverlays(state, selected, activeTool);
-    minimap?.update(state, camera);
+    minimap?.update(state, camera, viewStratum);
     newsTicker?.update();
     debugOverlay?.update(state);
   } catch (err) {
@@ -1199,15 +1208,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
 
   const setTool = (nextTool: Tool) => {
     selectTool(nextTool);
-    if (nextTool === Tool.WaterPipe && state.settings.minimap.mode !== 'underground') {
-      applySettings({ ...state.settings, minimap: { ...state.settings.minimap, mode: 'underground' } });
-    } else if (
-      nextTool !== Tool.WaterPipe &&
-      nextTool !== Tool.Bulldoze &&
-      state.settings.minimap.mode === 'underground'
-    ) {
-      applySettings({ ...state.settings, minimap: { ...state.settings.minimap, mode: 'base' } });
-    }
+    viewStratum = resolveStratumForTool(nextTool, viewStratum);
+  };
+
+  const toggleViewStratum = () => {
+    viewStratum = viewStratum === 'surface' ? 'underground' : 'surface';
   };
 
   const setSimSpeed = (speed: SimSpeedKey, opts: { silent?: boolean } = {}) => {
@@ -1358,7 +1363,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     const minimapChanged =
       previous.minimap.open !== normalized.minimap.open ||
       previous.minimap.size !== normalized.minimap.size ||
-      previous.minimap.mode !== normalized.minimap.mode;
+      previous.minimap.overlay !== normalized.minimap.overlay;
     const hotkeysChanged =
       JSON.stringify(previous.hotkeys ?? {}) !== JSON.stringify(normalized.hotkeys ?? {});
     state.settings = normalized;
@@ -1406,6 +1411,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     },
     onJumpToTile: ({ x, y }) => centerCameraOnTile(x, y),
     getViewportSize: minimapViewport,
+    onStratumToggle: toggleViewStratum,
     palette
   });
   syncMinimapSettings(state.settings.minimap);
