@@ -109,6 +109,18 @@ Every PR must have at least one label. Primary categories:
 
 Use `gh pr edit <number> --add-label "<label>"` immediately after `gh pr create`.
 
+## Issue Linking and Closing
+
+**A single PR that fully resolves a tracked issue** uses a closing keyword in its body — `Fixes #N` / `Closes #N` — so merging it auto-closes the issue. No follow-up needed.
+
+**A multi-PR stack against the same issue**: every PR before the last one references the issue without a closing keyword (`Part of #N`) — a keyword there would close the issue while the rest of the stack is still open. **The final PR in the stack does use the closing keyword**, so merging it auto-closes the issue the normal way; no manual close step needed in the common case.
+
+- If you don't yet know a PR is the last one when you open it, don't guess — leave the keyword off and close manually once you confirm nothing else is left, per the fallback below.
+- Fallback (keyword missed, or a manual close is genuinely called for): `gh issue close <N> --comment "<summary of every PR that merged, and anything explicitly deferred to a separate tracked issue>"`.
+- Either way, verify the issue actually closed — `gh issue view <N> --json state` — don't assume a closing keyword did its job, and don't assume a manual close command succeeded either.
+
+This applies to every multi-PR task, not just ones with an explicit "PR 1/2, PR 2/2" plan — if a task's last commit lands and there's a tracked issue for it, closing that issue is part of finishing the task, not a separate step to remember later.
+
 ## Git Workflow
 
 - Do not push or force-push unless explicitly requested by the user.
