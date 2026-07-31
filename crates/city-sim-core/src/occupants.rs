@@ -1327,9 +1327,11 @@ impl Tile {
         self.occupants() & occupant_bit(occupant) != 0
     }
 
-    /// Surface + overhead: what the player sees and what the bulldozer clears.
-    /// Underground occupants are excluded — they are only reachable from the
-    /// underground view.
+    /// Surface + overhead: what the player sees from the surface view, and
+    /// what a `stratum: Surface` bulldoze clears (`commands::bulldoze`).
+    /// Underground occupants are excluded — clearing them takes a
+    /// `stratum: Underground` command instead, which the client only sends
+    /// from the underground view (`#198`).
     #[inline]
     pub fn visible_occupants(&self) -> OccupantSet {
         self.surface.bits() | self.overhead.bits()
@@ -2728,7 +2730,15 @@ mod tests {
         fn build(order: &[Tool]) -> OccupantSet {
             let mut s = GameState::new(4, 4, 0);
             for &t in order {
-                apply_tool(&mut s, t, 1, 1, ViewStratum::Surface);
+                // `WaterPipe` refuses everywhere but the Underground stratum
+                // (see `commands::apply_tool`'s `Tool::WaterPipe` arm); every
+                // other tool exercised by this helper is stratum-blind.
+                let stratum = if t == Tool::WaterPipe {
+                    ViewStratum::Underground
+                } else {
+                    ViewStratum::Surface
+                };
+                apply_tool(&mut s, t, 1, 1, stratum);
             }
             s.tiles[s.tile_index(1, 1).unwrap()].occupants()
         }

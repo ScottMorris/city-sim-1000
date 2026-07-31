@@ -1,6 +1,6 @@
 # View Layers — Strata and Overlays as First-Class State
 
-**Status:** implemented, client-side (#197 — `ViewStratum`/`MinimapOverlay` split, tool-implied switching, the tool/stratum click-guard, and the HUD stratum badge). The engine never hears about the stratum yet: `SimCommand::ApplyTool` still has no `stratum` field, so the bulldozer stays view-blind in Rust. That wire-up is `layer-scoped-bulldozer.md`'s job (#198), which depends on the model defined here.
+**Status:** implemented, client and engine (#197 — `ViewStratum`/`MinimapOverlay` split, tool-implied switching, the tool/stratum click-guard, and the HUD stratum badge; #198 — `SimCommand::ApplyTool` gained a `stratum` field end to end and `commands::bulldoze` is layer-scoped, see `layer-scoped-bulldozer.md`).
 
 ## Purpose
 
@@ -14,7 +14,7 @@ Genre precedent is unambiguous that these are two independent axes (survey: SimC
 
 * **Edit stratum** is first-class mode state, and the genre flipped polarity on how it's entered. Classic titles used an explicit toggle (SC2000's Show Underground button, SC3000's Layers button, Workers & Resources' F3 editor mode). From SimCity 4 onward, **selecting a stratum-bound tool switches the view automatically** — SC4's subway/pipe tools force the Underground View (built-in and unconditional), and C:S1's water-pipe tool auto-activates the underground view the same way. The explicit toggle survives where tool selection is ambiguous about stratum — most notably the **bulldozer** (C:S1's underground-bulldozing toggle, added in patch 1.7.0 because tunnels were previously undeletable; C:S2's whole-view Underground Mode, surface greyed, underground outlined).
 * **Data overlays** are a separate system in every game studied — SimCity's query/graph windows and Data Views, C:S Info Views, SimCity 2013's data layers. They answer "show me X about the city" and never gate what tools may touch. Auto-*opening* a relevant overlay on tool selection (C:S2's "associated info views" rule, SimCity 2013 throughout) is established and fine *because* they are read-only.
-* The anti-patterns, each remembered as a bug or design flaw: cross-layer leakage (SC3000 terraforming silently destroys unseen subways/pipes — its manual literally warns players to check the underground view after terraforming; SC4 hybrid objects need bulldozing in *both* views to fully clear); overlays that quietly grant edit power (C:S1 lets you bulldoze pipes from inside the read-only Water/Heating info views — a perennial source of player confusion); and mode state that isn't loudly visible (Timberborn players demolish the wrong things while a layer view is active, and an on-screen active-layer warning is a standing feature request). Our view-blind `bulldoze()` is the first family of bug; the invariant every one of these violates is *the demolition tool never destroys what the player cannot currently see*.
+* The anti-patterns, each remembered as a bug or design flaw: cross-layer leakage (SC3000 terraforming silently destroys unseen subways/pipes — its manual literally warns players to check the underground view after terraforming; SC4 hybrid objects need bulldozing in *both* views to fully clear); overlays that quietly grant edit power (C:S1 lets you bulldoze pipes from inside the read-only Water/Heating info views — a perennial source of player confusion); and mode state that isn't loudly visible (Timberborn players demolish the wrong things while a layer view is active, and an on-screen active-layer warning is a standing feature request). Our `bulldoze()` was the first family of bug until `#198` fixed it (`layer-scoped-bulldozer.md`); the invariant every one of these violates is *the demolition tool never destroys what the player cannot currently see*.
 
 ## Proposed model
 
@@ -65,7 +65,7 @@ The two compose into one rule: **tools with a home stratum set the stratum; stra
 1. ✅ `ViewStratum` is `main.ts` app state, module-level alongside the active tool.
 2. ✅ `MinimapMode` split into `MinimapOverlay` (six values) + `ViewStratum`; `ClientState` never persists stratum (a save's old `mode: 'underground'` key just has no `overlay` field to migrate — the default wins).
 3. ✅ Renderer/minimap take `(stratum, overlay)` instead of one `overlayMode` string.
-4. ✅ Tool/view consistency guards (see above). ❌ **Not done**: wiring `stratum` into `ApplyTool` itself — the engine stays view-blind. That's `layer-scoped-bulldozer.md`/#198, unstarted.
+4. ✅ Tool/view consistency guards (see above). ✅ `stratum` wired into `ApplyTool` itself and `commands::bulldoze` made layer-scoped — `layer-scoped-bulldozer.md`/#198.
 5. ✅ `docs/tile-model.md`, `SPEC.md`, and `app/public/manual.html` updated to describe the two-axis model.
 
 ## Non-goals

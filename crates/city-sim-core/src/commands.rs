@@ -277,6 +277,17 @@ pub fn apply_tool(
         }
 
         Tool::WaterPipe => {
+            // Belt-and-suspenders: `#197`'s client-side click-guard already
+            // switches the view to Underground the moment this tool is
+            // selected and refuses a click if the player manually toggles
+            // away before placing (`SPEC.md`'s Utilities section), so this
+            // should be unreachable from the ordinary UI. It is reachable
+            // from `mcpBridge.ts`/the MCP server, though, which have no view
+            // state and default `stratum` to `Surface` — so the engine needs
+            // its own refusal rather than trusting the client entirely.
+            if stratum != ViewStratum::Underground {
+                return CommandResult::fail("Water pipes must be laid from the Underground view.");
+            }
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
             state.tiles[idx].set_occupant(Occupant::Pipe, true);
@@ -525,42 +536,52 @@ fn place_footprint_building(
     CommandResult::ok()
 }
 
-/// Bulldoze the tile at (x, y): remove any building, or clear what stands on
-/// the ground — leaving the ground itself exactly as it was.
+/// Bulldoze the tile at (x, y): clear `stratum` — and nothing else — leaving
+/// the ground itself, and every other stratum, exactly as it was.
 ///
-/// **Terrain is not the bulldozer's to change (#177 step 4).** Until now this
-/// function wrote `Terrain::Land` unconditionally, so one click at a cost of 1
-/// filled in a lake that cost 12 to dig and 10 to raise back out: the cheapest
-/// tool on the palette was also the most powerful terraformer. It was the one
-/// function that most needed terrain to be durable, and it was the last one
-/// still overwriting it — giving terrain a field of its own and then flattening
-/// it here would have been doing the work and discarding the result.
+/// **Layer-scoped, not view-blind (`#198`).** Until now this function ignored
+/// which layer the player was looking at and applied a fixed precedence —
+/// building, then underground, then surface+overhead — so a surface click on
+/// a tile with only a buried pipe silently destroyed the pipe, and an
+/// underground click on a tile with an empty underground stratum fell through
+/// and razed the dimmed surface. `docs/tile-model.md` has said "underground
+/// occupants are only removable from the underground view" since the strata
+/// model was designed; `stratum` (threaded onto `ApplyTool` in the prior PR)
+/// is what finally lets the engine honour it. `stratum: Surface` never
+/// touches `underground`; `stratum: Underground` never touches
+/// `building_id`/surface/overhead. Buildings are surface-stratum objects
+/// (`docs/features/layer-scoped-bulldozer.md`), so `stratum: Surface` is what
+/// removes one, exactly as every click did before this existed.
 ///
-/// The design note has said so from the start: the bulldozer restores a tile
-/// *to its terrain*. So a bulldozed lake stays a lake, and the terrain brushes
-/// — `TerraformRaise`, `TerraformLower`, `Tool::Water` — are the tools *for*
-/// changing what the ground is. That is their job, and it is what they charge
-/// 10, 10 and 12 for.
+/// **Free no-op (also `#198`).** The cost used to be deducted unconditionally
+/// before the branch, so bulldozing bare land — or, since this fix, the empty
+/// half of a tile carrying something in the other stratum — charged a credit
+/// for nothing. `Tool::Bulldoze` now costs money only when it actually clears
+/// something; an empty-stratum click is `CommandResult::fail`, not `ok`, so
+/// the demolition SFX and "Demolition crews active" narrative event — both
+/// gated on `success` — stay truthful about whether anything happened.
 ///
-/// **They are not the only tools that change it.** [`regrade_at`] writes
-/// `Terrain::Land`, and every building tool calls it to wipe the surface
-/// before it lays anything down, so a lake is still drainable: pave it, raze
-/// the pavement, and the ground stays where the road left it — 6 credits with
-/// `Tool::Road`, under either brush. Filling water in as you build over it is
-/// deliberate and predates #177 (building over water is bridges and docks, a
-/// feature of its own), so what step 4 removed is the 1-credit regrade, not
-/// every cheap one. See
+/// **Terrain is not the bulldozer's to change (#177 step 4).** A bulldozed
+/// lake stays a lake — clearing `Surface` never touches `terrain` — and the
+/// terrain brushes (`TerraformRaise`, `TerraformLower`, `Tool::Water`) are the
+/// only tools *for* changing what the ground is; that is what they charge 10,
+/// 10 and 12 for. They are not the only tools that *move* it, though:
+/// [`regrade_at`] writes `Terrain::Land`, and every building tool calls it to
+/// wipe the surface before it lays anything down, so a lake is still
+/// drainable — pave it, raze the pavement, and the ground stays where the
+/// road left it, 6 credits under either brush. See
 /// `tests::building_over_water_and_razing_it_is_the_cheapest_regrade`.
 ///
 /// A tile carrying water *and* something built on it is therefore a real
-/// arrangement, reached in two ordinary clicks: `regrade_at` takes the surface
-/// stratum and the canopy but deliberately leaves the overhead line and the
-/// buried pipe standing, so `PowerLine` then `Tool::Water` — or `WaterPipe`
-/// then `Tool::Water` — is water with something on it. The rule reads
-/// correctly on those: what stands goes, the water stays. Water carrying a
-/// *road* is the unreachable case, because the brush clears the stratum a road
-/// lives in; `bulldoze` still has to be total over it, because [`set_v4`] can
-/// build one out of a loaded save and `Tile` can hold one.
+/// arrangement, reached in two ordinary clicks: `regrade_at` takes the
+/// surface stratum and the canopy but deliberately leaves the overhead line
+/// and the buried pipe standing, so `PowerLine` then `Tool::Water` — or
+/// `WaterPipe` then `Tool::Water` — is water with something on it. The rule
+/// reads correctly on those: what stands goes, the water stays. Water
+/// carrying a *road* is the unreachable case, because the brush clears the
+/// stratum a road lives in; a `Surface` bulldoze still has to be total over
+/// it, because [`set_v4`] can build one out of a loaded save and `Tile` can
+/// hold one.
 ///
 /// [`set_v4`]: crate::migrate::set_v4
 fn bulldoze(
@@ -568,29 +589,40 @@ fn bulldoze(
     x: u32,
     y: u32,
     cost: i64,
-    _stratum: ViewStratum,
+    stratum: ViewStratum,
 ) -> CommandResult {
-    state.money -= cost;
     let idx = state.tile_index(x, y).unwrap();
-    if let Some(bid) = state.tiles[idx].building_id {
-        remove_building(state, bid as u32);
-    } else if !state.tiles[idx].underground.is_empty() {
-        state.tiles[idx].clear_stratum(Stratum::Underground);
-    } else {
-        // The bulldozer works on what you can see: surface and overhead
-        // together. Underground is reached on its own click, above, because it
-        // is only editable from the underground view.
-        //
-        // `terrain` is deliberately absent from this list — see above.
-        let tile = &mut state.tiles[idx];
-        tile.clear_stratum(Stratum::Surface);
-        tile.clear_stratum(Stratum::Overhead);
-        // FLAG_POWERED / FLAG_WATERED are recomputed by the utility passes;
-        // ABANDONED describes a lot that no longer exists.
-        tile.set_flag(FLAG_ABANDONED, false);
-        state.tile_revision += 1;
+    match stratum {
+        ViewStratum::Surface => {
+            if let Some(bid) = state.tiles[idx].building_id {
+                state.money -= cost;
+                remove_building(state, bid as u32);
+                CommandResult::ok()
+            } else if !state.tiles[idx].surface.is_empty() || !state.tiles[idx].overhead.is_empty()
+            {
+                state.money -= cost;
+                let tile = &mut state.tiles[idx];
+                tile.clear_stratum(Stratum::Surface);
+                tile.clear_stratum(Stratum::Overhead);
+                // FLAG_POWERED / FLAG_WATERED are recomputed by the utility
+                // passes; ABANDONED describes a lot that no longer exists.
+                tile.set_flag(FLAG_ABANDONED, false);
+                state.tile_revision += 1;
+                CommandResult::ok()
+            } else {
+                CommandResult::fail("Nothing to demolish here")
+            }
+        }
+        ViewStratum::Underground => {
+            if state.tiles[idx].underground.is_empty() {
+                CommandResult::fail("Nothing to demolish here")
+            } else {
+                state.money -= cost;
+                state.tiles[idx].clear_stratum(Stratum::Underground);
+                CommandResult::ok()
+            }
+        }
     }
-    CommandResult::ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -697,8 +729,28 @@ mod tests {
     #[test]
     fn water_pipe_sets_underground() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Underground);
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Pipe));
+    }
+
+    /// **`#198`'s engine-side belt-and-suspenders.** The client-side click
+    /// guard (`#197`) already keeps this unreachable from the ordinary UI —
+    /// selecting `Tool::WaterPipe` switches the view to Underground, and a
+    /// manual toggle away refuses the click before it's ever sent — but
+    /// `mcpBridge.ts`/the MCP server have no view state and default `stratum`
+    /// to `Surface`, so the engine needs its own refusal too.
+    #[test]
+    fn water_pipe_refuses_from_the_surface_view() {
+        let mut s = gs(4, 4);
+        let before = s.money;
+        let r = apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
+        assert!(!r.success);
+        assert_eq!(
+            r.message.as_deref(),
+            Some("Water pipes must be laid from the Underground view.")
+        );
+        assert!(!s.tile_at(1, 1).unwrap().has_occupant(Occupant::Pipe));
+        assert_eq!(s.money, before, "a refused pipe must not charge");
     }
 
     #[test]
@@ -816,12 +868,15 @@ mod tests {
     /// A *builder* plus a bulldozer still regrades, for 6; that is
     /// `building_over_water_and_razing_it_is_the_cheapest_regrade`. What this
     /// test pins is narrower and is the thing step 4 changed: the bulldozer
-    /// alone, on open water, no longer moves the ground at all.
+    /// alone, on open water, no longer moves the ground at all. Since `#198`
+    /// the click does not even succeed — open water carries nothing in any
+    /// stratum, so it is a free no-op — but the point step 4 made still
+    /// holds either way: terrain is not the bulldozer's to touch.
     #[test]
     fn bulldozing_open_water_is_not_a_cheap_regrade() {
         let mut s = gs(4, 4);
         assert!(apply_tool(&mut s, Tool::Water, 1, 1, ViewStratum::Surface).success);
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
+        assert!(!apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
         assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
 
         // …and the brush that *is* priced for it still works.
@@ -892,7 +947,7 @@ mod tests {
         // does regrade costs more than a road.
         let mut pipe = gs(4, 4);
         assert!(apply_tool(&mut pipe, Tool::Water, 1, 1, ViewStratum::Surface).success);
-        assert!(apply_tool(&mut pipe, Tool::WaterPipe, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut pipe, Tool::WaterPipe, 1, 1, ViewStratum::Underground).success);
         assert_eq!(
             pipe.tile_at(1, 1).unwrap().terrain(),
             Terrain::Water,
@@ -933,7 +988,7 @@ mod tests {
         );
 
         // Underground: a main, then a lake painted over it.
-        assert!(apply_tool(&mut s, Tool::WaterPipe, 3, 3, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::WaterPipe, 3, 3, ViewStratum::Underground).success);
         assert!(apply_tool(&mut s, Tool::Water, 3, 3, ViewStratum::Surface).success);
         let t = s.tile_at(3, 3).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
@@ -942,15 +997,17 @@ mod tests {
             "the water brush dug the main up"
         );
 
-        // And the bulldozer reads correctly on both: what stands goes, the
-        // water stays. The pipe takes its own click, because underground is
-        // only editable from the underground view.
+        // And the bulldozer reads correctly on both, each from its own
+        // stratum: what stands goes, the water stays. The line is overhead,
+        // so a `Surface` bulldoze reaches it; the pipe takes its own click
+        // from `Underground` (`#198`) — a `Surface` bulldoze on (3,3) would
+        // find nothing in surface/overhead and refuse.
         assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2, ViewStratum::Surface).success);
         let t = s.tile_at(2, 2).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert_eq!(t.occupants(), 0);
 
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 3, 3, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 3, 3, ViewStratum::Underground).success);
         let t = s.tile_at(3, 3).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert_eq!(t.occupants(), 0);
@@ -1093,13 +1150,80 @@ mod tests {
         }
     }
 
+    /// **`#198`, the whole point of the fix.** Before this, `bulldoze` applied
+    /// a fixed precedence — building, then underground, then surface+overhead
+    /// — with no idea which layer the player was looking at, so a surface
+    /// click on a road with a buried pipe under it took the invisible pipe
+    /// first and left the road standing, one credit and a second click later.
     #[test]
-    fn bulldoze_removes_underground_pipe() {
+    fn bulldoze_clears_only_the_stratum_it_was_asked_for() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterPipe, 0, 0, ViewStratum::Surface);
-        assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
-        apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface);
+        assert!(apply_tool(&mut s, Tool::Road, 0, 0, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::WaterPipe, 0, 0, ViewStratum::Underground).success);
+        let t = s.tile_at(0, 0).unwrap();
+        assert!(t.has_occupant(Occupant::Road));
+        assert!(t.has_occupant(Occupant::Pipe));
+
+        // A surface click takes the road the player was aiming at and
+        // nothing else — the pipe the old precedence would have destroyed
+        // invisibly is still there afterwards.
+        let before = s.money;
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface).success);
+        let t = s.tile_at(0, 0).unwrap();
+        assert!(
+            !t.has_occupant(Occupant::Road),
+            "the surface click left the road standing"
+        );
+        assert!(
+            t.has_occupant(Occupant::Pipe),
+            "a surface bulldoze reached into underground"
+        );
+        assert_eq!(s.money, before - tool_cost(Tool::Bulldoze));
+
+        // An underground click on the same tile takes the pipe.
+        let before = s.money;
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Underground).success);
         assert!(!s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
+        assert_eq!(s.money, before - tool_cost(Tool::Bulldoze));
+
+        // And with nothing left in either stratum, a third click of either
+        // kind is a free no-op, not a charge for clearing nothing.
+        let before = s.money;
+        let r = apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Underground);
+        assert!(!r.success);
+        assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
+        assert_eq!(s.money, before, "an empty-stratum bulldoze must not charge");
+    }
+
+    /// Symmetric to the surface case above: an underground click on a tile
+    /// with an empty underground stratum must not fall through and reach the
+    /// surface it isn't looking at.
+    #[test]
+    fn underground_bulldoze_never_reaches_the_surface() {
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::Road, 0, 0, ViewStratum::Surface).success);
+        let before = s.money;
+        let r = apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Underground);
+        assert!(!r.success);
+        assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
+        assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Road));
+        assert_eq!(s.money, before);
+    }
+
+    /// A bare tile — nothing in any stratum — is a free no-op regardless of
+    /// which view the click came from, fixing the pre-`#198` behaviour where
+    /// razing bare land cost a credit for nothing (the deduction ran before
+    /// the branch that discovered there was nothing to clear).
+    #[test]
+    fn bulldozing_bare_land_charges_nothing() {
+        for stratum in [ViewStratum::Surface, ViewStratum::Underground] {
+            let mut s = gs(4, 4);
+            let before = s.money;
+            let r = apply_tool(&mut s, Tool::Bulldoze, 0, 0, stratum);
+            assert!(!r.success, "{stratum:?}: bare land must refuse");
+            assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
+            assert_eq!(s.money, before, "{stratum:?}: bare land must not charge");
+        }
     }
 
     #[test]
@@ -1327,7 +1451,7 @@ mod tests {
         ] {
             let mut s = gs(4, 4);
             apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
-            apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
+            apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Underground);
             apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface);
 
             let t = s.tile_at(1, 1).unwrap();

@@ -289,7 +289,13 @@ mod tests {
         );
         apply_tool(&mut sim.state, Tool::HydroPlant, 5, 5, ViewStratum::Surface);
         apply_tool(&mut sim.state, Tool::WaterPump, 0, 5, ViewStratum::Surface);
-        apply_tool(&mut sim.state, Tool::WaterPipe, 2, 5, ViewStratum::Surface);
+        apply_tool(
+            &mut sim.state,
+            Tool::WaterPipe,
+            2,
+            5,
+            ViewStratum::Underground,
+        );
         for _ in 0..60 {
             sim.step(1.0 / 20.0);
         }

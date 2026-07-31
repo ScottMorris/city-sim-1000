@@ -292,7 +292,8 @@ Bulldoze
 #### Bulldoze
 
 * Clears what stands on the tile and leaves the terrain as the land or water it was. Bulldozing a lake does not fill it in.
-* One click removes one layer, in this order: a building if there is one; otherwise anything buried (pipes); otherwise everything at and above ground level — roads, rail, zone tags, power lines and trees together. So razing a developed lot leaves the zoning behind for it to regrow on, and a hydro line over that lot survives the same click; a second click clears them.
+* Layer-scoped (`#198`): a click clears only the stratum the player is looking at, and never reaches across the boundary into the other one. From the Surface view it clears a building if there is one, otherwise everything at and above ground level together — roads, rail, zone tags, power lines and trees — but never a buried pipe. From the Underground view it clears the underground stratum only, never the building/surface/overhead. So razing a developed lot leaves the zoning behind for it to regrow on, and a hydro line over that lot survives the same click; a pipe buried under a road needs its own click from the Underground view, and a surface click over that same road leaves the pipe untouched.
+* A click that finds nothing in the targeted stratum is refused ("Nothing to demolish here") and charges nothing — razing bare land, or the empty half of a tile carrying something in the other stratum, is a free no-op.
 * The terrain brushes — Raise, Lower and Water paint — are the tools *for* changing what the ground is, priced at 10, 10 and 12 against Bulldoze's 1. They are not the only way to change it: every building tool fills water in as it builds over the tile, so Road (5) then Bulldoze (1) drains a water tile for 6.
 * Does not modify height
 
@@ -310,7 +311,7 @@ Bulldoze
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
 * Water Tower: 2×2 footprint that boosts city water reserves, requires power and a network connection
-* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing (client-side only; `Tool::WaterPipe` itself has no engine-side guard yet).
+* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing. Enforced engine-side too (`#198`): `Tool::WaterPipe` refuses with "Water pipes must be laid from the Underground view." unless the command's `stratum` is `Underground`, so a client with no view state (`mcpBridge.ts`/the MCP server) can't lay a pipe from the surface either.
 * Power lines: graph-based connectivity
 
 #### Sound Effects

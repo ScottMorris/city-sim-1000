@@ -567,8 +567,17 @@ mod tests {
     /// here.
     fn build_row(state: &mut GameState, tools: &[Tool], y: u32, len: u32) {
         for tool in tools {
+            // `WaterPipe` refuses everywhere but the Underground stratum
+            // (see `commands::apply_tool`'s `Tool::WaterPipe` arm) — every
+            // other tool here is stratum-blind, so `Surface` is the ordinary
+            // choice for them.
+            let stratum = if *tool == Tool::WaterPipe {
+                ViewStratum::Underground
+            } else {
+                ViewStratum::Surface
+            };
             for x in 0..len {
-                let r = apply_tool(state, *tool, x, y, ViewStratum::Surface);
+                let r = apply_tool(state, *tool, x, y, stratum);
                 assert!(r.success, "{tool:?} at ({x}, {y}) failed: {:?}", r.message);
             }
         }
@@ -649,7 +658,9 @@ mod tests {
     /// lake bought three points of wilderness.
     ///
     /// Now the bulldozer moves neither term, because it no longer touches
-    /// terrain. The lake is still there after the click.
+    /// terrain. The lake is still there after the click — and since `#198`,
+    /// open water carries nothing in any stratum, so the click is a free
+    /// no-op rather than a charge for clearing nothing.
     ///
     /// **What that did not do is close the exploit — it made it 6× dearer.**
     /// `regrade_at` still writes `Terrain::Land`, and every building tool calls
@@ -684,11 +695,17 @@ mod tests {
         let (before_score, before_buildable) = (score(&s), buildable(&s));
         assert_eq!(before_buildable, 240, "the lake is 16 of the 256 tiles");
 
+        let money_before_clicks = s.money;
         for y in 12..16 {
             for x in 0..4 {
-                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y, ViewStratum::Surface).success);
+                let r = apply_tool(&mut s, Tool::Bulldoze, x, y, ViewStratum::Surface);
+                assert!(!r.success, "open water at ({x}, {y}) has nothing to clear");
             }
         }
+        assert_eq!(
+            s.money, money_before_clicks,
+            "16 refused clicks on open water must not have charged a credit each"
+        );
 
         assert_eq!(
             buildable(&s),

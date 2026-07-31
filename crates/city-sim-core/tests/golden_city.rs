@@ -85,9 +85,19 @@ const TICK_DT: f64 = 1.0 / 20.0;
 #[derive(Debug, Clone, Copy)]
 enum Step {
     /// Apply a tool. Must succeed.
-    Apply { tool: Tool, x: u32, y: u32 },
+    Apply {
+        tool: Tool,
+        x: u32,
+        y: u32,
+        stratum: ViewStratum,
+    },
     /// Apply a tool that must be refused; the message goes in the dump.
-    Refuse { tool: Tool, x: u32, y: u32 },
+    Refuse {
+        tool: Tool,
+        x: u32,
+        y: u32,
+        stratum: ViewStratum,
+    },
     /// Advance the simulation by this many fixed ticks.
     Tick(u32),
 }
@@ -162,6 +172,22 @@ fn parse_script(src: &str) -> Script {
                 })
         };
 
+        // Every `Apply`/`Refuse` directive takes an optional trailing stratum
+        // token — `surface` (the default, so every pre-existing line in this
+        // file needs no edit) or `underground`. Only `Tool::Bulldoze` and
+        // `Tool::WaterPipe` currently read it, but it is a field of the
+        // directive itself, same as the wire command it stands in for.
+        let stratum = |i: usize| -> ViewStratum {
+            match fields.get(i) {
+                None => ViewStratum::Surface,
+                Some(s) if s.eq_ignore_ascii_case("surface") => ViewStratum::Surface,
+                Some(s) if s.eq_ignore_ascii_case("underground") => ViewStratum::Underground,
+                Some(s) => panic!(
+                    "golden_city.script:{line_no}: `{s}` is not a stratum (surface|underground)"
+                ),
+            }
+        };
+
         match fields[0].to_ascii_lowercase().as_str() {
             "grid" => {
                 assert!(
@@ -189,6 +215,7 @@ fn parse_script(src: &str) -> Script {
                         tool,
                         x: num(2),
                         y: num(3),
+                        stratum: stratum(4),
                     },
                 ));
             }
@@ -204,6 +231,7 @@ fn parse_script(src: &str) -> Script {
                         tool,
                         x: num(1),
                         y: num(2),
+                        stratum: stratum(3),
                     },
                 ));
             }
@@ -235,8 +263,13 @@ fn replay(script: &Script) -> Replay {
 
     for &(line_no, step) in &script.steps {
         match step {
-            Step::Apply { tool, x, y } => {
-                let r = apply_tool(&mut sim.state, tool, x, y, ViewStratum::Surface);
+            Step::Apply {
+                tool,
+                x,
+                y,
+                stratum,
+            } => {
+                let r = apply_tool(&mut sim.state, tool, x, y, stratum);
                 assert!(
                     r.success,
                     "golden_city.script:{line_no}: `{tool:?} {x} {y}` was refused — {}\n\
@@ -245,15 +278,28 @@ fn replay(script: &Script) -> Replay {
                     r.message.as_deref().unwrap_or("(no message)")
                 );
             }
-            Step::Refuse { tool, x, y } => {
-                let r = apply_tool(&mut sim.state, tool, x, y, ViewStratum::Surface);
+            Step::Refuse {
+                tool,
+                x,
+                y,
+                stratum,
+            } => {
+                let r = apply_tool(&mut sim.state, tool, x, y, stratum);
                 assert!(
                     !r.success,
                     "golden_city.script:{line_no}: `refuse {tool:?} {x} {y}` was ACCEPTED.\n\
                      A placement guard has gone. That is a finding, not a stale expectation."
                 );
+                // Only note the stratum when it's not the (overwhelmingly
+                // common) Surface default, so this line's shape — and every
+                // pre-existing entry in the committed dump — stays unchanged
+                // for directives that don't care about layers.
+                let stratum_note = match stratum {
+                    ViewStratum::Surface => String::new(),
+                    ViewStratum::Underground => " (underground)".to_string(),
+                };
                 refusals.push(format!(
-                    "{tool:?} {x} {y} -> {}",
+                    "{tool:?} {x} {y}{stratum_note} -> {}",
                     r.message.as_deref().unwrap_or("(no message)")
                 ));
             }
@@ -601,7 +647,7 @@ fn the_golden_city_is_deterministic() {
 fn tool_history(script: &Script) -> BTreeMap<(u32, u32), Vec<Tool>> {
     let mut history: BTreeMap<(u32, u32), Vec<Tool>> = BTreeMap::new();
     for &(_, step) in &script.steps {
-        if let Step::Apply { tool, x, y } = step {
+        if let Step::Apply { tool, x, y, .. } = step {
             history.entry((x, y)).or_default().push(tool);
         }
     }
@@ -663,7 +709,7 @@ fn a_footprint_cleared_off_origin(script: &Script) -> Option<((u32, u32), (u32, 
     // Live rects, most recently stamped last: `(origin, (width, height))`.
     let mut live: Vec<((u32, u32), (u32, u32))> = Vec::new();
     for &(_, step) in &script.steps {
-        let Step::Apply { tool, x, y } = step else {
+        let Step::Apply { tool, x, y, .. } = step else {
             continue;
         };
         if let Some(&(_, footprint)) = footprints.iter().find(|(t, _)| *t == tool) {
@@ -712,10 +758,19 @@ fn the_golden_city_still_covers_every_awkward_state() {
         ("a pipe buried under a road", &[Road, WaterPipe]),
         ("water brushed over a buried pipe", &[WaterPipe, Water]),
         ("a 1×1 structure razed (the v4 ghost)", &[Park, Bulldoze]),
-        ("a bulldozed lake", &[Water, Bulldoze]),
         (
             "a lake paved and the pavement razed",
             &[Water, Road, Bulldoze],
+        ),
+        // #198: a surface bulldoze takes the road and leaves the pipe, then
+        // an underground bulldoze on the same tile takes the pipe. (The
+        // bulldozed-lake case above moved from this list to the refusals
+        // check below — since #198, bulldozing bare open water is refused,
+        // not a successful Apply, so it can no longer appear in a tool
+        // history built from `Step::Apply` alone.)
+        (
+            "#198: a surface bulldoze leaves a buried pipe, an underground one takes it",
+            &[Road, WaterPipe, Bulldoze, Bulldoze],
         ),
     ];
     for (what, run) in orders {
@@ -728,6 +783,28 @@ fn the_golden_city_still_covers_every_awkward_state() {
 
     // --- structural cases, asked of the replayed city ---------------------
     let r = replay(&script);
+
+    // A bulldozed lake is still a lake (`#177` step 4) — and since `#198`
+    // open water carries nothing in any stratum, the click is refused rather
+    // than silently doing nothing. `tool_history` only sees `Step::Apply`, so
+    // this one has to be asked of the refusals instead of `orders` above.
+    assert!(
+        r.refusals
+            .iter()
+            .any(|line| line.starts_with("Bulldoze 1 9 ->")),
+        "golden_city.script no longer refuses a bulldoze on bare open water — \
+         restore `refuse Bulldoze 1 9`."
+    );
+    // #198: with nothing left in either stratum, a third click on the (20,13)
+    // scenario tile is refused too, charging nothing.
+    assert!(
+        r.refusals
+            .iter()
+            .any(|line| line.starts_with("Bulldoze 20 13 (underground) ->")),
+        "golden_city.script no longer refuses the empty-stratum bulldoze at \
+         the end of the #198 scenario — restore `refuse Bulldoze 20 13 underground`."
+    );
+
     let s = &r.sim.state;
     let lookup = StructureLookup::new(s);
 
