@@ -8,7 +8,7 @@
     "build":                 "cd app && bun run build",
     "preview":               "cd app && bun run preview",
     "lint":                  "cd app && bun run lint",
-    "test":                  "cd app && bun run test",
+    "test":                  "cd app && bun run test && cd ../scripts/city-sim-mcp && bun run test",
     "test:ci":               "cd app && bun run test:ci",
     "test:e2e":              "cd app && bun run test:e2e",
     "test:visual":           "cd app && bun run test:visual",
