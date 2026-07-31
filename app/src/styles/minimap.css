@@ -39,6 +39,24 @@
   color: var(--text-dim);
 }
 
+/* The edit-stratum toggle is a different axis from the overlay chips below
+   (see docs/features/view-layers.md) — its own row keeps it from reading as
+   a seventh overlay choice. */
+.minimap-stratum-row {
+  display: flex;
+  width: 100%;
+}
+
+.minimap-stratum-row .chip-button {
+  width: 100%;
+  min-width: 0;
+}
+
+.minimap-stratum-button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .minimap-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

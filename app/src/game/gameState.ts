@@ -64,14 +64,28 @@ export interface Tile {
   density: ZoneDensity;
 }
 
-export type MinimapMode = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'wilderness' | 'underground';
+/**
+ * Read-only diagnostic filters painted over the world — never gate what
+ * tools may touch. `ViewStratum` (below) is the orthogonal axis that does.
+ */
+export type MinimapOverlay = 'base' | 'power' | 'water' | 'alerts' | 'education' | 'wilderness';
+
+/** Single validated list — `clientState.ts`'s sanitiser and `minimap.ts`'s chip set both read this so they can't drift apart again. */
+export const MINIMAP_OVERLAYS: MinimapOverlay[] = ['base', 'power', 'water', 'alerts', 'education', 'wilderness'];
+
+/**
+ * What the player's tools may touch — orthogonal to `MinimapOverlay`. Owned
+ * by `main.ts` alongside the active tool, not persisted with `ClientState`;
+ * a session always starts at `surface`. See `docs/features/view-layers.md`.
+ */
+export type ViewStratum = 'surface' | 'underground';
 
 export type MinimapSize = 'small' | 'medium';
 
 export interface MinimapSettings {
   open: boolean;
   size: MinimapSize;
-  mode: MinimapMode;
+  overlay: MinimapOverlay;
 }
 
 export type PanSpeedPreset = 'slow' | 'normal' | 'fast';
@@ -237,7 +251,7 @@ export interface GameState {
 }
 
 export function createDefaultMinimapSettings(): MinimapSettings {
-  return { open: true, size: 'medium', mode: 'base' };
+  return { open: true, size: 'medium', overlay: 'base' };
 }
 
 export function createDefaultInputSettings(): InputSettings {

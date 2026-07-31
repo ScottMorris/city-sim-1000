@@ -16,6 +16,7 @@ import {
   createDefaultMinimapSettings,
   createDefaultNarrativeSettings,
   createDefaultUiSettings,
+  MINIMAP_OVERLAYS,
   type GameSettings,
   type GameState
 } from './gameState';
@@ -35,12 +36,16 @@ export interface ClientState {
  */
 export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSettings {
   const minimapDefaults = createDefaultMinimapSettings();
+  // A save's `minimap` may still carry an old `mode: 'underground'` key from
+  // before the stratum/overlay split — it has no `overlay` field of its own,
+  // so the default above wins and the old edit-stratum value is dropped
+  // rather than migrated (stratum was never meant to persist anyway).
   const minimapSettings = {
     ...minimapDefaults,
     ...(settings?.minimap ?? {})
   };
-  if (!['base', 'power', 'water', 'alerts', 'education', 'underground'].includes(minimapSettings.mode)) {
-    minimapSettings.mode = 'base';
+  if (!MINIMAP_OVERLAYS.includes(minimapSettings.overlay)) {
+    minimapSettings.overlay = 'base';
   }
   const inputDefaults = createDefaultInputSettings();
   const accessibilityDefaults = createDefaultAccessibilitySettings();

@@ -5,7 +5,7 @@
 
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Camera } from './camera';
-import { GameState, MinimapMode, TileKind, getTile } from '../game/gameState';
+import { GameState, MinimapOverlay, TileKind, ViewStratum, getTile } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
 import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate, getToolCost } from '../game/buildings/templates';
@@ -136,7 +136,8 @@ export class MapRenderer {
     state: GameState,
     hovered: Position | null,
     selected: Position | null,
-    overlayMode: MinimapMode = 'base',
+    stratum: ViewStratum = 'surface',
+    overlay: MinimapOverlay = 'base',
     pointerActive = false,
     activeTool: Tool = Tool.Inspect
   ) {
@@ -151,7 +152,7 @@ export class MapRenderer {
     for (const building of state.buildings) {
       buildingStatuses.set(building.id, building.state.status);
     }
-    const isUnderground = overlayMode === 'underground';
+    const isUnderground = stratum === 'underground';
     const surfaceAlpha = isUnderground ? 0.25 : 1.0;
 
     for (let y = 0; y < state.height; y++) {
@@ -271,7 +272,7 @@ export class MapRenderer {
     this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
-    this.drawOverlayTints(state, size, overlayMode, buildingStatuses, buildingLookup);
+    this.drawOverlayTints(state, size, overlay, buildingStatuses, buildingLookup);
     const educationPreview = this.pickEducationPreview(state, hovered, selected, activeTool, buildingLookup);
     if (educationPreview) {
       this.drawEducationPreview(
@@ -383,11 +384,11 @@ export class MapRenderer {
   private drawOverlayTints(
     state: GameState,
     size: number,
-    overlayMode: MinimapMode,
+    overlay: MinimapOverlay,
     buildingStatuses: Map<number, BuildingStatus>,
     buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ) {
-    if (overlayMode === 'base') return;
+    if (overlay === 'base') return;
 
     const templateKindOf = (tile: NonNullable<ReturnType<typeof getTile>>) =>
       tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
@@ -395,7 +396,7 @@ export class MapRenderer {
     const pickTint = (tile: ReturnType<typeof getTile>) => {
       if (!tile) return null;
 
-      if (overlayMode === 'power') {
+      if (overlay === 'power') {
         if (tile.powerPlantType) return { color: 0x81e8ff, alpha: 0.35 };
         if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
           return { color: tile.powered ? 0x7bf0ff : 0xff99c2, alpha: 0.35 };
@@ -406,7 +407,7 @@ export class MapRenderer {
         return null;
       }
 
-      if (overlayMode === 'water' || overlayMode === 'underground') {
+      if (overlay === 'water') {
         if (tile.terrain === Terrain.Water) return { color: 0x2f7be5, alpha: 0.32 };
         if (hasOccupant(tile.underground, Occupant.Pipe)) {
           return { color: tile.watered ? WATER_OVERLAY_COLOUR : 0x888888, alpha: 0.6 };
@@ -421,7 +422,7 @@ export class MapRenderer {
         return null;
       }
 
-      if (overlayMode === 'alerts') {
+      if (overlay === 'alerts') {
         const zone = isZone(tile);
         const buildingStatus = tile.buildingId !== undefined ? buildingStatuses.get(tile.buildingId) : undefined;
         let severity = 0;
@@ -440,7 +441,7 @@ export class MapRenderer {
         return { color: 0xff7b7b, alpha: 0.33 };
       }
 
-      if (overlayMode === 'wilderness') {
+      if (overlay === 'wilderness') {
         if (tile.terrain === Terrain.Water) return null;
         // 0–1 with 0.5 neutral (see tileBuffer decodeEco); tint strength
         // scales with distance from neutral — lush green up, urban grey down.
@@ -450,7 +451,7 @@ export class MapRenderer {
         return null;
       }
 
-      if (overlayMode === 'education') {
+      if (overlay === 'education') {
         const templateKind = templateKindOf(tile);
         if (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) {
           return { color: 0x8f7bff, alpha: 0.4 };
