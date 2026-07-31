@@ -272,7 +272,7 @@ export class MapRenderer {
     this.gridDrawer.draw(state, size, multiTileCoverage, this.camera);
 
     this.overlayLayer.clear();
-    this.drawOverlayTints(state, size, overlay, buildingStatuses, buildingLookup);
+    this.drawOverlayTints(state, size, overlay, stratum, buildingStatuses, buildingLookup);
     const educationPreview = this.pickEducationPreview(state, hovered, selected, activeTool, buildingLookup);
     if (educationPreview) {
       this.drawEducationPreview(
@@ -385,10 +385,17 @@ export class MapRenderer {
     state: GameState,
     size: number,
     overlay: MinimapOverlay,
+    stratum: ViewStratum,
     buildingStatuses: Map<number, BuildingStatus>,
     buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ) {
-    if (overlay === 'base') return;
+    // `overlay === 'base'` still has a tint while underground: the
+    // watered/dry pipe distinction below, restoring what the old combined
+    // `overlayMode === 'underground'` used to draw unconditionally. Overlays
+    // otherwise take priority over it — they're meaningful in either
+    // stratum (see docs/features/view-layers.md) — so this only kicks in
+    // once none of the explicit overlay branches below have already matched.
+    if (overlay === 'base' && stratum !== 'underground') return;
 
     const templateKindOf = (tile: NonNullable<ReturnType<typeof getTile>>) =>
       tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
@@ -467,6 +474,19 @@ export class MapRenderer {
         return null;
       }
 
+      // `overlay === 'base'` beyond this point — only reached while
+      // underground (guarded above): the same watered/dry pipe tint the
+      // `'water'` overlay draws, so the distinction is visible by default
+      // without an extra overlay pick.
+      if (tile.terrain === Terrain.Water) return { color: 0x2f7be5, alpha: 0.32 };
+      if (hasOccupant(tile.underground, Occupant.Pipe)) {
+        return { color: tile.watered ? WATER_OVERLAY_COLOUR : 0x888888, alpha: 0.6 };
+      }
+      const templateKind = templateKindOf(tile);
+      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
+        return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
+      }
+      if (tile.watered) return { color: WATER_OVERLAY_COLOUR, alpha: 0.2 };
       return null;
     };
 
