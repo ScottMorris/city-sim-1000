@@ -5,7 +5,7 @@
 
 import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate } from '../game/buildings/templates';
-import { GameState, getTile } from '../game/gameState';
+import { GameState, getTile, ViewStratum } from '../game/gameState';
 import { dominantOccupantLabel } from '../game/protocol/tileLabel';
 import { Position } from '../rendering/renderer';
 import { Tool } from '../game/toolTypes';
@@ -27,6 +27,7 @@ export interface HudElements {
   dayEl: HTMLElement;
   wildernessEl: HTMLElement;
   wildernessChip: HTMLElement;
+  stratumBadge: HTMLElement;
   overlayRoot: HTMLElement;
 }
 
@@ -99,7 +100,13 @@ export function createHud(elements: HudElements) {
     }
   };
 
-  const update = (state: GameState) => {
+  const update = (state: GameState, stratum: ViewStratum) => {
+    // A loud, always-on badge — not tucked inside the (pinnable/hideable)
+    // tool-info card — since the active stratum determines what the
+    // bulldozer destroys. Timberborn's players demolishing the wrong layer
+    // while a view mode was active, with no on-screen warning, is the
+    // cautionary tale (see docs/features/view-layers.md).
+    elements.stratumBadge.classList.toggle('stratum-badge-hidden', stratum !== 'underground');
     elements.moneyEl.textContent = `$${Math.floor(state.money).toLocaleString()}`;
     const net = state.budget?.netPerMonth ?? 0;
     const netClass = net > 0 ? 'positive' : net < 0 ? 'negative' : 'neutral';
@@ -182,11 +189,7 @@ export function createHud(elements: HudElements) {
                 ${rowsHtml}
               </div>
               ${hintsHtml}
-              ${
-                details.unavailable
-                  ? `<div class="tool-hints warning">Coming soon: pipes and underground view.</div>`
-                  : '<div class="tool-hints subtle">Press Esc to cancel the active tool.</div>'
-              }
+              <div class="tool-hints subtle">Press Esc to cancel the active tool.</div>
             </div>
           `;
         })()
@@ -304,9 +307,7 @@ export function createHud(elements: HudElements) {
       overlayContainer?.appendChild(infoBox);
     }
 
-    const unavailableClass =
-      showToolInfo && getToolDetails(activeTool).unavailable ? ' muted' : '';
-    infoBox.className = `info-box${unavailableClass}`;
+    infoBox.className = 'info-box';
     infoBox.innerHTML = `
       ${toolSection}
       ${toolSection && tileSection ? '<div class="divider"></div>' : ''}

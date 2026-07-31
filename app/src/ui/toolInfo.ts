@@ -16,7 +16,6 @@ export interface ToolDetails {
   hotkey?: string;
   rows: { label: string; value: string }[];
   hints: string[];
-  unavailable?: boolean;
 }
 
 export const toolLabels: Record<Tool, string> = {

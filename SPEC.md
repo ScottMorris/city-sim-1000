@@ -149,7 +149,7 @@ Tiles include:
 * Toolbar hosts a radio widget at the trailing end of its primary row (Budget/Bylaws/Settings live in the status ribbon instead) with emoji controls (⏮️/▶️/⏸️/⏭️), a compact marquee for artist/title, and a hover/focus popover showing larger cover art plus details. If the playlist at `/public/audio/radio/playlist.json` is missing or empty, it shows “Radio offline”; audio prefers Opus with optional fallbacks listed in `fallbackSrc` and covers in `/public/audio/radio/covers/`.
 * Buttons in sub-rows carry explicit labels/tooltips for clarity.
 * Tile inspector lives in the bottom-left; the neighbouring tool info card shows cost/upkeep/output for the active tool with a pin toggle. The inspector only appears while the Inspect tool is active.
-* Minimap sits in the bottom-right HUD corner with click-to-jump navigation, a visible viewport rectangle, and a toggle/hotkey (`M`) to collapse or expand it. Base mode renders terrain, zones, roads, rail, power lines, and buildings; overlay modes for power/water/alerts/education tint both the minimap and main view. Use an offscreen canvas for redraws, throttle updates, and coarsen sampling on very large maps to protect performance.
+* Minimap sits in the bottom-right HUD corner with click-to-jump navigation, a visible viewport rectangle, and a toggle/hotkey (`M`) to collapse or expand it. Two orthogonal axes, each its own control: a **View** toggle (`ViewStratum`: Surface/Underground, hotkey `G`) that determines what tools may touch — Surface edits surface + overhead, Underground edits the underground stratum and dims the surface — and read-only **overlay** chips (`MinimapOverlay`: base/power/water/alerts/education/wilderness) that tint both the minimap and main view without gating tools. Selecting a tool with a home stratum (e.g. Pipes) switches the View for you; a tool already armed is refused with a hint if the View is manually toggled away from what it needs, rather than silently applying to the wrong layer. A loud HUD badge marks the active View whenever it's Underground. Use an offscreen canvas for redraws, throttle updates, and coarsen sampling on very large maps to protect performance. See `docs/features/view-layers.md`.
 * Budget panel shows cash, a colour-coded monthly net projection, and a calendar month/day readout (30-day months) so per-month numbers have visible context. A Budget modal (HUD button) surfaces quarterly totals (last 3 months), per-month net, runway at current burn, revenue/expense breakdowns, and an optional narrative Insights panel. Revenue shows base stipend + residents/commercial/industrial; expenses split transport (roads/rail/lines/pipes) and buildings (power, civic, zones) with details.
 * A news ticker bar sits beneath the top HUD, cycling short, grounded updates at month end and surfacing immediate utility alerts that persist until resolved. It can be disabled independently in Settings.
 
@@ -310,7 +310,7 @@ Bulldoze
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
 * Water Tower: 2×2 footprint that boosts city water reserves, requires power and a network connection
-* Water Pipe: Connects water network underground. Requires Underground View.
+* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing (client-side only; `Tool::WaterPipe` itself has no engine-side guard yet).
 * Power lines: graph-based connectivity
 
 #### Sound Effects

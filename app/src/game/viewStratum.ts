@@ -19,3 +19,18 @@ export function resolveStratumForTool(tool: Tool, currentStratum: ViewStratum): 
   if (tool === Tool.Bulldoze) return currentStratum;
   return 'surface';
 }
+
+/**
+ * Which stratum must be active for a click with `tool` armed to be honoured
+ * — `null` for tools that place nothing on a fixed layer (`Inspect`,
+ * `Bulldoze`, both stratum-neutral). Selecting a tool always leaves the view
+ * matching its requirement (`resolveStratumForTool`), so this only matters
+ * when the player manually toggles the view away afterwards without
+ * reselecting the tool — the click-guard in `main.ts`'s `applyCurrentTool`
+ * refuses the click instead of silently applying it to the wrong layer.
+ */
+export function requiredStratumForTool(tool: Tool): ViewStratum | null {
+  if (tool === Tool.WaterPipe) return 'underground';
+  if (tool === Tool.Bulldoze || tool === Tool.Inspect) return null;
+  return 'surface';
+}
