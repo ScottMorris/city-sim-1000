@@ -31,10 +31,6 @@
   border-radius: 8px;
 }
 
-.info-box.muted {
-  opacity: 0.65;
-}
-
 .info-header {
   display: flex;
   justify-content: space-between;

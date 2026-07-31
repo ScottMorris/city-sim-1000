@@ -20,7 +20,8 @@ import {
   ViewStratum
 } from './game/gameState';
 import { Tool } from './game/toolTypes';
-import { resolveStratumForTool } from './game/viewStratum';
+import { requiredStratumForTool, resolveStratumForTool } from './game/viewStratum';
+import { toolLabels } from './ui/toolInfo';
 import { WasmSimBridge } from './game/wasmSimBridge';
 import { TauriSimBridge } from './game/tauriSimBridge';
 import type { SimBridge } from './game/simBridge';
@@ -145,7 +146,9 @@ appRoot.innerHTML = `
   </div>
   <div id="viewport">
     <div class="toolbar" id="toolbar"></div>
-    <div class="canvas-wrapper" id="canvas-wrapper"></div>
+    <div class="canvas-wrapper" id="canvas-wrapper">
+      <div class="stratum-badge stratum-badge-hidden" id="stratum-badge" role="status">⬇ Underground View — bulldoze and pipes apply here</div>
+    </div>
   </div>
   <footer>
     <span class="footer-copy">Offline ready • WebGL powered • Inspired by pixel skylines</span>
@@ -177,6 +180,7 @@ const popEl = requireElement<HTMLDivElement>('#population');
 const jobsEl = requireElement<HTMLDivElement>('#jobs');
 const wildernessEl = requireElement<HTMLSpanElement>('#wilderness');
 const wildernessChip = requireElement<HTMLButtonElement>('#wilderness-chip');
+const stratumBadge = requireElement<HTMLDivElement>('#stratum-badge');
 const monthEl = requireElement<HTMLDivElement>('#month');
 const dayEl = requireElement<HTMLDivElement>('#day');
 const speedSlowBtn = requireElement<HTMLButtonElement>('#speed-slow');
@@ -753,6 +757,20 @@ function applyCurrentTool(tilePos: Position) {
     }
     return;
   }
+  // Selecting a tool already leaves the view matching its requirement
+  // (setTool → resolveStratumForTool), so this only ever fires when the
+  // player manually toggles the view away afterwards without reselecting
+  // the tool — refuse the click instead of silently applying it to the
+  // wrong layer (see docs/features/view-layers.md).
+  const requiredStratum = requiredStratumForTool(activeTool);
+  if (requiredStratum && requiredStratum !== viewStratum) {
+    const label = requiredStratum === 'underground' ? 'Underground' : 'Surface';
+    showToast(`${toolLabels[activeTool]} needs the ${label} view — press G or the minimap's view toggle to switch.`, {
+      severity: 'warning',
+      id: 'stratum-guard'
+    });
+    return;
+  }
   // Both bridges answer this optimistically (success:true, always) before the
   // engine has actually processed the command — the real result, including
   // any failure message, arrives async as a `CommandResult` FromSim message
@@ -1098,7 +1116,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       lastRenderPointerActive = pointerActive;
       hasRenderedOnce = true;
     }
-    hud.update(state);
+    hud.update(state, viewStratum);
     hud.renderOverlays(state, selected, activeTool);
     minimap?.update(state, camera, viewStratum);
     newsTicker?.update();
@@ -1158,6 +1176,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     dayEl,
     wildernessEl,
     wildernessChip,
+    stratumBadge,
     overlayRoot: wrapper
   });
   // Always 'auto' now, desktop and compact alike — content picks itself
@@ -1321,6 +1340,9 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       case 'toggleMinimap':
         minimap?.toggleOpen();
         minimap?.markDirty();
+        return;
+      case 'toggleStratum':
+        toggleViewStratum();
         return;
     }
   };
@@ -1567,7 +1589,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     }
   });
 
-  hud.update(state);
+  hud.update(state, viewStratum);
   registerServiceWorker();
   requestAnimationFrame(() => gameLoop(renderer, hud));
 })();

@@ -58,7 +58,8 @@ const HOTKEY_LABELS: Record<HotkeyAction, string> = {
   speedFast: 'Speed: Fast',
   speedLudicrous: 'Speed: Ludicrous',
   togglePause: 'Pause / resume',
-  toggleMinimap: 'Toggle minimap'
+  toggleMinimap: 'Toggle minimap',
+  toggleStratum: 'Toggle underground view'
 };
 
 function createSection(title: string, hint?: string) {

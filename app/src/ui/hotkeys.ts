@@ -31,7 +31,8 @@ export type HotkeyAction =
   | 'speedFast'
   | 'speedLudicrous'
   | 'togglePause'
-  | 'toggleMinimap';
+  | 'toggleMinimap'
+  | 'toggleStratum';
 
 export type HotkeyBindings = Record<HotkeyAction, string[]>;
 
@@ -63,7 +64,8 @@ export const defaultHotkeys: HotkeyBindings = {
   speedFast: ['Digit2'],
   speedLudicrous: ['Digit3'],
   togglePause: ['Space'],
-  toggleMinimap: ['KeyM']
+  toggleMinimap: ['KeyM'],
+  toggleStratum: ['KeyG']
 };
 
 interface HotkeyOptions {

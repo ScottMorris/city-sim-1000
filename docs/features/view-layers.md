@@ -1,6 +1,6 @@
 # View Layers — Strata and Overlays as First-Class State
 
-**Status:** proposal. Companion to `layer-scoped-bulldozer.md`, which depends on the model defined here.
+**Status:** implemented, client-side (#197 — `ViewStratum`/`MinimapOverlay` split, tool-implied switching, the tool/stratum click-guard, and the HUD stratum badge). The engine never hears about the stratum yet: `SimCommand::ApplyTool` still has no `stratum` field, so the bulldozer stays view-blind in Rust. That wire-up is `layer-scoped-bulldozer.md`'s job (#198), which depends on the model defined here.
 
 ## Purpose
 
@@ -51,22 +51,22 @@ The two compose into one rule: **tools with a home stratum set the stratum; stra
 ### Rules the model must enforce (currently unenforced or leaky)
 
 * **Bulldozer follows the stratum** — the headline defect; see `layer-scoped-bulldozer.md`.
-* **Surface tools while underground**: today a Road/Zone/Park/Terraform click while the underground view is open silently builds on the dimmed surface — no guard anywhere. Under the new model, either (a) selecting a surface-stratum tool flips the view back to surface (extending today's partial auto-switch so the player always sees what they edit), or (b) the click is refused with a hint. Recommendation: (a), it matches the existing tool auto-switch behaviour and never interrupts flow. Note the two paths that bypass today's auto-switch and must be covered: right-button quick-bulldoze (`main.ts` calls `setActiveTool` directly) and changing the view while a tool is already active.
-* **Pipe tool from the surface**: `SPEC.md` says the pipe tool "Requires Underground View", but `Tool::WaterPipe` has no guard — the requirement is satisfied only incidentally by the auto-switch, and manually flipping back to base leaves pipe-laying fully available on an invisible layer. Same fix as above: the tool implies the stratum, and the stratum implies the visible view.
-* **No cross-stratum side effects, stated as an invariant**: no surface or terrain tool may silently alter the underground stratum, and vice versa. (Terraforming destroying unseen pipes is SC3000's most-warned-about behaviour; if terrain edits ever need to disturb pipes, that must be visible and deliberate, not incidental.) This belongs in `docs/tile-model.md` beside the bulldozer rule, and in engine tests.
+* **Surface tools while underground**: **resolved, but not as recommended below.** Tool *selection* still flips the view (unchanged, existing behaviour) — but for the gap this bullet was really about, a tool already armed before the player manually toggles the view away, discussion landed on refusal instead: `main.ts`'s `applyCurrentTool` checks `requiredStratumForTool(activeTool)` against the live `ViewStratum` and refuses the click with a toast hint if they've drifted apart, rather than snapping the view back or deselecting the tool. Right-button quick-bulldoze is unaffected either way — `Bulldoze`'s required stratum is `null`, so it never trips the guard, which is the point of it being stratum-neutral.
+* **Pipe tool from the surface**: closed by the same guard — `Tool::WaterPipe` requires `underground`, so a click after manually flipping back to base is refused rather than silently landing on an invisible layer. `SPEC.md`'s "Requires Underground View" is now an enforced client-side rule, not just an auto-switch side effect.
+* **No cross-stratum side effects, stated as an invariant**: still open. (Terraforming destroying unseen pipes is SC3000's most-warned-about behaviour; if terrain edits ever need to disturb pipes, that must be visible and deliberate, not incidental.) This belongs in `docs/tile-model.md` beside the bulldozer rule, and in engine tests — tracked with the rest of the engine-side wiring in `layer-scoped-bulldozer.md`/#198, since it's a Rust-side rule.
 
-## Known bugs to fix in passing
+## Known bugs fixed in passing
 
-* `app/src/game/clientState.ts:42-44`: the minimap-mode sanitiser allow-list is missing `'wilderness'`, so a save made in wilderness overlay mode silently resets to `base` on load. The list has drifted from `ALLOWED_MODES` in `minimap.ts:63` — under this proposal there is one overlay enum and one place that validates it.
-* `app/src/ui/hud.ts:186-187`: dead "Coming soon: pipes and underground view." branch (`ToolDetails.unavailable` is declared but never assigned) — remove or repurpose as the stratum indicator.
+* `app/src/game/clientState.ts`'s minimap-mode sanitiser allow-list was missing `'wilderness'`, so a save made in wilderness overlay mode silently reset to `base` on load. Fixed: `MINIMAP_OVERLAYS` (`gameState.ts`) is now the one list both `clientState.ts`'s sanitiser and `minimap.ts`'s chip set read.
+* `app/src/ui/hud.ts`'s dead "Coming soon: pipes and underground view." branch (`ToolDetails.unavailable` was declared but never assigned) is removed, replaced by the loud stratum badge described above.
 
-## Migration sketch
+## Migration — what shipped
 
-1. Introduce `ViewStratum` app state in `main.ts`; derive it initially from `minimap.mode === 'underground'` so nothing changes visually.
-2. Split `MinimapMode` into the overlay enum (six values) + the stratum; migrate `ClientState` (accept old `'underground'` mode on load by mapping it to `base` overlay + a session-start surface stratum).
-3. Renderer/minimap take `(stratum, overlay)` instead of one `overlayMode` string.
-4. Wire `stratum` into `ApplyTool` per `layer-scoped-bulldozer.md`; add the tool/view consistency guards.
-5. Update `docs/tile-model.md`, `SPEC.md`, and `app/public/manual.html` to describe the two-axis model as a player-facing promise.
+1. ✅ `ViewStratum` is `main.ts` app state, module-level alongside the active tool.
+2. ✅ `MinimapMode` split into `MinimapOverlay` (six values) + `ViewStratum`; `ClientState` never persists stratum (a save's old `mode: 'underground'` key just has no `overlay` field to migrate — the default wins).
+3. ✅ Renderer/minimap take `(stratum, overlay)` instead of one `overlayMode` string.
+4. ✅ Tool/view consistency guards (see above). ❌ **Not done**: wiring `stratum` into `ApplyTool` itself — the engine stays view-blind. That's `layer-scoped-bulldozer.md`/#198, unstarted.
+5. ✅ `docs/tile-model.md`, `SPEC.md`, and `app/public/manual.html` updated to describe the two-axis model.
 
 ## Non-goals
 
