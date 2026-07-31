@@ -19,6 +19,18 @@ npm run dev
 
 Then open the provided local URL. The service worker caches assets after first load so the game keeps running offline. Use `npm run build` for a production bundle.
 
+### Codex MCP control
+
+Codex can inspect and operate a locally running city through the `city-sim-1000` MCP server. Register it once on the development machine:
+
+```bash
+codex mcp add city-sim-1000 -- bun run --cwd /absolute/path/to/city-sim-1000/scripts/city-sim-mcp start
+```
+
+Start the game with `bun run dev`, then open `http://localhost:5173/?mcp` in a browser. The browser connects to the MCP relay on `localhost:5174`; the Codex server process starts that relay independently after its MCP handshake. Codex may launch more than one MCP process: the first owns the browser relay and later instances proxy their calls through it. Start a new Codex session after registration so it discovers the server. The server reports `No game connected` until that browser tab is open.
+
+Verify the registration with `codex mcp get city-sim-1000`. Remove it later with `codex mcp remove city-sim-1000`.
+
 ### Tests
 
 `bun run test` (TypeScript), `cargo test --workspace` (Rust) and `bun run test:e2e` (Playwright) are the three gates. On top of the unit tests there are three **architecture harnesses** — a golden city, a visual regression over the derived wire bytes, and a long-run soak. `docs/testing.md` describes what each one covers, what it deliberately does not, how to run it, and how to regenerate its baseline.
