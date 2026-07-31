@@ -18,7 +18,7 @@ import type { ServerWebSocket } from 'bun';
 import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 
-const MCP_WS_PORT = 5174;
+const MCP_WS_PORT = Number.parseInt(process.env.CITY_SIM_MCP_PORT ?? '5174', 10);
 const RELAY_LOCK_PATH = `/tmp/city-sim-1000-mcp-${MCP_WS_PORT}.lock`;
 let relayLockToken: string | undefined;
 

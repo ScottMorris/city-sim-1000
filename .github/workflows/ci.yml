@@ -431,6 +431,35 @@ jobs:
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+  mcp-test:
+    name: MCP relay test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run MCP relay tests
+        id: mcp_tests
+        run: bun run test:mcp
+
+      - name: Write summary
+        if: always()
+        run: |
+          {
+            echo "## MCP relay tests"
+            echo
+            echo "- Runner: \`ubuntu-24.04\`"
+            echo "- Result: \`${{ steps.mcp_tests.outcome }}\`"
+            echo "- Command: \`bun run test:mcp\`"
+            echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   wasm-build:
     name: WASM build
     runs-on: ubuntu-24.04
@@ -584,6 +613,7 @@ jobs:
       - rust-mutants-diff
       - ts-typecheck
       - ts-test
+      - mcp-test
       - wasm-build
       - mobile-e2e
       - tauri-plugin-build
@@ -608,6 +638,7 @@ jobs:
             const mutantsMissed  = '${{ needs.rust-mutants-diff.outputs.missed }}';
             const tsCheck    = '${{ needs.ts-typecheck.result }}';
             const tsTests    = '${{ needs.ts-test.result }}';
+            const mcpTests   = '${{ needs.mcp-test.result }}';
             const wasmBuild  = '${{ needs.wasm-build.result }}';
             const mobileE2e  = '${{ needs.mobile-e2e.result }}';
             const tauriBuild = '${{ needs.tauri-plugin-build.result }}';
@@ -625,6 +656,7 @@ jobs:
                 : `- ${mutantsMissed === '0' ? '[PASS]' : '[WARN]'} Rust mutants in this diff (advisory): \`${mutantsMissed}\` survived (step: \`${mutantsOutcome}\`)`,
               `- ${label(tsCheck)} TypeScript typecheck: \`${tsCheck}\``,
               `- ${label(tsTests)} TypeScript tests: \`${tsTests}\``,
+              `- ${label(mcpTests)} MCP relay tests: \`${mcpTests}\``,
               `- ${label(wasmBuild)} WASM build: \`${wasmBuild}\``,
               `- ${label(mobileE2e)} Mobile e2e (Playwright): \`${mobileE2e}\``,
               `- ${label(tauriBuild)} Tauri plugin build: \`${tauriBuild}\``,
