@@ -147,7 +147,7 @@ appRoot.innerHTML = `
   <div id="viewport">
     <div class="toolbar" id="toolbar"></div>
     <div class="canvas-wrapper" id="canvas-wrapper">
-      <div class="stratum-badge stratum-badge-hidden" id="stratum-badge">⬇ Underground View — bulldoze and pipes apply here</div>
+      <div class="stratum-badge stratum-badge-hidden" id="stratum-badge" role="status">⬇ Underground View — bulldoze and pipes apply here</div>
     </div>
   </div>
   <footer>
@@ -765,7 +765,7 @@ function applyCurrentTool(tilePos: Position) {
   const requiredStratum = requiredStratumForTool(activeTool);
   if (requiredStratum && requiredStratum !== viewStratum) {
     const label = requiredStratum === 'underground' ? 'Underground' : 'Surface';
-    showToast(`${toolLabels[activeTool] ?? 'This tool'} needs the ${label} view — press G or the minimap's view toggle to switch.`, {
+    showToast(`${toolLabels[activeTool]} needs the ${label} view — press G or the minimap's view toggle to switch.`, {
       severity: 'warning',
       id: 'stratum-guard'
     });
