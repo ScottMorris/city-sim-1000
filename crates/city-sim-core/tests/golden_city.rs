@@ -247,6 +247,16 @@ fn parse_script(src: &str) -> Script {
     }
 }
 
+/// The committed `golden_city.script` only ever spells the trailing stratum
+/// token as `underground` or omits it — never `surface` (the default makes
+/// it redundant) and never a typo — so the parser's panic arm for an invalid
+/// token is otherwise never exercised by the suite. Pin it directly.
+#[test]
+#[should_panic(expected = "is not a stratum (surface|underground)")]
+fn an_invalid_stratum_token_panics() {
+    parse_script("grid 4 4\nseed 1\nBulldoze 0 0 sideways\n");
+}
+
 // ---------------------------------------------------------------------------
 // The replay
 // ---------------------------------------------------------------------------

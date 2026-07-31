@@ -999,18 +999,26 @@ mod tests {
 
         // And the bulldozer reads correctly on both, each from its own
         // stratum: what stands goes, the water stays. The line is overhead,
-        // so a `Surface` bulldoze reaches it; the pipe takes its own click
-        // from `Underground` (`#198`) — a `Surface` bulldoze on (3,3) would
-        // find nothing in surface/overhead and refuse.
+        // so a `Surface` bulldoze reaches it (charging, same as the
+        // surface-nonempty branch — the shared `!surface.is_empty() ||
+        // !overhead.is_empty()` check must charge on either half); the pipe
+        // takes its own click from `Underground` (`#198`) — a `Surface`
+        // bulldoze on (3,3) would find nothing in surface/overhead and
+        // refuse (`surface_bulldoze_refuses_a_tile_with_only_underground_content`
+        // pins that directly).
+        let before = s.money;
         assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2, ViewStratum::Surface).success);
         let t = s.tile_at(2, 2).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert_eq!(t.occupants(), 0);
+        assert_eq!(s.money, before - tool_cost(Tool::Bulldoze));
 
+        let before = s.money;
         assert!(apply_tool(&mut s, Tool::Bulldoze, 3, 3, ViewStratum::Underground).success);
         let t = s.tile_at(3, 3).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert_eq!(t.occupants(), 0);
+        assert_eq!(s.money, before - tool_cost(Tool::Bulldoze));
     }
 
     /// **Bulldozing a developed lot takes the building and nothing else.**
@@ -1208,6 +1216,48 @@ mod tests {
         assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
         assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Road));
         assert_eq!(s.money, before);
+    }
+
+    /// The mirror image of `bulldoze_clears_only_the_stratum_it_was_asked_for`'s
+    /// first assertion: a tile whose *only* content is underground must refuse
+    /// a `Surface` click rather than silently falling through. The `Surface`
+    /// arm only ever inspects `building_id`/`surface`/`overhead`, so this pins
+    /// that a regression which accidentally consulted `underground` there —
+    /// letting a surface click reach into or clear buried content — would be
+    /// caught.
+    #[test]
+    fn surface_bulldoze_refuses_a_tile_with_only_underground_content() {
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::WaterPipe, 0, 0, ViewStratum::Underground).success);
+        let before = s.money;
+        let r = apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface);
+        assert!(!r.success);
+        assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
+        assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
+        assert_eq!(s.money, before);
+    }
+
+    /// **Buildings are surface-stratum objects, even over buried infrastructure.**
+    /// `place_footprint_building` never checks `underground`, so a building can
+    /// legally sit over a buried pipe; `bulldoze`'s `Surface` arm must still
+    /// take only the building, exactly as it does over a plain surface tile —
+    /// this is the building-branch counterpart to
+    /// `bulldoze_clears_only_the_stratum_it_was_asked_for`, which only covers
+    /// the non-building surface-clear branch.
+    #[test]
+    fn surface_bulldoze_on_a_building_leaves_a_buried_pipe_untouched() {
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::WaterPipe, 0, 0, ViewStratum::Underground).success);
+        assert!(apply_tool(&mut s, Tool::Park, 0, 0, ViewStratum::Surface).success);
+        assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
+
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface).success);
+        let t = s.tile_at(0, 0).unwrap();
+        assert!(t.building_id.is_none(), "the building outlived the click");
+        assert!(
+            t.has_occupant(Occupant::Pipe),
+            "a surface bulldoze of a building reached into underground"
+        );
     }
 
     /// A bare tile — nothing in any stratum — is a free no-op regardless of

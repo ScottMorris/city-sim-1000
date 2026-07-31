@@ -37,7 +37,9 @@ const MCP_WS_PORT = 5174;
 // The MCP bridge has no view state of its own — scripted commands default to
 // the surface, with an explicit `stratum: 'underground'` param letting a
 // script lay pipe or bulldoze underground without a client view to read.
-function stratumParam(params: Record<string, unknown>): ViewStratum {
+// Exported (only) so it's unit-testable — everything else here needs a live
+// WebSocket connection to exercise.
+export function stratumParam(params: Record<string, unknown>): ViewStratum {
   return params.stratum === 'underground' ? 'underground' : 'surface';
 }
 

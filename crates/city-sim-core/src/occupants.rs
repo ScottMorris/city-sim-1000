@@ -2440,7 +2440,18 @@ mod tests {
         while let Some((s, path)) = frontier.pop_front() {
             for &tool in &tools {
                 let mut next = s.clone();
-                apply_tool(&mut next, tool, 1, 1, ViewStratum::Surface);
+                // `WaterPipe` refuses everywhere but the Underground stratum
+                // (see `commands::apply_tool`'s `Tool::WaterPipe` arm); every
+                // other tool in the sweep is stratum-blind. Without this, the
+                // sweep can never reach a state with `Occupant::Pipe` set —
+                // silently halving the state space this test's own docstring
+                // promises to close.
+                let stratum = if tool == Tool::WaterPipe {
+                    ViewStratum::Underground
+                } else {
+                    ViewStratum::Surface
+                };
+                apply_tool(&mut next, tool, 1, 1, stratum);
                 // Funds must never be what makes a state unreachable.
                 next.money = 100_000;
                 if !seen.insert(signature(&next)) {
