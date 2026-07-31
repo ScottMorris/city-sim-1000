@@ -7,7 +7,7 @@
 //   1. bun run dev              (start game at http://localhost:5173)
 //   2. bun run mcp              (start this server)
 //   3. Open http://localhost:5173/?mcp in a browser
-//   4. Register this server in Claude Code's MCP config
+//   4. Register this server with Codex (see the README's MCP section)
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -15,9 +15,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type { ServerWebSocket } from 'bun';
+import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 
 const MCP_WS_PORT = 5174;
+const RELAY_LOCK_PATH = `/tmp/city-sim-1000-mcp-${MCP_WS_PORT}.lock`;
+let relayLockToken: string | undefined;
 
 // ---------------------------------------------------------------------------
 // WebSocket relay — browser connects here, MCP tools route through it
@@ -30,43 +33,60 @@ type WsPendingCall = {
 
 const pending = new Map<string, WsPendingCall>();
 let gameSocket: ServerWebSocket<unknown> | null = null;
+let ownsRelay = false;
+let relayStart: Promise<void> | null = null;
 
-Bun.serve({
-  port: MCP_WS_PORT,
-  fetch(req, server) {
-    if (server.upgrade(req)) return undefined;
-    return new Response(
-      'City Sim 1000 MCP relay — open http://localhost:5173/?mcp in a browser',
-      { status: 200, headers: { 'Content-Type': 'text/plain' } },
-    );
-  },
-  websocket: {
-    open(ws) {
-      gameSocket = ws;
-      console.error('[mcp] Browser game connected');
-    },
-    message(_ws, data) {
-      const msg = JSON.parse(data as string) as {
-        id: string;
-        result?: unknown;
-        error?: string;
-      };
-      const call = pending.get(msg.id);
-      if (!call) return;
-      pending.delete(msg.id);
-      if (msg.error) call.reject(new Error(msg.error));
-      else call.resolve(msg.result);
-    },
-    close() {
-      gameSocket = null;
-      console.error('[mcp] Browser game disconnected');
-    },
-  },
-});
+async function existingRelayIsAvailable(): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${MCP_WS_PORT}`, {
+      signal: AbortSignal.timeout(500),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
-console.error(`[mcp] WebSocket relay listening on ws://localhost:${MCP_WS_PORT}`);
+function acquireRelayLock(): boolean {
+  try {
+    const fd = openSync(RELAY_LOCK_PATH, 'wx');
+    relayLockToken = `${process.pid}:${crypto.randomUUID()}`;
+    writeFileSync(fd, relayLockToken);
+    closeSync(fd);
+    process.once('exit', () => {
+      try {
+        if (readFileSync(RELAY_LOCK_PATH, 'utf8') === relayLockToken) {
+          unlinkSync(RELAY_LOCK_PATH);
+        }
+      } catch { /* Relay lock already removed. */ }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-function callGame(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+function removeStaleRelayLock(): boolean {
+  try {
+    const [pidText] = readFileSync(RELAY_LOCK_PATH, 'utf8').split(':', 1);
+    const pid = Number.parseInt(pidText, 10);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      unlinkSync(RELAY_LOCK_PATH);
+      return true;
+    }
+    try {
+      process.kill(pid, 0);
+      return false;
+    } catch {
+      unlinkSync(RELAY_LOCK_PATH);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+}
+
+function callConnectedGame(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
   if (!gameSocket) {
     throw new Error(
       'No game connected. Open http://localhost:5173/?mcp in a browser first.',
@@ -85,6 +105,97 @@ function callGame(method: string, params: Record<string, unknown> = {}): Promise
     });
     gameSocket!.send(JSON.stringify({ id, method, params }));
   });
+}
+
+async function startRelay(): Promise<void> {
+  if (await existingRelayIsAvailable()) {
+    console.error('[mcp] Reusing an existing City Sim relay');
+    return;
+  }
+
+  if (!acquireRelayLock()) {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      if (await existingRelayIsAvailable()) {
+        console.error('[mcp] Reusing an existing City Sim relay');
+        return;
+      }
+    }
+    if (removeStaleRelayLock()) return startRelay();
+    throw new Error('Another City Sim MCP process is starting the browser relay');
+  }
+
+  Bun.serve({
+    hostname: '127.0.0.1',
+    port: MCP_WS_PORT,
+    async fetch(req, server) {
+      const url = new URL(req.url);
+      if (url.pathname === '/call' && req.method === 'POST') {
+        try {
+          const { method, params } = await req.json() as {
+            method?: unknown;
+            params?: unknown;
+          };
+          if (typeof method !== 'string' || (params != null && typeof params !== 'object')) {
+            return Response.json({ error: 'Invalid relay request' }, { status: 400 });
+          }
+          return Response.json({ result: await callConnectedGame(method, params as Record<string, unknown> ?? {}) });
+        } catch (error) {
+          return Response.json({ error: String(error) }, { status: 500 });
+        }
+      }
+      if (req.method === 'GET' && server.upgrade(req)) return undefined;
+      return new Response(
+        'City Sim 1000 MCP relay — open http://localhost:5173/?mcp in a browser',
+        { status: 200, headers: { 'Content-Type': 'text/plain' } },
+      );
+    },
+    websocket: {
+      open(ws) {
+        gameSocket = ws;
+        console.error('[mcp] Browser game connected');
+      },
+      message(_ws, data) {
+        const msg = JSON.parse(data as string) as {
+          id: string;
+          result?: unknown;
+          error?: string;
+        };
+        const call = pending.get(msg.id);
+        if (!call) return;
+        pending.delete(msg.id);
+        if (msg.error) call.reject(new Error(msg.error));
+        else call.resolve(msg.result);
+      },
+      close() {
+        gameSocket = null;
+        console.error('[mcp] Browser game disconnected');
+      },
+    },
+  });
+  ownsRelay = true;
+  console.error(`[mcp] WebSocket relay listening on ws://localhost:${MCP_WS_PORT}`);
+}
+
+function ensureRelay(): Promise<void> {
+  relayStart ??= startRelay();
+  return relayStart;
+}
+
+async function callGame(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  await ensureRelay();
+  if (ownsRelay) return callConnectedGame(method, params);
+
+  const response = await fetch(`http://127.0.0.1:${MCP_WS_PORT}/call`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method, params }),
+  });
+  const body = await response.json() as { result?: unknown; error?: string };
+  if (!response.ok) {
+    throw new Error(body.error ?? `Relay request for "${method}" failed`);
+  }
+  return body.result;
 }
 
 function textResult(value: unknown) {
@@ -254,3 +365,6 @@ server.tool(
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
+void ensureRelay().catch(error => {
+  console.error(`[mcp] Could not start the browser relay: ${String(error)}`);
+});
