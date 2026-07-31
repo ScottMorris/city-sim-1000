@@ -11,7 +11,7 @@ import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate, getToolCost } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
-import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
+import { createBuildingLookup, getTileColour, resolveIndicatorKey, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone, isWaterCarrier } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
@@ -566,17 +566,6 @@ export class MapRenderer {
     size: number,
     buildingLookup: Map<number, { template: ReturnType<typeof getBuildingTemplate>; origin: { x: number; y: number } }>
   ) {
-    // Determine which service types have infrastructure on the map so we only
-    // show "no service" indicators when the player has actually built that service.
-    let hasWaterInfra = false;
-    for (const tile of state.tiles) {
-      const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
-      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
-        hasWaterInfra = true;
-        break;
-      }
-    }
-
     // Target display size = half a tile; sprite texture is 128×128.
     const iconPx = 128;
     const iconScale = (size * 0.5) / iconPx;
@@ -584,15 +573,8 @@ export class MapRenderer {
 
     const seen = new Set<number>();
     for (const building of state.buildings) {
-      const { status } = building.state;
-      if (status === BuildingStatus.Active) continue;
-
-      let texture: import('pixi.js').Texture | undefined;
-      if (status === BuildingStatus.InactiveNoPower) {
-        texture = this.tileTextures.indicators.noPower;
-      } else if (status === BuildingStatus.InactiveNoWater && hasWaterInfra) {
-        texture = this.tileTextures.indicators.noWater;
-      }
+      const indicatorKey = resolveIndicatorKey(building.state.status);
+      const texture = indicatorKey ? this.tileTextures.indicators[indicatorKey] : undefined;
       if (!texture) continue;
 
       const lookup = buildingLookup.get(building.id);

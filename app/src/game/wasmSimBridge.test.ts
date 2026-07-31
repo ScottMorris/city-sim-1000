@@ -175,8 +175,8 @@ describe('WasmSimBridge undo/redo', () => {
     const historyEvents = () => events.filter(e => e.type === 'HistoryChanged');
     const before = historyEvents().length;
     bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
-    worker.emit({ type: 'apply_result', success: true, history: flags(true, false) });
-    worker.emit({ type: 'apply_result', success: true, history: flags(true, false) });
+    worker.emit({ type: 'apply_result', success: true, message: null, history: flags(true, false) });
+    worker.emit({ type: 'apply_result', success: true, message: null, history: flags(true, false) });
     const after = historyEvents();
     expect(after.length).toBe(before + 1);
     expect(after[after.length - 1]).toMatchObject({ data: { canUndo: true, canRedo: false } });
@@ -185,7 +185,7 @@ describe('WasmSimBridge undo/redo', () => {
   it('discards a pending step_result when an undo lands', async () => {
     const { worker, state, bridge } = makeBridge();
     const staleStats = { ...zeroStats(), money: 424242 };
-    worker.emit({ type: 'step_result', bytes: emptyTileBuffer(), stats: staleStats });
+    worker.emit({ type: 'step_result', bytes: emptyTileBuffer(), stats: staleStats, alerts: [] });
     const pending = bridge.undo();
     const undoneStats = { ...zeroStats(), money: 1111 };
     worker.emit({
@@ -197,6 +197,63 @@ describe('WasmSimBridge undo/redo', () => {
     // step_result must be gone, leaving the undone stats in place.
     bridge.step(1 / 20);
     expect(state.money).toBe(1111);
+  });
+
+  it('forwards a refused apply_result as a CommandResult with the message', () => {
+    const { worker, bridge, events } = makeBridge();
+    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
+    worker.emit({ type: 'apply_result', success: false, message: 'Not enough funds', history: flags(false, false) });
+
+    const result = events.find(e => e.type === 'CommandResult');
+    expect(result).toEqual({ type: 'CommandResult', success: false, message: 'Not enough funds' });
+  });
+
+  it('forwards each step_result alert as FromSim::Alert plus its paired narrative event, once step() flushes it', () => {
+    const { worker, bridge, events } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0,
+      alerts: [{ kind: 'WaterDeficit', message: 'Water deficit detected.', sticky: true }],
+    });
+    // Alerts are staged like pendingStats/pendingTileBuffer, not dispatched
+    // on arrival — see pendingAlerts' field doc for why (undo/redo/load must
+    // be able to discard a stale one before it ever reaches the player).
+    expect(events.find(e => e.type === 'Alert')).toBeUndefined();
+
+    bridge.step(1 / 20);
+
+    const alert = events.find(e => e.type === 'Alert');
+    expect(alert).toMatchObject({
+      type: 'Alert',
+      data: { kind: 'WaterDeficit', message: 'Water deficit detected.', sticky: true },
+    });
+
+    const narrative = events.find(e => e.type === 'Narrative');
+    expect(narrative).toMatchObject({
+      type: 'Narrative',
+      data: { kind: 'Alert', payload: { type: 'water_deficit_start', category: 'utilities', severity: 'alert' } },
+    });
+  });
+
+  it('discards a pending alert when an undo lands before step() flushes it', () => {
+    const { worker, bridge, events } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0,
+      alerts: [{ kind: 'PowerDeficit', message: 'Power deficit detected.', sticky: true }],
+    });
+
+    const pending = bridge.undo();
+    worker.emit({
+      type: 'undo_result', happened: true,
+      bytes: emptyTileBuffer(), stats: zeroStats(), history: flags(false, true)
+    });
+
+    return pending.then(() => {
+      bridge.step(1 / 20);
+      // The undo happened before the deficit-carrying step_result was ever
+      // flushed — since the Rust engine resyncs its latch silently on
+      // restore, no alert (deficit or restore) should surface for it.
+      expect(events.find(e => e.type === 'Alert')).toBeUndefined();
+    });
   });
 
   it('translates a worker init_error message into an InitError event', () => {

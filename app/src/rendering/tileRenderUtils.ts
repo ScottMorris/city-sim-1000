@@ -10,7 +10,25 @@ import { getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, TileKind, type GameState } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant, zoneOccupant } from '../game/protocol/occupants';
 import { legacyKind } from '../game/protocol/legacyProjection';
+import { BuildingStatus } from '../game/buildings/state';
 import type { CarriagewayClass, HydroVariant, RoadVariant, TileTextures } from './tileAtlas';
+
+/**
+ * Which `tileTextures.indicators` key (if any) a building's status should
+ * show, or `null` for `Active` and any other status with no icon.
+ *
+ * A plain 1:1 mapping, deliberately: a building can only ever reach
+ * `InactiveNoWater` once the bridge that built it already confirmed a water
+ * system exists (pipes included, mirroring `GameState::has_water_system`),
+ * so this needs no further "does the map actually have water infra" gating —
+ * an earlier version of this logic re-derived that separately, scanning only
+ * for pump/tower buildings, and missed pipes-only cities entirely.
+ */
+export function resolveIndicatorKey(status: BuildingStatus): 'noPower' | 'noWater' | null {
+  if (status === BuildingStatus.InactiveNoPower) return 'noPower';
+  if (status === BuildingStatus.InactiveNoWater) return 'noWater';
+  return null;
+}
 
 export type BuildingLookupEntry = {
   template: ReturnType<typeof getBuildingTemplate>;

@@ -18,6 +18,7 @@ use crate::wilderness::{
     apply_happiness_drift, compute_wilderness, update_trend, WildernessTunables,
 };
 use crate::zones::ZoneGrowthSim;
+use city_sim_protocol::events::{AlertKind, SimAlert};
 
 // ---------------------------------------------------------------------------
 // Simulation driver
@@ -50,6 +51,16 @@ pub struct Simulation {
     /// accumulators (`day_frac`, `money_frac`) live in `GameState` instead so
     /// snapshot restores are exact.
     accumulator: f64,
+    /// Edge-triggered hysteresis latches for the deficit alerts below — set
+    /// the tick the balance is decided negative, cleared the tick it recovers,
+    /// so a balance sitting at exactly the boundary doesn't re-fire every tick.
+    power_deficit_active: bool,
+    water_deficit_active: bool,
+    /// Alerts raised since the last `take_alerts()` call. A `Vec` rather than
+    /// firing a callback directly: `step()` can run several `tick_fixed()`s
+    /// per call (see `MAX_TICKS_PER_STEP`), and both hosts drain this once per
+    /// external step/tick rather than per fixed tick, so none can be dropped.
+    pending_alerts: Vec<SimAlert>,
 }
 
 impl Simulation {
@@ -64,6 +75,9 @@ impl Simulation {
             ticks_per_second: 20,
             speed: 1.0,
             accumulator: 0.0,
+            power_deficit_active: false,
+            water_deficit_active: false,
+            pending_alerts: Vec::new(),
         }
     }
 
@@ -206,9 +220,21 @@ impl Simulation {
     /// accumulators (`day_frac`, `money_frac`) travel inside `GameState`, so
     /// a restore continues the clock and treasury exactly.
     pub fn load_state(&mut self, state: GameState) {
+        // Resync the deficit latches to the loaded balance without alerting —
+        // this is a restore, not a live transition, and a save can easily
+        // load into an already-negative balance.
+        self.power_deficit_active = state.utilities.power < 0;
+        self.water_deficit_active = self.water_enabled && state.utilities.water < 0;
+        self.pending_alerts.clear();
         self.state = state;
         self.zone_growth = ZoneGrowthSim::new();
         self.accumulator = 0.0;
+    }
+
+    /// Drain and return alerts raised since the last call. Both hosts call
+    /// this once per external step/tick to forward to their UI transport.
+    pub fn take_alerts(&mut self) -> Vec<SimAlert> {
+        std::mem::take(&mut self.pending_alerts)
     }
 
     // --- internal ---
@@ -243,6 +269,51 @@ impl Simulation {
         } else {
             1_000_000
         };
+        self.handle_resource_alerts();
+    }
+
+    /// Edge-triggered power/water deficit alerts — ported from the deleted TS
+    /// oracle's `handleResourceAlerts` (`git show 1f8140a:app/src/game/simulation.ts:742-812`),
+    /// now the sole producer since neither host re-derives this state machine.
+    fn handle_resource_alerts(&mut self) {
+        let power_balance = self.state.utilities.power;
+        if power_balance < 0 && !self.power_deficit_active {
+            self.power_deficit_active = true;
+            self.pending_alerts.push(SimAlert {
+                kind: AlertKind::PowerDeficit,
+                message:
+                    "Power deficit detected. Build more plants or reduce demand to restore growth."
+                        .into(),
+                sticky: true,
+            });
+        } else if power_balance >= 0 && self.power_deficit_active {
+            self.power_deficit_active = false;
+            self.pending_alerts.push(SimAlert {
+                kind: AlertKind::PowerRestored,
+                message: "Power restored. Zones can grow again.".into(),
+                sticky: false,
+            });
+        }
+
+        if !self.water_enabled {
+            return;
+        }
+        let water_balance = self.state.utilities.water;
+        if water_balance < 0 && !self.water_deficit_active {
+            self.water_deficit_active = true;
+            self.pending_alerts.push(SimAlert {
+                kind: AlertKind::WaterDeficit,
+                message: "Water deficit detected. Add pumps/towers or cut usage.".into(),
+                sticky: true,
+            });
+        } else if water_balance >= 0 && self.water_deficit_active {
+            self.water_deficit_active = false;
+            self.pending_alerts.push(SimAlert {
+                kind: AlertKind::WaterRestored,
+                message: "Water restored. Supply is stable again.".into(),
+                sticky: false,
+            });
+        }
     }
 }
 
@@ -688,6 +759,206 @@ mod tests {
             (high_budget.revenue - (low_budget.revenue + high_budget.revenue_tourism)).abs()
                 < 0.001,
             "tourism must be the only revenue difference"
+        );
+    }
+
+    #[test]
+    fn power_deficit_alert_fires_once_and_clears_on_recovery() {
+        let mut sim = Simulation::new(4, 4, 1);
+        sim.state.utilities.power = -5;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerDeficit);
+        assert!(alerts[0].sticky);
+
+        // Still negative — must not re-fire every tick.
+        sim.handle_resource_alerts();
+        assert!(sim.take_alerts().is_empty());
+
+        sim.state.utilities.power = 3;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerRestored);
+        assert!(!alerts[0].sticky);
+    }
+
+    /// A balance of exactly zero is not a deficit, and is the exact threshold
+    /// a recovery reads as "restored" — pins the boundary on both sides of
+    /// the `< 0` / `>= 0` comparisons in `handle_resource_alerts`.
+    #[test]
+    fn power_deficit_boundary_is_strictly_negative() {
+        let mut sim = Simulation::new(4, 4, 1);
+        sim.state.utilities.power = 0;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "zero balance must not read as a deficit"
+        );
+
+        sim.state.utilities.power = -1;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerDeficit);
+
+        sim.state.utilities.power = 0;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerRestored);
+    }
+
+    /// Same boundary as `power_deficit_boundary_is_strictly_negative`, for
+    /// water — plus proves the deficit latch actually suppresses a second
+    /// fire while still negative (catches the `!` in
+    /// `!self.water_deficit_active` being dropped).
+    #[test]
+    fn water_deficit_boundary_and_no_refire_while_active() {
+        let mut sim = Simulation::new(4, 4, 1);
+        assert!(sim.water_enabled);
+
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "zero balance must not read as a deficit"
+        );
+
+        sim.state.utilities.water = -1;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::WaterDeficit);
+
+        // Still negative and already active — must not re-fire.
+        sim.handle_resource_alerts();
+        assert!(sim.take_alerts().is_empty());
+
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::WaterRestored);
+    }
+
+    #[test]
+    fn water_deficit_alert_respects_water_enabled_gate() {
+        let mut sim = Simulation::new(4, 4, 1);
+        sim.water_enabled = false;
+        sim.state.utilities.water = -10;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "water alerts must not fire while water_enabled is false"
+        );
+    }
+
+    #[test]
+    fn load_state_resyncs_latches_without_alerting() {
+        let mut sim = Simulation::new(4, 4, 1);
+        let mut loaded = sim.state.clone();
+        loaded.utilities.power = -5;
+        sim.load_state(loaded);
+        assert!(
+            sim.take_alerts().is_empty(),
+            "a load must resync the latch silently, not raise an alert"
+        );
+        // Recovering from here proves the latch resynced to active=true —
+        // if it hadn't, this transition wouldn't be seen as a recovery at all.
+        sim.state.utilities.power = 3;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].kind, AlertKind::PowerRestored);
+    }
+
+    /// Pins `load_state`'s latch resync to the same strictly-negative
+    /// boundary as `handle_resource_alerts` itself: a loaded balance of
+    /// exactly zero must resync to "not active", not "active".
+    #[test]
+    fn load_state_resyncs_latches_at_the_strictly_negative_boundary() {
+        let mut sim = Simulation::new(4, 4, 1);
+
+        let mut zero_balance = sim.state.clone();
+        zero_balance.utilities.power = 0;
+        zero_balance.utilities.water = 0;
+        sim.load_state(zero_balance);
+        sim.state.utilities.power = 0;
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        assert!(
+            sim.take_alerts().is_empty(),
+            "a latch resynced from a zero balance must start inactive, so an unchanged zero balance is not a recovery"
+        );
+
+        let mut negative_balance = sim.state.clone();
+        negative_balance.utilities.power = -1;
+        negative_balance.utilities.water = -1;
+        sim.load_state(negative_balance);
+        sim.state.utilities.power = 0;
+        sim.state.utilities.water = 0;
+        sim.handle_resource_alerts();
+        let alerts = sim.take_alerts();
+        assert!(
+            alerts.iter().any(|a| a.kind == AlertKind::PowerRestored),
+            "a latch resynced from a negative balance must start active, so recovering to zero is a restore"
+        );
+        assert!(alerts.iter().any(|a| a.kind == AlertKind::WaterRestored));
+    }
+
+    /// Every other alert test calls `handle_resource_alerts()` directly on
+    /// the private method — none of them would notice if a future refactor
+    /// of `compute_utility_use`/`tick_fixed` silently dropped the call that
+    /// wires it into the real tick path (exactly the class of bug #199
+    /// itself was: code that exists but is never actually invoked). This one
+    /// drives a real deficit through `step()` — the same entry point both
+    /// hosts call — via actual zone growth and network connectivity, not a
+    /// hand-set balance.
+    ///
+    /// Same road/plant/zone fixture as
+    /// `water_requirement_is_opt_in_until_infrastructure_exists` below, with
+    /// a 5 MW `SolarFarm` in place of an 80 MW `CoalPlant` — but built
+    /// directly via `place_zone_building` (same helper real zone growth
+    /// calls) instead of waiting on growth's own timing/RNG, since the
+    /// demand-vs-deficit feedback loop this branch's own economy now runs
+    /// (a live balance suppresses further growth) makes waiting for organic
+    /// growth to overshoot 5 MW non-deterministic — it settles into
+    /// equilibrium right at the boundary instead.
+    #[test]
+    fn step_wires_handle_resource_alerts_into_the_real_tick_path() {
+        use crate::commands::apply_tool;
+        use crate::zones::place_zone_building;
+        use city_sim_protocol::commands::Tool;
+
+        let mut sim = Simulation::new(16, 16, 42);
+        for x in 0..12 {
+            apply_tool(&mut sim.state, Tool::Road, x, 5);
+        }
+        apply_tool(&mut sim.state, Tool::SolarFarm, 0, 3);
+        // 5 zoned-and-built residential lots at 1.5 MW each = 7.5 MW,
+        // comfortably past the SolarFarm's 5 MW — not the razor-thin 4.5 MW
+        // (rounds to 5, exactly tying production) that 3 lots would give.
+        for x in 2..7 {
+            apply_tool(&mut sim.state, Tool::Residential, x, 4);
+            assert!(
+                place_zone_building(&mut sim.state, x, 4),
+                "zone tag must place a building on a tile this test just zoned"
+            );
+        }
+
+        let mut alerts = Vec::new();
+        for _ in 0..5 {
+            sim.step(1.0 / 20.0);
+            alerts.extend(sim.take_alerts());
+        }
+
+        assert!(
+            alerts.iter().any(|a| a.kind == AlertKind::PowerDeficit),
+            "5 active 1.5 MW lots against a 5 MW SolarFarm must raise PowerDeficit \
+             via handle_resource_alerts — if this fails, check compute_utility_use \
+             still calls it"
         );
     }
 

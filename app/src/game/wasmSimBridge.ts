@@ -21,7 +21,8 @@ import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
 import { recordDailyBudget } from './economy';
 import type { FromSim } from './protocol/events';
-import type { SimStats } from '../workers/wasmSim.worker';
+import type { SimStats, SimAlertWire } from '../workers/wasmSim.worker';
+import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
@@ -70,8 +71,8 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number }
-  | { type: 'apply_result'; success: boolean; history: WorkerHistoryFlags }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; alerts: SimAlertWire[] }
+  | { type: 'apply_result'; success: boolean; message: string | null; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
@@ -112,6 +113,17 @@ export class WasmSimBridge implements SimBridge {
   private pendingBuildingsJson = '';
   private pendingStats: SimStats | null = null;
   private pendingMutationSeq = 0;
+  /**
+   * Alerts from step_results not yet flushed by step() — staged the same way
+   * as pendingStats/pendingTileBuffer rather than dispatched on arrival, so
+   * an undo/redo/load that discards a stale step_result (see those handlers
+   * below) discards its alerts too. Without this, an alert raised by a
+   * step_result that predates a rollback could reach the player as a
+   * permanent sticky toast for a state transition the rollback undid, with
+   * no restore alert ever following it — the Rust-side latch resyncs
+   * silently on load_state, so nothing else would ever correct it.
+   */
+  private pendingAlerts: SimAlertWire[] = [];
   private pendingUndo: ((happened: boolean) => void) | null = null;
   private pendingRedo: ((happened: boolean) => void) | null = null;
   private canUndoFlag = false;
@@ -203,6 +215,7 @@ export class WasmSimBridge implements SimBridge {
     ) {
       this.pendingTileBuffer = null;
       this.pendingStats = null;
+      this.pendingAlerts = [];
       return this.consumeDirty();
     }
     if (this.pendingTileBuffer !== null) {
@@ -216,6 +229,10 @@ export class WasmSimBridge implements SimBridge {
       this.lastAppliedMutationSeq = this.pendingMutationSeq;
       this.pendingStats = null;
       this.dirtySinceLastStep = true;
+    }
+    if (this.pendingAlerts.length > 0) {
+      this.dispatchAlerts(this.pendingAlerts);
+      this.pendingAlerts = [];
     }
     return this.consumeDirty();
   }
@@ -386,18 +403,25 @@ export class WasmSimBridge implements SimBridge {
         this.pendingBuildingsJson = msg.buildingsJson;
         this.pendingStats = msg.stats;
         this.pendingMutationSeq = msg.mutationSeq;
+        // Staged, not dispatched here — see pendingAlerts' field doc. Concat
+        // rather than replace: if two step_results arrive before the next
+        // step() flush (a delayed rAF frame), neither's alerts are lost.
+        this.pendingAlerts = this.pendingAlerts.concat(msg.alerts);
         break;
       case 'apply_result':
-        if (!msg.success) {
-          console.warn('[WasmSimBridge] apply_tool rejected by Rust sim');
-        }
+        this.handler?.({ type: 'CommandResult', success: msg.success, message: msg.message ?? undefined });
         this.syncHistoryFlags(msg.history);
         break;
       case 'undo_result':
         // Discard any pending step_result — it was computed before the undo
-        // and would overwrite the rolled-back state on the next frame.
+        // and would overwrite the rolled-back state on the next frame. Its
+        // alerts go with it: the engine resyncs the deficit latches to the
+        // restored balance silently (see sim.rs's load_state), so an alert
+        // from a pre-undo step_result describes a transition the undo just
+        // erased, and no correcting alert will ever arrive to cancel it.
         this.pendingTileBuffer = null;
         this.pendingStats = null;
+        this.pendingAlerts = [];
         if (msg.happened) {
           this.applyTileBuffer(msg.bytes, msg.buildingsJson);
           this.updateStats(msg.stats);
@@ -410,8 +434,10 @@ export class WasmSimBridge implements SimBridge {
         this.pendingUndo = null;
         break;
       case 'redo_result':
+        // Same reasoning as undo_result above.
         this.pendingTileBuffer = null;
         this.pendingStats = null;
+        this.pendingAlerts = [];
         if (msg.happened) {
           this.applyTileBuffer(msg.bytes, msg.buildingsJson);
           this.updateStats(msg.stats);
@@ -437,9 +463,10 @@ export class WasmSimBridge implements SimBridge {
           break;
         }
         // Discard pre-load frames and refresh the mirror atomically before
-        // the caller's promise resolves.
+        // the caller's promise resolves — same reasoning as undo_result above.
         this.pendingTileBuffer = null;
         this.pendingStats = null;
+        this.pendingAlerts = [];
         this.adoptDimensions(msg.width, msg.height, msg.seed);
         this.state.policies = msg.policies;
         this.applyTileBuffer(msg.bytes, msg.buildingsJson);
@@ -473,6 +500,17 @@ export class WasmSimBridge implements SimBridge {
       overhead: 0,
       density: ZoneDensity.Low,
     }));
+  }
+
+  /** Forward each alert as `FromSim::Alert`, plus its paired narrative event if any. */
+  private dispatchAlerts(alerts: SimAlertWire[]): void {
+    for (const alert of alerts) {
+      this.handler?.({ type: 'Alert', data: alert });
+      const narrative = deriveNarrativeEventFromAlert(alert, Date.now());
+      if (narrative) {
+        this.handler?.({ type: 'Narrative', data: { kind: 'Alert', payload: narrative } });
+      }
+    }
   }
 
   private syncHistoryFlags(flags: WorkerHistoryFlags): void {

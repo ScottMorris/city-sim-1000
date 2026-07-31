@@ -76,8 +76,10 @@ TS `BudgetStats.breakdown.details.buildings` includes `powerByType`, `civicByTyp
 - Effect: loading any save older than 6 seconds of sim time (120 ticks) silently rewinds tick/day/population/jobs/budget history to ≈tick 120. The display shows the saved values until the first `step_result` overwrites them. Task **P5-1 is marked done but is Tauri-only**.
 - Also: saves without a `cmdLog` (older saves; `persistence.ts:246–250`) fall back to a seed-only `reset` — the sim becomes a blank map while the display still shows the loaded city until the next buffer apply erases it.
 
-### B2. Sim events never emitted (P0)
+### B2. Sim events never emitted (P0) — ✅ resolved 2026-07-30 (#199)
 `FromSim` (`crates/city-sim-protocol/src/events.rs`) defines `Alert`, `Narrative`, `CommandResult`, `TickStats`, but no Rust code constructs `Alert`/`Narrative`/`CommandResult` anywhere (wasm crate, core, or Tauri plugin). The TS oracle emits power/water deficit alerts and narrative events (`simulation.ts:715–787`); `main.ts` has handlers wired for them (`main.ts:199–209`) that can never fire in WASM mode. The narrative layer in WASM mode is reduced to player-action events and month-end snapshots generated TS-side.
+
+Fixed by porting the deficit state machine into `Simulation::handle_resource_alerts` (`sim.rs`), drained per host step via `Simulation::take_alerts` and forwarded over both the WASM worker's `step_result` and the Tauri `TickEvent.alerts`. See `docs/features/sim-feedback-channel.md` for the full recovery.
 
 ### B3. Natural terrain not seeded into the Rust sim (P0) — ✅ resolved 2026-07-21 (#101)
 - TS `createInitialState` generates a water border and centre speckle (`gameState.ts:241–257`); Rust `GameState::new` is all-Land (`state.rs:336–341`).
@@ -90,8 +92,10 @@ TS `BudgetStats.breakdown.details.buildings` includes `powerByType`, `civicByTyp
 ### B4. Command-log desync on rejected commands (P0)
 `WasmSimBridge.send` pushes to its TS-side `cmdLog` **before** the async result arrives (`wasmSimBridge.ts:143–150`); Rust pops its own `CommandLog` when `apply_tool` fails (`crates/city-sim-wasm/src/lib.rs:153–164`), but the bridge's `apply_result` handler only `console.warn`s and never removes the rejected entry (`wasmSimBridge.ts:252–255`). The two logs then disagree. Since the TS `cmdLog` is what gets saved (`persistence.ts`) and replayed on load/engine-swap, a command rejected live (e.g. insufficient funds) can *succeed* during replay when money differs at that tick — replayed state diverges from the session the player actually had.
 
-### B5. Rejected placements give no user feedback (P2)
+### B5. Rejected placements give no user feedback (P2) — ✅ resolved 2026-07-30 (#199)
 `send()` returns an optimistic `{ success: true }` and `FromSim::CommandResult` is never emitted (B2), so a failed placement is invisible except for the money display correcting on the next stats tick. The TS path returned the real result synchronously.
+
+Fixed alongside B2: the async result (success and message) now reaches `main.ts` as a `CommandResult` message on both bridges — WASM via `SimHost::last_apply_message`, Tauri via a new reply channel on `SimCmd::ApplyTool`. See `docs/features/sim-feedback-channel.md`.
 
 ### B6. `getMetadata()` returns null (P2)
 The "Option B" Rust `building_metadata()` export was never implemented (`wasmSimBridge.ts:228–229`, `simBridge.ts:70–76`); UI callers fall back to TS `templates.ts`. Acceptable while templates are hand-mirrored, but it is a second source of truth for costs/footprints/capacities that can drift silently from `buildings.rs` (`building_template!` macro table).
@@ -135,7 +139,7 @@ Rust computes education for demand/decay (`education.rs`, wired in `sim.rs:133`)
 |-----|------|---------|
 | P0 | Money truncated every tick (frozen income below 30/day) | A4 |
 | P0 | No WASM snapshot API; loads capped at 120-tick replay | B1 |
-| P0 | `FromSim` alerts/narrative never emitted | B2 |
+| ~~P0~~ | ~~`FromSim` alerts/narrative never emitted~~ — resolved (#199) | B2 |
 | ~~P0~~ | ~~Natural terrain absent from Rust sim; display-only mask~~ — resolved (#101) | B3 |
 | P0 | TS/Rust command-log desync on rejected commands | B4 |
 | P1 | Power line destroys zones | A1 |
@@ -147,7 +151,7 @@ Rust computes education for demand/decay (`education.rs`, wired in `sim.rs:133`)
 | P1 | No Rust-vs-TS parity harness for the golden fixtures | D1 |
 | P1 | P4-3 cross-platform determinism unproven | D2 |
 | P2 | Happiness dynamics absent; rounding/type divergences | A7, A9 |
-| P2 | No placement-failure feedback; `getMetadata()` null | B5, B6 |
+| P2 | ~~No placement-failure feedback~~ (resolved, #199); `getMetadata()` null | B5, B6 |
 | P2 | Undo rewinds sim time | B7 |
 | P2 | Mirror loses building state; duplicate education calc | C1, C2 |
 | P2 | WASM crate untested in CI; docs drift | D3, D4 |
@@ -158,5 +162,5 @@ Rust computes education for demand/decay (`education.rs`, wired in `sim.rs:133`)
 2. **B4** (pop TS `cmdLog` on `apply_result: false`) — small bridge fix protecting every save made from now on.
 3. **B1** (expose `snapshot_bytes()`/`load_snapshot_bytes()` on `SimHost`, store snapshot in the save alongside the cmdLog) — removes the 120-tick cap and the money/set_money workaround.
 4. **B3** (seed terrain in `city-sim-core` from the seed; delete the display mask) — unblocks A3-style water rules and makes the tile buffer authoritative.
-5. **B2** (emit `FromSim` events from the tick loop; forward via worker/Channel) — restores alerts + narrative on the production path.
+5. ~~**B2** (emit `FromSim` events from the tick loop; forward via worker/Channel) — restores alerts + narrative on the production path.~~ — done (#199).
 6. **D1** (native fixture parity harness) — then burn down the A-section drift items with the harness as the referee, and decide each one: match the TS behaviour, or ratify the Rust behaviour and update the oracle/fixtures + `docs/game-parameters.md`/manual.

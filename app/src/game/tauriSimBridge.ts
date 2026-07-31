@@ -40,6 +40,7 @@ import type { FromSim } from './protocol/events';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { decodeTileBuffer } from './protocol/tileBuffer';
+import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
 import {
@@ -170,10 +171,14 @@ export class TauriSimBridge implements SimBridge {
     switch (cmd.type) {
       case 'ApplyTool': {
         const id = TOOL_TO_ID[cmd.tool];
-        void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId);
-        // Optimistic: the Rust side will reject invalid placements silently;
-        // a proper async result is deferred to P5 when we wire CommandResult
-        // events back through the Channel.
+        // Optimistic return: `send()` must answer synchronously (SimBridge's
+        // interface contract), but the real result comes back from the sim
+        // thread over IPC. Forward it once it lands, correlated to this exact
+        // call by promise identity ("keyed by stroke" in practice, since each
+        // call already carries its own strokeId).
+        void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId).then((result) => {
+          this.handler?.({ type: 'CommandResult', success: result.success, message: result.message ?? undefined });
+        });
         return { success: true };
       }
       case 'SetSpeed':
@@ -355,6 +360,17 @@ export class TauriSimBridge implements SimBridge {
 
     // Education coverage keys off the rebuilt buildings list.
     s.education = recomputeEducation(s);
+
+    // Forward any deficit/restore alerts raised this tick, plus each one's
+    // paired narrative event — same derivation `wasmSimBridge.ts` uses, kept
+    // in one shared helper so the two bridges can't independently drift.
+    for (const alert of event.alerts) {
+      this.handler?.({ type: 'Alert', data: alert });
+      const narrative = deriveNarrativeEventFromAlert(alert, Date.now());
+      if (narrative) {
+        this.handler?.({ type: 'Narrative', data: { kind: 'Alert', payload: narrative } });
+      }
+    }
 
     // Forward TickStats to the UI handler
     this.handler?.({

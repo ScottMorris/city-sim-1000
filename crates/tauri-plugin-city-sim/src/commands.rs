@@ -14,7 +14,8 @@ use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
 use city_sim_core::wire::encode_tile_buffer;
-use city_sim_protocol::commands::{Policies, Tool};
+use city_sim_protocol::commands::{CommandResult, Policies, Tool};
+use city_sim_protocol::events::SimAlert;
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
 
@@ -66,6 +67,10 @@ pub struct TickEvent {
     /// Whether an undo/redo step is currently available — drives button state.
     pub can_undo: bool,
     pub can_redo: bool,
+    /// Utility deficit/restore alerts raised since the previous tick — see
+    /// `city_sim_core::sim::Simulation::take_alerts`. Empty on most ticks;
+    /// only non-empty the tick a power/water balance crosses zero.
+    pub alerts: Vec<SimAlert>,
 }
 
 /// One entry in [`TickEvent::buildings`].
@@ -83,7 +88,7 @@ pub struct WireBuilding {
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
 
 pub enum SimCmd {
-    ApplyTool(Tool, u32, u32, u64),
+    ApplyTool(Tool, u32, u32, u64, mpsc::SyncSender<CommandResult>),
     SetSpeed(f32),
     SetPolicies(Policies),
     SetNaturalTerrain(Vec<u8>),
@@ -137,7 +142,7 @@ impl SimState {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
+fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) -> TickEvent {
     let s = &sim.state;
     // Same encoder the WASM host's `tile_buffer()` calls — one wire format,
     // shared, so this transport cannot silently drift from that one.
@@ -173,6 +178,7 @@ fn build_tick_event(sim: &Simulation, history: &History) -> TickEvent {
         buildings,
         can_undo: history.can_undo(),
         can_redo: history.can_redo(),
+        alerts,
     }
 }
 
@@ -230,7 +236,7 @@ pub fn start(
             // Drain all pending commands before ticking
             loop {
                 match rx.try_recv() {
-                    Ok(SimCmd::ApplyTool(tool, x, y, stroke)) => {
+                    Ok(SimCmd::ApplyTool(tool, x, y, stroke, tx)) => {
                         let pending = history.prepare(&sim.state, stroke);
                         let result = sim_apply_tool(&mut sim.state, tool, x, y);
                         if result.success {
@@ -238,6 +244,7 @@ pub fn start(
                                 history.commit(bytes, stroke);
                             }
                         }
+                        let _ = tx.send(result);
                     }
                     Ok(SimCmd::SetSpeed(m)) => {
                         sim.set_speed(m);
@@ -290,8 +297,12 @@ pub fn start(
             }
 
             sim.step(dt);
+            let alerts = sim.take_alerts();
 
-            if on_tick.send(build_tick_event(&sim, &history)).is_err() {
+            if on_tick
+                .send(build_tick_event(&sim, &history, alerts))
+                .is_err()
+            {
                 break; // JS side closed the channel
             }
 
@@ -306,6 +317,12 @@ pub fn start(
 
 /// Apply a player tool at tile (x, y). `tool` is the `Tool` u8 discriminant
 /// (matching `city_sim_protocol::commands::Tool as u8`).
+///
+/// Blocks until the sim thread has actually processed the command (max 2 s,
+/// same budget as `get_snapshot`) and returns its real `CommandResult` —
+/// success and, on failure, the reason ("Not enough funds", "Bulldoze
+/// first"). The sim thread drains all pending commands before ticking, so
+/// this normally resolves within one frame (≤50 ms), not a full timeout.
 #[tauri::command]
 pub fn apply_tool(
     state: State<'_, SimState>,
@@ -313,9 +330,15 @@ pub fn apply_tool(
     x: u32,
     y: u32,
     stroke_id: u32,
-) -> Result<(), Error> {
+) -> Result<CommandResult, Error> {
     let tool = Tool::try_from(tool).map_err(|_| Error::InvalidTool(tool))?;
-    state.send(SimCmd::ApplyTool(tool, x, y, stroke_id as u64))
+    let (tx, rx) = mpsc::sync_channel(0);
+    state.send(SimCmd::ApplyTool(tool, x, y, stroke_id as u64, tx))?;
+    rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|e| match e {
+            RecvTimeoutError::Timeout => Error::ApplyToolTimeout,
+            RecvTimeoutError::Disconnected => Error::ChannelClosed,
+        })
 }
 
 /// Adjust simulation speed. `multiplier` is relative to the base 20 Hz rate.

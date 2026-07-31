@@ -37,6 +37,12 @@ interface WireBuilding {
   originY: number;
 }
 
+interface SimAlert {
+  kind: 'PowerDeficit' | 'PowerRestored' | 'WaterDeficit' | 'WaterRestored' | 'BudgetWarning' | 'Abandonment' | 'Info';
+  message: string;
+  sticky: boolean;
+}
+
 interface TickEvent {
   tick: number; day: number; population: number; jobs: number; money: number;
   power: number; water: number; powerProduced: number; waterProduced: number;
@@ -46,6 +52,7 @@ interface TickEvent {
   tiles: number[];
   buildings: WireBuilding[];
   canUndo: boolean; canRedo: boolean;
+  alerts: SimAlert[];
 }
 
 const GRID_TILES = 8 * 8;
@@ -60,6 +67,7 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
     tiles: new Array(GRID_TILES * BYTES_PER_TILE).fill(0),
     buildings: [],
     canUndo: false, canRedo: false,
+    alerts: [],
     ...overrides
   };
 }
@@ -67,7 +75,7 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
 function makeFakePlugin(): TauriPluginBindings {
   return {
     start: vi.fn(),
-    applyTool: vi.fn(),
+    applyTool: vi.fn().mockResolvedValue({ success: true, message: null }),
     setSpeed: vi.fn(),
     setPolicies: vi.fn(),
     setNaturalTerrain: vi.fn(),
@@ -148,6 +156,20 @@ describe('TauriSimBridge command routing', () => {
 
     bridge.dispose();
     expect(plugin.stop).toHaveBeenCalled();
+  });
+
+  it('forwards a refused ApplyTool\'s message as a CommandResult once the plugin resolves', async () => {
+    const { bridge, plugin, events } = await makeBridge();
+    vi.mocked(plugin.applyTool).mockResolvedValueOnce({ success: false, message: 'Not enough funds' });
+
+    bridge.send(applyToolCmd(Tool.Road, 3, 4, nextStrokeId()));
+    // send() itself must still answer synchronously and optimistically —
+    // the real result arrives later, over the resolved promise.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const result = events.find((e) => e.type === 'CommandResult');
+    expect(result).toEqual({ type: 'CommandResult', success: false, message: 'Not enough funds' });
   });
 });
 
@@ -294,6 +316,25 @@ describe('TauriSimBridge onTick decode', () => {
     const after = historyEvents();
     expect(after.length).toBe(before + 1);
     expect(after[after.length - 1]).toMatchObject({ data: { canUndo: true, canRedo: false } });
+  });
+
+  it('forwards each alert as FromSim::Alert plus its paired narrative event', async () => {
+    const { emit, events } = await makeBridge();
+    emit(baseTickEvent({
+      alerts: [{ kind: 'PowerDeficit', message: 'Power deficit detected.', sticky: true }],
+    }));
+
+    const alert = events.find((e) => e.type === 'Alert');
+    expect(alert).toMatchObject({
+      type: 'Alert',
+      data: { kind: 'PowerDeficit', message: 'Power deficit detected.', sticky: true },
+    });
+
+    const narrative = events.find((e) => e.type === 'Narrative');
+    expect(narrative).toMatchObject({
+      type: 'Narrative',
+      data: { kind: 'Alert', payload: { type: 'power_deficit_start', category: 'utilities', severity: 'alert' } },
+    });
   });
 
   it('emits Ready once the plugin has started and the engine is seeded', async () => {
