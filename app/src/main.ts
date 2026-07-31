@@ -449,15 +449,22 @@ function wireBridge(b: SimBridge): void {
     } else if (msg.type === 'CommandResult') {
       // The synchronous check in applyCurrentTool (bridge.send()'s return
       // value) can never see a failure — both bridges answer optimistically
-      // before the engine has actually processed the command. This is the
-      // real result, arriving async; surface it the same way.
-      if (!msg.success && msg.message) {
-        // Keyed by message text, same as the Alert branch above keys by
-        // kind: a drag-paint stroke can send one ApplyTool per tile, and a
-        // sustained failure (e.g. running out of funds mid-drag) would
-        // otherwise post one stacked toast per tile instead of one toast
-        // that keeps refreshing.
-        showToast(msg.message, { id: `command-result:${msg.message}`, severity: 'warning' });
+      // before the engine has actually processed the command, so the click
+      // already played the success chime. This is the real result, arriving
+      // async; correct both the sound and the message the same way.
+      if (!msg.success) {
+        // playToolResult ignores `tool` entirely once `success` is false —
+        // it always plays the throttled 'error' cue — so which tool was
+        // active doesn't need to be correlated back to this specific call.
+        sfx?.playToolResult(activeTool, false);
+        if (msg.message) {
+          // Keyed by message text, same as the Alert branch above keys by
+          // kind: a drag-paint stroke can send one ApplyTool per tile, and a
+          // sustained failure (e.g. running out of funds mid-drag) would
+          // otherwise post one stacked toast per tile instead of one toast
+          // that keeps refreshing.
+          showToast(msg.message, { id: `command-result:${msg.message}`, severity: 'warning' });
+        }
       }
     } else if (msg.type === 'HistoryChanged') {
       onHistoryChanged?.(msg.data);
