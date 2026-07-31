@@ -11,7 +11,7 @@
 // Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
 import { recordEngineBuild } from '../buildInfo';
-import type { GameState } from './gameState';
+import type { GameState, ViewStratum } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
@@ -54,6 +54,16 @@ const TOOL_TO_U8: Record<Tool, number> = {
   [Tool.Park]:             20,
   [Tool.Bulldoze]:         21,
   [Tool.ParkLarge]:        22,
+};
+
+// Mapping from the TS string-valued ViewStratum ('surface' | 'underground',
+// gameState.ts) → the Rust ViewStratum's #[repr(u8)] discriminant
+// (city-sim-protocol/src/commands.rs). Deliberately a distinct concept from
+// tile-internal Stratum — this one describes which layer the *player* is
+// looking at, not a tile occupant bitset — see that enum's doc comment.
+const STRATUM_TO_U8: Record<ViewStratum, number> = {
+  surface: 0,
+  underground: 1,
 };
 
 interface WorkerHistoryFlags {
@@ -250,7 +260,13 @@ export class WasmSimBridge implements SimBridge {
         if (this.ready) {
           this.worker.postMessage({
             type: 'apply_tool',
-            payload: { tool: TOOL_TO_U8[cmd.tool], x: cmd.x, y: cmd.y, strokeId: cmd.strokeId },
+            payload: {
+              tool: TOOL_TO_U8[cmd.tool],
+              x: cmd.x,
+              y: cmd.y,
+              strokeId: cmd.strokeId,
+              stratum: STRATUM_TO_U8[cmd.stratum],
+            },
           });
         }
         break;

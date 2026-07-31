@@ -118,6 +118,19 @@ export const TOOL_ID = {
 
 export type ToolId = typeof TOOL_ID[keyof typeof TOOL_ID]
 
+/**
+ * ViewStratum u8 discriminant map — mirrors `city_sim_protocol::commands::ViewStratum as u8`.
+ *
+ * Pass one of these as the `stratum` argument to `applyTool`. TauriSimBridge maps
+ * the game's string `ViewStratum` type ('surface' | 'underground') to these IDs.
+ */
+export const VIEW_STRATUM_ID = {
+  Surface:     0,
+  Underground: 1,
+} as const
+
+export type ViewStratumId = typeof VIEW_STRATUM_ID[keyof typeof VIEW_STRATUM_ID]
+
 // ── Plugin commands ───────────────────────────────────────────────────────────
 
 /**
@@ -161,9 +174,18 @@ export interface CommandResult {
  * @param y        Tile row (0-indexed from top).
  * @param strokeId Groups the calls of one drag-paint gesture into a single
  *                 undo step; bump it on every new gesture.
+ * @param stratum  A `VIEW_STRATUM_ID` value — which layer the player was
+ *                 looking at when they clicked, so stratum-aware tools (the
+ *                 bulldozer) know what the player actually meant to clear.
  */
-export async function applyTool(tool: ToolId, x: number, y: number, strokeId: number): Promise<CommandResult> {
-  return await invoke('plugin:city-sim|apply_tool', { tool, x, y, strokeId })
+export async function applyTool(
+  tool: ToolId,
+  x: number,
+  y: number,
+  strokeId: number,
+  stratum: ViewStratumId,
+): Promise<CommandResult> {
+  return await invoke('plugin:city-sim|apply_tool', { tool, x, y, strokeId, stratum })
 }
 
 /**

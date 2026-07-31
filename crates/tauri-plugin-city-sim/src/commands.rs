@@ -14,7 +14,7 @@ use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
 use city_sim_core::wire::encode_tile_buffer;
-use city_sim_protocol::commands::{CommandResult, Policies, Tool};
+use city_sim_protocol::commands::{CommandResult, Policies, Tool, ViewStratum};
 use city_sim_protocol::events::SimAlert;
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
@@ -88,7 +88,14 @@ pub struct WireBuilding {
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
 
 pub enum SimCmd {
-    ApplyTool(Tool, u32, u32, u64, mpsc::SyncSender<CommandResult>),
+    ApplyTool(
+        Tool,
+        u32,
+        u32,
+        u64,
+        ViewStratum,
+        mpsc::SyncSender<CommandResult>,
+    ),
     SetSpeed(f32),
     SetPolicies(Policies),
     SetNaturalTerrain(Vec<u8>),
@@ -236,9 +243,9 @@ pub fn start(
             // Drain all pending commands before ticking
             loop {
                 match rx.try_recv() {
-                    Ok(SimCmd::ApplyTool(tool, x, y, stroke, tx)) => {
+                    Ok(SimCmd::ApplyTool(tool, x, y, stroke, stratum, tx)) => {
                         let pending = history.prepare(&sim.state, stroke);
-                        let result = sim_apply_tool(&mut sim.state, tool, x, y);
+                        let result = sim_apply_tool(&mut sim.state, tool, x, y, stratum);
                         if result.success {
                             if let Some(bytes) = pending {
                                 history.commit(bytes, stroke);
@@ -316,7 +323,11 @@ pub fn start(
 }
 
 /// Apply a player tool at tile (x, y). `tool` is the `Tool` u8 discriminant
-/// (matching `city_sim_protocol::commands::Tool as u8`).
+/// (matching `city_sim_protocol::commands::Tool as u8`). `stratum` is the
+/// `ViewStratum` u8 discriminant (0 = Surface, 1 = Underground) — which layer
+/// the player was looking at when they clicked, so tools that behave
+/// differently per-stratum (currently just the bulldozer) know what the
+/// player actually meant to clear.
 ///
 /// Blocks until the sim thread has actually processed the command (max 2 s,
 /// same budget as `get_snapshot`) and returns its real `CommandResult` —
@@ -330,10 +341,12 @@ pub fn apply_tool(
     x: u32,
     y: u32,
     stroke_id: u32,
+    stratum: u8,
 ) -> Result<CommandResult, Error> {
     let tool = Tool::try_from(tool).map_err(|_| Error::InvalidTool(tool))?;
+    let stratum = ViewStratum::from(stratum);
     let (tx, rx) = mpsc::sync_channel(0);
-    state.send(SimCmd::ApplyTool(tool, x, y, stroke_id as u64, tx))?;
+    state.send(SimCmd::ApplyTool(tool, x, y, stroke_id as u64, stratum, tx))?;
     rx.recv_timeout(Duration::from_secs(2))
         .map_err(|e| match e {
             RecvTimeoutError::Timeout => Error::ApplyToolTimeout,

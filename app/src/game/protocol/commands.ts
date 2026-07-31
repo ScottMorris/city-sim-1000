@@ -7,6 +7,7 @@
  */
 
 import { Tool } from '../toolTypes';
+import type { ViewStratum } from '../gameState';
 
 /**
  * SimCity-style fiscal policy — TS mirror of `BudgetPolicy` in
@@ -107,7 +108,7 @@ export function clampPolicies(policies: Policies): Policies {
 }
 
 export type SimCommand =
-  | { type: 'ApplyTool'; tool: Tool; x: number; y: number; strokeId: number }
+  | { type: 'ApplyTool'; tool: Tool; x: number; y: number; strokeId: number; stratum: ViewStratum }
   | { type: 'SetSpeed'; multiplier: number }
   | { type: 'SetPolicies'; policies: Policies };
 
@@ -120,9 +121,20 @@ export interface CommandResult {
  * `strokeId` groups the many `ApplyTool` commands of one drag-paint gesture
  * into a single undo step — allocate a fresh id per gesture with
  * `nextStrokeId()`, not per painted tile.
+ *
+ * `stratum` names the layer the player is looking at (see `ViewStratum` in
+ * `../gameState`) — every tool but `Tool.Bulldoze` ignores it today, but it
+ * travels on every `ApplyTool` command so it is never a client-only setting
+ * the engine can't see (`docs/features/layer-scoped-bulldozer.md`).
  */
-export function applyToolCmd(tool: Tool, x: number, y: number, strokeId: number): SimCommand {
-  return { type: 'ApplyTool', tool, x, y, strokeId };
+export function applyToolCmd(
+  tool: Tool,
+  x: number,
+  y: number,
+  strokeId: number,
+  stratum: ViewStratum
+): SimCommand {
+  return { type: 'ApplyTool', tool, x, y, strokeId, stratum };
 }
 
 let strokeCounter = 0;

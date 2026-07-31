@@ -8,7 +8,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { SimBridge } from './simBridge';
-import type { GameState } from './gameState';
+import type { GameState, ViewStratum } from './gameState';
 import { createInitialState } from './gameState';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
@@ -33,6 +33,13 @@ function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number,
 }
 
 const MCP_WS_PORT = 5174;
+
+// The MCP bridge has no view state of its own — scripted commands default to
+// the surface, with an explicit `stratum: 'underground'` param letting a
+// script lay pipe or bulldoze underground without a client view to read.
+function stratumParam(params: Record<string, unknown>): ViewStratum {
+  return params.stratum === 'underground' ? 'underground' : 'surface';
+}
 
 // Use setTimeout rather than rAF — background/unfocused Chromium tabs throttle
 // rAF to 1 fps, which would stall every MCP command for seconds and freeze the HUD.
@@ -141,7 +148,7 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const x = params.x as number;
           const y = params.y as number;
           const moneyBefore = bridge.getState().money;
-          bridge.send({ type: 'ApplyTool', tool, x, y, strokeId: nextStrokeId() });
+          bridge.send({ type: 'ApplyTool', tool, x, y, strokeId: nextStrokeId(), stratum: stratumParam(params) });
           await waitMs(150);
           reply(id, {
             moneyBefore,
@@ -193,8 +200,9 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           );
           const moneyBefore = bridge.getState().money;
           const lineStroke = nextStrokeId();
+          const stratum = stratumParam(params);
           for (const [px, py] of pts) {
-            bridge.send({ type: 'ApplyTool', tool, x: px, y: py, strokeId: lineStroke });
+            bridge.send({ type: 'ApplyTool', tool, x: px, y: py, strokeId: lineStroke, stratum });
           }
           await waitMs(150);
           reply(id, { placed: pts.length, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
@@ -209,10 +217,11 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const by = Math.max(params.y1 as number, params.y2 as number);
           const moneyBefore = bridge.getState().money;
           const rectStroke = nextStrokeId();
+          const stratum = stratumParam(params);
           let placed = 0;
           for (let ry = ay; ry <= by; ry++) {
             for (let rx = ax; rx <= bx; rx++) {
-              bridge.send({ type: 'ApplyTool', tool, x: rx, y: ry, strokeId: rectStroke });
+              bridge.send({ type: 'ApplyTool', tool, x: rx, y: ry, strokeId: rectStroke, stratum });
               placed++;
             }
           }

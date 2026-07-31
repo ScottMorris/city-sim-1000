@@ -529,7 +529,7 @@ mod tests {
     use crate::commands::{apply_tool, tool_cost};
     use crate::migrate::set_v4_kind;
     use crate::occupants::{Occupant, ALL_OCCUPANTS};
-    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
 
     fn grid(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -568,7 +568,7 @@ mod tests {
     fn build_row(state: &mut GameState, tools: &[Tool], y: u32, len: u32) {
         for tool in tools {
             for x in 0..len {
-                let r = apply_tool(state, *tool, x, y);
+                let r = apply_tool(state, *tool, x, y, ViewStratum::Surface);
                 assert!(r.success, "{tool:?} at ({x}, {y}) failed: {:?}", r.message);
             }
         }
@@ -594,14 +594,14 @@ mod tests {
         let (blank_eco, blank_score) = (eco_at(&untouched, 4, 4), score(&untouched));
 
         let mut s = grid(8, 8);
-        assert!(apply_tool(&mut s, Tool::Park, 4, 4).success);
+        assert!(apply_tool(&mut s, Tool::Park, 4, 4, ViewStratum::Surface).success);
         let built_eco = eco_at(&s, 4, 4);
         assert!(
             built_eco > blank_eco,
             "a park must be worth more than the ground it sits on ({built_eco} vs {blank_eco})"
         );
 
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4, ViewStratum::Surface).success);
         assert_eq!(
             eco_at(&s, 4, 4),
             blank_eco,
@@ -671,7 +671,7 @@ mod tests {
         build_row(&mut s, &[Tool::Tree], 11, 16);
         for y in 12..16 {
             for x in 0..4 {
-                assert!(apply_tool(&mut s, Tool::Water, x, y).success);
+                assert!(apply_tool(&mut s, Tool::Water, x, y, ViewStratum::Surface).success);
             }
         }
 
@@ -686,7 +686,7 @@ mod tests {
 
         for y in 12..16 {
             for x in 0..4 {
-                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y).success);
+                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y, ViewStratum::Surface).success);
             }
         }
 
@@ -740,7 +740,7 @@ mod tests {
         }
         for y in 8..16 {
             for x in 0..4 {
-                assert!(apply_tool(&mut s, Tool::Water, x, y).success);
+                assert!(apply_tool(&mut s, Tool::Water, x, y, ViewStratum::Surface).success);
             }
         }
         let buildable = |s: &GameState| {
@@ -755,8 +755,8 @@ mod tests {
         let money_before = s.money;
         for y in 8..16 {
             for x in 0..4 {
-                assert!(apply_tool(&mut s, Tool::Road, x, y).success);
-                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y).success);
+                assert!(apply_tool(&mut s, Tool::Road, x, y, ViewStratum::Surface).success);
+                assert!(apply_tool(&mut s, Tool::Bulldoze, x, y, ViewStratum::Surface).success);
             }
         }
 

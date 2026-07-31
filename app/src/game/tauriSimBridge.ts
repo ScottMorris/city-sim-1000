@@ -29,7 +29,7 @@
  * that could disagree with the engine's own.
  */
 
-import type { GameState, Tile } from './gameState';
+import type { GameState, Tile, ViewStratum } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
@@ -57,6 +57,8 @@ import {
   importLegacy as pluginImportLegacy,
   TOOL_ID,
   type ToolId,
+  VIEW_STRATUM_ID,
+  type ViewStratumId,
   type TickEvent,
 } from 'tauri-plugin-city-sim';
 
@@ -134,6 +136,15 @@ const TOOL_TO_ID: Record<Tool, ToolId> = {
 };
 
 // ---------------------------------------------------------------------------
+// Stratum mapping: TS ViewStratum string union → plugin u8 discriminant
+// ---------------------------------------------------------------------------
+
+const STRATUM_TO_ID: Record<ViewStratum, ViewStratumId> = {
+  surface:     VIEW_STRATUM_ID.Surface,
+  underground: VIEW_STRATUM_ID.Underground,
+};
+
+// ---------------------------------------------------------------------------
 // TauriSimBridge
 // ---------------------------------------------------------------------------
 
@@ -176,7 +187,7 @@ export class TauriSimBridge implements SimBridge {
         // thread over IPC. Forward it once it lands, correlated to this exact
         // call by promise identity ("keyed by stroke" in practice, since each
         // call already carries its own strokeId).
-        void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId).then((result) => {
+        void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId, STRATUM_TO_ID[cmd.stratum]).then((result) => {
           this.handler?.({ type: 'CommandResult', success: result.success, message: result.message ?? undefined });
         });
         return { success: true };

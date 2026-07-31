@@ -775,7 +775,7 @@ function applyCurrentTool(tilePos: Position) {
   // engine has actually processed the command — the real result, including
   // any failure message, arrives async as a `CommandResult` FromSim message
   // (see `wireBridge` above), not through this return value.
-  const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y, strokeId));
+  const result = bridge.send(applyToolCmd(activeTool, tilePos.x, tilePos.y, strokeId, viewStratum));
   sfx?.playToolResult(activeTool, result.success);
   if (result.success) {
     minimap?.markDirty();

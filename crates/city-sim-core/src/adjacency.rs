@@ -200,7 +200,7 @@ mod tests {
     use crate::commands::apply_tool;
     use crate::migrate::{set_v4, set_v4_kind};
     use crate::occupants::Occupant;
-    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
     use city_sim_protocol::tile_kind::TileKind;
 
@@ -310,7 +310,7 @@ mod tests {
         let mut s = g(3, 1);
         s.money = 10_000;
         kind(&mut s, 0, 0, TileKind::Residential);
-        apply_tool(&mut s, Tool::PowerLine, 1, 0);
+        apply_tool(&mut s, Tool::PowerLine, 1, 0, ViewStratum::Surface);
         let line = s.tile_at(1, 0).unwrap();
         assert!(line.has_occupant(Occupant::PowerLine));
         assert!(
@@ -330,8 +330,8 @@ mod tests {
         let mut s = g(3, 1);
         s.money = 10_000;
         kind(&mut s, 0, 0, TileKind::Residential);
-        apply_tool(&mut s, Tool::PowerLine, 1, 0);
-        apply_tool(&mut s, Tool::Road, 1, 0);
+        apply_tool(&mut s, Tool::PowerLine, 1, 0, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::Road, 1, 0, ViewStratum::Surface);
         let t = s.tile_at(1, 0).unwrap();
         assert!(t.has_occupant(Occupant::PowerLine));
         assert!(t.has_occupant(Occupant::Road));
@@ -341,8 +341,8 @@ mod tests {
         let mut s = g(3, 1);
         s.money = 10_000;
         kind(&mut s, 0, 0, TileKind::Residential);
-        apply_tool(&mut s, Tool::Road, 1, 0);
-        apply_tool(&mut s, Tool::PowerLine, 1, 0);
+        apply_tool(&mut s, Tool::Road, 1, 0, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::PowerLine, 1, 0, ViewStratum::Surface);
         assert!(has_road_access(&s, 0, 0), "road-then-line");
     }
 
@@ -438,7 +438,7 @@ mod tests {
                 kind(&mut s, x, y, TileKind::Residential);
             }
         }
-        apply_tool(&mut s, Tool::PowerLine, 3, 1);
+        apply_tool(&mut s, Tool::PowerLine, 3, 1, ViewStratum::Surface);
 
         // (1,1) is the interior tile: every neighbour is a zone, so it is
         // neither a frontier zone nor road-adjacent.
@@ -450,7 +450,7 @@ mod tests {
         );
 
         // Pave the same tile and the chain is a road path again.
-        apply_tool(&mut s, Tool::Road, 3, 1);
+        apply_tool(&mut s, Tool::Road, 3, 1, ViewStratum::Surface);
         assert!(zone_has_road_path(&s, 1, 1));
     }
 

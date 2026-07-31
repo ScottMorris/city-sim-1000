@@ -259,8 +259,10 @@ server.tool(
     ]).describe('Tool to apply'),
     x: z.number().int().describe('Tile column'),
     y: z.number().int().describe('Tile row'),
+    stratum: z.enum(['surface', 'underground']).optional()
+      .describe('Which layer to act on — only bulldoze honours this today. Defaults to surface; pass "underground" to clear a buried pipe without a client view.'),
   },
-  async ({ tool, x, y }) => textResult(await callGame('apply_tool', { tool, x, y })),
+  async ({ tool, x, y, stratum }) => textResult(await callGame('apply_tool', { tool, x, y, stratum })),
 );
 
 server.tool(
@@ -294,9 +296,11 @@ server.tool(
     y1: z.number().int().describe('Start tile row'),
     x2: z.number().int().describe('End tile column'),
     y2: z.number().int().describe('End tile row'),
+    stratum: z.enum(['surface', 'underground']).optional()
+      .describe('Which layer to act on — only bulldoze honours this today. Defaults to surface; pass "underground" to clear buried pipe without a client view.'),
   },
-  async ({ tool, x1, y1, x2, y2 }) =>
-    textResult(await callGame('apply_tool_line', { tool, x1, y1, x2, y2 })),
+  async ({ tool, x1, y1, x2, y2, stratum }) =>
+    textResult(await callGame('apply_tool_line', { tool, x1, y1, x2, y2, stratum })),
 );
 
 server.tool(
@@ -311,9 +315,11 @@ server.tool(
     y1: z.number().int().describe('Top row (inclusive)'),
     x2: z.number().int().describe('Right column (inclusive)'),
     y2: z.number().int().describe('Bottom row (inclusive)'),
+    stratum: z.enum(['surface', 'underground']).optional()
+      .describe('Which layer to act on — only bulldoze honours this today. Defaults to surface; pass "underground" to clear buried pipe without a client view.'),
   },
-  async ({ tool, x1, y1, x2, y2 }) =>
-    textResult(await callGame('apply_tool_rect', { tool, x1, y1, x2, y2 })),
+  async ({ tool, x1, y1, x2, y2, stratum }) =>
+    textResult(await callGame('apply_tool_rect', { tool, x1, y1, x2, y2, stratum })),
 );
 
 server.tool(

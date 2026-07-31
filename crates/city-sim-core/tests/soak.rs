@@ -238,7 +238,7 @@ use city_sim_core::sim::{state_hash, Simulation};
 use city_sim_core::state::{BudgetStats, DemandStats, EducationStats, GameState};
 use city_sim_core::wilderness::{WildernessBreakdown, WildernessStats};
 use city_sim_core::wire::encode_tile_buffer;
-use city_sim_protocol::commands::Tool;
+use city_sim_protocol::commands::{Tool, ViewStratum};
 
 // ---------------------------------------------------------------------------
 // The counting allocator
@@ -503,7 +503,7 @@ fn build_soak_city() -> Simulation {
     // --- The hinterland ---------------------------------------------------
     for y in 1..5 {
         for x in (OUTPOST_END + 1)..(WIDTH - 1) {
-            apply_tool(s, Tool::Water, x, y);
+            apply_tool(s, Tool::Water, x, y, ViewStratum::Surface);
         }
     }
     for y in 7..(HEIGHT - 1) {
@@ -511,7 +511,7 @@ fn build_soak_city() -> Simulation {
             // Not a solid block — the holes give the fragmentation penalty and
             // the patch bonus something to disagree about.
             if (x + y) % 7 != 0 {
-                apply_tool(s, Tool::Tree, x, y);
+                apply_tool(s, Tool::Tree, x, y, ViewStratum::Surface);
             }
         }
     }
@@ -523,12 +523,12 @@ fn build_soak_city() -> Simulation {
     let grid = |s: &mut GameState, x0: u32, x1: u32| {
         for y in (0..HEIGHT).step_by(4) {
             for x in x0..x1 {
-                apply_tool(s, Tool::Road, x, y);
+                apply_tool(s, Tool::Road, x, y, ViewStratum::Surface);
             }
         }
         for x in (x0..x1).step_by(4) {
             for y in 0..HEIGHT {
-                apply_tool(s, Tool::Road, x, y);
+                apply_tool(s, Tool::Road, x, y, ViewStratum::Surface);
             }
         }
     };
@@ -538,11 +538,11 @@ fn build_soak_city() -> Simulation {
     // --- Services, town only ----------------------------------------------
     // The plant sits on the town grid, so the whole town grid is live; the
     // outpost grid is unreachable across the firebreak.
-    apply_tool(s, Tool::CoalPlant, 1, 1);
-    apply_tool(s, Tool::WaterPump, 2, 2);
-    apply_tool(s, Tool::ElementarySchool, 1, 5);
-    apply_tool(s, Tool::HighSchool, 1, 9);
-    apply_tool(s, Tool::Park, 3, 13);
+    apply_tool(s, Tool::CoalPlant, 1, 1, ViewStratum::Surface);
+    apply_tool(s, Tool::WaterPump, 2, 2, ViewStratum::Surface);
+    apply_tool(s, Tool::ElementarySchool, 1, 5, ViewStratum::Surface);
+    apply_tool(s, Tool::HighSchool, 1, 9, ViewStratum::Surface);
+    apply_tool(s, Tool::Park, 3, 13, ViewStratum::Surface);
 
     // --- Zoning -----------------------------------------------------------
     // The town cycles six parts jobs to one part housing; the outpost is all
@@ -570,7 +570,7 @@ fn build_soak_city() -> Simulation {
                 if s.tiles[idx].occupants() != 0 || s.tiles[idx].building_id.is_some() {
                     continue;
                 }
-                apply_tool(s, zones[*n % zones.len()], x, y);
+                apply_tool(s, zones[*n % zones.len()], x, y, ViewStratum::Surface);
                 *n += 1;
             }
         }

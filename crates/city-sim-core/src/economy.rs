@@ -356,7 +356,7 @@ mod tests {
         // are the whole point: adding a line to a road once took the bill
         // DOWN, from 0.10 to 0.08.
         use crate::commands::apply_tool;
-        use city_sim_protocol::commands::Tool;
+        use city_sim_protocol::commands::{Tool, ViewStratum};
 
         let bill = |build: &dyn Fn(&mut GameState)| {
             let mut s = gs(8, 8);
@@ -368,24 +368,24 @@ mod tests {
         };
 
         let road = bill(&|s| {
-            apply_tool(s, Tool::Road, 1, 1);
+            apply_tool(s, Tool::Road, 1, 1, ViewStratum::Surface);
         });
         let road_line = bill(&|s| {
-            apply_tool(s, Tool::Road, 1, 1);
-            apply_tool(s, Tool::PowerLine, 1, 1);
+            apply_tool(s, Tool::Road, 1, 1, ViewStratum::Surface);
+            apply_tool(s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         });
         let crossing = bill(&|s| {
-            apply_tool(s, Tool::Road, 1, 1);
-            apply_tool(s, Tool::Rail, 1, 1);
+            apply_tool(s, Tool::Road, 1, 1, ViewStratum::Surface);
+            apply_tool(s, Tool::Rail, 1, 1, ViewStratum::Surface);
         });
         let all_three = bill(&|s| {
-            apply_tool(s, Tool::Road, 1, 1);
-            apply_tool(s, Tool::Rail, 1, 1);
-            apply_tool(s, Tool::PowerLine, 1, 1);
+            apply_tool(s, Tool::Road, 1, 1, ViewStratum::Surface);
+            apply_tool(s, Tool::Rail, 1, 1, ViewStratum::Surface);
+            apply_tool(s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         });
         let zone_line = bill(&|s| {
-            apply_tool(s, Tool::Commercial, 1, 1);
-            apply_tool(s, Tool::PowerLine, 1, 1);
+            apply_tool(s, Tool::Commercial, 1, 1, ViewStratum::Surface);
+            apply_tool(s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         });
 
         let near = |got: f32, want: f32, what: &str| {
@@ -417,14 +417,14 @@ mod tests {
     #[test]
     fn a_water_pipe_under_a_road_is_billed_once() {
         use crate::commands::apply_tool;
-        use city_sim_protocol::commands::Tool;
+        use city_sim_protocol::commands::{Tool, ViewStratum};
 
         let mut s = gs(8, 8);
         for t in &mut s.tiles {
             *t = crate::state::Tile::land();
         }
-        apply_tool(&mut s, Tool::Road, 1, 1);
-        apply_tool(&mut s, Tool::WaterPipe, 1, 1);
+        apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
         let b = compute_daily_budget(&s);
         assert!(
             (b.maint_pipes - MAINT_WATER_PIPE).abs() < 1e-4,

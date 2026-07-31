@@ -441,19 +441,43 @@ mod tests {
 
     fn make_city_sim(seed: u32) -> Simulation {
         use crate::commands::apply_tool;
-        use city_sim_protocol::commands::Tool;
+        use city_sim_protocol::commands::{Tool, ViewStratum};
         let mut sim = Simulation::new(8, 8, seed);
         // Place roads + zones so zone growth fires and RNG is exercised
-        apply_tool(&mut sim.state, Tool::Road, 3, 0);
-        apply_tool(&mut sim.state, Tool::Road, 3, 1);
-        apply_tool(&mut sim.state, Tool::Road, 3, 2);
-        apply_tool(&mut sim.state, Tool::Road, 3, 3);
-        apply_tool(&mut sim.state, Tool::Residential, 0, 0);
-        apply_tool(&mut sim.state, Tool::Residential, 1, 0);
-        apply_tool(&mut sim.state, Tool::Residential, 0, 1);
-        apply_tool(&mut sim.state, Tool::Residential, 1, 1);
-        apply_tool(&mut sim.state, Tool::Commercial, 0, 2);
-        apply_tool(&mut sim.state, Tool::Industrial, 0, 3);
+        apply_tool(&mut sim.state, Tool::Road, 3, 0, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::Road, 3, 1, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::Road, 3, 2, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::Road, 3, 3, ViewStratum::Surface);
+        apply_tool(
+            &mut sim.state,
+            Tool::Residential,
+            0,
+            0,
+            ViewStratum::Surface,
+        );
+        apply_tool(
+            &mut sim.state,
+            Tool::Residential,
+            1,
+            0,
+            ViewStratum::Surface,
+        );
+        apply_tool(
+            &mut sim.state,
+            Tool::Residential,
+            0,
+            1,
+            ViewStratum::Surface,
+        );
+        apply_tool(
+            &mut sim.state,
+            Tool::Residential,
+            1,
+            1,
+            ViewStratum::Surface,
+        );
+        apply_tool(&mut sim.state, Tool::Commercial, 0, 2, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::Industrial, 0, 3, ViewStratum::Surface);
         sim.state.demand.residential = 80.0;
         sim.state.demand.commercial = 60.0;
         sim.state.demand.industrial = 60.0;
@@ -625,17 +649,29 @@ mod tests {
     fn water_requirement_is_opt_in_until_infrastructure_exists() {
         use crate::buildings::BuildingStatus;
         use crate::commands::apply_tool;
-        use city_sim_protocol::commands::Tool;
+        use city_sim_protocol::commands::{Tool, ViewStratum};
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(16, 16, 42);
         for x in 0..12 {
-            apply_tool(&mut sim.state, Tool::Road, x, 5);
+            apply_tool(&mut sim.state, Tool::Road, x, 5, ViewStratum::Surface);
         }
-        apply_tool(&mut sim.state, Tool::CoalPlant, 0, 3);
+        apply_tool(&mut sim.state, Tool::CoalPlant, 0, 3, ViewStratum::Surface);
         for x in 2..10 {
-            apply_tool(&mut sim.state, Tool::Residential, x, 4);
-            apply_tool(&mut sim.state, Tool::Residential, x, 6);
+            apply_tool(
+                &mut sim.state,
+                Tool::Residential,
+                x,
+                4,
+                ViewStratum::Surface,
+            );
+            apply_tool(
+                &mut sim.state,
+                Tool::Residential,
+                x,
+                6,
+                ViewStratum::Surface,
+            );
         }
         sim.state.demand.residential = 90.0;
         for _ in 0..300 {
@@ -662,7 +698,13 @@ mod tests {
         );
 
         // Opting in: a pump far from the zones activates the requirement.
-        apply_tool(&mut sim.state, Tool::WaterPump, 13, 13);
+        apply_tool(
+            &mut sim.state,
+            Tool::WaterPump,
+            13,
+            13,
+            ViewStratum::Surface,
+        );
         for _ in 0..5 {
             sim.step(1.0 / 20.0);
         }
@@ -930,18 +972,24 @@ mod tests {
     fn step_wires_handle_resource_alerts_into_the_real_tick_path() {
         use crate::commands::apply_tool;
         use crate::zones::place_zone_building;
-        use city_sim_protocol::commands::Tool;
+        use city_sim_protocol::commands::{Tool, ViewStratum};
 
         let mut sim = Simulation::new(16, 16, 42);
         for x in 0..12 {
-            apply_tool(&mut sim.state, Tool::Road, x, 5);
+            apply_tool(&mut sim.state, Tool::Road, x, 5, ViewStratum::Surface);
         }
-        apply_tool(&mut sim.state, Tool::SolarFarm, 0, 3);
+        apply_tool(&mut sim.state, Tool::SolarFarm, 0, 3, ViewStratum::Surface);
         // 5 zoned-and-built residential lots at 1.5 MW each = 7.5 MW,
         // comfortably past the SolarFarm's 5 MW — not the razor-thin 4.5 MW
         // (rounds to 5, exactly tying production) that 3 lots would give.
         for x in 2..7 {
-            apply_tool(&mut sim.state, Tool::Residential, x, 4);
+            apply_tool(
+                &mut sim.state,
+                Tool::Residential,
+                x,
+                4,
+                ViewStratum::Surface,
+            );
             assert!(
                 place_zone_building(&mut sim.state, x, 4),
                 "zone tag must place a building on a tile this test just zoned"

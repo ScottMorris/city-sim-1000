@@ -12,7 +12,7 @@ use crate::occupants::{
 };
 use crate::state::{GameState, Tile, FLAG_ABANDONED};
 use city_sim_protocol::{
-    commands::{CommandResult, Tool},
+    commands::{CommandResult, Tool, ViewStratum},
     tile_kind::TileKind,
 };
 
@@ -123,9 +123,21 @@ fn regrade_refusal(tile: &Tile) -> Option<&'static str> {
 
 /// Apply a player tool at tile (x, y) on `state`.
 ///
+/// `stratum` names the layer the player is looking at, filled from the
+/// client's active view. Every tool but `Tool::Bulldoze` ignores it today —
+/// see `bulldoze` — but it is threaded through every call site so the field
+/// travels on the wire for every command, not just the ones that currently
+/// read it (`docs/features/layer-scoped-bulldozer.md`).
+///
 /// Validates funds and placement rules, modifies state on success, and returns
 /// a `CommandResult` indicating success or a human-readable failure reason.
-pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandResult {
+pub fn apply_tool(
+    state: &mut GameState,
+    tool: Tool,
+    x: u32,
+    y: u32,
+    stratum: ViewStratum,
+) -> CommandResult {
     // Bounds check
     if state.tile_index(x, y).is_none() {
         return CommandResult::fail("Out of bounds");
@@ -344,7 +356,7 @@ pub fn apply_tool(state: &mut GameState, tool: Tool, x: u32, y: u32) -> CommandR
         Tool::Park => place_footprint_building(state, TileKind::Park, x, y, cost, 0, 0.0),
         Tool::ParkLarge => place_footprint_building(state, TileKind::ParkLarge, x, y, cost, 0, 0.0),
 
-        Tool::Bulldoze => bulldoze(state, x, y, cost),
+        Tool::Bulldoze => bulldoze(state, x, y, cost, stratum),
     }
 }
 
@@ -551,7 +563,13 @@ fn place_footprint_building(
 /// build one out of a loaded save and `Tile` can hold one.
 ///
 /// [`set_v4`]: crate::migrate::set_v4
-fn bulldoze(state: &mut GameState, x: u32, y: u32, cost: i64) -> CommandResult {
+fn bulldoze(
+    state: &mut GameState,
+    x: u32,
+    y: u32,
+    cost: i64,
+    _stratum: ViewStratum,
+) -> CommandResult {
     state.money -= cost;
     let idx = state.tile_index(x, y).unwrap();
     if let Some(bid) = state.tiles[idx].building_id {
@@ -601,7 +619,7 @@ mod tests {
     #[test]
     fn inspect_always_succeeds() {
         let mut s = gs(4, 4);
-        let r = apply_tool(&mut s, Tool::Inspect, 0, 0);
+        let r = apply_tool(&mut s, Tool::Inspect, 0, 0, ViewStratum::Surface);
         assert!(r.success);
         assert_eq!(s.money, 100_000);
     }
@@ -609,7 +627,7 @@ mod tests {
     #[test]
     fn out_of_bounds_fails() {
         let mut s = gs(4, 4);
-        let r = apply_tool(&mut s, Tool::Road, 10, 10);
+        let r = apply_tool(&mut s, Tool::Road, 10, 10, ViewStratum::Surface);
         assert!(!r.success);
     }
 
@@ -617,7 +635,7 @@ mod tests {
     fn no_funds_fails() {
         let mut s = gs(4, 4);
         s.money = 0;
-        let r = apply_tool(&mut s, Tool::Road, 0, 0);
+        let r = apply_tool(&mut s, Tool::Road, 0, 0, ViewStratum::Surface);
         assert!(!r.success);
         assert_eq!(r.message.as_deref(), Some("Not enough funds"));
     }
@@ -626,7 +644,7 @@ mod tests {
     fn road_places_road_and_charges_money() {
         let mut s = gs(4, 4);
         let before = s.money;
-        let r = apply_tool(&mut s, Tool::Road, 1, 1);
+        let r = apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface);
         assert!(r.success);
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road));
         assert_eq!(s.money, before - tool_cost(Tool::Road));
@@ -643,7 +661,7 @@ mod tests {
         for order in [[Tool::Rail, Tool::Road], [Tool::Road, Tool::Rail]] {
             let mut s = gs(4, 4);
             for tool in order {
-                assert!(apply_tool(&mut s, tool, 0, 0).success);
+                assert!(apply_tool(&mut s, tool, 0, 0, ViewStratum::Surface).success);
             }
             let t = s.tile_at(0, 0).unwrap();
             assert!(t.has_occupant(Occupant::Road), "{order:?}: the road");
@@ -655,7 +673,7 @@ mod tests {
     fn zone_tool_charges_and_sets_kind() {
         let mut s = gs(4, 4);
         let before = s.money;
-        let r = apply_tool(&mut s, Tool::Residential, 2, 2);
+        let r = apply_tool(&mut s, Tool::Residential, 2, 2, ViewStratum::Surface);
         assert!(r.success);
         assert_eq!(
             s.tile_at(2, 2).unwrap().zone_occupant(),
@@ -668,7 +686,7 @@ mod tests {
     fn zone_over_road_fails() {
         let mut s = gs(4, 4);
         set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::Road);
-        let r = apply_tool(&mut s, Tool::Residential, 0, 0);
+        let r = apply_tool(&mut s, Tool::Residential, 0, 0, ViewStratum::Surface);
         assert!(!r.success);
         assert!(
             s.tile_at(0, 0).unwrap().has_occupant(Occupant::Road),
@@ -679,7 +697,7 @@ mod tests {
     #[test]
     fn water_pipe_sets_underground() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterPipe, 1, 1);
+        apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Pipe));
     }
 
@@ -687,7 +705,7 @@ mod tests {
     fn place_1x1_building_stamps_tile_and_charges() {
         let mut s = gs(4, 4);
         let before = s.money;
-        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0);
+        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0, ViewStratum::Surface);
         assert!(r.success);
         assert_eq!(structure_kind_at(&s, 0, 0), Some(TileKind::WaterPump));
         assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
@@ -698,7 +716,7 @@ mod tests {
     #[test]
     fn place_2x2_building_fills_footprint() {
         let mut s = gs(4, 4);
-        let r = apply_tool(&mut s, Tool::WaterTower, 0, 0);
+        let r = apply_tool(&mut s, Tool::WaterTower, 0, 0, ViewStratum::Surface);
         assert!(r.success);
         let bid = s.tile_at(0, 0).unwrap().building_id.unwrap();
         for dy in 0..2 {
@@ -713,7 +731,7 @@ mod tests {
     fn place_building_fails_out_of_bounds() {
         let mut s = gs(3, 3);
         // WaterTower is 2×2; placing at (2,2) would go to (3,3) which is out of bounds
-        let r = apply_tool(&mut s, Tool::WaterTower, 2, 2);
+        let r = apply_tool(&mut s, Tool::WaterTower, 2, 2, ViewStratum::Surface);
         assert!(!r.success);
         assert_eq!(s.tile_at(2, 2).unwrap().occupants(), 0);
     }
@@ -721,8 +739,8 @@ mod tests {
     #[test]
     fn place_building_fails_on_overlap() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterPump, 0, 0);
-        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0);
+        apply_tool(&mut s, Tool::WaterPump, 0, 0, ViewStratum::Surface);
+        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0, ViewStratum::Surface);
         assert!(!r.success);
         assert_eq!(s.buildings.len(), 1, "only one building should exist");
     }
@@ -730,8 +748,8 @@ mod tests {
     #[test]
     fn bulldoze_removes_road() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Road, 0, 0);
-        apply_tool(&mut s, Tool::Bulldoze, 0, 0);
+        apply_tool(&mut s, Tool::Road, 0, 0, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface);
         assert_eq!(s.tile_at(0, 0).unwrap().occupants(), 0);
     }
 
@@ -758,9 +776,9 @@ mod tests {
     fn the_bulldozer_clears_the_tile_and_leaves_the_ground_alone() {
         // Dry land, built on through the tools.
         let mut s = gs(4, 4);
-        assert!(apply_tool(&mut s, Tool::Road, 1, 1).success);
-        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.terrain(), Terrain::Land, "bulldozing land drowned it");
         assert_eq!(t.occupants(), 0, "something outlived the bulldozer");
@@ -774,7 +792,7 @@ mod tests {
             None,
         );
         assert!(s.tile_at(2, 2).unwrap().has_occupant(Occupant::Road));
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2, ViewStratum::Surface).success);
         let t = s.tile_at(2, 2).unwrap();
         assert_eq!(
             t.terrain(),
@@ -802,12 +820,12 @@ mod tests {
     #[test]
     fn bulldozing_open_water_is_not_a_cheap_regrade() {
         let mut s = gs(4, 4);
-        assert!(apply_tool(&mut s, Tool::Water, 1, 1).success);
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Water, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
         assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
 
         // …and the brush that *is* priced for it still works.
-        assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1, ViewStratum::Surface).success);
         assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Land);
         assert!(
             tool_cost(Tool::TerraformRaise) > tool_cost(Tool::Bulldoze),
@@ -839,17 +857,17 @@ mod tests {
     #[test]
     fn building_over_water_and_razing_it_is_the_cheapest_regrade() {
         let mut s = gs(4, 4);
-        assert!(apply_tool(&mut s, Tool::Water, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Water, 1, 1, ViewStratum::Surface).success);
         assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
 
         let before = s.money;
-        assert!(apply_tool(&mut s, Tool::Road, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface).success);
         assert_eq!(
             s.tile_at(1, 1).unwrap().terrain(),
             Terrain::Land,
             "the road did not fill the lake in as it crossed it"
         );
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
 
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(
@@ -873,8 +891,8 @@ mod tests {
         // `Pipe` bit and never calls `regrade_at` — and everything else that
         // does regrade costs more than a road.
         let mut pipe = gs(4, 4);
-        assert!(apply_tool(&mut pipe, Tool::Water, 1, 1).success);
-        assert!(apply_tool(&mut pipe, Tool::WaterPipe, 1, 1).success);
+        assert!(apply_tool(&mut pipe, Tool::Water, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut pipe, Tool::WaterPipe, 1, 1, ViewStratum::Surface).success);
         assert_eq!(
             pipe.tile_at(1, 1).unwrap().terrain(),
             Terrain::Water,
@@ -905,8 +923,8 @@ mod tests {
         let mut s = gs(4, 4);
 
         // Overhead: a hydro span, then a lake painted under it.
-        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2).success);
-        assert!(apply_tool(&mut s, Tool::Water, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Water, 2, 2, ViewStratum::Surface).success);
         let t = s.tile_at(2, 2).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert!(
@@ -915,8 +933,8 @@ mod tests {
         );
 
         // Underground: a main, then a lake painted over it.
-        assert!(apply_tool(&mut s, Tool::WaterPipe, 3, 3).success);
-        assert!(apply_tool(&mut s, Tool::Water, 3, 3).success);
+        assert!(apply_tool(&mut s, Tool::WaterPipe, 3, 3, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Water, 3, 3, ViewStratum::Surface).success);
         let t = s.tile_at(3, 3).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert!(
@@ -927,12 +945,12 @@ mod tests {
         // And the bulldozer reads correctly on both: what stands goes, the
         // water stays. The pipe takes its own click, because underground is
         // only editable from the underground view.
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2, ViewStratum::Surface).success);
         let t = s.tile_at(2, 2).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert_eq!(t.occupants(), 0);
 
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 3, 3).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 3, 3, ViewStratum::Surface).success);
         let t = s.tile_at(3, 3).unwrap();
         assert_eq!(t.terrain(), Terrain::Water);
         assert_eq!(t.occupants(), 0);
@@ -959,9 +977,9 @@ mod tests {
         use crate::zones::ZoneGrowthSim;
 
         let mut s = gs(4, 4);
-        assert!(apply_tool(&mut s, Tool::Road, 1, 0).success);
-        assert!(apply_tool(&mut s, Tool::Residential, 1, 1).success);
-        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Road, 1, 0, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Residential, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success);
         s.tile_at_mut(1, 0).unwrap().set_flag(FLAG_POWERED, true);
         s.tile_at_mut(1, 1).unwrap().set_flag(FLAG_POWERED, true);
         s.demand.residential = 100.0;
@@ -983,7 +1001,7 @@ mod tests {
         assert!(t.has_occupant(Occupant::ZoneResidential));
         assert!(t.has_occupant(Occupant::PowerLine));
 
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
         let t = s.tile_at(1, 1).unwrap();
         assert!(t.building_id.is_none(), "the house outlived the click");
         assert!(
@@ -1000,16 +1018,16 @@ mod tests {
         );
 
         // The second click is what clears them.
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface).success);
         assert_eq!(s.tile_at(1, 1).unwrap().occupants(), 0);
     }
 
     #[test]
     fn bulldoze_removes_building_and_clears_tiles() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterTower, 0, 0);
+        apply_tool(&mut s, Tool::WaterTower, 0, 0, ViewStratum::Surface);
         assert_eq!(s.buildings.len(), 1);
-        apply_tool(&mut s, Tool::Bulldoze, 0, 0);
+        apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface);
         assert!(s.buildings.is_empty());
         for dy in 0..2 {
             for dx in 0..2 {
@@ -1044,13 +1062,16 @@ mod tests {
             (Tool::ElementarySchool, 2, 2),
         ] {
             let mut s = gs(8, 8);
-            assert!(apply_tool(&mut s, tool, 4, 4).success, "{tool:?} refused");
+            assert!(
+                apply_tool(&mut s, tool, 4, 4, ViewStratum::Surface).success,
+                "{tool:?} refused"
+            );
             assert!(
                 s.tile_at(4, 4).unwrap().has_occupant(Occupant::Structure),
                 "{tool:?} not built"
             );
 
-            assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4).success);
+            assert!(apply_tool(&mut s, Tool::Bulldoze, 4, 4, ViewStratum::Surface).success);
             for dy in 0..h {
                 for dx in 0..w {
                     let (x, y) = (4 + dx, 4 + dy);
@@ -1075,9 +1096,9 @@ mod tests {
     #[test]
     fn bulldoze_removes_underground_pipe() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterPipe, 0, 0);
+        apply_tool(&mut s, Tool::WaterPipe, 0, 0, ViewStratum::Surface);
         assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
-        apply_tool(&mut s, Tool::Bulldoze, 0, 0);
+        apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface);
         assert!(!s.tile_at(0, 0).unwrap().has_occupant(Occupant::Pipe));
     }
 
@@ -1089,8 +1110,8 @@ mod tests {
         // while doing the same two things in the other order gave a crossing.
         for tool in [Tool::Road, Tool::Rail] {
             let mut s = gs(4, 4);
-            apply_tool(&mut s, Tool::PowerLine, 1, 1);
-            apply_tool(&mut s, tool, 1, 1);
+            apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
+            apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface);
 
             let t = s.tile_at(1, 1).unwrap();
             assert!(
@@ -1117,12 +1138,12 @@ mod tests {
             (Tool::Commercial, Tool::PowerLine),
         ] {
             let mut forward = gs(4, 4);
-            apply_tool(&mut forward, first, 1, 1);
-            apply_tool(&mut forward, second, 1, 1);
+            apply_tool(&mut forward, first, 1, 1, ViewStratum::Surface);
+            apply_tool(&mut forward, second, 1, 1, ViewStratum::Surface);
 
             let mut reverse = gs(4, 4);
-            apply_tool(&mut reverse, second, 1, 1);
-            apply_tool(&mut reverse, first, 1, 1);
+            apply_tool(&mut reverse, second, 1, 1, ViewStratum::Surface);
+            apply_tool(&mut reverse, first, 1, 1, ViewStratum::Surface);
 
             assert_eq!(
                 forward.tile_at(1, 1).unwrap().occupants(),
@@ -1138,12 +1159,12 @@ mod tests {
         // power overlay. Bulldozing must clear them, or the tile keeps
         // rendering a road and wires that are no longer there.
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Road, 1, 1);
-        apply_tool(&mut s, Tool::PowerLine, 1, 1);
+        apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road));
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::PowerLine));
 
-        apply_tool(&mut s, Tool::Bulldoze, 1, 1);
+        apply_tool(&mut s, Tool::Bulldoze, 1, 1, ViewStratum::Surface);
         assert_eq!(
             s.tile_at(1, 1).unwrap().visible_occupants(),
             0,
@@ -1154,14 +1175,14 @@ mod tests {
     #[test]
     fn power_line_sets_power_overlay_flag() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::PowerLine, 0, 0);
+        apply_tool(&mut s, Tool::PowerLine, 0, 0, ViewStratum::Surface);
         assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::PowerLine));
     }
 
     #[test]
     fn place_elementary_school_2x2() {
         let mut s = gs(4, 4);
-        let r = apply_tool(&mut s, Tool::ElementarySchool, 0, 0);
+        let r = apply_tool(&mut s, Tool::ElementarySchool, 0, 0, ViewStratum::Surface);
         assert!(r.success);
         assert_eq!(
             structure_kind_at(&s, 0, 0),
@@ -1175,7 +1196,7 @@ mod tests {
         // Regression: place_footprint_building must propagate water_output from
         // the building template onto the tile so the water BFS sees it as a source.
         let mut s = gs(4, 4);
-        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0);
+        let r = apply_tool(&mut s, Tool::WaterPump, 0, 0, ViewStratum::Surface);
         assert!(r.success);
         assert!(
             s.tile_at(0, 0).unwrap().water_output > 0,
@@ -1189,11 +1210,11 @@ mod tests {
         // The player must Bulldoze first — matches the TS tools.ts guard.
         for tool in [Tool::Road, Tool::Rail, Tool::PowerLine] {
             let mut s = gs(4, 4);
-            apply_tool(&mut s, Tool::WaterPump, 1, 1);
+            apply_tool(&mut s, Tool::WaterPump, 1, 1, ViewStratum::Surface);
             assert!(s.tile_at(1, 1).unwrap().building_id.is_some());
 
             let before_money = s.money;
-            let r = apply_tool(&mut s, tool, 1, 1);
+            let r = apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface);
             assert!(!r.success, "{tool:?} should be rejected over a building");
             assert_eq!(
                 s.money, before_money,
@@ -1209,10 +1230,10 @@ mod tests {
     #[test]
     fn zone_over_building_fails() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::WaterPump, 1, 1);
+        apply_tool(&mut s, Tool::WaterPump, 1, 1, ViewStratum::Surface);
         let before_money = s.money;
         for tool in [Tool::Residential, Tool::Commercial, Tool::Industrial] {
-            let r = apply_tool(&mut s, tool, 1, 1);
+            let r = apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface);
             assert!(!r.success, "{tool:?} should be rejected over a building");
             assert_eq!(
                 s.money, before_money,
@@ -1229,9 +1250,9 @@ mod tests {
     #[test]
     fn building_over_road_fails() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Road, 1, 1);
+        apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface);
         let before_money = s.money;
-        let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
+        let r = apply_tool(&mut s, Tool::WaterPump, 1, 1, ViewStratum::Surface);
         assert!(!r.success, "building should be rejected over a road");
         assert_eq!(s.money, before_money, "must not charge on rejection");
         assert!(
@@ -1243,9 +1264,9 @@ mod tests {
     #[test]
     fn building_over_powerline_fails() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::PowerLine, 1, 1);
+        apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         let before_money = s.money;
-        let r = apply_tool(&mut s, Tool::WaterPump, 1, 1);
+        let r = apply_tool(&mut s, Tool::WaterPump, 1, 1, ViewStratum::Surface);
         assert!(!r.success, "building should be rejected over a powerline");
         assert_eq!(s.money, before_money, "must not charge on rejection");
     }
@@ -1257,14 +1278,14 @@ mod tests {
         // `kind`-enumerating guard could not see it and let a park land on live
         // conductors — which went on drawing, conducting and billing.
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Residential, 1, 1);
-        apply_tool(&mut s, Tool::PowerLine, 1, 1);
+        apply_tool(&mut s, Tool::Residential, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.zone_occupant(), Some(Occupant::ZoneResidential));
         assert!(t.has_occupant(Occupant::PowerLine));
 
         let before_money = s.money;
-        let r = apply_tool(&mut s, Tool::Park, 1, 1);
+        let r = apply_tool(&mut s, Tool::Park, 1, 1, ViewStratum::Surface);
         assert!(!r.success, "a park was stamped over a live hydro line");
         assert_eq!(s.money, before_money, "must not charge on rejection");
         assert!(s.buildings.is_empty());
@@ -1283,13 +1304,13 @@ mod tests {
         // point of making the strata canonical; the guard reads the occupant
         // set either way.
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::PowerLine, 1, 1);
-        apply_tool(&mut s, Tool::TerraformRaise, 1, 1);
+        apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::TerraformRaise, 1, 1, ViewStratum::Surface);
         let t = s.tile_at(1, 1).unwrap();
         assert_eq!(t.occupants_in(Stratum::Surface), 0, "the ground is bare");
         assert!(t.has_occupant(Occupant::PowerLine));
 
-        let r = apply_tool(&mut s, Tool::HydroPlant, 1, 1);
+        let r = apply_tool(&mut s, Tool::HydroPlant, 1, 1, ViewStratum::Surface);
         assert!(!r.success, "a plant was stamped over a terraformed line");
     }
 
@@ -1305,9 +1326,9 @@ mod tests {
             (Tool::TerraformLower, Terrain::Water),
         ] {
             let mut s = gs(4, 4);
-            apply_tool(&mut s, Tool::PowerLine, 1, 1);
-            apply_tool(&mut s, Tool::WaterPipe, 1, 1);
-            apply_tool(&mut s, tool, 1, 1);
+            apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
+            apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
+            apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface);
 
             let t = s.tile_at(1, 1).unwrap();
             assert_eq!(t.terrain(), expected, "{tool:?} did not regrade the ground");
@@ -1337,11 +1358,11 @@ mod tests {
 
         for tool in [Tool::TerraformRaise, Tool::TerraformLower, Tool::Water] {
             let mut s = gs(8, 8);
-            assert!(apply_tool(&mut s, Tool::CoalPlant, 5, 5).success);
+            assert!(apply_tool(&mut s, Tool::CoalPlant, 5, 5, ViewStratum::Surface).success);
             let before_money = s.money;
             let before_score = compute_wilderness(&s, &WildernessTunables::default()).score;
 
-            let r = apply_tool(&mut s, tool, 5, 5);
+            let r = apply_tool(&mut s, tool, 5, 5, ViewStratum::Surface);
             assert!(
                 !r.success,
                 "{tool:?} regraded the ground under a live plant"
@@ -1377,12 +1398,12 @@ mod tests {
     #[test]
     fn terraforming_refuses_a_developed_zone_lot() {
         let mut s = gs(8, 8);
-        apply_tool(&mut s, Tool::Road, 1, 1);
-        apply_tool(&mut s, Tool::Residential, 2, 1);
+        apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::Residential, 2, 1, ViewStratum::Surface);
         crate::zones::place_zone_building(&mut s, 2, 1);
         assert!(s.tile_at(2, 1).unwrap().building_id.is_some(), "lot grew");
 
-        let r = apply_tool(&mut s, Tool::TerraformLower, 2, 1);
+        let r = apply_tool(&mut s, Tool::TerraformLower, 2, 1, ViewStratum::Surface);
         assert!(!r.success, "a regrade drowned a developed lot");
         assert_eq!(
             r.message.as_deref(),
@@ -1410,9 +1431,11 @@ mod tests {
         for surface in [Tool::Road, Tool::Rail] {
             for line_first in [false, true] {
                 let mut s = gs(4, 4);
-                assert!(apply_tool(&mut s, surface, 1, 1).success);
+                assert!(apply_tool(&mut s, surface, 1, 1, ViewStratum::Surface).success);
                 if line_first {
-                    assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
+                    assert!(
+                        apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success
+                    );
                 }
                 let before = s.tile_at(1, 1).unwrap().clone();
                 assert!(
@@ -1422,7 +1445,7 @@ mod tests {
                 );
                 let before_money = s.money;
 
-                let r = apply_tool(&mut s, Tool::TerraformRaise, 1, 1);
+                let r = apply_tool(&mut s, Tool::TerraformRaise, 1, 1, ViewStratum::Surface);
                 assert!(
                     r.success,
                     "{surface:?} (line_first={line_first}) was refused: {:?}",
@@ -1464,9 +1487,9 @@ mod tests {
     #[test]
     fn a_regrade_wipes_zoned_land_and_still_works_on_open_ground() {
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Residential, 1, 1);
+        apply_tool(&mut s, Tool::Residential, 1, 1, ViewStratum::Surface);
         let before_money = s.money;
-        let r = apply_tool(&mut s, Tool::TerraformLower, 1, 1);
+        let r = apply_tool(&mut s, Tool::TerraformLower, 1, 1, ViewStratum::Surface);
         assert!(r.success, "a regrade was refused over an undeveloped zone");
         assert_eq!(s.money, before_money - tool_cost(Tool::TerraformLower));
         assert_eq!(s.tile_at(1, 1).unwrap().terrain(), Terrain::Water);
@@ -1482,7 +1505,7 @@ mod tests {
             (Tool::Water, Terrain::Water),
         ] {
             let before_money = s.money;
-            let r = apply_tool(&mut s, tool, 3, 3);
+            let r = apply_tool(&mut s, tool, 3, 3, ViewStratum::Surface);
             assert!(r.success, "{tool:?} refused open ground");
             assert_eq!(s.tile_at(3, 3).unwrap().terrain(), expected);
             assert_eq!(s.money, before_money - tool_cost(tool));
@@ -1503,14 +1526,16 @@ mod tests {
         for surface in [Tool::Road, Tool::Rail] {
             for line_first in [false, true] {
                 let mut s = gs(4, 4);
-                assert!(apply_tool(&mut s, surface, 1, 1).success);
+                assert!(apply_tool(&mut s, surface, 1, 1, ViewStratum::Surface).success);
                 if line_first {
-                    assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
+                    assert!(
+                        apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success
+                    );
                 }
                 let before = s.tile_at(1, 1).unwrap().clone();
                 let before_money = s.money;
 
-                let r = apply_tool(&mut s, Tool::Tree, 1, 1);
+                let r = apply_tool(&mut s, Tool::Tree, 1, 1, ViewStratum::Surface);
                 assert!(r.success, "{surface:?} (line_first={line_first}) refused");
                 assert_eq!(s.money, before_money - tool_cost(Tool::Tree));
 
@@ -1546,17 +1571,17 @@ mod tests {
     #[test]
     fn planting_refuses_a_tile_carrying_a_live_building() {
         let mut s = gs(8, 8);
-        assert!(apply_tool(&mut s, Tool::CoalPlant, 5, 5).success);
+        assert!(apply_tool(&mut s, Tool::CoalPlant, 5, 5, ViewStratum::Surface).success);
         let before_money = s.money;
 
-        let r = apply_tool(&mut s, Tool::Tree, 5, 5);
+        let r = apply_tool(&mut s, Tool::Tree, 5, 5, ViewStratum::Surface);
         assert!(!r.success, "a canopy was planted over a live plant");
         assert_eq!(s.money, before_money, "charged on rejection");
         assert_eq!(structure_kind_at(&s, 5, 5), Some(TileKind::CoalPlant));
         assert_eq!(s.buildings.len(), 1);
 
         // Open ground still takes a tree.
-        assert!(apply_tool(&mut s, Tool::Tree, 0, 0).success);
+        assert!(apply_tool(&mut s, Tool::Tree, 0, 0, ViewStratum::Surface).success);
         assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Trees));
     }
 
@@ -1573,8 +1598,8 @@ mod tests {
             Tool::Tree,
         ] {
             let mut s = gs(4, 4);
-            assert!(apply_tool(&mut s, tool, 1, 1).success);
-            let r = apply_tool(&mut s, Tool::Park, 1, 1);
+            assert!(apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface).success);
+            let r = apply_tool(&mut s, Tool::Park, 1, 1, ViewStratum::Surface);
             assert!(r.success, "a park was refused over {tool:?}");
             assert_eq!(structure_kind_at(&s, 1, 1), Some(TileKind::Park));
         }
@@ -1590,9 +1615,9 @@ mod tests {
             (Tool::PowerLine, Tool::Residential),
         ] {
             let mut s = gs(4, 4);
-            assert!(apply_tool(&mut s, first, 1, 1).success);
+            assert!(apply_tool(&mut s, first, 1, 1, ViewStratum::Surface).success);
             assert!(
-                apply_tool(&mut s, second, 1, 1).success,
+                apply_tool(&mut s, second, 1, 1, ViewStratum::Surface).success,
                 "{first:?} then {second:?} was refused"
             );
             let t = s.tile_at(1, 1).unwrap();
@@ -1615,8 +1640,8 @@ mod tests {
         // must not need a bulldozer. (The converse — planting a tree *under* a
         // live line — is still the open defect tracked in `occupants.rs`.)
         let mut s = gs(4, 4);
-        apply_tool(&mut s, Tool::Tree, 1, 1);
-        let r = apply_tool(&mut s, Tool::PowerLine, 1, 1);
+        apply_tool(&mut s, Tool::Tree, 1, 1, ViewStratum::Surface);
+        let r = apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface);
         assert!(r.success, "a line was refused over a tree");
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::PowerLine));
     }
@@ -1630,13 +1655,13 @@ mod tests {
     fn a_bulldozed_park_leaves_bare_ground() {
         for tool in [Tool::Residential, Tool::Road, Tool::Rail, Tool::PowerLine] {
             let mut s = gs(4, 4);
-            apply_tool(&mut s, Tool::Park, 1, 1);
+            apply_tool(&mut s, Tool::Park, 1, 1, ViewStratum::Surface);
             let bid = s.tile_at(1, 1).unwrap().building_id.unwrap();
             remove_building(&mut s, bid as u32);
             assert_eq!(s.tile_at(1, 1).unwrap().occupants(), 0);
             assert!(s.tile_at(1, 1).unwrap().building_id.is_none());
 
-            let r = apply_tool(&mut s, tool, 1, 1);
+            let r = apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface);
             assert!(r.success, "{tool:?} was refused by a demolished park");
         }
     }
@@ -1656,7 +1681,7 @@ mod tests {
         for (tool, expected_kind, expected_mw) in cases {
             let mut s = gs(6, 6);
             s.money = 200_000;
-            let r = apply_tool(&mut s, tool, 0, 0);
+            let r = apply_tool(&mut s, tool, 0, 0, ViewStratum::Surface);
             assert!(
                 r.success,
                 "{tool:?} placement should succeed: {:?}",

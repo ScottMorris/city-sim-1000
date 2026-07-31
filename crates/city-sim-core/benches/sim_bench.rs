@@ -10,7 +10,7 @@ use city_sim_core::{
     snapshot::{from_bytes, to_bytes},
     state::GameState,
 };
-use city_sim_protocol::commands::Tool;
+use city_sim_protocol::commands::{Tool, ViewStratum};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 // ---------------------------------------------------------------------------
@@ -22,17 +22,41 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 fn make_populated_8x8(seed: u32) -> Simulation {
     let mut sim = Simulation::new(8, 8, seed);
     // Roads
-    apply_tool(&mut sim.state, Tool::Road, 3, 0);
-    apply_tool(&mut sim.state, Tool::Road, 3, 1);
-    apply_tool(&mut sim.state, Tool::Road, 3, 2);
-    apply_tool(&mut sim.state, Tool::Road, 3, 3);
+    apply_tool(&mut sim.state, Tool::Road, 3, 0, ViewStratum::Surface);
+    apply_tool(&mut sim.state, Tool::Road, 3, 1, ViewStratum::Surface);
+    apply_tool(&mut sim.state, Tool::Road, 3, 2, ViewStratum::Surface);
+    apply_tool(&mut sim.state, Tool::Road, 3, 3, ViewStratum::Surface);
     // Zones
-    apply_tool(&mut sim.state, Tool::Residential, 0, 0);
-    apply_tool(&mut sim.state, Tool::Residential, 1, 0);
-    apply_tool(&mut sim.state, Tool::Residential, 0, 1);
-    apply_tool(&mut sim.state, Tool::Residential, 1, 1);
-    apply_tool(&mut sim.state, Tool::Commercial, 0, 2);
-    apply_tool(&mut sim.state, Tool::Industrial, 0, 3);
+    apply_tool(
+        &mut sim.state,
+        Tool::Residential,
+        0,
+        0,
+        ViewStratum::Surface,
+    );
+    apply_tool(
+        &mut sim.state,
+        Tool::Residential,
+        1,
+        0,
+        ViewStratum::Surface,
+    );
+    apply_tool(
+        &mut sim.state,
+        Tool::Residential,
+        0,
+        1,
+        ViewStratum::Surface,
+    );
+    apply_tool(
+        &mut sim.state,
+        Tool::Residential,
+        1,
+        1,
+        ViewStratum::Surface,
+    );
+    apply_tool(&mut sim.state, Tool::Commercial, 0, 2, ViewStratum::Surface);
+    apply_tool(&mut sim.state, Tool::Industrial, 0, 3, ViewStratum::Surface);
     // Prime demand so zone growth fires from tick 1
     sim.state.demand.residential = 80.0;
     sim.state.demand.commercial = 60.0;
@@ -83,7 +107,7 @@ fn tick_1000_64x64(c: &mut Criterion) {
     });
 }
 
-/// Single `apply_tool(Road)` call on a fresh 8×8 state.
+/// Single `apply_tool(Road, ViewStratum::Surface)` call on a fresh 8×8 state.
 ///
 /// Measures the cost of the hottest player-action path: bounds check, fund
 /// deduction, tile mutation, and tile_revision bump.
@@ -92,7 +116,13 @@ fn apply_tool_road(c: &mut Criterion) {
         b.iter_batched(
             || GameState::new(8, 8, 0),
             |mut state| {
-                let result = apply_tool(&mut state, black_box(Tool::Road), 3, 3);
+                let result = apply_tool(
+                    &mut state,
+                    black_box(Tool::Road),
+                    3,
+                    3,
+                    ViewStratum::Surface,
+                );
                 black_box(result)
             },
             criterion::BatchSize::SmallInput,

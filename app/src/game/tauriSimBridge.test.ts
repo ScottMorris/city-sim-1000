@@ -30,6 +30,10 @@ const TOOL_ID = {
   Commercial: 18, Industrial: 19, Park: 20, Bulldoze: 21, ParkLarge: 22
 } as const;
 
+// Local mirror of `VIEW_STRATUM_ID` from `tauri-plugin-city-sim`'s guest-js,
+// for the same reason `TOOL_ID` is mirrored above rather than imported.
+const VIEW_STRATUM_ID = { Surface: 0, Underground: 1 } as const;
+
 interface WireBuilding {
   id: number;
   kind: number;
@@ -115,9 +119,22 @@ describe('TauriSimBridge command routing', () => {
     for (const tool of Object.values(Tool)) {
       vi.mocked(plugin.applyTool).mockClear();
       const stroke = nextStrokeId();
-      bridge.send(applyToolCmd(tool, 3, 4, stroke));
-      expect(plugin.applyTool).toHaveBeenCalledWith(TOOL_ID[toolIdKey(tool)], 3, 4, stroke);
+      bridge.send(applyToolCmd(tool, 3, 4, stroke, 'surface'));
+      expect(plugin.applyTool).toHaveBeenCalledWith(TOOL_ID[toolIdKey(tool)], 3, 4, stroke, VIEW_STRATUM_ID.Surface);
     }
+  });
+
+  it('maps an \'underground\' stratum to VIEW_STRATUM_ID.Underground when sending ApplyTool', async () => {
+    const { bridge, plugin } = await makeBridge();
+    const stroke = nextStrokeId();
+    bridge.send(applyToolCmd(Tool.Bulldoze, 3, 4, stroke, 'underground'));
+    expect(plugin.applyTool).toHaveBeenCalledWith(
+      TOOL_ID.Bulldoze,
+      3,
+      4,
+      stroke,
+      VIEW_STRATUM_ID.Underground
+    );
   });
 
   it('delegates SetSpeed and SetPolicies to the plugin', async () => {
@@ -162,7 +179,7 @@ describe('TauriSimBridge command routing', () => {
     const { bridge, plugin, events } = await makeBridge();
     vi.mocked(plugin.applyTool).mockResolvedValueOnce({ success: false, message: 'Not enough funds' });
 
-    bridge.send(applyToolCmd(Tool.Road, 3, 4, nextStrokeId()));
+    bridge.send(applyToolCmd(Tool.Road, 3, 4, nextStrokeId(), 'surface'));
     // send() itself must still answer synchronously and optimistically —
     // the real result arrives later, over the resolved promise.
     await Promise.resolve();
