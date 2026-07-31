@@ -9,7 +9,8 @@ import { createInitialState, getTile, setTile, TileKind } from '../game/gameStat
 import { PowerPlantType } from '../game/constants';
 import { createBuildingState } from '../game/buildings/state';
 import { Occupant, Terrain, setTileOccupant } from '../game/protocol/occupants';
-import { createBuildingLookup, getTileColour, resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
+import { createBuildingLookup, getTileColour, resolveIndicatorKey, resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
+import { BuildingStatus } from '../game/buildings/state';
 import type { TileTextures } from './tileAtlas';
 
 /** Sentinel "textures" — resolveTileSprite only passes them through, so plain
@@ -408,5 +409,14 @@ describe('getTileColour agrees with the sprite/connectivity derivation on what c
     const palette = { [TileKind.CoalPlant]: 0x804020 } as Record<TileKind, number>;
 
     expect(getTileColour(tile, palette, buildingLookup)).toBe(palette[TileKind.CoalPlant]);
+  });
+});
+
+describe('resolveIndicatorKey', () => {
+  it('maps InactiveNoPower/InactiveNoWater to their icon key, everything else to null', () => {
+    expect(resolveIndicatorKey(BuildingStatus.InactiveNoPower)).toBe('noPower');
+    expect(resolveIndicatorKey(BuildingStatus.InactiveNoWater)).toBe('noWater');
+    expect(resolveIndicatorKey(BuildingStatus.Active)).toBeNull();
+    expect(resolveIndicatorKey(BuildingStatus.InactiveDamaged)).toBeNull();
   });
 });

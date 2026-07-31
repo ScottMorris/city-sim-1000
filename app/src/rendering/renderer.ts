@@ -11,7 +11,7 @@ import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate, getToolCost } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
-import { createBuildingLookup, getTileColour, resolveTileSprite } from './tileRenderUtils';
+import { createBuildingLookup, getTileColour, resolveIndicatorKey, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone, isWaterCarrier } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
@@ -573,20 +573,8 @@ export class MapRenderer {
 
     const seen = new Set<number>();
     for (const building of state.buildings) {
-      const { status } = building.state;
-      if (status === BuildingStatus.Active) continue;
-
-      let texture: import('pixi.js').Texture | undefined;
-      if (status === BuildingStatus.InactiveNoPower) {
-        texture = this.tileTextures.indicators.noPower;
-      } else if (status === BuildingStatus.InactiveNoWater) {
-        // No separate "does the map have water infra" check needed: both
-        // bridges only ever assign this status when their own hasWaterSystem
-        // scan (pipes included, mirroring `GameState::has_water_system`) was
-        // already true — re-deriving it here was both redundant and, because
-        // it only looked for pumps/towers, missed pipes-only cities entirely.
-        texture = this.tileTextures.indicators.noWater;
-      }
+      const indicatorKey = resolveIndicatorKey(building.state.status);
+      const texture = indicatorKey ? this.tileTextures.indicators[indicatorKey] : undefined;
       if (!texture) continue;
 
       const lookup = buildingLookup.get(building.id);
