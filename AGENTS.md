@@ -121,6 +121,10 @@ Use `gh pr edit <number> --add-label "<label>"` immediately after `gh pr create`
 
 This applies to every multi-PR task, not just ones with an explicit "PR 1/2, PR 2/2" plan — if a task's last commit lands and there's a tracked issue for it, closing that issue is part of finishing the task, not a separate step to remember later.
 
+## Pull Request Drafts
+
+Open PRs ready for review by default — do not pass `--draft` to `gh pr create` unless the user explicitly asks for a draft.
+
 ## Git Workflow
 
 - Do not push or force-push unless explicitly requested by the user.
