@@ -1024,8 +1024,9 @@ mod tests {
 
     /// **Bulldozing a developed lot takes the building and nothing else.**
     ///
-    /// `bulldoze` is a three-way branch, and the building branch returns as
-    /// soon as [`remove_building`] has run. That function clears
+    /// `bulldoze` matches on `stratum` first; within the `Surface` arm, the
+    /// building branch returns as soon as [`remove_building`] has run. That
+    /// function clears
     /// `building_id`, the derived caches and the `Structure` tag — it never
     /// touches the zone tag, by design, because "bulldoze the house, keep the
     /// zoning, let it regrow" is the behaviour the zone tools have always had.
@@ -1222,6 +1223,26 @@ mod tests {
         assert!(!r.success);
         assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
         assert!(s.tile_at(0, 0).unwrap().has_occupant(Occupant::Road));
+        assert_eq!(s.money, before);
+    }
+
+    /// The `Underground` arm never reads `building_id` — it only checks
+    /// `tile.underground` — so a building tile (underground always empty,
+    /// since no tool can place one there) must refuse an `Underground` click
+    /// exactly like bare land does, leaving the building untouched. Pins that
+    /// a regression which special-cased buildings there (e.g. clearing
+    /// underground utilities as part of demolition) would be caught, mirroring
+    /// `surface_bulldoze_refuses_a_tile_with_only_underground_content`'s
+    /// coverage of the opposite arm.
+    #[test]
+    fn underground_bulldoze_on_a_building_tile_is_refused() {
+        let mut s = gs(4, 4);
+        assert!(apply_tool(&mut s, Tool::Park, 0, 0, ViewStratum::Surface).success);
+        let before = s.money;
+        let r = apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Underground);
+        assert!(!r.success);
+        assert_eq!(r.message.as_deref(), Some("Nothing to demolish here"));
+        assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
         assert_eq!(s.money, before);
     }
 
