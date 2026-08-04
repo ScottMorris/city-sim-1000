@@ -9,18 +9,24 @@
 #
 # Grammar, one directive per line, `#` starts a comment:
 #
-#   grid <w> <h>          the map size. Once, first.
-#   seed <n>              the PRNG seed. Once.
-#   tick <n>              advance the sim by n fixed ticks (1/20 s each).
-#   <Tool> <x> <y>        apply a tool. MUST succeed, or the harness panics.
-#   refuse <Tool> <x> <y> apply a tool that MUST be refused. The refusal
-#                         message is recorded in the dump, so the guard text
-#                         is pinned too.
+#   grid <w> <h>                    the map size. Once, first.
+#   seed <n>                        the PRNG seed. Once.
+#   tick <n>                        advance the sim by n fixed ticks (1/20 s each).
+#   <Tool> <x> <y> [<stratum>]      apply a tool. MUST succeed, or the harness panics.
+#   refuse <Tool> <x> <y> [<stratum>]
+#                                   apply a tool that MUST be refused. The refusal
+#                                   message is recorded in the dump, so the guard text
+#                                   is pinned too.
 #
 # `<Tool>` is the Rust `Tool` enum spelled exactly as it is declared in
 # `city_sim_protocol::commands` (case-insensitive here). The harness derives
 # the name table from the enum, so a renamed tool fails loudly rather than
 # silently mismatching.
+#
+# `<stratum>` is optional and defaults to `surface` — the active view a
+# stratum-scoped tool (`WaterPipe`, `Bulldoze`) acts on. `WaterPipe` refuses
+# outright unless it is `underground`; `Bulldoze` clears whichever stratum is
+# named. Every other tool ignores it. Case-insensitive, same as `<Tool>`.
 #
 # The map is 24 wide × 16 tall on purpose — not square, so a transposed x/y
 # cannot pass unnoticed.
@@ -174,12 +180,12 @@ WindTurbine 0 12
 # 5. Water — a pump piped up to the spine
 # ===========================================================================
 WaterPump 22 9
-WaterPipe 22 8
-WaterPipe 22 7
-WaterPipe 22 6
-WaterPipe 22 5
-WaterPipe 22 4
-WaterPipe 22 3
+WaterPipe 22 8 underground
+WaterPipe 22 7 underground
+WaterPipe 22 6 underground
+WaterPipe 22 5 underground
+WaterPipe 22 4 underground
+WaterPipe 22 3 underground
 
 # ===========================================================================
 # 6. Civic footprints — 1×1 and 2×2
@@ -236,7 +242,7 @@ PowerLine 2 6
 # a line demoted to its flag by a later regrade, with a pipe under it
 PowerLine 3 6
 TerraformRaise 3 6
-WaterPipe 3 6
+WaterPipe 3 6 underground
 # trees planted straight through a live line
 PowerLine 4 6
 Tree 4 6
@@ -252,16 +258,30 @@ Commercial 8 6
 
 # --- pipes ----------------------------------------------------------------
 # a pipe under a road
-WaterPipe 13 2
+WaterPipe 13 2 underground
 # a lone pipe, nothing above it
-WaterPipe 2 7
+WaterPipe 2 7 underground
 # a pipe under water
-WaterPipe 4 9
+WaterPipe 4 9 underground
 Water 4 9
 
+# --- #198: the bulldozer is layer-scoped -----------------------------------
+# A road over a buried pipe, on a tile of its own so the sequence below reads
+# on its own dump lines rather than folding into "a pipe under a road" above.
+# From the surface, bulldozing takes the road and leaves the pipe untouched;
+# from underground it takes the pipe and leaves the road; and once the pipe
+# is gone, bulldozing underground again finds nothing there — refused, and
+# (unlike the old view-blind precedence) charged nothing.
+Road 20 13
+WaterPipe 20 13 underground
+Bulldoze 20 13
+Bulldoze 20 13 underground
+refuse Bulldoze 20 13 underground
+
 # --- terrain --------------------------------------------------------------
-# a bulldozed lake is still a lake
-Bulldoze 1 9
+# a bulldozed lake is still a lake — open water carries nothing in any
+# stratum, so since #198 the click is refused outright, charging nothing
+refuse Bulldoze 1 9
 # but paving a lake and razing the pavement leaves land — the cheapest
 # regrade on the palette, and deliberate
 Water 3 9

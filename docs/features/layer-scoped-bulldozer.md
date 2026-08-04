@@ -1,6 +1,6 @@
 # Layer-Scoped Bulldozer
 
-**Status:** regressed — design intent documented but not implemented in the Rust engine. This document is the recovery plan.
+**Status:** fixed (`#198`). `SimCommand::ApplyTool` carries `stratum: ViewStratum` end to end (protocol, both the WASM and Tauri transports, the TS mirror, `mcpBridge.ts`/the MCP server); `commands::bulldoze` clears only the named stratum, charges nothing on an empty-stratum no-op, and `Tool::WaterPipe` refuses outright unless `stratum: Underground`. Golden-city scenarios and unit tests in `crates/city-sim-core/src/commands.rs` pin the behaviour this document proposed below — the rest of the document is kept as the design record.
 
 ## Purpose
 
@@ -8,9 +8,9 @@ The bulldozer clears **what the player can see, at the layer they are looking at
 
 This rule has been the design position since the strata model was written — `docs/tile-model.md` (§"The bulldozer works on what you can see"): *"Underground occupants are only removable from the underground view."* The TS-era game honoured it; the Rust migration lost it.
 
-## Current behaviour (the defect)
+## The defect (fixed by `#198` — kept as the design record)
 
-`bulldoze()` in `crates/city-sim-core/src/commands.rs` is **view-blind**. It applies a fixed precedence regardless of what the player is looking at:
+Before `#198`, `bulldoze()` in `crates/city-sim-core/src/commands.rs` was **view-blind**. It applied a fixed precedence regardless of what the player was looking at:
 
 1. a building on the tile → remove the building;
 2. else, anything in the underground stratum → clear underground;

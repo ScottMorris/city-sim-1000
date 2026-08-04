@@ -15,9 +15,11 @@
 # byte to dump separately (#177's TS/wire follow-up deleted the projection;
 # the wire now carries `occ`/`terrain`/`density` directly, see `crate::wire`).
 
-script grid=24x16 seed=20260729 ticks=400 directives=153 script_hash=0x36cbcc2bdc25997f
+script grid=24x16 seed=20260729 ticks=400 directives=158 script_hash=0xc0e82f5c5d415cb2
 
 [refusals]
+refuse Bulldoze 20 13 (underground) -> Nothing to demolish here
+refuse Bulldoze 1 9 -> Nothing to demolish here
 refuse Park 12 2 -> Cannot build here — clear roads and powerlines first.
 refuse Residential 6 2 -> Cannot zone over roads or rail. Bulldoze first.
 refuse Road 21 12 -> A building occupies this tile. Bulldoze first.
@@ -29,13 +31,13 @@ refuse CoalPlant 23 15 -> Needs 2×2 tiles in-bounds
 [scalars]
 tick 400
 day 14
-money 54844
+money 54834
 population 141
 jobs 117
 buildings 32
 next_building_id 36
-tile_revision 188
-state_hash 0xd5d375861afacd14
+tile_revision 189
+state_hash 0xcecdea2bd6e255d6
 
 [utilities]
 power 24

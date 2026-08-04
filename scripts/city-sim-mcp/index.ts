@@ -260,7 +260,7 @@ server.tool(
     x: z.number().int().describe('Tile column'),
     y: z.number().int().describe('Tile row'),
     stratum: z.enum(['surface', 'underground']).optional()
-      .describe('Which layer to act on — only bulldoze honours this today. Defaults to surface; pass "underground" to clear a buried pipe without a client view.'),
+      .describe('Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.'),
   },
   async ({ tool, x, y, stratum }) => textResult(await callGame('apply_tool', { tool, x, y, stratum })),
 );
@@ -297,7 +297,7 @@ server.tool(
     x2: z.number().int().describe('End tile column'),
     y2: z.number().int().describe('End tile row'),
     stratum: z.enum(['surface', 'underground']).optional()
-      .describe('Which layer to act on — only bulldoze honours this today. Defaults to surface; pass "underground" to clear buried pipe without a client view.'),
+      .describe('Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.'),
   },
   async ({ tool, x1, y1, x2, y2, stratum }) =>
     textResult(await callGame('apply_tool_line', { tool, x1, y1, x2, y2, stratum })),
@@ -316,7 +316,7 @@ server.tool(
     x2: z.number().int().describe('Right column (inclusive)'),
     y2: z.number().int().describe('Bottom row (inclusive)'),
     stratum: z.enum(['surface', 'underground']).optional()
-      .describe('Which layer to act on — only bulldoze honours this today. Defaults to surface; pass "underground" to clear buried pipe without a client view.'),
+      .describe('Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.'),
   },
   async ({ tool, x1, y1, x2, y2, stratum }) =>
     textResult(await callGame('apply_tool_rect', { tool, x1, y1, x2, y2, stratum })),

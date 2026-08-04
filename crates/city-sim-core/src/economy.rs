@@ -424,7 +424,7 @@ mod tests {
             *t = crate::state::Tile::land();
         }
         apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Surface);
-        apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Surface);
+        apply_tool(&mut s, Tool::WaterPipe, 1, 1, ViewStratum::Underground);
         let b = compute_daily_budget(&s);
         assert!(
             (b.maint_pipes - MAINT_WATER_PIPE).abs() < 1e-4,

@@ -56,9 +56,11 @@
 //! The design note asks two things of terrain: that it survive terraforming,
 //! and that it be the thing the bulldozer restores a tile to. The first holds
 //! by construction — terrain is not an occupant, so nothing built on the tile
-//! can reach it. The second is `bulldoze`, which since step 4 clears the
-//! surface and overhead strata and leaves terrain exactly as it found it: a
-//! bulldozed lake is still a lake.
+//! can reach it. The second is `bulldoze`, which since step 4 leaves terrain
+//! exactly as it found it either way: a bulldozed lake is still a lake. Since
+//! `#198` it clears whichever stratum the command names — `Surface` clears
+//! surface and overhead together, `Underground` clears underground alone —
+//! never both in one click.
 //!
 //! What still forces `Terrain::Land` is every tool that *builds* — a road laid
 //! across a lake fills the lake in as it goes, exactly as `kind = Road` did.
@@ -398,10 +400,11 @@ pub const OVERHEAD_MASK: OccupantSet = B_POWER_LINE | B_TREES;
 /// [`Tile::visible_occupants`] unions, spelled as a mask for tests that want to
 /// name it.
 ///
-/// Not the same as "what the bulldozer clears": `bulldoze` also clears
-/// `underground`, and clears it *first*, so on a road carrying a pipe the first
-/// click removes nothing visible. Use this mask for what is drawn, not for what
-/// a tool reaches.
+/// Not the same as "what the bulldozer clears": `bulldoze` only reaches
+/// `underground` when the command's `stratum` is `Underground` (`#198`) — a
+/// `Surface`-stratum click never touches it, so on a road carrying a pipe the
+/// first click takes the road and leaves the pipe standing. Use this mask for
+/// what is drawn, not for what a `Surface` bulldoze reaches.
 pub const VISIBLE_MASK: OccupantSet = SURFACE_MASK | OVERHEAD_MASK;
 /// The three zone tags. Used by `commands.rs` to refuse a zone or a structure
 /// over land already zoned; [`Tile::zone_occupant`] is the accessor for asking
@@ -1327,9 +1330,11 @@ impl Tile {
         self.occupants() & occupant_bit(occupant) != 0
     }
 
-    /// Surface + overhead: what the player sees and what the bulldozer clears.
-    /// Underground occupants are excluded — they are only reachable from the
-    /// underground view.
+    /// Surface + overhead: what the player sees from the surface view, and
+    /// what a `stratum: Surface` bulldoze clears (`commands::bulldoze`).
+    /// Underground occupants are excluded — clearing them takes a
+    /// `stratum: Underground` command instead, which the client only sends
+    /// from the underground view (`#198`).
     #[inline]
     pub fn visible_occupants(&self) -> OccupantSet {
         self.surface.bits() | self.overhead.bits()
@@ -2438,7 +2443,18 @@ mod tests {
         while let Some((s, path)) = frontier.pop_front() {
             for &tool in &tools {
                 let mut next = s.clone();
-                apply_tool(&mut next, tool, 1, 1, ViewStratum::Surface);
+                // `WaterPipe` refuses everywhere but the Underground stratum
+                // (see `commands::apply_tool`'s `Tool::WaterPipe` arm); every
+                // other tool in the sweep is stratum-blind. Without this, the
+                // sweep can never reach a state with `Occupant::Pipe` set —
+                // silently halving the state space this test's own docstring
+                // promises to close.
+                let stratum = if tool == Tool::WaterPipe {
+                    ViewStratum::Underground
+                } else {
+                    ViewStratum::Surface
+                };
+                apply_tool(&mut next, tool, 1, 1, stratum);
                 // Funds must never be what makes a state unreachable.
                 next.money = 100_000;
                 if !seen.insert(signature(&next)) {
@@ -2728,7 +2744,15 @@ mod tests {
         fn build(order: &[Tool]) -> OccupantSet {
             let mut s = GameState::new(4, 4, 0);
             for &t in order {
-                apply_tool(&mut s, t, 1, 1, ViewStratum::Surface);
+                // `WaterPipe` refuses everywhere but the Underground stratum
+                // (see `commands::apply_tool`'s `Tool::WaterPipe` arm); every
+                // other tool exercised by this helper is stratum-blind.
+                let stratum = if t == Tool::WaterPipe {
+                    ViewStratum::Underground
+                } else {
+                    ViewStratum::Surface
+                };
+                apply_tool(&mut s, t, 1, 1, stratum);
             }
             s.tiles[s.tile_index(1, 1).unwrap()].occupants()
         }
