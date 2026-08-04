@@ -293,6 +293,17 @@ mod tests {
     }
 
     #[test]
+    fn view_stratum_from_u8() {
+        // Only `wasm/src/lib.rs` calls this decoder (the FFI boundary for
+        // `stratum_idx`), so it needs its own direct test to be covered by
+        // `cargo test --workspace`.
+        assert_eq!(ViewStratum::from(0u8), ViewStratum::Surface);
+        assert_eq!(ViewStratum::from(1u8), ViewStratum::Underground);
+        assert_eq!(ViewStratum::from(2u8), ViewStratum::Surface);
+        assert_eq!(ViewStratum::from(255u8), ViewStratum::Surface);
+    }
+
+    #[test]
     fn policies_round_trip_postcard() {
         let policies = Policies {
             budget: BudgetPolicy {
