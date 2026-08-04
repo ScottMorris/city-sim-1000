@@ -1177,6 +1177,7 @@ mod tests {
         // nothing else — the pipe the old precedence would have destroyed
         // invisibly is still there afterwards.
         let before = s.money;
+        let revision_before = s.tile_revision;
         assert!(apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface).success);
         let t = s.tile_at(0, 0).unwrap();
         assert!(
@@ -1188,6 +1189,11 @@ mod tests {
             "a surface bulldoze reached into underground"
         );
         assert_eq!(s.money, before - tool_cost(Tool::Bulldoze));
+        assert_eq!(
+            s.tile_revision,
+            revision_before + 1,
+            "a surface clear must bump tile_revision exactly once"
+        );
 
         // An underground click on the same tile takes the pipe.
         let before = s.money;
@@ -1252,12 +1258,18 @@ mod tests {
         assert!(apply_tool(&mut s, Tool::Park, 0, 0, ViewStratum::Surface).success);
         assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
 
+        let before = s.money;
         assert!(apply_tool(&mut s, Tool::Bulldoze, 0, 0, ViewStratum::Surface).success);
         let t = s.tile_at(0, 0).unwrap();
         assert!(t.building_id.is_none(), "the building outlived the click");
         assert!(
             t.has_occupant(Occupant::Pipe),
             "a surface bulldoze of a building reached into underground"
+        );
+        assert_eq!(
+            s.money,
+            before - tool_cost(Tool::Bulldoze),
+            "the building branch must charge exactly the bulldoze cost"
         );
     }
 
