@@ -182,7 +182,7 @@ mod tests {
     use crate::occupants::{zone_template_kind, Occupant, StructureLookup};
     use crate::sim::Simulation;
     use crate::state::{Tile, DERIVED_FLAG_MASK};
-    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags;
     use city_sim_protocol::tile_buffer::encode_happiness;
 
@@ -278,12 +278,18 @@ mod tests {
 
     fn build_city() -> Simulation {
         let mut sim = Simulation::new(8, 8, 7);
-        apply_tool(&mut sim.state, Tool::Road, 3, 0);
-        apply_tool(&mut sim.state, Tool::Road, 3, 1);
-        apply_tool(&mut sim.state, Tool::Residential, 2, 0);
-        apply_tool(&mut sim.state, Tool::HydroPlant, 5, 5);
-        apply_tool(&mut sim.state, Tool::WaterPump, 0, 5);
-        apply_tool(&mut sim.state, Tool::WaterPipe, 2, 5);
+        apply_tool(&mut sim.state, Tool::Road, 3, 0, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::Road, 3, 1, ViewStratum::Surface);
+        apply_tool(
+            &mut sim.state,
+            Tool::Residential,
+            2,
+            0,
+            ViewStratum::Surface,
+        );
+        apply_tool(&mut sim.state, Tool::HydroPlant, 5, 5, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::WaterPump, 0, 5, ViewStratum::Surface);
+        apply_tool(&mut sim.state, Tool::WaterPipe, 2, 5, ViewStratum::Surface);
         for _ in 0..60 {
             sim.step(1.0 / 20.0);
         }

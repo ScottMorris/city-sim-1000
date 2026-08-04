@@ -163,7 +163,7 @@ impl History {
 mod tests {
     use super::*;
     use crate::sim::{state_hash, Simulation};
-    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
 
     fn make_sim() -> Simulation {
         let mut sim = Simulation::new(8, 8, 42);
@@ -181,7 +181,7 @@ mod tests {
         y: u32,
     ) -> bool {
         let pending = history.prepare(&sim.state, stroke);
-        let result = crate::commands::apply_tool(&mut sim.state, tool, x, y);
+        let result = crate::commands::apply_tool(&mut sim.state, tool, x, y, ViewStratum::Surface);
         if result.success {
             if let Some(bytes) = pending {
                 history.commit(bytes, stroke);

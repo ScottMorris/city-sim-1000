@@ -124,7 +124,7 @@ export interface LegacyEngineImport {
 
 type MainToWorker =
   | { type: 'init';          payload: { width: number; height: number; seed: number; terrain?: Uint8Array; policies?: WorkerPolicies } }
-  | { type: 'apply_tool';    payload: { tool: number; x: number; y: number; strokeId: number } }
+  | { type: 'apply_tool';    payload: { tool: number; x: number; y: number; strokeId: number; stratum: number } }
   | { type: 'set_speed';     payload: { multiplier: number } }
   | { type: 'set_policies';  payload: WorkerPolicies }
   | { type: 'undo' }
@@ -359,7 +359,7 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
     }
     case 'apply_tool': {
       if (!host) break;
-      const success = host.apply_tool(msg.payload.tool, msg.payload.x, msg.payload.y, msg.payload.strokeId);
+      const success = host.apply_tool(msg.payload.tool, msg.payload.x, msg.payload.y, msg.payload.strokeId, msg.payload.stratum);
       const message = host.last_apply_message() ?? null;
       // Bump unconditionally (not just on success) — cheap, and keeps this
       // simple; a rejected placement just costs one extra harmless apply on

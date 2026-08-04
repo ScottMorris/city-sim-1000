@@ -1527,7 +1527,7 @@ mod tests {
     use crate::commands::apply_tool;
     use crate::migrate::{set_v4_kind, tile_from_v4};
     use crate::state::{FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
-    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags::{
         POWER_OVERLAY as FLAG_POWER_OVERLAY, RAIL_UNDERLAY as FLAG_RAIL_UNDERLAY,
         ROAD_UNDERLAY as FLAG_ROAD_UNDERLAY,
@@ -2196,8 +2196,8 @@ mod tests {
     #[test]
     fn a_structure_is_refused_over_a_live_hydro_line() {
         let mut s = GameState::new(4, 4, 0);
-        assert!(apply_tool(&mut s, Tool::Residential, 2, 2).success);
-        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Residential, 2, 2, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2, ViewStratum::Surface).success);
 
         // After two clicks the tile is a zone carrying a line, recorded the one
         // canonical way: the zone keeps `kind`, the line takes the flag.
@@ -2210,7 +2210,7 @@ mod tests {
         // The third click is refused — the line is in the flag, not in `kind`,
         // and the guard reads the occupant set.
         let money = s.money;
-        let r = apply_tool(&mut s, Tool::Park, 2, 2);
+        let r = apply_tool(&mut s, Tool::Park, 2, 2, ViewStratum::Surface);
         assert!(!r.success, "a park landed on top of live conductors");
         assert_eq!(s.money, money, "a refused placement must not charge");
         assert!(s.buildings.is_empty(), "a refused placement built nothing");
@@ -2223,8 +2223,8 @@ mod tests {
 
         // Bulldozing the line clears the way, so the refusal is a "clear it
         // first", not a tile the player can never build on.
-        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2).success);
-        assert!(apply_tool(&mut s, Tool::Park, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Bulldoze, 2, 2, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::Park, 2, 2, ViewStratum::Surface).success);
         assert_eq!(
             s.tiles[s.tile_index(2, 2).unwrap()].occupants(),
             B_STRUCTURE
@@ -2236,8 +2236,8 @@ mod tests {
         // standing — correctly, a regrade does not take down a span — after
         // which the old guard saw a bare land tile.
         let mut s = GameState::new(4, 4, 0);
-        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
-        assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::TerraformRaise, 1, 1, ViewStratum::Surface).success);
         let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
         assert_eq!(t.terrain(), Terrain::Land);
         assert!(t.has_occupant(Occupant::PowerLine));
@@ -2249,7 +2249,7 @@ mod tests {
         assert!(t.conducts(Network::Power));
         assert!((t.tile_upkeep_unfunded() - MAINT_POWER_LINE).abs() < 1e-6);
         assert!(
-            !apply_tool(&mut s, Tool::HydroPlant, 1, 1).success,
+            !apply_tool(&mut s, Tool::HydroPlant, 1, 1, ViewStratum::Surface).success,
             "a terraformed line is still a line"
         );
 
@@ -2257,10 +2257,10 @@ mod tests {
         // not just its origin: the line here is at (2, 2), the 2×2 plant at
         // (1, 1).
         let mut s = GameState::new(4, 4, 0);
-        assert!(apply_tool(&mut s, Tool::Residential, 2, 2).success);
-        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2).success);
+        assert!(apply_tool(&mut s, Tool::Residential, 2, 2, ViewStratum::Surface).success);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 2, 2, ViewStratum::Surface).success);
         assert!(
-            !apply_tool(&mut s, Tool::HydroPlant, 1, 1).success,
+            !apply_tool(&mut s, Tool::HydroPlant, 1, 1, ViewStratum::Surface).success,
             "the footprint's far corner sits on a line"
         );
     }
@@ -2286,7 +2286,7 @@ mod tests {
     fn removing_a_building_takes_its_structure_tag_with_it() {
         for tool in [Tool::Residential, Tool::Road, Tool::Rail, Tool::PowerLine] {
             let mut s = GameState::new(4, 4, 0);
-            assert!(apply_tool(&mut s, Tool::Park, 1, 1).success);
+            assert!(apply_tool(&mut s, Tool::Park, 1, 1, ViewStratum::Surface).success);
             let bid = s.tiles[s.tile_index(1, 1).unwrap()].building_id.unwrap();
             crate::commands::remove_building(&mut s, bid as u32);
             let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
@@ -2296,7 +2296,7 @@ mod tests {
             );
             assert_eq!(t.occupants(), 0, "{tool:?}: bare ground is what is left");
             assert!(
-                apply_tool(&mut s, tool, 1, 1).success,
+                apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface).success,
                 "{tool:?} was refused by a demolished park"
             );
         }
@@ -2307,7 +2307,7 @@ mod tests {
     #[test]
     fn removing_a_zone_lot_leaves_the_zone_standing() {
         let mut s = GameState::new(4, 4, 0);
-        assert!(apply_tool(&mut s, Tool::Residential, 1, 1).success);
+        assert!(apply_tool(&mut s, Tool::Residential, 1, 1, ViewStratum::Surface).success);
         let idx = s.tile_index(1, 1).unwrap();
         s.tiles[idx].building_id = Some(9);
         s.buildings.push(crate::buildings::BuildingInstance::new(
@@ -2355,8 +2355,8 @@ mod tests {
     #[test]
     fn known_defect_trees_are_planted_through_a_live_hydro_line() {
         let mut s = GameState::new(4, 4, 0);
-        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1).success);
-        let r = apply_tool(&mut s, Tool::Tree, 1, 1);
+        assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success);
+        let r = apply_tool(&mut s, Tool::Tree, 1, 1, ViewStratum::Surface);
         assert!(
             r.success,
             "step 2 has tightened Tool::Tree — good. Delete this known defect \
@@ -2438,7 +2438,7 @@ mod tests {
         while let Some((s, path)) = frontier.pop_front() {
             for &tool in &tools {
                 let mut next = s.clone();
-                apply_tool(&mut next, tool, 1, 1);
+                apply_tool(&mut next, tool, 1, 1, ViewStratum::Surface);
                 // Funds must never be what makes a state unreachable.
                 next.money = 100_000;
                 if !seen.insert(signature(&next)) {
@@ -2728,7 +2728,7 @@ mod tests {
         fn build(order: &[Tool]) -> OccupantSet {
             let mut s = GameState::new(4, 4, 0);
             for &t in order {
-                apply_tool(&mut s, t, 1, 1);
+                apply_tool(&mut s, t, 1, 1, ViewStratum::Surface);
             }
             s.tiles[s.tile_index(1, 1).unwrap()].occupants()
         }

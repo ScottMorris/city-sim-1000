@@ -68,7 +68,7 @@ use city_sim_core::commands::apply_tool;
 use city_sim_core::occupants::{iter_set, Network, Occupant, StructureLookup, Terrain};
 use city_sim_core::sim::{state_hash, Simulation};
 use city_sim_core::state::{GameState, Tile, FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
-use city_sim_protocol::commands::Tool;
+use city_sim_protocol::commands::{Tool, ViewStratum};
 
 const SCRIPT: &str = include_str!("fixtures/golden_city.script");
 const EXPECTED: &str = include_str!("fixtures/golden_city.expected");
@@ -236,7 +236,7 @@ fn replay(script: &Script) -> Replay {
     for &(line_no, step) in &script.steps {
         match step {
             Step::Apply { tool, x, y } => {
-                let r = apply_tool(&mut sim.state, tool, x, y);
+                let r = apply_tool(&mut sim.state, tool, x, y, ViewStratum::Surface);
                 assert!(
                     r.success,
                     "golden_city.script:{line_no}: `{tool:?} {x} {y}` was refused — {}\n\
@@ -246,7 +246,7 @@ fn replay(script: &Script) -> Replay {
                 );
             }
             Step::Refuse { tool, x, y } => {
-                let r = apply_tool(&mut sim.state, tool, x, y);
+                let r = apply_tool(&mut sim.state, tool, x, y, ViewStratum::Surface);
                 assert!(
                     !r.success,
                     "golden_city.script:{line_no}: `refuse {tool:?} {x} {y}` was ACCEPTED.\n\
@@ -632,7 +632,7 @@ fn footprint_tools() -> Vec<(Tool, (u32, u32))> {
     for tool in (0u8..=u8::MAX).filter_map(|v| Tool::try_from(v).ok()) {
         let mut s = GameState::new(8, 8, 1);
         s.money = 10_000_000;
-        if !apply_tool(&mut s, tool, 2, 2).success {
+        if !apply_tool(&mut s, tool, 2, 2, ViewStratum::Surface).success {
             continue;
         }
         // A zone tool writes a tag and no building; only a footprint stamp does.

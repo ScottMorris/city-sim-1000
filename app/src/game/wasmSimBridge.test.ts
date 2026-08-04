@@ -81,10 +81,21 @@ describe('WasmSimBridge undo/redo', () => {
   it('threads strokeId through apply_tool worker messages', () => {
     const { worker, bridge } = makeBridge();
     const stroke = nextStrokeId();
-    bridge.send(applyToolCmd(Tool.Road, 2, 3, stroke));
+    bridge.send(applyToolCmd(Tool.Road, 2, 3, stroke, 'surface'));
     expect(worker.sent).toHaveLength(1);
     expect(worker.sent[0].type).toBe('apply_tool');
     expect(worker.sent[0].payload).toMatchObject({ x: 2, y: 3, strokeId: stroke });
+  });
+
+  it('encodes the ViewStratum onto the apply_tool payload as a 0/1 discriminant', () => {
+    // The only observable behaviour change in this PR: everything else is
+    // pure plumbing (the engine still ignores stratum until PR 2's bulldoze()
+    // implementation lands), but the wire encoding itself is worth pinning.
+    const { worker, bridge } = makeBridge();
+    const stroke = nextStrokeId();
+    bridge.send(applyToolCmd(Tool.Bulldoze, 4, 5, stroke, 'underground'));
+    expect(worker.sent).toHaveLength(1);
+    expect(worker.sent[0].payload).toMatchObject({ x: 4, y: 5, strokeId: stroke, stratum: 1 });
   });
 
   it('resolves undo with false when the worker reports nothing to undo', async () => {
@@ -97,7 +108,7 @@ describe('WasmSimBridge undo/redo', () => {
   it('undo/redo round-trip resolves true and tracks history flags', async () => {
     const { worker, bridge } = makeBridge();
     const drag = nextStrokeId();
-    bridge.send(applyToolCmd(Tool.Road, 1, 0, drag));
+    bridge.send(applyToolCmd(Tool.Road, 1, 0, drag, 'surface'));
 
     const pendingUndo = bridge.undo();
     worker.emit({
@@ -174,7 +185,7 @@ describe('WasmSimBridge undo/redo', () => {
     const { worker, bridge, events } = makeBridge();
     const historyEvents = () => events.filter(e => e.type === 'HistoryChanged');
     const before = historyEvents().length;
-    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
+    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId(), 'surface'));
     worker.emit({ type: 'apply_result', success: true, message: null, history: flags(true, false) });
     worker.emit({ type: 'apply_result', success: true, message: null, history: flags(true, false) });
     const after = historyEvents();
@@ -201,7 +212,7 @@ describe('WasmSimBridge undo/redo', () => {
 
   it('forwards a refused apply_result as a CommandResult with the message', () => {
     const { worker, bridge, events } = makeBridge();
-    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId()));
+    bridge.send(applyToolCmd(Tool.Road, 1, 0, nextStrokeId(), 'surface'));
     worker.emit({ type: 'apply_result', success: false, message: 'Not enough funds', history: flags(false, false) });
 
     const result = events.find(e => e.type === 'CommandResult');

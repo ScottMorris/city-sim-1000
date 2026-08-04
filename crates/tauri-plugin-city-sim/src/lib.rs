@@ -8,7 +8,7 @@
 //
 // Commands:
 //   start(width, height, seed, onTick: Channel<TickEvent>)
-//   apply_tool(tool: u8, x: u32, y: u32)
+//   apply_tool(tool: u8, x: u32, y: u32, stroke_id: u32, stratum: u8)
 //   set_speed(multiplier: f32)
 //   set_policies(policies: { budget: {...}, wilderness: {...} })
 //   set_natural_terrain(kinds: Vec<u8>)

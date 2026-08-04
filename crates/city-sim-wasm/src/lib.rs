@@ -12,7 +12,7 @@ use city_sim_core::{
     wire::encode_tile_buffer,
 };
 use city_sim_protocol::{
-    commands::{Policies, Tool},
+    commands::{Policies, Tool, ViewStratum},
     tile_buffer::BYTES_PER_TILE,
 };
 use wasm_bindgen::prelude::*;
@@ -282,16 +282,27 @@ impl SimHost {
     /// `tool_idx` is the `Tool` discriminant (0 = Inspect … 21 = Bulldoze),
     /// matching `#[repr(u8)]` in `city-sim-protocol`. `stroke_id` groups the
     /// many calls of one drag-paint gesture into a single undo step — the
-    /// history captures one pre-stroke snapshot per id. Returns `true` on
+    /// history captures one pre-stroke snapshot per id. `stratum_idx` is the
+    /// `ViewStratum` discriminant (0 = Surface, 1 = Underground) — which
+    /// layer the player was looking at when the command was issued, so tools
+    /// like bulldoze can act on only what's visible. Returns `true` on
     /// success; `false` if the tool could not be applied (out-of-bounds,
     /// insufficient funds, invalid placement).
-    pub fn apply_tool(&mut self, tool_idx: u8, x: u32, y: u32, stroke_id: u32) -> bool {
+    pub fn apply_tool(
+        &mut self,
+        tool_idx: u8,
+        x: u32,
+        y: u32,
+        stroke_id: u32,
+        stratum_idx: u8,
+    ) -> bool {
         let Ok(tool) = Tool::try_from(tool_idx) else {
             self.last_apply_message = None;
             return false;
         };
+        let stratum = ViewStratum::from(stratum_idx);
         let pending = self.history.prepare(&self.sim.state, stroke_id as u64);
-        let result = apply_tool(&mut self.sim.state, tool, x, y);
+        let result = apply_tool(&mut self.sim.state, tool, x, y, stratum);
         if result.success {
             if let Some(bytes) = pending {
                 self.history.commit(bytes, stroke_id as u64);

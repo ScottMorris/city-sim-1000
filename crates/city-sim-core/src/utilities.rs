@@ -248,7 +248,7 @@ mod tests {
     use crate::migrate::{set_v4_kind, tile_from_v4};
     use crate::occupants::Occupant;
     use crate::state::Tile;
-    use city_sim_protocol::commands::Tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
     use city_sim_protocol::tile_kind::TileKind;
 
@@ -454,9 +454,9 @@ mod tests {
             g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
             set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
             for x in 1..=3 {
-                apply_tool(&mut g, Tool::PowerLine, x, 0);
+                apply_tool(&mut g, Tool::PowerLine, x, 0, ViewStratum::Surface);
             }
-            apply_tool(&mut g, tool, 2, 0);
+            apply_tool(&mut g, tool, 2, 0, ViewStratum::Surface);
 
             let mid = g.tile_at(2, 0).unwrap();
             assert!(

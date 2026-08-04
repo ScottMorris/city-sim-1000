@@ -138,12 +138,49 @@ impl Policies {
     }
 }
 
+/// Which layer of the tile a layer-scoped tool (currently just
+/// `Tool::Bulldoze`) acts on — filled from the player's active view.
+///
+/// Deliberately distinct from `Stratum` in `city-sim-core`'s `occupants.rs`
+/// (`Underground | Surface | Overhead`, tile-internal): the surface *view*
+/// maps to two tile strata — `Surface` and `Overhead` — at once. `Surface` is
+/// the default so command logs recorded before this field existed, and any
+/// command that doesn't care about layers, decode unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+pub enum ViewStratum {
+    #[default]
+    Surface = 0,
+    Underground = 1,
+}
+
+impl From<u8> for ViewStratum {
+    /// Decodes the `stratum_idx` byte the WASM and Tauri bridges pass across
+    /// their FFI/IPC boundary (mirroring `Tool`'s discriminant convention).
+    /// Infallible rather than `TryFrom` — any value but `1` is `Surface`,
+    /// same as a missing/legacy field decoding through `#[serde(default)]`.
+    fn from(v: u8) -> Self {
+        if v == ViewStratum::Underground as u8 {
+            ViewStratum::Underground
+        } else {
+            ViewStratum::Surface
+        }
+    }
+}
+
 /// A command sent from the UI/bridge into the simulation.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub enum SimCommand {
-    /// Apply a tool at tile coordinates (x, y).
-    ApplyTool { tool: Tool, x: u16, y: u16 },
+    /// Apply a tool at tile coordinates (x, y), scoped to `stratum` for
+    /// tools that honour it (currently just `Tool::Bulldoze`).
+    ApplyTool {
+        tool: Tool,
+        x: u16,
+        y: u16,
+        #[serde(default)]
+        stratum: ViewStratum,
+    },
     /// Adjust simulation speed (multiplier relative to base tick rate).
     SetSpeed { multiplier: f32 },
     /// Replace the full set of player policies (budget, wilderness, ...).
@@ -232,6 +269,7 @@ mod tests {
             tool: Tool::Road,
             x: 5,
             y: 10,
+            stratum: ViewStratum::Underground,
         };
         let bytes = to_allocvec(&cmd).unwrap();
         let back: SimCommand = from_bytes(&bytes).unwrap();
@@ -240,9 +278,29 @@ mod tests {
             SimCommand::ApplyTool {
                 tool: Tool::Road,
                 x: 5,
-                y: 10
+                y: 10,
+                stratum: ViewStratum::Underground,
             }
         ));
+    }
+
+    #[test]
+    fn view_stratum_defaults_to_surface() {
+        // `#[serde(default)]` on `ApplyTool::stratum` falls back to
+        // `ViewStratum::default()` when decoding a command log recorded before
+        // this field existed, so the default must stay `Surface`.
+        assert_eq!(ViewStratum::default(), ViewStratum::Surface);
+    }
+
+    #[test]
+    fn view_stratum_from_u8() {
+        // Only `wasm/src/lib.rs` calls this decoder (the FFI boundary for
+        // `stratum_idx`), so it needs its own direct test to be covered by
+        // `cargo test --workspace`.
+        assert_eq!(ViewStratum::from(0u8), ViewStratum::Surface);
+        assert_eq!(ViewStratum::from(1u8), ViewStratum::Underground);
+        assert_eq!(ViewStratum::from(2u8), ViewStratum::Surface);
+        assert_eq!(ViewStratum::from(255u8), ViewStratum::Surface);
     }
 
     #[test]
