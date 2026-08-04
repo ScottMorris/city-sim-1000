@@ -124,10 +124,11 @@ fn regrade_refusal(tile: &Tile) -> Option<&'static str> {
 /// Apply a player tool at tile (x, y) on `state`.
 ///
 /// `stratum` names the layer the player is looking at, filled from the
-/// client's active view. Every tool but `Tool::Bulldoze` ignores it today —
-/// see `bulldoze` — but it is threaded through every call site so the field
-/// travels on the wire for every command, not just the ones that currently
-/// read it (`docs/features/layer-scoped-bulldozer.md`).
+/// client's active view. Only `Tool::Bulldoze` (see `bulldoze`) and
+/// `Tool::WaterPipe` (refuses outright unless `Underground`) read it today —
+/// every other tool ignores it, but it is threaded through every call site so
+/// the field travels on the wire for every command, not just the ones that
+/// currently read it (`docs/features/layer-scoped-bulldozer.md`).
 ///
 /// Validates funds and placement rules, modifies state on success, and returns
 /// a `CommandResult` indicating success or a human-readable failure reason.
