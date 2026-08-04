@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { stratumParam } from './mcpBridge';
+import { Tool } from './toolTypes';
 
 describe('stratumParam', () => {
   it('defaults to surface when the param is absent', () => {
@@ -19,5 +20,13 @@ describe('stratumParam', () => {
     expect(stratumParam({ stratum: 'surface' })).toBe('surface');
     expect(stratumParam({ stratum: 'sideways' })).toBe('surface');
     expect(stratumParam({ stratum: 42 })).toBe('surface');
+  });
+
+  it('defaults water_pipe to underground, since the engine refuses it anywhere else', () => {
+    expect(stratumParam({ tool: Tool.WaterPipe })).toBe('underground');
+  });
+
+  it('still honours an explicit "surface" override on water_pipe (the engine will refuse it)', () => {
+    expect(stratumParam({ tool: Tool.WaterPipe, stratum: 'surface' })).toBe('surface');
   });
 });

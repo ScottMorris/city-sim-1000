@@ -35,12 +35,21 @@ function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number,
 const MCP_WS_PORT = 5174;
 
 // The MCP bridge has no view state of its own — scripted commands default to
-// the surface, with an explicit `stratum: 'underground'` param letting a
-// script lay pipe or bulldoze underground without a client view to read.
+// the surface, with an explicit `stratum` param letting a script override it.
+// `Tool.WaterPipe` defaults to underground instead: the engine refuses it
+// outright from any other stratum (`#198`), same as the real UI auto-switches
+// the view the moment the tool is selected (`SPEC.md`'s Water Pipe entry) —
+// without this, every `apply_tool_line`/`apply_tool_rect` water-pipe script
+// that doesn't pass `stratum: 'underground'` explicitly would place nothing
+// while still reporting a `placed` count, since those two handlers fire
+// commands without checking each one's `CommandResult`.
 // Exported (only) so it's unit-testable — everything else here needs a live
 // WebSocket connection to exercise.
 export function stratumParam(params: Record<string, unknown>): ViewStratum {
-  return params.stratum === 'underground' ? 'underground' : 'surface';
+  if (params.stratum === 'underground' || params.stratum === 'surface') {
+    return params.stratum;
+  }
+  return params.tool === Tool.WaterPipe ? 'underground' : 'surface';
 }
 
 // Use setTimeout rather than rAF — background/unfocused Chromium tabs throttle
