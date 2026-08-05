@@ -229,6 +229,34 @@ impl Simulation {
         self.state = state;
         self.zone_growth = ZoneGrowthSim::new();
         self.accumulator = 0.0;
+
+        // `utility_networks` is `#[serde(skip)]` (`#230`) — a restored
+        // `GameState` carries the scalar `utilities` totals it was saved
+        // with, but its component breakdown decoded to empty. Recompute it
+        // here rather than waiting for the next `tick_fixed()`: while paused
+        // (`speed == 0`), that tick may never come, leaving
+        // `powerComponents`/`waterComponents` empty indefinitely after a
+        // load/undo/redo even though the aggregate figures are already
+        // correct. `recompute_utility_network` also rewrites
+        // `power`/`water`/`*_produced` and zeroes `*_used` as its usual
+        // "start clean for this tick" contract — preserve the `*_used` the
+        // snapshot was saved with and rebuild the net balance from it
+        // afterward, so a load doesn't transiently show zero consumption
+        // until the next tick's `compute_utility_use()` corrects it.
+        let power_used = self.state.utilities.power_used;
+        let water_used = self.state.utilities.water_used;
+        recompute_utility_network(&mut self.state, UtilityKind::Power);
+        if self.water_enabled {
+            recompute_utility_network(&mut self.state, UtilityKind::Water);
+        }
+        self.state.utilities.power_used = power_used;
+        self.state.utilities.water_used = water_used;
+        self.state.utilities.power = self.state.utilities.power_produced - power_used;
+        self.state.utilities.water = if self.water_enabled {
+            self.state.utilities.water_produced - water_used
+        } else {
+            1_000_000
+        };
     }
 
     /// Drain and return alerts raised since the last call. Both hosts call
@@ -247,11 +275,6 @@ impl Simulation {
         let water_active = self.water_enabled && self.state.has_water_system();
         let mut power_used: f32 = 0.0;
         let mut water_used: f32 = 0.0;
-        // Origin tile index + per-utility draw for each Active building —
-        // collected in this pass so the component-attribution pass below
-        // doesn't need to re-walk `state.buildings` while also holding a
-        // mutable borrow of `state.utility_networks`.
-        let mut draws: Vec<(usize, f32, f32)> = Vec::new();
         for b in &self.state.buildings {
             if b.status != BuildingStatus::Active {
                 continue;
@@ -262,8 +285,30 @@ impl Simulation {
             power_used += tmpl.power_use;
             let wu = if water_active { tmpl.water_use } else { 0.0 };
             water_used += wu;
+
+            // Attribute this draw to the component its origin tile is
+            // labelled with — fresh from this tick's step-5 recompute, which
+            // ran before this pass. `state.buildings` (read above) and
+            // `state.utility_networks` (mutated here) are disjoint fields,
+            // so no borrow conflict requires collecting draws separately. An
+            // Active building is by definition powered, so its origin is
+            // labelled; `label == 0` only fires if that invariant is ever
+            // violated, and is a silent no-op rather than a panic.
             if let Some(idx) = self.state.tile_index(b.origin.0, b.origin.1) {
-                draws.push((idx, tmpl.power_use, wu));
+                if let Some(&label) = self.state.utility_networks.power_labels.get(idx) {
+                    if label != 0 {
+                        self.state.utility_networks.power_components[(label - 1) as usize].used +=
+                            tmpl.power_use;
+                    }
+                }
+                if water_active {
+                    if let Some(&label) = self.state.utility_networks.water_labels.get(idx) {
+                        if label != 0 {
+                            self.state.utility_networks.water_components[(label - 1) as usize]
+                                .used += wu;
+                        }
+                    }
+                }
             }
         }
         let pu = power_used.round() as i32;
@@ -276,28 +321,6 @@ impl Simulation {
         } else {
             1_000_000
         };
-
-        // Attribute each draw to the component its origin tile is labelled
-        // with — fresh from this tick's step-5 recompute, which ran before
-        // this pass. An Active building is by definition powered, so its
-        // origin is labelled; `label == 0` only fires if that invariant is
-        // ever violated, and is a silent no-op rather than a panic.
-        for &(idx, pu_draw, wu_draw) in &draws {
-            if let Some(&label) = self.state.utility_networks.power_labels.get(idx) {
-                if label != 0 {
-                    self.state.utility_networks.power_components[(label - 1) as usize].used +=
-                        pu_draw;
-                }
-            }
-            if water_active {
-                if let Some(&label) = self.state.utility_networks.water_labels.get(idx) {
-                    if label != 0 {
-                        self.state.utility_networks.water_components[(label - 1) as usize].used +=
-                            wu_draw;
-                    }
-                }
-            }
-        }
 
         self.handle_resource_alerts();
     }
@@ -835,6 +858,53 @@ mod tests {
         assert_eq!(surplus.used, 0.0, "segment A has no consumers of its own");
     }
 
+    /// Mutation-testing gap: the power half of `compute_utility_use`'s
+    /// draw-attribution loop is exercised above, but nothing previously ran
+    /// an `Active`, water-consuming building through the water half, so a
+    /// `cargo-mutants` pass over this PR's diff found the `+=`/`label - 1`
+    /// arithmetic there could be broken without any test failing.
+    #[test]
+    fn water_consumption_is_summed_and_attributed_to_its_component() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        use crate::migrate::set_v4_kind;
+        use crate::occupants::Occupant;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut sim = Simulation::new(3, 1, 1);
+        {
+            let s = &mut sim.state;
+            s.tile_at_mut(0, 0).unwrap().water_output = 50;
+            set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
+            s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+            s.tile_at_mut(1, 0)
+                .unwrap()
+                .set_occupant(Occupant::Pipe, true);
+            set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Residential);
+            s.tile_at_mut(2, 0).unwrap().building_id = Some(2);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(2, TileKind::Residential, (2, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+        }
+
+        recompute_utility_network(&mut sim.state, UtilityKind::Water);
+        sim.compute_utility_use();
+
+        assert_eq!(
+            sim.state.utilities.water_used, 1,
+            "one Residential zone draws its template's water_use (1.0)"
+        );
+        let components = sim.state.utility_networks.components(UtilityKind::Water);
+        assert_eq!(components.len(), 1);
+        assert_eq!(components[0].used, 1.0);
+    }
+
     #[test]
     fn tick_advances_day_and_tick_counter() {
         let mut sim = Simulation::new(4, 4, 0);
@@ -1011,6 +1081,66 @@ mod tests {
         assert!(
             sim.take_alerts().is_empty(),
             "water alerts must not fire while water_enabled is false"
+        );
+    }
+
+    /// `#230` regression: `utility_networks` is `#[serde(skip)]`, so a
+    /// restored `GameState` always decodes with it empty. `load_state` must
+    /// repopulate it immediately rather than waiting for the next
+    /// `tick_fixed()` — which may never come while paused — and must not
+    /// clobber the `*_used`/net-balance figures the snapshot was saved with
+    /// in the process (`recompute_utility_network` zeroes `*_used` as its
+    /// usual "start clean for this tick" contract).
+    #[test]
+    fn load_state_repopulates_utility_networks_without_clobbering_used() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        use crate::migrate::set_v4_kind;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut sim = Simulation::new(3, 1, 1);
+        {
+            let s = &mut sim.state;
+            s.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+            s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(1, TileKind::CoalPlant, (0, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+            set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Residential);
+            s.tile_at_mut(1, 0).unwrap().building_id = Some(2);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(2, TileKind::Residential, (1, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+        }
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        assert_eq!(
+            sim.state.utilities.power_used, 2,
+            "one Residential zone draws 1.5 MW, rounds to 2"
+        );
+        let expected_power = sim.state.utilities.power;
+
+        // Round-trip through the real snapshot format, the same path a
+        // save/load or an undo/redo restore takes.
+        let bytes = crate::snapshot::to_bytes(&sim.state).unwrap();
+        let restored = crate::snapshot::from_bytes(&bytes).unwrap();
+        sim.load_state(restored);
+
+        assert_eq!(
+            sim.state.utilities.power_used, 2,
+            "load_state must not zero *_used before the next tick's compute_utility_use()"
+        );
+        assert_eq!(sim.state.utilities.power, expected_power);
+        assert_eq!(
+            sim.state
+                .utility_networks
+                .components(UtilityKind::Power)
+                .len(),
+            1,
+            "components must be populated immediately after load, not wait for the next tick"
         );
     }
 

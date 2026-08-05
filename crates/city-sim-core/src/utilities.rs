@@ -318,10 +318,17 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
         }
     }
 
-    // Update utility stats. City-wide totals are the *rounded sum* of the
-    // per-component figures — mathematically the single rounding step this
-    // function always did (`Σ(raw_i × fund)` = `fund × Σ raw_i`), so this is
-    // not a behaviour change: see `UtilityComponent::produced`.
+    // Update utility stats. City-wide totals are computed from the raw
+    // (pre-funding) sum, `fund × Σ raw_i` — the exact formula this function
+    // always used — rather than `Σ(raw_i × fund)`: those are only equal in
+    // real-number arithmetic, and `f32` rounding can make them disagree by a
+    // unit at ordinary funding fractions (e.g. 1 MW + 14 MW at 90% funding
+    // rounds to 14 either way in real numbers, but summing the two
+    // already-scaled components can round to 13). Computing the city total
+    // from the raw sum keeps it bit-for-bit what it always was; per-component
+    // `produced` is still funding-scaled for the breakdown, but the
+    // components' own sum can drift from the city total by that same ~1-unit
+    // rounding at an arbitrary funding percentage.
     match kind {
         UtilityKind::Power => {
             // Underfunded power departments brown out: plant output scales
@@ -329,11 +336,11 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
             let fund = city_sim_protocol::commands::BudgetPolicy::funding_multiplier(
                 state.policies.budget.fund_power,
             );
+            let raw_total: f32 = components.iter().map(|c| c.produced).sum();
             for c in &mut components {
                 c.produced *= fund;
             }
-            let produced: f32 = components.iter().map(|c| c.produced).sum();
-            state.utilities.power_produced = produced.round() as i32;
+            state.utilities.power_produced = (raw_total * fund).round() as i32;
             // power_used is updated by the economy tick; zero it here so
             // a fresh recompute starts clean.
             state.utilities.power_used = 0;
@@ -884,6 +891,34 @@ mod tests {
         assert_eq!(produced, vec![30, 40]);
     }
 
+    /// Regression: summing each component's *already-scaled* output
+    /// (`Σ(raw_i × fund)`) instead of scaling the raw total once (`fund ×
+    /// Σ raw_i`) can round to a different integer at an ordinary,
+    /// non-contrived funding fraction — `fund_power=50` above is dyadic
+    /// (`0.5`) and safe from `f32` rounding either way, which is exactly why
+    /// it didn't catch this. `fund_power=90` isn't: `1.0×0.9 + 14.0×0.9`
+    /// rounds to `13` in `f32`, while `(1.0 + 14.0)×0.9` rounds to `14`.
+    #[test]
+    fn city_total_matches_the_raw_total_scaled_once_not_the_sum_of_scaled_components() {
+        let mut g = grid(7, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 1;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        place(&mut g, 1, 0, TileKind::Road);
+        g.tile_at_mut(5, 0).unwrap().power_plant_mw = 14;
+        g.tile_at_mut(5, 0).unwrap().building_id = Some(2);
+        set_v4_kind(g.tile_at_mut(5, 0).unwrap(), TileKind::Road);
+        place(&mut g, 6, 0, TileKind::Road);
+        g.policies.budget.fund_power = 90;
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        assert_eq!(
+            g.utilities.power_produced, 14,
+            "(1 + 14) MW at 90% funding rounds to 14, matching the pre-components formula"
+        );
+    }
+
     #[test]
     fn label_grid_marks_off_network_tiles_as_zero() {
         let mut g = grid(3, 1);
@@ -924,6 +959,32 @@ mod tests {
         assert!(networks
             .component_at(UtilityKind::Power, off_network)
             .is_none());
+    }
+
+    /// Mutation-testing gap: nothing previously read `UtilityComponent::id`
+    /// itself — every other test reaches a component only through
+    /// `component_at`'s label-indexed lookup, which stays correct even if
+    /// `id` is never populated on the struct. Assert the field directly.
+    #[test]
+    fn component_id_matches_its_label_in_the_grid() {
+        let mut g = grid(3, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        place(&mut g, 1, 0, TileKind::Road);
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        let idx = g.tile_index(1, 0).unwrap();
+        let label = g.utility_networks.labels(UtilityKind::Power)[idx];
+        let component = g
+            .utility_networks
+            .component_at(UtilityKind::Power, idx)
+            .unwrap();
+        assert_eq!(
+            component.id, label,
+            "component.id must mirror the label grid's value"
+        );
     }
 
     #[test]

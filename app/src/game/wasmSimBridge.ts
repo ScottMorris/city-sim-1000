@@ -11,7 +11,7 @@
 // Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
 import { recordEngineBuild } from '../buildInfo';
-import type { GameState, ViewStratum } from './gameState';
+import type { GameState, UtilityComponentStats, ViewStratum } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
@@ -103,19 +103,6 @@ interface WireBuilding {
   kind: number;
   originX: number;
   originY: number;
-}
-
-/**
- * One entry decoded from a `powerComponentsJson`/`waterComponentsJson`
- * payload — see `SimHost::power_components_json`/`water_components_json`
- * (Rust). Structurally identical to `UtilityComponentStats` (`gameState.ts`).
- */
-interface WireUtilityComponent {
-  id: number;
-  produced: number;
-  used: number;
-  sourceCount: number;
-  utilization: number;
 }
 
 export interface WasmSimBridgeConfig {
@@ -660,10 +647,10 @@ export class WasmSimBridge implements SimBridge {
     // `#230` — one entry per physically-connected segment; unrounded on the
     // wire, matching the engine (`UtilityComponent`'s doc comment).
     this.state.utilities.powerComponents = powerComponentsJson
-      ? (JSON.parse(powerComponentsJson) as WireUtilityComponent[])
+      ? (JSON.parse(powerComponentsJson) as UtilityComponentStats[])
       : [];
     this.state.utilities.waterComponents = waterComponentsJson
-      ? (JSON.parse(waterComponentsJson) as WireUtilityComponent[])
+      ? (JSON.parse(waterComponentsJson) as UtilityComponentStats[])
       : [];
 
     decodeTileBuffer(this.state.tiles, bytes);
