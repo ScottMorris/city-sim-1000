@@ -82,19 +82,19 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; alerts: SimAlertWire[] }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; mutationSeq: number; alerts: SimAlertWire[] }
   | { type: 'apply_result'; success: boolean; message: string | null; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'snapshot_result'; requestId: number; bytes: Uint8Array }
   | { type: 'load_result'; requestId: number; ok: false; error?: string }
   | {
       type: 'load_result'; requestId: number; ok: true;
       width: number; height: number; seed: number;
       policies: GameState['policies'];
-      bytes: Uint8Array; stats: SimStats; buildingsJson: string; mutationSeq: number; history: WorkerHistoryFlags;
+      bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; mutationSeq: number; history: WorkerHistoryFlags;
     };
 
 /** One entry decoded from a `buildingsJson` payload — see `SimHost::buildings_json` (Rust). */
@@ -103,6 +103,19 @@ interface WireBuilding {
   kind: number;
   originX: number;
   originY: number;
+}
+
+/**
+ * One entry decoded from a `powerComponentsJson`/`waterComponentsJson`
+ * payload — see `SimHost::power_components_json`/`water_components_json`
+ * (Rust). Structurally identical to `UtilityComponentStats` (`gameState.ts`).
+ */
+interface WireUtilityComponent {
+  id: number;
+  produced: number;
+  used: number;
+  sourceCount: number;
+  utilization: number;
 }
 
 export interface WasmSimBridgeConfig {
@@ -122,6 +135,8 @@ export class WasmSimBridge implements SimBridge {
   private speedMult = 1;
   private pendingTileBuffer: Uint8Array | null = null;
   private pendingBuildingsJson = '';
+  private pendingPowerComponentsJson = '';
+  private pendingWaterComponentsJson = '';
   private pendingStats: SimStats | null = null;
   private pendingMutationSeq = 0;
   /**
@@ -230,7 +245,12 @@ export class WasmSimBridge implements SimBridge {
       return this.consumeDirty();
     }
     if (this.pendingTileBuffer !== null) {
-      this.applyTileBuffer(this.pendingTileBuffer, this.pendingBuildingsJson);
+      this.applyTileBuffer(
+        this.pendingTileBuffer,
+        this.pendingBuildingsJson,
+        this.pendingPowerComponentsJson,
+        this.pendingWaterComponentsJson,
+      );
       this.pendingTileBuffer = null;
       this.dirtySinceLastStep = true;
     }
@@ -418,6 +438,8 @@ export class WasmSimBridge implements SimBridge {
       case 'step_result':
         this.pendingTileBuffer = msg.bytes;
         this.pendingBuildingsJson = msg.buildingsJson;
+        this.pendingPowerComponentsJson = msg.powerComponentsJson;
+        this.pendingWaterComponentsJson = msg.waterComponentsJson;
         this.pendingStats = msg.stats;
         this.pendingMutationSeq = msg.mutationSeq;
         // Staged, not dispatched here — see pendingAlerts' field doc. Concat
@@ -440,7 +462,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.pendingAlerts = [];
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes, msg.buildingsJson);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -456,7 +478,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.pendingAlerts = [];
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes, msg.buildingsJson);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -486,7 +508,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingAlerts = [];
         this.adoptDimensions(msg.width, msg.height, msg.seed);
         this.state.policies = msg.policies;
-        this.applyTileBuffer(msg.bytes, msg.buildingsJson);
+        this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson);
         this.updateStats(msg.stats);
         this.lastAppliedTick = msg.stats.tick;
         this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -622,7 +644,12 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  private applyTileBuffer(bytes: Uint8Array, buildingsJson: string): void {
+  private applyTileBuffer(
+    bytes: Uint8Array,
+    buildingsJson: string,
+    powerComponentsJson: string,
+    waterComponentsJson: string,
+  ): void {
     const n = this.state.tiles.length;
 
     // The live wire no longer carries a resolved kind byte per tile (#177's
@@ -630,6 +657,14 @@ export class WasmSimBridge implements SimBridge {
     // stands here, not which one. `buildings_json` is the only source for
     // that now.
     const wireBuildings: WireBuilding[] = buildingsJson ? JSON.parse(buildingsJson) : [];
+    // `#230` — one entry per physically-connected segment; unrounded on the
+    // wire, matching the engine (`UtilityComponent`'s doc comment).
+    this.state.utilities.powerComponents = powerComponentsJson
+      ? (JSON.parse(powerComponentsJson) as WireUtilityComponent[])
+      : [];
+    this.state.utilities.waterComponents = waterComponentsJson
+      ? (JSON.parse(waterComponentsJson) as WireUtilityComponent[])
+      : [];
 
     decodeTileBuffer(this.state.tiles, bytes);
 

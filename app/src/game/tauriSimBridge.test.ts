@@ -41,6 +41,14 @@ interface WireBuilding {
   originY: number;
 }
 
+interface WireUtilityComponent {
+  id: number;
+  produced: number;
+  used: number;
+  sourceCount: number;
+  utilization: number;
+}
+
 interface SimAlert {
   kind: 'PowerDeficit' | 'PowerRestored' | 'WaterDeficit' | 'WaterRestored' | 'BudgetWarning' | 'Abandonment' | 'Info';
   message: string;
@@ -50,6 +58,7 @@ interface SimAlert {
 interface TickEvent {
   tick: number; day: number; population: number; jobs: number; money: number;
   power: number; water: number; powerProduced: number; waterProduced: number;
+  powerComponents: WireUtilityComponent[]; waterComponents: WireUtilityComponent[];
   demandResidential: number; demandCommercial: number; demandIndustrial: number;
   wildernessScore: number; wildernessTrend: number;
   width: number; height: number;
@@ -65,6 +74,7 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   return {
     tick: 0, day: 0, population: 0, jobs: 0, money: 0,
     power: 0, water: 0, powerProduced: 0, waterProduced: 0,
+    powerComponents: [], waterComponents: [],
     demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
     wildernessScore: 0, wildernessTrend: 0,
     width: 8, height: 8,

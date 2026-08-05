@@ -297,6 +297,8 @@ export class TauriSimBridge implements SimBridge {
     // Derived consumed = produced - balance
     s.utilities.powerUsed = event.powerProduced - event.power;
     s.utilities.waterUsed = event.waterProduced - event.water;
+    s.utilities.powerComponents = event.powerComponents;
+    s.utilities.waterComponents = event.waterComponents;
 
     // Demand
     s.demand.residential = event.demandResidential;
