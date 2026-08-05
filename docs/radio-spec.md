@@ -177,10 +177,10 @@ Because pack content is pure data (notation strings, parameter objects, script t
 Each lands independently and the ladder degrades gracefully; branch names follow repo convention.
 
 - **R0 — `feat/radio-webaudio-graph`.** Route the existing widget through the Web Audio graph (buses, crossfade, ducking plumbing). No player-visible behaviour change; the regression suite is the existing `radio.test.ts` behaviours.
-- **R1 — `feat/radio-broadcast-director`.** Director + segments + built-in undertone idents/stingers between tracks + caption rendering in marquee/popover. Delivers issue #19's text-first scope with sound on top.
+- **R1 — `feat/radio-broadcast-director`.** Director + segments + built-in undertone idents/stingers between tracks (the appendix's "Signal Hill" and "Two Tone") + caption rendering in marquee/popover. Delivers issue #19's text-first scope with sound on top.
 - **R2 — `feat/radio-news-channel`.** `radioSpotRule` narrative channel: news briefs, PSAs, ads, emergency takeovers; ticker cross-post; per-channel toggle. (Part of #13; the #22 LLM provider slots in here unchanged.)
 - **R3 — `feat/radio-voice-pack`.** Kokoro worker, opt-in model download, benchmark gating, IndexedDB cache, live ducking. Includes the native-inference spike (`ort` vs `sherpa-onnx`) that decides the `tauri-plugin-speech` design; the plugin itself lands with the Tauri host app timeline.
-- **R4 — `feat/radio-dynamic-music`.** Mood engine + first procedural station; era/season inputs.
+- **R4 — `feat/radio-dynamic-music`.** Mood engine + first procedural station seeded by the appendix's two "Skyline Drive" mixes (the mood engine's reference pair); era/season inputs.
 - **R5 — `feat/radio-studio`.** Jingle Lab, Script Booth, Station Manager, save-file sharing.
 
 `app/public/manual.html`, `README.md`, and this doc update in the same commit as each behaviour change, per repo convention.
@@ -193,3 +193,118 @@ Each lands independently and the ladder degrades gracefully; branch names follow
 - **Loudness consistency.** Suno tracks vs undertone patterns vs Kokoro WAVs will not naturally level-match; add a per-source trim at build time (playlist build can compute track gain) and fixed bus offsets, revisit if it's not enough.
 - **Determinism vs surprise.** The director is deterministic per (seed, month) for testability — is that too predictable across a long session? A per-session salt on flavour-class selection may be worth it; decide during R1 playtesting.
 - **Ticker/radio overlap.** News spots cross-posting to the ticker risks double-reporting; the shared `EventJournal` source IDs (`sourceEventId`) can dedupe — confirm during R2.
+
+## Appendix — the first Undertone songs
+
+The starting pattern library: five real compositions, written against the current `@liminal-hq/undertone` API and validated against the engine (each parses, produces onsets, and schedules voices through undertone's own fake `AudioContext`). They paste directly into the undertone demo playground (`bun run demo` in the undertone repo, or [liminalhq.ca/undertone](https://liminalhq.ca/undertone/)). At R1 the first two ship as built-in idents; at R2 "Grid Watch" becomes the default news bed; at R4 the two Skyline Drive mixes seed the first procedural station and demonstrate exactly which knobs the mood engine turns.
+
+**"Signal Hill" — the SC1K station ident sting** (one-shot, `signalHill.play({ bpm: 96 })`). A rising three-note broadcast logo resolving to a major-third dyad, with a sine root underneath and a soft noise tick on the resolution.
+
+```ts
+const signalHill = stack(
+  note('c5 g5 c6 [e6,g6]')
+    .sound('triangle')
+    .attack(0.002).decay(0.18).sustain(0).release(0.12)
+    .gain(0.6)
+    .lpf(3200).lpenv(6).lpa(0.002).lpd(0.1).lps(0).lpr(0.1),
+  note('c3 ~ ~ [c2,g2]')
+    .sound('sine')
+    .attack(0.005).decay(0.3).sustain(0).release(0.2)
+    .gain(0.5),
+  sound('~ ~ ~ white')
+    .attack(0.001).decay(0.05).sustain(0).release(0.03)
+    .gain(0.2)
+    .lpf(6000)
+);
+```
+
+**"Two Tone" — the EBS attention sting** (one-shot, `twoTone.play({ bpm: 60 })`). The emergency-takeover signature, built from the real Emergency Alert System attention-tone pair — raw 853 Hz + 960 Hz sines as a mini-notation chord. Players should learn to dread it.
+
+```ts
+const twoTone = note('[853,960]!2 ~')
+  .sound('sine')
+  .attack(0.01).decay(0.05).sustain(0.9).release(0.04)
+  .gain(0.35);
+```
+
+**"Grid Watch" — the news-talk bed** (`gridWatch.loop({ bpm: 92 })`). A low euclidean pulse, a two-chord sine pad, and sparse filtered ticks — deliberately narrow-band so speech sits on top of it even before ducking.
+
+```ts
+const gridWatch = stack(
+  note('c2(3,8)')
+    .sound('square')
+    .attack(0.005).decay(0.12).sustain(0.2).release(0.08)
+    .gain(0.5)
+    .lpf(320),
+  note('<[c4,e4,a4] [c4,e4,g4]>')
+    .sound('sine')
+    .attack(0.4).decay(0.3).sustain(0.6).release(0.6)
+    .gain(0.25)
+    .lpf(1400),
+  sound('white(5,16)')
+    .attack(0.001).decay(0.03).sustain(0).release(0.02)
+    .gain(0.12)
+    .lpf(7000)
+);
+```
+
+**"Skyline Drive" — the first procedural-station song, baseline mood** (`skylineDrive.loop({ bpm: 110 })`). Five layers: a I–vi–IV–V sawtooth pad with a slow filter envelope, a euclidean square bass, a triangle lead that reverses every second cycle and plays mirrored across the stereo field (`jux(rev)`), a four-on-the-floor sine kick with a pitch slide, and off-axis euclidean hats.
+
+```ts
+const skylineDrive = stack(
+  note('<[c3,e3,g3] [a2,c3,e3] [f2,a2,c3] [g2,b2,d3]>')
+    .sound('sawtooth')
+    .attack(0.06).decay(0.2).sustain(0.7).release(0.3)
+    .gain(0.3)
+    .lpf(900).lpenv(4).lpa(0.05).lpd(0.3).lps(0.4).lpr(0.2),
+  note('c2(5,8)')
+    .sound('square')
+    .attack(0.004).decay(0.15).sustain(0.3).release(0.1)
+    .gain(0.45)
+    .lpf(420),
+  note('c5 [e5 g5] <b5 a5> ~')
+    .sound('triangle')
+    .every(2, rev)
+    .jux(rev)
+    .attack(0.01).decay(0.2).sustain(0.2).release(0.15)
+    .gain(0.28)
+    .lpf(2600),
+  note('c1!4')
+    .sound('sine')
+    .attack(0.001).decay(0.09).sustain(0).release(0.05)
+    .gain(0.8)
+    .slide(0.05),
+  sound('white(11,16)')
+    .attack(0.001).decay(0.025).sustain(0).release(0.02)
+    .gain(0.15)
+    .lpf(8000)
+    .pan(0.3)
+);
+```
+
+**"Skyline Drive (Brownout Mix)" — the same song after the mood engine** (`brownoutMix.loop({ bpm: 84 })`). What high `tension`/low `energy` does to the baseline: the progression shifts to A minor (ending on a hard E-major dominant), the tempo drops, every filter closes down, the hats vanish, and the kick thins to beats one and four. Same song, worried city — this pair is the mood engine's reference test case.
+
+```ts
+const brownoutMix = stack(
+  note('<[a2,c3,e3] [f2,a2,c3] [d3,f3,a3] [e3,g#3,b3]>')
+    .sound('sawtooth')
+    .attack(0.12).decay(0.25).sustain(0.7).release(0.5)
+    .gain(0.3)
+    .lpf(520).lpenv(2).lpa(0.1).lpd(0.4).lps(0.3).lpr(0.3),
+  note('a1(3,8)')
+    .sound('square')
+    .attack(0.006).decay(0.18).sustain(0.25).release(0.12)
+    .gain(0.4)
+    .lpf(300),
+  note('a4 ~ <c5 b4> ~')
+    .sound('triangle')
+    .attack(0.03).decay(0.3).sustain(0.1).release(0.25)
+    .gain(0.22)
+    .lpf(1600),
+  note('a1 ~ ~ a1')
+    .sound('sine')
+    .attack(0.001).decay(0.11).sustain(0).release(0.06)
+    .gain(0.7)
+    .slide(0.06)
+);
+```
