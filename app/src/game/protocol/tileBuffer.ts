@@ -1,4 +1,5 @@
 import type { Tile } from '../gameState';
+import { ServiceId } from '../services';
 import { Terrain, ZoneDensity } from './occupants';
 
 /**
@@ -14,8 +15,10 @@ import { Terrain, ZoneDensity } from './occupants';
  *   elevation[N]   u8   — unsigned elevation (0–255)
  *   building_id[N] u16  — building ID, little-endian (0 = none)
  *   wilderness[N]  u8   — per-tile eco value, quantised (128 = neutral)
+ *   elementary_score[N] u8 — elementary education score, quantised (0.0–1.0)
+ *   high_score[N]  u8   — high-school education score, quantised (0.0–1.0)
  *
- * Total: N × 9 bytes.
+ * Total: N × 11 bytes.
  *
  * `underground`/`surface`/`overhead` are each a dense, rebased slice of one
  * stratum's occupant bits (see `protocol/occupants.ts`): `Occupant`'s
@@ -31,7 +34,7 @@ import { Terrain, ZoneDensity } from './occupants';
  * either representation without either bridge needing its own decoder.
  */
 
-export const BYTES_PER_TILE = 9;
+export const BYTES_PER_TILE = 11;
 
 export function tileBufferOffsets(n: number) {
   return {
@@ -42,7 +45,9 @@ export function tileBufferOffsets(n: number) {
     happiness: n * 4,
     elevation: n * 5,
     buildingId: n * 6, // u16le → occupies n*2 bytes starting here
-    wilderness: n * 8
+    wilderness: n * 8,
+    elementaryScore: n * 9,
+    highScore: n * 10
   } as const;
 }
 
@@ -53,7 +58,9 @@ export const STATUS = {
   ABANDONED: 1 << 2,
   WATER_TERRAIN: 1 << 3,
   DENSITY_SHIFT: 4,
-  DENSITY_MASK: 0b11 << 4
+  DENSITY_MASK: 0b11 << 4,
+  ELEMENTARY_SERVED: 1 << 6,
+  HIGH_SERVED: 1 << 7
 } as const;
 
 /** Rebase a wire `underground` byte back to absolute `Occupant` bits — already absolute, no shift. */
@@ -98,6 +105,11 @@ export function encodeEco(eco: number): number {
   return Math.trunc((clamped / ECO_RANGE) * 127 + 128);
 }
 
+/** Decode a u8 education score byte back to the [0, 1] float range. */
+export function decodeScore(u8: number): number {
+  return u8 / 255;
+}
+
 /**
  * Decode one SoA tile buffer into `tiles`, in place — shared by every bridge
  * that receives this wire (`wasmSimBridge.ts`, `tauriSimBridge.ts`), so a
@@ -125,5 +137,9 @@ export function decodeTileBuffer(tiles: Tile[], bytes: ArrayLike<number>): void 
     tile.buildingId = bid === 0 ? undefined : bid;
     // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
     tile.wilderness = bytes[o.wilderness + i] / 255;
+    tile.services.served[ServiceId.EducationElementary] = (status & STATUS.ELEMENTARY_SERVED) !== 0;
+    tile.services.served[ServiceId.EducationHigh] = (status & STATUS.HIGH_SERVED) !== 0;
+    tile.services.scores[ServiceId.EducationElementary] = decodeScore(bytes[o.elementaryScore + i]);
+    tile.services.scores[ServiceId.EducationHigh] = decodeScore(bytes[o.highScore + i]);
   }
 }

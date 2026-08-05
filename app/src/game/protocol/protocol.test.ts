@@ -17,7 +17,10 @@ import {
   tileKindFromU8,
   tileKindToU8,
 } from './tileKind';
-import { BYTES_PER_TILE, STATUS, tileBufferOffsets, decodeHappiness, encodeHappiness, decodeEco, encodeEco, ECO_RANGE } from './tileBuffer';
+import { BYTES_PER_TILE, STATUS, tileBufferOffsets, decodeHappiness, encodeHappiness, decodeEco, encodeEco, ECO_RANGE, decodeScore, decodeTileBuffer } from './tileBuffer';
+import { ServiceId, createTileServiceState } from '../services';
+import { Terrain, ZoneDensity } from './occupants';
+import type { Tile } from '../gameState';
 import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './legacyTileBuffer';
 import parityFixture from './tileKindParity.json';
 
@@ -69,7 +72,7 @@ describe('protocol: TileKind ↔ u8 parity with Rust', () => {
 // ---------------------------------------------------------------------------
 
 describe('protocol: tile buffer layout', () => {
-  it('BYTES_PER_TILE is 9', () => expect(BYTES_PER_TILE).toBe(9));
+  it('BYTES_PER_TILE is 11', () => expect(BYTES_PER_TILE).toBe(11));
 
   it('offsets for 64×64 map', () => {
     const n = 64 * 64;
@@ -82,10 +85,19 @@ describe('protocol: tile buffer layout', () => {
     expect(off.elevation).toBe(20480);
     expect(off.buildingId).toBe(24576);
     expect(off.wilderness).toBe(32768);
+    expect(off.elementaryScore).toBe(36864);
+    expect(off.highScore).toBe(40960);
   });
 
   it('STATUS bitmask values (excluding the density field) are unique powers of 2', () => {
-    const vals = [STATUS.POWERED, STATUS.WATERED, STATUS.ABANDONED, STATUS.WATER_TERRAIN];
+    const vals = [
+      STATUS.POWERED,
+      STATUS.WATERED,
+      STATUS.ABANDONED,
+      STATUS.WATER_TERRAIN,
+      STATUS.ELEMENTARY_SERVED,
+      STATUS.HIGH_SERVED
+    ];
     const unique = new Set(vals);
     expect(unique.size).toBe(vals.length);
     for (const v of vals) {
@@ -106,6 +118,45 @@ describe('protocol: tile buffer layout', () => {
     expect(encodeEco(0)).toBe(128);
     expect(encodeEco(999)).toBe(encodeEco(ECO_RANGE));
     expect(encodeEco(-999)).toBe(encodeEco(-ECO_RANGE));
+  });
+
+  it('education score decodes the [0, 1] range from a u8', () => {
+    expect(decodeScore(0)).toBe(0);
+    expect(decodeScore(255)).toBe(1);
+    expect(Math.abs(decodeScore(128) - 0.5)).toBeLessThan(0.01);
+  });
+
+  it('decodeTileBuffer sets per-tile education served/scores from the status bits and score bytes', () => {
+    const n = 2;
+    const makeTile = (): Tile => ({
+      elevation: 0,
+      happiness: 1,
+      powered: false,
+      watered: false,
+      services: createTileServiceState(),
+      terrain: Terrain.Land,
+      underground: 0,
+      surface: 0,
+      overhead: 0,
+      density: ZoneDensity.Low
+    });
+    const tiles = [makeTile(), makeTile()];
+    const o = tileBufferOffsets(n);
+    const bytes = new Array(n * BYTES_PER_TILE).fill(0);
+    bytes[o.status + 0] = STATUS.ELEMENTARY_SERVED;
+    bytes[o.status + 1] = STATUS.HIGH_SERVED;
+    bytes[o.elementaryScore + 0] = 255;
+    bytes[o.highScore + 1] = 128;
+
+    decodeTileBuffer(tiles, bytes);
+
+    expect(tiles[0].services.served[ServiceId.EducationElementary]).toBe(true);
+    expect(tiles[0].services.served[ServiceId.EducationHigh]).toBe(false);
+    expect(tiles[0].services.scores[ServiceId.EducationElementary]).toBe(1);
+
+    expect(tiles[1].services.served[ServiceId.EducationElementary]).toBe(false);
+    expect(tiles[1].services.served[ServiceId.EducationHigh]).toBe(true);
+    expect(Math.abs(tiles[1].services.scores[ServiceId.EducationHigh]! - 0.5)).toBeLessThan(0.01);
   });
 });
 
