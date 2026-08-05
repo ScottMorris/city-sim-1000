@@ -9,6 +9,7 @@ use city_sim_core::{
     import::{from_tile_buffer, ImportStats},
     sim::Simulation,
     snapshot,
+    utilities::{UtilityComponent, UtilityKind},
     wire::encode_tile_buffer,
 };
 use city_sim_protocol::{
@@ -480,6 +481,31 @@ impl SimHost {
             .collect();
         serde_json::to_string(&wire).unwrap_or_default()
     }
+
+    /// Power network connected components (`#230`) — one entry per
+    /// physically-connected segment reached by the last recompute. `produced`
+    /// and `used` are left unrounded; round for display in TS, not here (see
+    /// `UtilityComponent`'s doc comment in `city-sim-core`).
+    pub fn power_components_json(&self) -> String {
+        self.components_json(UtilityKind::Power)
+    }
+
+    /// Water network connected components — see `power_components_json`.
+    pub fn water_components_json(&self) -> String {
+        self.components_json(UtilityKind::Water)
+    }
+
+    fn components_json(&self, kind: UtilityKind) -> String {
+        let wire: Vec<WireUtilityComponent> = self
+            .sim
+            .state
+            .utility_networks
+            .components(kind)
+            .iter()
+            .map(WireUtilityComponent::from)
+            .collect();
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
 }
 
 /// One row of [`SimHost::buildings_json`]'s wire shape.
@@ -492,4 +518,29 @@ struct WireBuilding {
     kind: u8,
     origin_x: u32,
     origin_y: u32,
+}
+
+/// One row of [`SimHost::power_components_json`]/[`SimHost::water_components_json`]'s
+/// wire shape.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireUtilityComponent {
+    id: u16,
+    produced: f32,
+    used: f32,
+    source_count: u16,
+    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilization`.
+    utilization: f32,
+}
+
+impl From<&UtilityComponent> for WireUtilityComponent {
+    fn from(c: &UtilityComponent) -> Self {
+        Self {
+            id: c.id,
+            produced: c.produced,
+            used: c.used,
+            source_count: c.source_count,
+            utilization: c.utilization(),
+        }
+    }
 }
