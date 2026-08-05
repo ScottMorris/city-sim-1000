@@ -23,6 +23,8 @@ Three technology legs make this possible, and all three are already in or around
 
 ## Architecture
 
+![Signal flow: Rust engine → narrative layer and mood engine → Broadcast Director → renderer lanes → Web Audio graph, with captions branching unconditionally](images/radio/broadcast-architecture.svg)
+
 ### The playback graph (foundation)
 
 `radio.ts` currently drives a bare `HTMLAudioElement`. That cannot crossfade, duck, or mix in undertone patterns, so the first change is routing everything through one Web Audio graph:
@@ -124,6 +126,8 @@ The native app (see `docs/tauri-app-plan.md`) changes the speech story materiall
 
 ## Widget changes — from player to head unit
 
+![Widget mockup: unchanged toolbar strip above the pinned popover head unit — station identity, emergency kind badge, caption block, transcript, and tuning dial, annotated by milestone](images/radio/widget-head-unit.svg)
+
 The toolbar footprint of `radio.ts` deliberately does not grow: the controls + marquee + cover slot already fights for space, and compact mode strips it to icon buttons. All new surface area goes into the **popover**, which is already tap-pinnable on touch and graduates from "now playing tooltip" into the radio's head unit. Per milestone:
 
 - **R0 — nothing visible.** The graph re-plumb keeps every current behaviour (lazy cache warm, fallback sources, pause resync, popover pinning) pixel-identical; `radio.test.ts` is the regression net.
@@ -135,6 +139,8 @@ The toolbar footprint of `radio.ts` deliberately does not grow: the controls + m
 The widget's `RadioWidget` interface stays narrow: the director drives it through the same kind of callback wiring `toolbar.ts` uses today (`onRadioStationChange` and friends), not by reaching into its DOM.
 
 ## The Radio Studio (later phase, designed now)
+
+![Radio Studio concept: Jingle Lab pattern editor, Script Booth spot writer, and Station Manager with .radiopack export](images/radio/radio-studio-rooms.svg)
 
 The SFX editor (#153) is the exact template: a settings-surface editor, city/global override scopes, sliders plus a code view, data-only persistence. The Studio is three rooms built on that pattern:
 

@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="640" viewBox="0 0 980 640" font-family="ui-monospace, 'Cascadia Mono', 'Menlo', monospace">
+  <rect x="0" y="0" width="980" height="640" rx="14" fill="#0d1420"/>
+  <rect x="0.5" y="0.5" width="979" height="639" rx="14" fill="none" stroke="#2b3b50"/>
+
+  <text x="28" y="38" fill="#dbe6f4" font-size="17" font-weight="bold">RADIO STUDIO — THREE ROOMS (R5)</text>
+  <text x="28" y="58" fill="#7d8fa8" font-size="11">settings-surface editors on the SFX-editor pattern · everything persists as data, never code</text>
+
+  <!-- ============ Jingle Lab ============ -->
+  <rect x="24" y="80" width="296" height="452" rx="10" fill="#121b28" stroke="#4dd9e8"/>
+  <text x="44" y="108" fill="#9fe9f2" font-size="14" font-weight="bold">JINGLE LAB</text>
+  <text x="44" y="126" fill="#7d8fa8" font-size="10">idents · stingers · beds</text>
+
+  <rect x="44" y="140" width="256" height="112" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="58" y="162" fill="#6fe3a1" font-size="11">note('c2 [e3 g3] &lt;a3 b3&gt; ~')</text>
+  <text x="58" y="180" fill="#a9bad1" font-size="11">  .sound('triangle')</text>
+  <text x="58" y="198" fill="#a9bad1" font-size="11">  .lpf(220).slide(0.07)</text>
+  <text x="58" y="216" fill="#a9bad1" font-size="11">note('c5(3,8)').jux(rev)</text>
+  <text x="58" y="234" fill="#55657c" font-size="10">mini-notation — stored as data</text>
+
+  <g font-size="10" fill="#7d8fa8">
+    <text x="44" y="282">attack</text>
+    <line x1="104" y1="278" x2="284" y2="278" stroke="#2b3b50" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="132" cy="278" r="6" fill="#4dd9e8"/>
+    <text x="44" y="310">decay</text>
+    <line x1="104" y1="306" x2="284" y2="306" stroke="#2b3b50" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="186" cy="306" r="6" fill="#4dd9e8"/>
+    <text x="44" y="338">lpf</text>
+    <line x1="104" y1="334" x2="284" y2="334" stroke="#2b3b50" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="238" cy="334" r="6" fill="#4dd9e8"/>
+    <text x="44" y="366">gain</text>
+    <line x1="104" y1="362" x2="284" y2="362" stroke="#2b3b50" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="210" cy="362" r="6" fill="#4dd9e8"/>
+  </g>
+
+  <rect x="44" y="392" width="110" height="30" rx="6" fill="#0d1f24" stroke="#4dd9e8"/>
+  <path d="M62 400 L74 407 L62 414 z" fill="#9fe9f2"/>
+  <text x="82" y="412" fill="#9fe9f2" font-size="11">preview</text>
+  <rect x="164" y="392" width="136" height="30" rx="6" fill="#16202e" stroke="#2b3b50"/>
+  <text x="232" y="412" fill="#a9bad1" font-size="11" text-anchor="middle">save as ident</text>
+
+  <text x="44" y="452" fill="#55657c" font-size="10">patterns attach to stations as</text>
+  <text x="44" y="466" fill="#55657c" font-size="10">identPatternIds / bedPatternIds;</text>
+  <text x="44" y="480" fill="#55657c" font-size="10">the mood engine may parameterise</text>
+  <text x="44" y="494" fill="#55657c" font-size="10">them on procedural stations</text>
+
+  <!-- ============ Script Booth ============ -->
+  <rect x="342" y="80" width="296" height="452" rx="10" fill="#121b28" stroke="#f5a623"/>
+  <text x="362" y="108" fill="#ffd28a" font-size="14" font-weight="bold">SCRIPT BOOTH</text>
+  <text x="362" y="126" fill="#7d8fa8" font-size="10">custom idents · PSAs · ads</text>
+
+  <rect x="362" y="140" width="256" height="132" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="376" y="162" fill="#dbe6f4" font-size="11">A message from the Department</text>
+  <text x="376" y="180" fill="#dbe6f4" font-size="11">of Parks and Unplanned Nature:</text>
+  <text x="376" y="198" fill="#dbe6f4" font-size="11">leave a little wilderness in</text>
+  <text x="376" y="216" fill="#dbe6f4" font-size="11">your city plan.▌</text>
+  <text x="606" y="260" fill="#55657c" font-size="10" text-anchor="end">124 / 900</text>
+
+  <g font-size="11">
+    <text x="362" y="300" fill="#7d8fa8">kind</text>
+    <rect x="422" y="286" width="90" height="22" rx="11" fill="#16202e" stroke="#6fe3a1"/>
+    <text x="467" y="301" fill="#9beec0" text-anchor="middle">PSA</text>
+    <text x="362" y="334" fill="#7d8fa8">voice</text>
+    <rect x="422" y="320" width="196" height="22" rx="6" fill="#16202e" stroke="#2b3b50"/>
+    <text x="434" y="335" fill="#a9bad1">Aurora — civic calm  ▾</text>
+    <text x="362" y="368" fill="#7d8fa8">speed</text>
+    <line x1="422" y1="364" x2="602" y2="364" stroke="#2b3b50" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="512" cy="364" r="6" fill="#f5a623"/>
+    <text x="618" y="368" fill="#7d8fa8" text-anchor="end"> </text>
+  </g>
+
+  <rect x="362" y="392" width="110" height="30" rx="6" fill="#231a10" stroke="#f5a623"/>
+  <path d="M380 400 L392 407 L380 414 z" fill="#ffd28a"/>
+  <text x="400" y="412" fill="#ffd28a" font-size="11">audition</text>
+  <rect x="482" y="392" width="136" height="30" rx="6" fill="#16202e" stroke="#2b3b50"/>
+  <text x="550" y="412" fill="#a9bad1" font-size="11" text-anchor="middle">render to cache</text>
+
+  <text x="362" y="452" fill="#55657c" font-size="10">renders through the active</text>
+  <text x="362" y="466" fill="#55657c" font-size="10">SpeechRenderer into the opus</text>
+  <text x="362" y="480" fill="#55657c" font-size="10">cache; enters the director's</text>
+  <text x="362" y="494" fill="#55657c" font-size="10">rotation, pinnable per station</text>
+
+  <!-- ============ Station Manager ============ -->
+  <rect x="660" y="80" width="296" height="452" rx="10" fill="#121b28" stroke="#6fe3a1"/>
+  <text x="680" y="108" fill="#9beec0" font-size="14" font-weight="bold">STATION MANAGER</text>
+  <text x="680" y="126" fill="#7d8fa8" font-size="10">your frequencies</text>
+
+  <rect x="680" y="140" width="256" height="88" rx="8" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="696" y="164" fill="#dbe6f4" font-size="12" font-weight="bold">SC1K 101.3 — THE GRID</text>
+  <g font-size="9">
+    <rect x="696" y="176" width="70" height="16" rx="8" fill="#1d2434" stroke="#f5a623"/>
+    <text x="731" y="187" fill="#ffd28a" text-anchor="middle">news-talk</text>
+    <rect x="774" y="176" width="62" height="16" rx="8" fill="#1d2434" stroke="#4dd9e8"/>
+    <text x="805" y="187" fill="#9fe9f2" text-anchor="middle">DJ Nova</text>
+    <rect x="844" y="176" width="62" height="16" rx="8" fill="#1d2434" stroke="#2b3b50"/>
+    <text x="875" y="187" fill="#a9bad1" text-anchor="middle">3 idents</text>
+  </g>
+  <text x="696" y="216" fill="#55657c" font-size="10">spotMix: id 30 · psa 25 · news 35 · ad 10</text>
+
+  <rect x="680" y="240" width="256" height="88" rx="8" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="696" y="264" fill="#dbe6f4" font-size="12" font-weight="bold">PSY CIM 88.9</text>
+  <g font-size="9">
+    <rect x="696" y="276" width="54" height="16" rx="8" fill="#1d2434" stroke="#4dd9e8"/>
+    <text x="723" y="287" fill="#9fe9f2" text-anchor="middle">music</text>
+    <rect x="758" y="276" width="86" height="16" rx="8" fill="#1d2434" stroke="#2b3b50"/>
+    <text x="801" y="287" fill="#a9bad1" text-anchor="middle">12 tracks</text>
+  </g>
+  <text x="696" y="316" fill="#55657c" font-size="10">imported audio stays on-device</text>
+
+  <rect x="680" y="340" width="256" height="60" rx="8" fill="none" stroke="#3a4c64" stroke-dasharray="6 4"/>
+  <text x="808" y="375" fill="#7d8fa8" font-size="12" text-anchor="middle">+ new station</text>
+
+  <rect x="680" y="420" width="256" height="76" rx="8" fill="#16202e" stroke="#6fe3a1"/>
+  <text x="696" y="444" fill="#9beec0" font-size="12" font-weight="bold">⇪ export .radiopack</text>
+  <text x="696" y="464" fill="#a9bad1" font-size="10">stations + patterns + scripts</text>
+  <text x="696" y="480" fill="#55657c" font-size="10">no rendered audio · no third-party</text>
+
+  <!-- footer -->
+  <rect x="24" y="556" width="932" height="52" rx="10" fill="#16202e" stroke="#2b3b50"/>
+  <text x="44" y="580" fill="#a9bad1" font-size="11">override resolution: city → global → built-in (the SfxOverrides pattern)</text>
+  <text x="44" y="598" fill="#7d8fa8" font-size="11">per-city content rides the .citysim save's ClientState · packs follow the CSAV container conventions</text>
+
+  <text x="932" y="630" fill="#55657c" font-size="10" text-anchor="end">docs/radio-spec.md · "The Radio Studio"</text>
+</svg>
