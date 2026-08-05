@@ -307,7 +307,7 @@ describe('TauriSimBridge onTick decode', () => {
     expect(bridge.getState().buildings[0].state.status).toBe('active');
   });
 
-  it('marks a water pump InactiveNoSource until its footprint touches water terrain (#200)', async () => {
+  it('marks a water pump InactiveNoSource until its footprint touches water terrain', async () => {
     const { bridge, emit } = await makeBridge();
     const pump: WireBuilding = { id: 3, kind: tileKindToU8(TileKind.WaterPump), originX: 2, originY: 2 };
     const o = tileBufferOffsets(GRID_TILES);
