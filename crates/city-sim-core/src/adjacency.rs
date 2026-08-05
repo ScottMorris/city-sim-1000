@@ -530,4 +530,25 @@ mod tests {
         let s = g(2, 1);
         assert!(!tile_has_power(&s, 0, 0));
     }
+
+    /// `footprint_touches_water`'s per-tile coordinate is `(ox + dx, oy + dy)`
+    /// — every prior caller placed the building at the origin `(0, 0)`, where
+    /// `+`, `-`, and `*` all agree, so mutating either `+` to `-`/`*` survived
+    /// undetected. A footprint away from the origin, with water only beside
+    /// its *far* corner, makes the three arithmetics disagree: only `+`
+    /// reaches the tile with water next door.
+    #[test]
+    fn footprint_touches_water_uses_addition_not_the_origin_alone() {
+        let mut s = g(6, 6);
+        // 2×2 footprint at (3,4)–(4,5). Water at (5,5), east of the far
+        // corner (4,5) only — nowhere near the origin tile (3,4) itself.
+        s.tile_at_mut(5, 5).unwrap().terrain = Terrain::Water;
+        assert!(footprint_touches_water(&s, (3, 4), (2, 2)));
+    }
+
+    #[test]
+    fn footprint_touches_water_false_away_from_the_origin_with_no_water() {
+        let s = g(6, 6);
+        assert!(!footprint_touches_water(&s, (3, 4), (2, 2)));
+    }
 }
