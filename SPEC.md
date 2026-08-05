@@ -136,10 +136,10 @@ Tiles include:
 ### 5.4 Water Network (v1)
 
 * Tiles carry a `watered` flag.
-* Water sources: Pumps and Water Towers (powered and connected sources seed the network).
+* Water sources: Pumps and Water Towers, both gated on power. Pumps are also gated on a source connection (`#200`): a pump's footprint must be orthogonally adjacent to a water tile to seed the network at all — a dry pump is `InactiveNoSource` and produces nothing. Towers are deliberately terrain-independent and carry no such gate.
 * Network edges: `TileKind.WaterPipe` (underground layer), Road, Rail, and Zones.
 * Connectivity: BFS flood-fill from sources through pipes and surface transport/zones.
-* Production: `waterProduced` sums powered, connected pump/tower outputs.
+* Production: `waterProduced` sums powered pump/tower outputs, and for pumps, source-connected ones only — the same predicate the BFS seeding uses, so the two can't disagree.
 * Maintenance: per-pipe upkeep plus per-building maintenance.
 
 ### 5.5 UI Patterns
