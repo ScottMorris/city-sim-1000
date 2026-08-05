@@ -179,6 +179,10 @@ WindTurbine 0 12
 # ===========================================================================
 # 5. Water — a pump piped up to the spine
 # ===========================================================================
+# The pump's footprint must touch water terrain to produce at all (#200) —
+# a one-tile lake directly east of it, off the pipe spine so it doesn't
+# interfere with anything running north.
+Water 23 9
 WaterPump 22 9
 WaterPipe 22 8 underground
 WaterPipe 22 7 underground

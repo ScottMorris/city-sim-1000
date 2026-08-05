@@ -3,7 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-use crate::occupants::Network;
+use crate::occupants::{Network, Terrain};
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
 use std::collections::{HashSet, VecDeque};
 
@@ -184,6 +184,33 @@ pub fn tile_has_water(state: &GameState, x: u32, y: u32) -> bool {
         if let Some(n) = state.tile_at(nx, ny) {
             if n.flags & FLAG_WATERED != 0 && n.conducts(Network::Water) {
                 return true;
+            }
+        }
+    }
+    false
+}
+
+/// Returns true if any tile in the footprint rooted at `origin` is
+/// orthogonally adjacent to a `Terrain::Water` tile.
+///
+/// Shared by [`crate::buildings::update_building_states`] (drives
+/// `BuildingStatus::InactiveNoSource`) and the water BFS's source filter in
+/// `utilities.rs` (drives whether a pump seeds the network) — one predicate,
+/// so a pump's status and its actual water output cannot disagree (`#200`).
+pub fn footprint_touches_water(
+    state: &GameState,
+    origin: (u32, u32),
+    footprint: (u32, u32),
+) -> bool {
+    let (ox, oy) = origin;
+    let (w, h) = footprint;
+    for dy in 0..h {
+        for dx in 0..w {
+            let (x, y) = (ox + dx, oy + dy);
+            for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
+                if state.tile_at(nx, ny).is_some_and(|t| t.terrain() == Terrain::Water) {
+                    return true;
+                }
             }
         }
     }

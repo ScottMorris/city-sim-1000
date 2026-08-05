@@ -48,6 +48,31 @@ fn is_source(tile: &Tile, kind: UtilityKind) -> bool {
     }
 }
 
+/// Whether this tile is not just nominally a source ([`is_source`]) but is
+/// *actually* producing right now.
+///
+/// For water, that means its owning building is `Active` — which, for a
+/// pump, already folds in the `#200` footprint-touches-water check, since
+/// `update_building_states` sets `InactiveNoSource` for a dry pump before
+/// this runs. Used for both BFS seeding and [`sum_output_water`], so the
+/// network that actually gets flooded and the number shown on the HUD
+/// can't disagree (`#200` defect 2: an unpowered pump used to add to the
+/// HUD total while supplying nothing).
+fn is_effective_source(state: &GameState, tile: &Tile, kind: UtilityKind) -> bool {
+    if !is_source(tile, kind) {
+        return false;
+    }
+    if kind == UtilityKind::Water {
+        if let Some(bid) = tile.building_id {
+            return state
+                .buildings
+                .iter()
+                .any(|b| b.id == bid as u32 && b.status == BuildingStatus::Active);
+        }
+    }
+    true
+}
+
 /// Whether the network flows *through* this tile.
 ///
 /// Step 2 of the tile-model migration (#177, design note `docs/tile-model.md`):
@@ -115,28 +140,14 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
         tile.set_flag(flag, false);
     }
 
-    // Collect sources, seed their flags, build initial queue.
-    // For water: a tile only seeds the BFS if its building is Active — an
-    // unpowered pump must not supply water (mirrors the TS check for
-    // `building.state.status === BuildingStatus.Active`).
+    // Collect sources, seed their flags, build initial queue. See
+    // `is_effective_source` for the status gating (power/water) and, for
+    // pumps, the `#200` source-connection gate.
     let sources: Vec<usize> = state
         .tiles
         .iter()
         .enumerate()
-        .filter(|(_, t)| {
-            if !is_source(t, kind) {
-                return false;
-            }
-            if kind == UtilityKind::Water {
-                if let Some(bid) = t.building_id {
-                    return state
-                        .buildings
-                        .iter()
-                        .any(|b| b.id == bid as u32 && b.status == BuildingStatus::Active);
-                }
-            }
-            true
-        })
+        .filter(|(_, t)| is_effective_source(state, t, kind))
         .map(|(i, _)| i)
         .collect();
 
@@ -221,7 +232,11 @@ fn sum_output_water(state: &GameState) -> i32 {
     let mut seen: std::collections::HashSet<u16> = std::collections::HashSet::new();
     let mut total = 0;
     for tile in &state.tiles {
-        if tile.water_output <= 0 {
+        // `#200` defect 2: this used to sum every `water_output > 0` tile
+        // regardless of status, so an unpowered (or, now, unconnected) pump
+        // still padded the HUD total while the BFS correctly refused to seed
+        // from it. Same predicate as the seeding filter above.
+        if !is_effective_source(state, tile, UtilityKind::Water) {
             continue;
         }
         match tile.building_id {
@@ -597,6 +612,65 @@ mod tests {
             "inactive pump must not seed water"
         );
         assert!(!g.tile_at(1, 0).unwrap().is_watered());
+    }
+
+    /// `#200` defect 2: `sum_output_water`/`water_produced` used to sum every
+    /// `water_output > 0` tile regardless of status, so an inactive pump
+    /// padded the HUD total even though the BFS (correctly, per the test
+    /// above) refused to seed from it. One active and one inactive pump: the
+    /// HUD total must match what actually entered the network, not double it.
+    #[test]
+    fn water_produced_excludes_inactive_pumps() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        let mut g = grid(2, 1);
+        active_pump(&mut g, 1, 0, 0);
+        g.tile_at_mut(1, 0).unwrap().water_output = 50;
+        set_v4_kind(g.tile_at_mut(1, 0).unwrap(), TileKind::WaterPump);
+        g.tile_at_mut(1, 0).unwrap().building_id = Some(2);
+        let mut b = BuildingInstance::new(2, TileKind::WaterPump, (1, 0));
+        b.status = BuildingStatus::InactiveNoPower;
+        g.buildings.push(b);
+
+        recompute_utility_network(&mut g, UtilityKind::Water);
+        assert_eq!(
+            g.utilities.water_produced, 50,
+            "only the active pump's output should count"
+        );
+    }
+
+    /// `#200` end-to-end: `update_building_states` (the source-connection
+    /// gate) and `recompute_utility_network` (the BFS) agree without any
+    /// extra plumbing — a dry pump's own status already excludes it, and a
+    /// pump beside water terrain seeds normally. Exercises the full pipeline
+    /// the isolated `buildings.rs` status tests and the BFS tests above don't
+    /// cover together.
+    #[test]
+    fn dry_pump_does_not_produce_end_to_end() {
+        use crate::buildings::update_building_states;
+        use crate::occupants::Terrain;
+
+        let mut g = grid(2, 1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
+        g.tile_at_mut(0, 0)
+            .unwrap()
+            .set_occupant(Occupant::Structure, true);
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        g.tile_at_mut(0, 0).unwrap().water_output = 50;
+        g.tile_at_mut(0, 0).unwrap().set_flag(crate::state::FLAG_POWERED, true);
+        g.buildings
+            .push(crate::buildings::BuildingInstance::new(1, TileKind::WaterPump, (0, 0)));
+
+        update_building_states(&mut g, true);
+        recompute_utility_network(&mut g, UtilityKind::Water);
+        assert_eq!(g.utilities.water_produced, 0, "a dry pump must not produce");
+        assert!(!g.tile_at(0, 0).unwrap().is_watered());
+
+        // Water terrain appears next door: the same pump comes online.
+        g.tile_at_mut(1, 0).unwrap().terrain = Terrain::Water;
+        update_building_states(&mut g, true);
+        recompute_utility_network(&mut g, UtilityKind::Water);
+        assert_eq!(g.utilities.water_produced, 50);
+        assert!(g.tile_at(0, 0).unwrap().is_watered());
     }
 
     // --- orthogonal_neighbours tests ---

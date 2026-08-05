@@ -3,7 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-use crate::adjacency::{tile_has_power, tile_has_water};
+use crate::adjacency::{footprint_touches_water, tile_has_power, tile_has_water};
 use crate::state::{GameState, ServiceKind, FLAG_ABANDONED};
 use city_sim_protocol::tile_kind::TileKind;
 
@@ -18,6 +18,11 @@ pub enum BuildingStatus {
     Active,
     InactiveNoPower,
     InactiveNoWater,
+    /// A water source (pump) whose footprint doesn't touch `Terrain::Water`
+    /// (`#200`). Distinct from `InactiveNoWater`, which is about a building
+    /// *consuming* water it can't reach — a pump doesn't consume water, it
+    /// fails to produce it.
+    InactiveNoSource,
     InactiveDamaged,
 }
 
@@ -35,6 +40,10 @@ pub struct BuildingTemplate {
     pub requires_water: bool,
     pub water_use: f32,    // kL/day consumed (demand side)
     pub water_output: i32, // kL/day produced (supply side, 0 if not a source)
+    /// Whether this water source must have its footprint orthogonally
+    /// adjacent to `Terrain::Water` to actually produce (`#200`). Only
+    /// pumps draw from adjacent water; towers are terrain-independent.
+    pub requires_water_source: bool,
     pub power_use: f32,    // MW consumed when active
     pub population_capacity: u32,
     pub jobs_capacity: u32,
@@ -59,13 +68,15 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
         ($fp:expr, pwr=$p:expr, wat=$w:expr, wu=$wu:expr, wo=$wo:expr,
          pu=$pu:expr, pop=$pop:expr, jobs=$j:expr, maint=$m:expr,
          zone=$z:expr, plant=$pl:expr, civic=$cv:expr,
-         svc=$svc:expr, scap=$scap:expr, scov=$scov:expr) => {
+         svc=$svc:expr, scap=$scap:expr, scov=$scov:expr
+         $(, wsrc=$wsrc:expr)?) => {
             BuildingTemplate {
                 footprint: $fp,
                 requires_power: $p,
                 requires_water: $w,
                 water_use: $wu,
                 water_output: $wo,
+                requires_water_source: tmpl!(@wsrc $($wsrc)?),
                 power_use: $pu,
                 population_capacity: $pop,
                 jobs_capacity: $j,
@@ -78,6 +89,8 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
                 service_coverage: $scov,
             }
         };
+        (@wsrc $wsrc:expr) => { $wsrc };
+        (@wsrc) => { false };
     }
 
     // Mirrors TS ZONE_BUILDING_TEMPLATES
@@ -100,7 +113,7 @@ pub fn get_building_template(kind: TileKind) -> Option<&'static BuildingTemplate
     static WATER_PUMP: BuildingTemplate = tmpl! {
         (1,1), pwr=true,  wat=false, wu=0.0,  wo=50, pu=0.0,
         pop=0,  jobs=0,  maint=5.0,    zone=false, plant=false, civic=true,
-        svc=ServiceKind::None, scap=0, scov=0
+        svc=ServiceKind::None, scap=0, scov=0, wsrc=true
     };
     static WATER_TOWER: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=120, pu=0.0,
@@ -270,6 +283,15 @@ pub fn update_building_states(state: &mut GameState, water_enabled: bool) {
             continue;
         }
 
+        // `#200`: a pump only produces water when its footprint touches
+        // `Terrain::Water` — distinct from `requires_water`/`InactiveNoWater`
+        // below, which gates a *consumer* on network coverage. A pump
+        // doesn't consume water, so it never takes that branch.
+        if tmpl.requires_water_source && !footprint_touches_water(state, (ox, oy), (w, h)) {
+            state.buildings[i].status = BuildingStatus::InactiveNoSource;
+            continue;
+        }
+
         let needs_water = water_enabled && tmpl.requires_water && tmpl.water_use > 0.0;
         if needs_water {
             let mut watered_tiles = 0u32;
@@ -414,7 +436,7 @@ fn abandon_zone_building(state: &mut GameState, building_id: u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::occupants::Occupant;
+    use crate::occupants::{Occupant, Terrain};
     use crate::state::FLAG_POWERED;
 
     fn gs(w: u32, h: u32) -> GameState {
@@ -469,6 +491,54 @@ mod tests {
         place(&mut s, TileKind::Park, 0, 0);
         update_building_states(&mut s, true);
         assert_eq!(s.buildings[0].status, BuildingStatus::Active);
+    }
+
+    /// `#200`: a pump on dry land is powered but has no water to draw from.
+    #[test]
+    fn dry_pump_is_inactive_no_source() {
+        let mut s = gs(1, 1);
+        place(&mut s, TileKind::WaterPump, 0, 0);
+        s.tile_at_mut(0, 0).unwrap().set_flag(FLAG_POWERED, true);
+        update_building_states(&mut s, true);
+        assert_eq!(s.buildings[0].status, BuildingStatus::InactiveNoSource);
+    }
+
+    /// `#200`: a pump whose footprint touches `Terrain::Water` is Active,
+    /// same as any other powered civic building.
+    #[test]
+    fn pump_beside_water_is_active() {
+        let mut s = gs(2, 1);
+        place(&mut s, TileKind::WaterPump, 0, 0);
+        s.tile_at_mut(0, 0).unwrap().set_flag(FLAG_POWERED, true);
+        s.tile_at_mut(1, 0).unwrap().terrain = Terrain::Water;
+        update_building_states(&mut s, true);
+        assert_eq!(s.buildings[0].status, BuildingStatus::Active);
+    }
+
+    /// `#200` non-goal: towers stay terrain-independent by design, unlike
+    /// pumps. Placed by hand (not `place()`) because the tower's real
+    /// footprint is 2×2 — same pattern as `power_plant_active_without_power_input`.
+    #[test]
+    fn water_tower_ignores_terrain() {
+        let mut s = gs(2, 2);
+        let id = s.next_building_id;
+        for dy in 0..2 {
+            for dx in 0..2 {
+                let tile = s.tile_at_mut(dx, dy).unwrap();
+                tile.set_occupant(Occupant::Structure, true);
+                tile.building_id = Some(id as u16);
+                tile.set_flag(FLAG_POWERED, true);
+            }
+        }
+        s.buildings
+            .push(BuildingInstance::new(id, TileKind::WaterTower, (0, 0)));
+        s.next_building_id += 1;
+        update_building_states(&mut s, true);
+        assert_eq!(
+            s.buildings[0].status,
+            BuildingStatus::Active,
+            "a tower must not require adjacent water terrain"
+        );
     }
 
     #[test]
