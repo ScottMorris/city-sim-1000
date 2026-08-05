@@ -247,6 +247,11 @@ impl Simulation {
         let water_active = self.water_enabled && self.state.has_water_system();
         let mut power_used: f32 = 0.0;
         let mut water_used: f32 = 0.0;
+        // Origin tile index + per-utility draw for each Active building —
+        // collected in this pass so the component-attribution pass below
+        // doesn't need to re-walk `state.buildings` while also holding a
+        // mutable borrow of `state.utility_networks`.
+        let mut draws: Vec<(usize, f32, f32)> = Vec::new();
         for b in &self.state.buildings {
             if b.status != BuildingStatus::Active {
                 continue;
@@ -255,8 +260,10 @@ impl Simulation {
                 continue;
             };
             power_used += tmpl.power_use;
-            if water_active {
-                water_used += tmpl.water_use;
+            let wu = if water_active { tmpl.water_use } else { 0.0 };
+            water_used += wu;
+            if let Some(idx) = self.state.tile_index(b.origin.0, b.origin.1) {
+                draws.push((idx, tmpl.power_use, wu));
             }
         }
         let pu = power_used.round() as i32;
@@ -269,6 +276,29 @@ impl Simulation {
         } else {
             1_000_000
         };
+
+        // Attribute each draw to the component its origin tile is labelled
+        // with — fresh from this tick's step-5 recompute, which ran before
+        // this pass. An Active building is by definition powered, so its
+        // origin is labelled; `label == 0` only fires if that invariant is
+        // ever violated, and is a silent no-op rather than a panic.
+        for &(idx, pu_draw, wu_draw) in &draws {
+            if let Some(&label) = self.state.utility_networks.power_labels.get(idx) {
+                if label != 0 {
+                    self.state.utility_networks.power_components[(label - 1) as usize].used +=
+                        pu_draw;
+                }
+            }
+            if water_active {
+                if let Some(&label) = self.state.utility_networks.water_labels.get(idx) {
+                    if label != 0 {
+                        self.state.utility_networks.water_components[(label - 1) as usize].used +=
+                            wu_draw;
+                    }
+                }
+            }
+        }
+
         self.handle_resource_alerts();
     }
 
@@ -716,6 +746,93 @@ mod tests {
                     && b.status == BuildingStatus::InactiveNoWater),
             "with a water system present, unwatered zones require water again"
         );
+    }
+
+    /// The issue's headline defect (`#230`): a segment can be locally
+    /// starved — its own consumption exceeds its own production — while the
+    /// pooled city-wide balance still reads as a healthy surplus, because
+    /// the old aggregate had no notion of "which segment" at all.
+    #[test]
+    fn a_starved_segment_is_invisible_to_the_pooled_city_balance() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        use crate::migrate::set_v4_kind;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut sim = Simulation::new(14, 2, 1);
+        {
+            let s = &mut sim.state;
+
+            // Segment A: an 80 MW coal plant with no consumers — pure surplus.
+            for dy in 0..2 {
+                for dx in 0..2 {
+                    let t = s.tile_at_mut(dx, dy).unwrap();
+                    t.power_plant_mw = 80;
+                    t.building_id = Some(1);
+                }
+            }
+            s.buildings.push({
+                let mut b = BuildingInstance::new(1, TileKind::CoalPlant, (0, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+
+            // (3,0)/(4,0) stay plain Land — breaks the chain into two segments.
+
+            // Segment B: an 8 MW wind turbine feeding six 1.5 MW residential
+            // zones (9 MW drawn) — starved on its own, unrelated to A.
+            for dy in 0..2 {
+                for dx in 0..2 {
+                    let t = s.tile_at_mut(5 + dx, dy).unwrap();
+                    t.power_plant_mw = 8;
+                    t.building_id = Some(2);
+                }
+            }
+            s.buildings.push({
+                let mut b = BuildingInstance::new(2, TileKind::WindTurbine, (5, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+            set_v4_kind(s.tile_at_mut(7, 0).unwrap(), TileKind::Road);
+            for (i, x) in (8..14).enumerate() {
+                set_v4_kind(s.tile_at_mut(x, 0).unwrap(), TileKind::Residential);
+                let id = 10 + i as u32;
+                s.tile_at_mut(x, 0).unwrap().building_id = Some(id as u16);
+                s.buildings.push({
+                    let mut b = BuildingInstance::new(id, TileKind::Residential, (x, 0));
+                    b.status = BuildingStatus::Active;
+                    b
+                });
+            }
+        }
+
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+
+        assert!(
+            sim.state.utilities.power > 0,
+            "the pooled city-wide balance reads as a surplus"
+        );
+
+        let components = sim.state.utility_networks.components(UtilityKind::Power);
+        assert_eq!(components.len(), 2, "two disconnected segments");
+
+        let starved = components
+            .iter()
+            .find(|c| c.produced.round() as i32 == 8)
+            .expect("segment B (the wind turbine) is in the component list");
+        assert!(
+            starved.used > starved.produced,
+            "segment B alone is in deficit: {} used vs {} produced",
+            starved.used,
+            starved.produced
+        );
+        assert_eq!(starved.utilization(), 1.0);
+
+        let surplus = components
+            .iter()
+            .find(|c| c.produced.round() as i32 == 80)
+            .expect("segment A (the coal plant) is in the component list");
+        assert_eq!(surplus.used, 0.0, "segment A has no consumers of its own");
     }
 
     #[test]
