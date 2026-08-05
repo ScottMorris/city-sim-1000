@@ -208,7 +208,10 @@ pub fn footprint_touches_water(
         for dx in 0..w {
             let (x, y) = (ox + dx, oy + dy);
             for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
-                if state.tile_at(nx, ny).is_some_and(|t| t.terrain() == Terrain::Water) {
+                if state
+                    .tile_at(nx, ny)
+                    .is_some_and(|t| t.terrain() == Terrain::Water)
+                {
                     return true;
                 }
             }

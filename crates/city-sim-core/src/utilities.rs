@@ -656,9 +656,14 @@ mod tests {
             .set_occupant(Occupant::Structure, true);
         g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
         g.tile_at_mut(0, 0).unwrap().water_output = 50;
-        g.tile_at_mut(0, 0).unwrap().set_flag(crate::state::FLAG_POWERED, true);
-        g.buildings
-            .push(crate::buildings::BuildingInstance::new(1, TileKind::WaterPump, (0, 0)));
+        g.tile_at_mut(0, 0)
+            .unwrap()
+            .set_flag(crate::state::FLAG_POWERED, true);
+        g.buildings.push(crate::buildings::BuildingInstance::new(
+            1,
+            TileKind::WaterPump,
+            (0, 0),
+        ));
 
         update_building_states(&mut g, true);
         recompute_utility_network(&mut g, UtilityKind::Water);

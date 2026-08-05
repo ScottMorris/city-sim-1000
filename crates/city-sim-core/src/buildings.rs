@@ -44,7 +44,7 @@ pub struct BuildingTemplate {
     /// adjacent to `Terrain::Water` to actually produce (`#200`). Only
     /// pumps draw from adjacent water; towers are terrain-independent.
     pub requires_water_source: bool,
-    pub power_use: f32,    // MW consumed when active
+    pub power_use: f32, // MW consumed when active
     pub population_capacity: u32,
     pub jobs_capacity: u32,
     pub maintenance: f32, // $/day
