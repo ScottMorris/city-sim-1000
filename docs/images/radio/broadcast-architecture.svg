@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="660" viewBox="0 0 980 660" font-family="ui-monospace, 'Cascadia Mono', 'Menlo', monospace">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#7d8fa8"/>
+    </marker>
+    <marker id="arrAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#f5a623"/>
+    </marker>
+    <marker id="arrCyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4dd9e8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="980" height="660" rx="14" fill="#0d1420"/>
+  <rect x="0.5" y="0.5" width="979" height="659" rx="14" fill="none" stroke="#2b3b50"/>
+
+  <text x="28" y="38" fill="#dbe6f4" font-size="17" font-weight="bold">SC1K RADIO — BROADCAST LAYER SIGNAL FLOW</text>
+  <text x="28" y="58" fill="#7d8fa8" font-size="11">everything right of the bridge is client-side · no engine changes · persistent state is ClientState-owned</text>
+
+  <!-- Rust engine -->
+  <rect x="24" y="88" width="184" height="112" rx="8" fill="#16202e" stroke="#2b3b50"/>
+  <text x="40" y="112" fill="#dbe6f4" font-size="13" font-weight="bold">Rust engine</text>
+  <text x="40" y="130" fill="#7d8fa8" font-size="11">city-sim-core</text>
+  <text x="40" y="152" fill="#a9bad1" font-size="11">SimEvents</text>
+  <text x="40" y="168" fill="#a9bad1" font-size="11">CitySnapshot / deltas</text>
+  <text x="40" y="188" fill="#7d8fa8" font-size="10">via WASM / Tauri bridge</text>
+
+  <!-- Narrative layer -->
+  <rect x="252" y="72" width="224" height="212" rx="8" fill="#16202e" stroke="#2b3b50"/>
+  <text x="268" y="96" fill="#dbe6f4" font-size="13" font-weight="bold">Narrative layer</text>
+  <rect x="268" y="110" width="192" height="26" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="280" y="127" fill="#a9bad1" font-size="11">EventJournal</text>
+  <rect x="268" y="144" width="192" height="26" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="280" y="161" fill="#a9bad1" font-size="11">tickerRule</text>
+  <rect x="268" y="178" width="192" height="26" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="280" y="195" fill="#a9bad1" font-size="11">budgetInsightsRule</text>
+  <rect x="268" y="212" width="192" height="26" rx="5" fill="#1d2434" stroke="#f5a623"/>
+  <text x="280" y="229" fill="#ffd28a" font-size="11">radioSpotRule</text>
+  <rect x="404" y="217" width="44" height="16" rx="8" fill="#f5a623"/>
+  <text x="426" y="229" fill="#0d1420" font-size="10" font-weight="bold" text-anchor="middle">NEW</text>
+  <text x="268" y="262" fill="#7d8fa8" font-size="10">RuleNarrator now · LLMNarrator later (#22)</text>
+
+  <!-- Mood engine -->
+  <rect x="252" y="316" width="224" height="88" rx="8" fill="#16202e" stroke="#4dd9e8"/>
+  <text x="268" y="340" fill="#9fe9f2" font-size="13" font-weight="bold">Mood engine</text>
+  <text x="268" y="360" fill="#a9bad1" font-size="11">snapshot + deltas →</text>
+  <text x="268" y="376" fill="#a9bad1" font-size="11">energy · tension · scale · era</text>
+  <text x="268" y="394" fill="#7d8fa8" font-size="10">segment boundaries only · hysteresis</text>
+
+  <!-- Broadcast Director -->
+  <rect x="520" y="72" width="212" height="332" rx="8" fill="#16202e" stroke="#f5a623"/>
+  <text x="536" y="96" fill="#ffd28a" font-size="13" font-weight="bold">Broadcast Director</text>
+  <text x="536" y="114" fill="#7d8fa8" font-size="10">deterministic per (seed, month)</text>
+  <text x="536" y="136" fill="#a9bad1" font-size="10">emergency ▸ interrupt now</text>
+  <text x="536" y="151" fill="#a9bad1" font-size="10">news / psa ▸ next boundary</text>
+  <text x="536" y="166" fill="#a9bad1" font-size="10">flavour   ▸ idle gaps only</text>
+  <text x="536" y="192" fill="#dbe6f4" font-size="11" font-weight="bold">segment queue</text>
+  <rect x="536" y="202" width="180" height="24" rx="5" fill="#0d1420" stroke="#ff5d5d"/>
+  <text x="548" y="218" fill="#ff9c9c" font-size="10">spot · EMERGENCY</text>
+  <rect x="536" y="232" width="180" height="24" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="548" y="248" fill="#a9bad1" font-size="10">stinger · ident</text>
+  <rect x="536" y="262" width="180" height="24" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="548" y="278" fill="#a9bad1" font-size="10">track · Suno</text>
+  <rect x="536" y="292" width="180" height="24" rx="5" fill="#0d1420" stroke="#4dd9e8"/>
+  <text x="548" y="308" fill="#9fe9f2" font-size="10">pattern · undertone</text>
+  <rect x="536" y="322" width="180" height="24" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="548" y="338" fill="#a9bad1" font-size="10">spot · PSA + bed</text>
+  <text x="536" y="368" fill="#7d8fa8" font-size="10">station manifest v2:</text>
+  <text x="536" y="382" fill="#7d8fa8" font-size="10">format · dj · spotMix · idents</text>
+
+  <!-- Renderer lanes -->
+  <rect x="772" y="72" width="184" height="56" rx="8" fill="#16202e" stroke="#2b3b50"/>
+  <text x="786" y="94" fill="#dbe6f4" font-size="12" font-weight="bold">Tracks</text>
+  <text x="786" y="112" fill="#7d8fa8" font-size="10">HTMLAudio element</text>
+
+  <rect x="772" y="140" width="184" height="56" rx="8" fill="#16202e" stroke="#4dd9e8"/>
+  <text x="786" y="162" fill="#9fe9f2" font-size="12" font-weight="bold">Undertone</text>
+  <text x="786" y="180" fill="#7d8fa8" font-size="10">idents · beds · music</text>
+
+  <rect x="772" y="208" width="184" height="140" rx="8" fill="#16202e" stroke="#2b3b50"/>
+  <text x="786" y="230" fill="#dbe6f4" font-size="12" font-weight="bold">SpeechRenderer</text>
+  <text x="786" y="248" fill="#a9bad1" font-size="10">CaptionOnly · always</text>
+  <text x="786" y="263" fill="#a9bad1" font-size="10">KokoroWorker · web</text>
+  <text x="786" y="278" fill="#a9bad1" font-size="10">TauriSpeech · native</text>
+  <rect x="786" y="290" width="156" height="24" rx="5" fill="#0d1420" stroke="#6fe3a1"/>
+  <text x="798" y="306" fill="#9beec0" font-size="10">opus cache · LRU</text>
+  <text x="786" y="334" fill="#7d8fa8" font-size="10">PCM in flight only</text>
+
+  <!-- Web Audio graph -->
+  <rect x="520" y="432" width="436" height="148" rx="8" fill="#16202e" stroke="#2b3b50"/>
+  <text x="536" y="456" fill="#dbe6f4" font-size="13" font-weight="bold">Web Audio graph</text>
+  <rect x="536" y="472" width="120" height="30" rx="6" fill="#0d1420" stroke="#4dd9e8"/>
+  <text x="596" y="491" fill="#9fe9f2" font-size="11" text-anchor="middle">musicBus</text>
+  <rect x="536" y="532" width="120" height="30" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="596" y="551" fill="#a9bad1" font-size="11" text-anchor="middle">speechBus</text>
+  <rect x="712" y="502" width="130" height="30" rx="6" fill="#0d1420" stroke="#f5a623"/>
+  <text x="777" y="521" fill="#ffd28a" font-size="11" text-anchor="middle">radioMaster</text>
+  <path d="M656 487 L700 510" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <path d="M656 547 L700 524" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <path d="M842 517 L886 517" stroke="#f5a623" fill="none" marker-end="url(#arrAmber)"/>
+  <path d="M896 508 h10 v18 h-10 z M906 508 l14 -8 v34 l-14 -8 z" fill="#ffd28a"/>
+  <path d="M584 532 L584 508" stroke="#6fe3a1" stroke-dasharray="4 3" fill="none" marker-end="url(#arr)"/>
+  <text x="566" y="524" fill="#9beec0" font-size="9">duck −9 dB</text>
+  <text x="536" y="600" fill="#7d8fa8" font-size="10" opacity="0">.</text>
+
+  <!-- Captions branch -->
+  <rect x="24" y="472" width="330" height="88" rx="8" fill="#16202e" stroke="#2b3b50"/>
+  <text x="40" y="496" fill="#dbe6f4" font-size="12" font-weight="bold">Captions — unconditional</text>
+  <text x="40" y="516" fill="#a9bad1" font-size="11">widget marquee + popover script</text>
+  <text x="40" y="532" fill="#a9bad1" font-size="11">news spots → ticker cross-post</text>
+  <text x="40" y="550" fill="#7d8fa8" font-size="10">accessibility = phone = fallback story</text>
+
+  <!-- Flow arrows -->
+  <path d="M208 144 L244 144" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <path d="M208 176 C232 176 232 356 244 356" stroke="#4dd9e8" fill="none" marker-end="url(#arrCyan)"/>
+  <path d="M476 225 L512 225" stroke="#f5a623" fill="none" marker-end="url(#arrAmber)"/>
+  <text x="480" y="216" fill="#ffd28a" font-size="9">spots</text>
+  <path d="M476 356 C500 356 500 320 512 316" stroke="#4dd9e8" fill="none" marker-end="url(#arrCyan)"/>
+  <text x="480" y="344" fill="#9fe9f2" font-size="9">params</text>
+  <path d="M732 100 L764 100" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <path d="M732 168 L764 168" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <path d="M732 278 L764 278" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <path d="M864 348 L864 424" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <text x="874" y="392" fill="#7d8fa8" font-size="9">all audio</text>
+  <text x="672" y="572" fill="#7d8fa8" font-size="9">tracks + patterns ▸ musicBus · speech ▸ speechBus</text>
+  <path d="M792 348 L792 414 L200 414 L200 464" stroke="#7d8fa8" fill="none" marker-end="url(#arr)"/>
+  <text x="404" y="408" fill="#7d8fa8" font-size="9">caption lines</text>
+
+  <text x="24" y="620" fill="#7d8fa8" font-size="11">Tiers: 0 tracks · 1 undertone · 2 captions · 3 voice — every rung is a complete experience on every device.</text>
+  <text x="24" y="640" fill="#55657c" font-size="10">docs/radio-spec.md · epic #248</text>
+</svg>
