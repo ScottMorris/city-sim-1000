@@ -109,7 +109,17 @@ Inputs and their pull: population growth and demand raise `energy`; utility defi
 
 - **Device gating.** On first enable, synthesise a standard benchmark sentence and measure the real-time factor. Three classes: `live` (can synthesise on demand ahead of the queue), `background` (the ~110 s laptop case: the director requests synthesis several segments ahead and plays voice only if the WAV landed in time, otherwise the spot runs caption-only), `off` (suggested on phones — captions only). The class is a setting the player can override.
 - **Cache.** IndexedDB, keyed by `hash(text | voiceId | speed | modelRev)`, LRU-capped. Station IDs and recurring PSAs are generated once per device, ever.
-- **Desktop later.** The Tauri build can add a native `SpeechRenderer` (Piper sidecar or OS TTS) behind the same interface — `KokoroRenderer | TauriNativeRenderer | CaptionOnlyRenderer` — without touching the director.
+- **Renderer seam.** Speech synthesis sits behind a `SpeechRenderer` interface — `CaptionOnlyRenderer | KokoroWorkerRenderer | TauriSpeechRenderer` — selected at startup exactly the way `main.ts` picks `WasmSimBridge` vs `TauriSimBridge`. The director never knows which one is active.
+
+### Native speech on Tauri
+
+The native app (see `docs/tauri-app-plan.md`) changes the speech story materially: a Tauri build can run Kokoro inference in Rust instead of through the browser's WASM/WebGPU stack, which is both faster on desktop and — more importantly — viable on phones, where the browser path is weakest (no WebGPU in stable WebKit, WASM q8 too slow). The design follows the org conventions the Tauri plan already adopted:
+
+- **A reusable org plugin, not a city-sim local.** `tauri-plugin-speech` in `liminal-hq/tauri-plugins-workspace` (the same home the Steamworks plugin draft chose): Rust-side Kokoro-82M inference via ONNX Runtime (`ort` crate, or `sherpa-onnx` which ships Kokoro TTS support — decide with a spike at R3). Crucially it runs the **same ONNX model assets** as the browser worker, so voices, output, and cache keys (`modelRev`) are identical across platforms — a save that pins a DJ voice sounds the same everywhere.
+- **Command surface.** `speech_synthesise(text, voiceId, speed) → WAV bytes` (or a Tauri IPC `Channel` for chunked delivery, the pattern `tauri-plugin-city-sim` already uses for tick updates), `speech_benchmark()`, and model management: `speech_install(voicePackId)` with native resumable, checksummed download to the app data dir, `speech_status()`. Native downloads sidestep CORS and browser cache eviction entirely.
+- **Execution providers raise the ceiling, gating stays.** CPU is comfortably fast on desktop; Android gets NNAPI/XNNPACK and iOS/macOS get CoreML through the same ONNX Runtime. The benchmark-gating classes (`live`/`background`/`off`) are unchanged — native inference just moves real devices up the ladder, likely making `live` voice a realistic default on desktop and `background` plausible on recent phones.
+- **Storage follows the keystone.** Where T1-1 moves saves from IndexedDB to real CSAV files under `appDataDir/saves/`, the voice model and the rendered-WAV cache live under `appDataDir/radio/` as plain files — immune to Android WebView storage eviction, visible to Steam Cloud exclusion rules, and off the base bundle (the T5-4 principle: base AAB free of audio; the voice pack is an in-app download on every platform, or rides the Play Asset Delivery decision if that's where T5-4 lands).
+- **Playback stays in the webview.** The native side only synthesises and returns buffers; the Web Audio graph, ducking, undertone patterns, and the director all remain identical webview code on every platform. One mixer, one scheduler, N renderers — the same "engine feature, not a platform feature" stance the Tauri plan takes for achievements.
 
 ## The Radio Studio (later phase, designed now)
 
@@ -119,7 +129,16 @@ The SFX editor (#153) is the exact template: a settings-surface editor, city/glo
 2. **Script Booth** — write custom spots (900-char cap, per the demo), assign kind/station/voice/speed, audition, and pre-render into the voice cache. Custom spots enter the director's rotation alongside generated ones, and can be pinned ("play my station ID every rotation").
 3. **Station Manager** — create stations: name, frequency, format, DJ persona, spot mix, attach Jingle Lab patterns, and (for music) point at local audio imported into IndexedDB — player-imported tracks stay on-device, sidestepping redistribution questions.
 
-Studio content persists in `ClientState` (global overrides in browser-level storage, per-city content in the save, mirroring `SfxOverrides` resolution: city → global → built-in). Because everything is data, a shared `.citysim` save carries its custom stations safely.
+### Studio persistence and station packs
+
+Studio content lives in three scopes, mirroring `SfxOverrides` resolution (city → global → built-in): per-city content rides the `.citysim` save's `ClientState` (a shared city broadcasts its custom stations), the global library lives in browser-level storage on web and as real files under `appDataDir/radio/` on Tauri (following T1-1's files-not-webview-storage keystone), and built-ins ship with the game.
+
+On top of those scopes, the Studio gets its own portable save file: a **station pack** (`.radiopack`), following the CSAV container conventions from `persistence.ts` — magic + version + meta JSON + payload. A pack bundles stations, Jingle Lab patterns (mini-notation + control data), Script Booth spots, and optional cover art. Two things deliberately stay out:
+
+- **Rendered TTS WAVs** — derived data. The pack carries the text; the receiving device re-synthesises through its own renderer and cache. This keeps packs tiny and voice-quality-correct on every device class.
+- **Imported audio, by default.** Player-imported tracks stay device-local; a pack references them by title and the importer offers re-linking. An explicit "embed audio" toggle exists for players sharing their own recordings, with a size warning — the default avoids casually redistributing copyrighted music.
+
+Because pack content is pure data (notation strings, parameter objects, script text — never code), importing one is as safe as loading a save. On web, packs export/import as downloads like `.citysim` files; on Tauri they're real files eligible for the native dialogs (T1-2) and, eventually, a file association (T1-3).
 
 ## Fun extras (cheap once the core exists)
 
@@ -141,7 +160,7 @@ Each lands independently and the ladder degrades gracefully; branch names follow
 - **R0 — `feat/radio-webaudio-graph`.** Route the existing widget through the Web Audio graph (buses, crossfade, ducking plumbing). No player-visible behaviour change; the regression suite is the existing `radio.test.ts` behaviours.
 - **R1 — `feat/radio-broadcast-director`.** Director + segments + built-in undertone idents/stingers between tracks + caption rendering in marquee/popover. Delivers issue #19's text-first scope with sound on top.
 - **R2 — `feat/radio-news-channel`.** `radioSpotRule` narrative channel: news briefs, PSAs, ads, emergency takeovers; ticker cross-post; per-channel toggle. (Part of #13; the #22 LLM provider slots in here unchanged.)
-- **R3 — `feat/radio-voice-pack`.** Kokoro worker, opt-in model download, benchmark gating, IndexedDB cache, live ducking.
+- **R3 — `feat/radio-voice-pack`.** Kokoro worker, opt-in model download, benchmark gating, IndexedDB cache, live ducking. Includes the native-inference spike (`ort` vs `sherpa-onnx`) that decides the `tauri-plugin-speech` design; the plugin itself lands with the Tauri host app timeline.
 - **R4 — `feat/radio-dynamic-music`.** Mood engine + first procedural station; era/season inputs.
 - **R5 — `feat/radio-studio`.** Jingle Lab, Script Booth, Station Manager, save-file sharing.
 
@@ -150,7 +169,7 @@ Each lands independently and the ladder degrades gracefully; branch names follow
 ## Risks and open questions
 
 - **Model licensing/size.** `kokoro-js` is MIT and the Kokoro-82M weights are Apache-2.0 — re-verify at R3, and decide whether to self-host the weights (GitHub Pages size limits) or keep the Hugging Face CDN dependency with a clear "needs network once" message.
-- **iOS/WebKit.** No WebGPU in stable WebKit and tighter memory ceilings — the WASM q8 path may still be too heavy; `off`/captions is the honest default there, and the gating benchmark protects us from promising what a device can't deliver.
+- **iOS/WebKit.** No WebGPU in stable WebKit and tighter memory ceilings — the WASM q8 path may still be too heavy; `off`/captions is the honest default there, and the gating benchmark protects us from promising what a device can't deliver. The native Tauri path (CoreML/NNAPI via ONNX Runtime) is the real fix for phones; the web PWA on a phone simply stays captions-first.
 - **Autoplay policy.** The graph must resume its `AudioContext` on the same user gesture that starts playback today (the SFX system already handles this pattern).
 - **Loudness consistency.** Suno tracks vs undertone patterns vs Kokoro WAVs will not naturally level-match; add a per-source trim at build time (playlist build can compute track gain) and fixed bus offsets, revisit if it's not enough.
 - **Determinism vs surprise.** The director is deterministic per (seed, month) for testability — is that too predictable across a long session? A per-session salt on flavour-class selection may be worth it; decide during R1 playtesting.
