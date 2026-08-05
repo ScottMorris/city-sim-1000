@@ -13,6 +13,7 @@ use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
 use city_sim_core::state::GameState;
+use city_sim_core::utilities::{UtilityComponent, UtilityKind};
 use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::{CommandResult, Policies, Tool, ViewStratum};
 use city_sim_protocol::events::SimAlert;
@@ -38,6 +39,13 @@ pub struct TickEvent {
     pub water: i32,
     pub power_produced: i32,
     pub water_produced: i32,
+    /// Power network connected components (`#230`) — one entry per
+    /// physically-connected segment reached by the last recompute.
+    /// `produced`/`used` are left unrounded on the wire; round for display
+    /// in TS, not here. See `city_sim_core::utilities::UtilityComponent`.
+    pub power_components: Vec<WireUtilityComponent>,
+    /// Water network connected components — see `power_components`.
+    pub water_components: Vec<WireUtilityComponent>,
     pub demand_residential: f32,
     pub demand_commercial: f32,
     pub demand_industrial: f32,
@@ -83,6 +91,33 @@ pub struct WireBuilding {
     pub kind: u8,
     pub origin_x: u32,
     pub origin_y: u32,
+}
+
+/// One entry in [`TickEvent::power_components`]/[`TickEvent::water_components`].
+/// Mirrors `SimHost::power_components_json`/`water_components_json` on the
+/// WASM path, sent as real values here since Tauri IPC serialises the whole
+/// `TickEvent` natively.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireUtilityComponent {
+    pub id: u16,
+    pub produced: f32,
+    pub used: f32,
+    pub source_count: u16,
+    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilisation`.
+    pub utilisation: f32,
+}
+
+impl From<&UtilityComponent> for WireUtilityComponent {
+    fn from(c: &UtilityComponent) -> Self {
+        Self {
+            id: c.id,
+            produced: c.produced,
+            used: c.used,
+            source_count: c.source_count,
+            utilisation: c.utilisation(),
+        }
+    }
 }
 
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
@@ -174,6 +209,18 @@ fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) 
         water: s.utilities.water,
         power_produced: s.utilities.power_produced,
         water_produced: s.utilities.water_produced,
+        power_components: s
+            .utility_networks
+            .components(UtilityKind::Power)
+            .iter()
+            .map(WireUtilityComponent::from)
+            .collect(),
+        water_components: s
+            .utility_networks
+            .components(UtilityKind::Water)
+            .iter()
+            .map(WireUtilityComponent::from)
+            .collect(),
         demand_residential: s.demand.residential,
         demand_commercial: s.demand.commercial,
         demand_industrial: s.demand.industrial,

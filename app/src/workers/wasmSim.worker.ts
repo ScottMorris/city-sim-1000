@@ -196,9 +196,11 @@ function startStepLoop(): void {
     const bytes = host.tile_buffer();
     const stats = gatherStats(host);
     const buildingsJson = host.buildings_json();
+    const powerComponentsJson = host.power_components_json();
+    const waterComponentsJson = host.water_components_json();
     const alerts: SimAlertWire[] = JSON.parse(host.take_alerts_json() || '[]');
     self.postMessage(
-      { type: 'step_result', bytes, stats, buildingsJson, mutationSeq, alerts },
+      { type: 'step_result', bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, mutationSeq, alerts },
       { transfer: [bytes.buffer as ArrayBuffer] },
     );
   }, STEP_INTERVAL_MS);
@@ -385,8 +387,10 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         const bytes = host.tile_buffer();
         const stats = gatherStats(host);
         const buildingsJson = host.buildings_json();
+        const powerComponentsJson = host.power_components_json();
+        const waterComponentsJson = host.water_components_json();
         self.postMessage(
-          { type: 'undo_result', happened: true, bytes, stats, buildingsJson, mutationSeq, history: historyFlags(host) },
+          { type: 'undo_result', happened: true, bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -401,8 +405,10 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         const bytes = host.tile_buffer();
         const stats = gatherStats(host);
         const buildingsJson = host.buildings_json();
+        const powerComponentsJson = host.power_components_json();
+        const waterComponentsJson = host.water_components_json();
         self.postMessage(
-          { type: 'redo_result', happened: true, bytes, stats, buildingsJson, mutationSeq, history: historyFlags(host) },
+          { type: 'redo_result', happened: true, bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -472,6 +478,8 @@ function postLoadResult(h: SimHost, requestId: number): void {
       bytes,
       stats: gatherStats(h),
       buildingsJson: h.buildings_json(),
+      powerComponentsJson: h.power_components_json(),
+      waterComponentsJson: h.water_components_json(),
       mutationSeq,
       history: historyFlags(h),
     },

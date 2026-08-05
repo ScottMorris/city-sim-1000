@@ -30,3 +30,7 @@ The TS sim gated pump output on `hasWaterSourceConnection()` (`app/src/game/simu
 * Groundwater, aquifers, or water quality — the gate is binary source-connection, as before.
 * Changing water tower behaviour (towers are the terrain-independent option by design).
 * Refusing *placement* of a pump that doesn't border water — SPEC.md's "Pump: must border ≥1 water tile" describes a build-time rule that's still unenforced (a pump can be placed anywhere, it just won't produce); that gap is tracked separately as `#206`, alongside the same gap for Hydro plants.
+
+## See also
+
+`is_effective_source`, the predicate this fix introduced to keep BFS seeding and the HUD total in agreement, is also what `#230`'s per-source flood-fill iterates to build connected components — see `docs/features/utility-network-components.md`. A dry (or otherwise inactive) pump excluded here is, by construction, excluded from every component there too.

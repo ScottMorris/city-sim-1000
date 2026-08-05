@@ -236,6 +236,7 @@ pub(crate) fn v4_to_v5(old: v4::GameState) -> GameState {
         budget_history: old.budget_history,
         policies: old.policies,
         wilderness: old.wilderness,
+        utility_networks: crate::utilities::UtilityNetworks::default(),
     }
 }
 

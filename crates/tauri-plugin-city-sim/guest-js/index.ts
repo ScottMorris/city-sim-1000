@@ -31,6 +31,15 @@ export interface TickEvent {
   water:              number   // i32 (net = produced − used)
   powerProduced:      number   // i32
   waterProduced:      number   // i32
+  /**
+   * Power network connected components — one entry per physically-connected
+   * segment reached by the last recompute. `produced`/`used` are left
+   * unrounded on the wire; round for display in TS, not here. See
+   * `city_sim_core::utilities::UtilityComponent`.
+   */
+  powerComponents:    WireUtilityComponent[]
+  /** Water network connected components — see {@link powerComponents}. */
+  waterComponents:    WireUtilityComponent[]
   demandResidential:  number   // f32 [0, 100]
   demandCommercial:   number   // f32 [0, 100]
   demandIndustrial:   number   // f32 [0, 100]
@@ -82,6 +91,16 @@ export interface WireBuilding {
   kind:     number   // u8
   originX:  number   // u32
   originY:  number   // u32
+}
+
+/** One entry in {@link TickEvent.powerComponents}/{@link TickEvent.waterComponents}. */
+export interface WireUtilityComponent {
+  id:           number   // u16 — stable only within one tick's recompute
+  produced:     number   // f32, unrounded
+  used:         number   // f32, unrounded
+  sourceCount:  number   // u16
+  /** `used / produced`, clamped to `[0, 1]`. */
+  utilisation:  number   // f32
 }
 
 /**

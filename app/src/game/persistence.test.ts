@@ -137,7 +137,9 @@ describe('utilities back-fill', () => {
       powerProduced: 0,
       powerUsed: 0,
       waterProduced: 0,
-      waterUsed: 0
+      waterUsed: 0,
+      powerComponents: [],
+      waterComponents: []
     });
   });
 
@@ -148,6 +150,8 @@ describe('utilities back-fill', () => {
     expect(state.utilities.powerProduced).toBe(0);
     expect(state.utilities.waterUsed).toBe(0);
     expect(state.utilities.power).toBe(2);
+    expect(state.utilities.powerComponents).toEqual([]);
+    expect(state.utilities.waterComponents).toEqual([]);
   });
 });
 

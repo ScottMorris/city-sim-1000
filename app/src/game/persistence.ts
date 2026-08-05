@@ -42,13 +42,17 @@ export function deserialize(payload: string): GameState {
       powerProduced: 0,
       powerUsed: 0,
       waterProduced: 0,
-      waterUsed: 0
+      waterUsed: 0,
+      powerComponents: [],
+      waterComponents: []
     };
   } else {
     parsed.utilities.powerProduced = parsed.utilities.powerProduced ?? 0;
     parsed.utilities.powerUsed = parsed.utilities.powerUsed ?? 0;
     parsed.utilities.waterProduced = parsed.utilities.waterProduced ?? 0;
     parsed.utilities.waterUsed = parsed.utilities.waterUsed ?? 0;
+    parsed.utilities.powerComponents = parsed.utilities.powerComponents ?? [];
+    parsed.utilities.waterComponents = parsed.utilities.waterComponents ?? [];
   }
   parsed.services = parsed.services ?? createServiceSystemState();
   parsed.services.definitions = parsed.services.definitions ?? {

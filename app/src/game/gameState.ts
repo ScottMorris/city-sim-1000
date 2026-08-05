@@ -141,6 +141,22 @@ export interface GameSettings {
   sfxOverrides: SfxOverrides;
 }
 
+/**
+ * One physically-connected segment of a power or water network. Mirrors
+ * Rust's `UtilityComponent` (`crates/city-sim-core/src/utilities.rs`) —
+ * `produced`/`used` are left unrounded on the wire; round for display here,
+ * not in the engine. `id` is stable only within one tick's recompute — a
+ * grid edit can renumber every component on the next one.
+ */
+export interface UtilityComponentStats {
+  id: number;
+  produced: number;
+  used: number;
+  sourceCount: number;
+  /** `used / produced`, clamped to `[0, 1]`. */
+  utilisation: number;
+}
+
 export interface UtilityStats {
   power: number;
   water: number;
@@ -148,6 +164,10 @@ export interface UtilityStats {
   powerUsed: number;
   waterProduced: number;
   waterUsed: number;
+  /** One entry per physically-connected power segment; see `#230`. */
+  powerComponents: UtilityComponentStats[];
+  /** One entry per physically-connected water segment. */
+  waterComponents: UtilityComponentStats[];
 }
 
 export interface DemandStats {
@@ -375,7 +395,9 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       powerProduced: 0,
       powerUsed: 0,
       waterProduced: 0,
-      waterUsed: 0
+      waterUsed: 0,
+      powerComponents: [],
+      waterComponents: []
     },
     budget: {
       revenue: 0,
