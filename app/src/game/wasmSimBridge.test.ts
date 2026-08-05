@@ -5,8 +5,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { WasmSimBridge } from './wasmSimBridge';
-import { createInitialState } from './gameState';
+import { createInitialState, TileKind } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
+import { tileKindToU8 } from './protocol/tileKind';
+import { ServiceId } from './services';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
 import { Tool } from './toolTypes';
@@ -260,6 +262,27 @@ describe('WasmSimBridge undo/redo', () => {
       { id: 1, produced: 60, used: 30, sourceCount: 1, utilisation: 0.5 },
     ]);
     expect(state.utilities.waterComponents).toEqual([]);
+  });
+
+  it('decodes educationJson into state.education and educationSeatsUsedJson into a building\'s slotsUsed, on step() flush', () => {
+    const { worker, bridge, state } = makeBridge();
+    const educationStats = {
+      elementaryServed: 12, elementaryCapacity: 180, elementaryLoad: 20,
+      highServed: 0, highCapacity: 0, highLoad: 0,
+      score: 0.6, elementaryCoverage: 0.6, highCoverage: 1,
+    };
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      buildingsJson: JSON.stringify([{ id: 7, kind: tileKindToU8(TileKind.ElementarySchool), originX: 0, originY: 0 }]),
+      powerComponentsJson: '[]', waterComponentsJson: '[]',
+      educationJson: JSON.stringify(educationStats),
+      educationSeatsUsedJson: JSON.stringify([{ buildingId: 7, used: 12 }]),
+    });
+
+    bridge.step(1 / 20);
+
+    expect(state.education).toEqual(educationStats);
+    expect(state.buildings[0].state.serviceLoad.slotsUsed[ServiceId.EducationElementary]).toBe(12);
   });
 
   it('discards a pending alert when an undo lands before step() flushes it', () => {

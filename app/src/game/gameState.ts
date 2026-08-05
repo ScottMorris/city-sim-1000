@@ -419,6 +419,8 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     buildings: [],
     nextBuildingId: 1,
     services: createServiceSystemState(),
+    // No schools yet → no load anywhere → full coverage, matching
+    // `city_sim_core::state::EducationStats::default()`.
     education: {
       elementaryServed: 0,
       elementaryCapacity: 0,
@@ -426,9 +428,9 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       highServed: 0,
       highCapacity: 0,
       highLoad: 0,
-      score: 0,
-      elementaryCoverage: 0,
-      highCoverage: 0
+      score: 1,
+      elementaryCoverage: 1,
+      highCoverage: 1
     },
     bylaws: { ...DEFAULT_BYLAWS },
     policies: createDefaultPolicies(),

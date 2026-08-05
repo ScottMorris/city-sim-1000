@@ -33,7 +33,6 @@ import type { GameState, Tile, ViewStratum } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
-import { recomputeEducation } from './education';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
@@ -349,6 +348,7 @@ export class TauriSimBridge implements SimBridge {
     for (let i = 0; i < n && !hasWaterSystem; i++) {
       if (hasOccupant(s.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
     }
+    const seatsUsedByBuildingId = new Map(event.educationSeatsUsed.map((e) => [e.buildingId, e.used]));
     s.buildings = event.buildings.map((b) => {
       const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
       // Derive status from the tile flags the status byte already set —
@@ -371,6 +371,12 @@ export class TauriSimBridge implements SimBridge {
       } else if (needsWater && !originTile?.watered) {
         bstate.status = BuildingStatus.InactiveNoWater;
       }
+      // `#228` — seats consumed, from the wire; only schools currently have
+      // an entry (Rust's `ServiceKind` has no other service ported yet).
+      const used = template?.service ? seatsUsedByBuildingId.get(b.id) : undefined;
+      if (template?.service && used !== undefined) {
+        bstate.serviceLoad.slotsUsed[template.service.id] = used;
+      }
       return {
         id: b.id,
         templateId: kind as string,
@@ -379,8 +385,8 @@ export class TauriSimBridge implements SimBridge {
       };
     });
 
-    // Education coverage keys off the rebuilt buildings list.
-    s.education = recomputeEducation(s);
+    // `#228` — Rust-computed, replaces the old client-side recompute.
+    s.education = event.education;
 
     // Forward any deficit/restore alerts raised this tick, plus each one's
     // paired narrative event — same derivation `wasmSimBridge.ts` uses, kept
