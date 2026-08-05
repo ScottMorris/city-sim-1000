@@ -293,9 +293,20 @@ impl Simulation {
             // so no borrow conflict requires collecting draws separately. An
             // Active building is by definition powered, so its origin is
             // labelled; `label == 0` only fires if that invariant is ever
-            // violated, and is a silent no-op rather than a panic.
+            // violated (e.g. a future template with `power_use > 0` but
+            // `requires_power == false`), and is a silent no-op in release
+            // rather than a panic — the `debug_assert!`s below catch the
+            // violation itself in tests/debug builds instead.
             if let Some(idx) = self.state.tile_index(b.origin.0, b.origin.1) {
                 if let Some(&label) = self.state.utility_networks.power_labels.get(idx) {
+                    debug_assert!(
+                        label != 0 || tmpl.power_use <= 0.0,
+                        "Active building {:?} draws {} MW but its origin tile is unlabelled \
+                         (unpowered) — the requires_power invariant this attribution relies on \
+                         may be broken",
+                        b.kind,
+                        tmpl.power_use
+                    );
                     if label != 0 {
                         self.state.utility_networks.power_components[(label - 1) as usize].used +=
                             tmpl.power_use;
@@ -303,6 +314,14 @@ impl Simulation {
                 }
                 if water_active {
                     if let Some(&label) = self.state.utility_networks.water_labels.get(idx) {
+                        debug_assert!(
+                            label != 0 || wu <= 0.0,
+                            "Active building {:?} draws {} kL/day but its origin tile is \
+                             unlabelled (unwatered) — the requires_water invariant this \
+                             attribution relies on may be broken",
+                            b.kind,
+                            wu
+                        );
                         if label != 0 {
                             self.state.utility_networks.water_components[(label - 1) as usize]
                                 .used += wu;
