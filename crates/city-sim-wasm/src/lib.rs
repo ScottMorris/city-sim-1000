@@ -9,7 +9,7 @@ use city_sim_core::{
     import::{from_tile_buffer, ImportStats},
     sim::Simulation,
     snapshot,
-    state::EducationStats,
+    state::{BudgetHistoryEntry, EducationStats},
     utilities::{UtilityComponent, UtilityKind},
     wire::encode_tile_buffer,
 };
@@ -529,6 +529,18 @@ impl SimHost {
         wire.sort_by_key(|e| e.building_id);
         serde_json::to_string(&wire).unwrap_or_default()
     }
+
+    /// Rolling 200-day budget history (`#229`) — see `state::BudgetHistoryEntry`.
+    pub fn budget_history_json(&self) -> String {
+        let wire: Vec<WireBudgetHistoryEntry> = self
+            .sim
+            .state
+            .budget_history
+            .iter()
+            .map(WireBudgetHistoryEntry::from)
+            .collect();
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
 }
 
 /// One row of [`SimHost::buildings_json`]'s wire shape.
@@ -608,4 +620,28 @@ impl From<&EducationStats> for WireEducationStats {
 struct WireEducationSeatsUsed {
     building_id: u32,
     used: f32,
+}
+
+/// One row of [`SimHost::budget_history_json`]'s wire shape. A local
+/// duplicate rather than deriving `Serialize` directly on the engine's
+/// `BudgetHistoryEntry`, matching the `WireBuilding`/`WireUtilityComponent`
+/// precedent of wire-agnostic engine types.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireBudgetHistoryEntry {
+    day: u32,
+    revenue: f32,
+    expenses: f32,
+    net: f32,
+}
+
+impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
+    fn from(e: &BudgetHistoryEntry) -> Self {
+        Self {
+            day: e.day,
+            revenue: e.revenue,
+            expenses: e.expenses,
+            net: e.net,
+        }
+    }
 }
