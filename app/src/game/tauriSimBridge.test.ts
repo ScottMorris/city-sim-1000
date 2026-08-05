@@ -290,16 +290,41 @@ describe('TauriSimBridge onTick decode', () => {
 
   it('marks a power-requiring building InactiveNoPower until its origin tile reads powered', async () => {
     const { bridge, emit } = await makeBridge();
-    const pump: WireBuilding = { id: 1, kind: tileKindToU8(TileKind.WaterPump), originX: 2, originY: 2 };
+    // WaterTower, not WaterPump: it requires power like a pump, but (unlike
+    // a pump) doesn't need its footprint to touch water terrain, so this
+    // stays a pure power-gating test rather than tripping the #200 source
+    // gate covered separately below.
+    const tower: WireBuilding = { id: 1, kind: tileKindToU8(TileKind.WaterTower), originX: 2, originY: 2 };
     const o = tileBufferOffsets(GRID_TILES);
     const originIndex = 2 * 8 + 2;
 
-    emit(baseTickEvent({ buildings: [pump] }));
+    emit(baseTickEvent({ buildings: [tower] }));
     expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_power');
 
     const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
     tiles[o.status + originIndex] = STATUS.POWERED;
+    emit(baseTickEvent({ tiles, buildings: [tower] }));
+    expect(bridge.getState().buildings[0].state.status).toBe('active');
+  });
+
+  it('marks a water pump InactiveNoSource until its footprint touches water terrain (#200)', async () => {
+    const { bridge, emit } = await makeBridge();
+    const pump: WireBuilding = { id: 3, kind: tileKindToU8(TileKind.WaterPump), originX: 2, originY: 2 };
+    const o = tileBufferOffsets(GRID_TILES);
+    const originIndex = 2 * 8 + 2;
+    const neighbourIndex = 2 * 8 + 3; // (3,2), orthogonally east of the pump
+
+    const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
+    tiles[o.status + originIndex] = STATUS.POWERED;
+
+    // Powered, but nowhere near water: no source to draw from.
     emit(baseTickEvent({ tiles, buildings: [pump] }));
+    expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_source');
+
+    // A water-terrain neighbour appears: the pump comes online.
+    const tilesWithWater = tiles.slice();
+    tilesWithWater[o.status + neighbourIndex] = STATUS.WATER_TERRAIN;
+    emit(baseTickEvent({ tiles: tilesWithWater, buildings: [pump] }));
     expect(bridge.getState().buildings[0].state.status).toBe('active');
   });
 

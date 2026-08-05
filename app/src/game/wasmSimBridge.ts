@@ -27,6 +27,7 @@ import { decodeTileBuffer } from './protocol/tileBuffer';
 import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
+import { footprintTouchesWater } from './adjacency';
 
 // Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
 // Must remain in sync with city-sim-protocol/src/commands.rs Tool enum.
@@ -656,15 +657,22 @@ export class WasmSimBridge implements SimBridge {
       const needsPower = template ? template.requiresPower !== false : false;
       const needsWater =
         hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
+      // A pump only produces when its footprint touches water terrain (#200)
+      // — distinct from needsWater above, which gates a *consumer* on
+      // network coverage; a pump doesn't consume water.
+      const needsSource = kind === TileKind.WaterPump;
+      const origin = { x: b.originX, y: b.originY };
       if (needsPower && !originTile?.powered) {
         bstate.status = BuildingStatus.InactiveNoPower;
+      } else if (needsSource && template && !footprintTouchesWater(this.state, origin, template.footprint)) {
+        bstate.status = BuildingStatus.InactiveNoSource;
       } else if (needsWater && !originTile?.watered) {
         bstate.status = BuildingStatus.InactiveNoWater;
       }
       return {
         id: b.id,
         templateId: kind as string,
-        origin: { x: b.originX, y: b.originY },
+        origin,
         state: bstate
       };
     });

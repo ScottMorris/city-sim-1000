@@ -26,7 +26,10 @@ import type { CarriagewayClass, HydroVariant, RoadVariant, TileTextures } from '
  */
 export function resolveIndicatorKey(status: BuildingStatus): 'noPower' | 'noWater' | null {
   if (status === BuildingStatus.InactiveNoPower) return 'noPower';
-  if (status === BuildingStatus.InactiveNoWater) return 'noWater';
+  // `InactiveNoSource` (a pump not touching water terrain, #200) reuses the
+  // `noWater` icon rather than adding a new asset — both read to the player
+  // as "this building has a water problem".
+  if (status === BuildingStatus.InactiveNoWater || status === BuildingStatus.InactiveNoSource) return 'noWater';
   return null;
 }
 
