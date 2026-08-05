@@ -6,11 +6,11 @@
 //! SoA tile buffer layout shared between the sim and the renderer via
 //! SharedArrayBuffer (web) or a Tauri Channel binary payload (desktop).
 //!
-//! For a W×H map the buffer is divided into eight contiguous field arrays:
+//! For a W×H map the buffer is divided into ten contiguous field arrays:
 //!
 //! ```text
-//! | underground[N] u8 | surface[N] u8 | overhead[N] u8 | status[N] u8 | happiness[N] u8 | elevation[N] u8 | building_id[N*2] u16le | wilderness[N] u8 |
-//! |--- N -------------|--- N ---------|--- N -----------|--- N --------|--- N --------------|--- N --------------|--- N*2 ------------------|--- N --------------|
+//! | underground[N] u8 | surface[N] u8 | overhead[N] u8 | status[N] u8 | happiness[N] u8 | elevation[N] u8 | building_id[N*2] u16le | wilderness[N] u8 | elementary_score[N] u8 | high_score[N] u8 |
+//! |--- N -------------|--- N ---------|--- N -----------|--- N --------|--- N --------------|--- N --------------|--- N*2 ------------------|--- N --------------|--- N --------------------|--- N --------------|
 //! ```
 //!
 //! Where N = W × H. All multi-byte values are little-endian.
@@ -26,15 +26,20 @@
 //!
 //! `status` bit layout: bit0=POWERED, bit1=WATERED, bit2=ABANDONED (mirrors
 //! `city_sim_core::state`'s `FLAG_*` positions directly), bit3=WATER_TERRAIN
-//! (0=Land, 1=Water), bits4-5=density (see `status::DENSITY_SHIFT`), bits6-7
-//! spare. See the `status` module below.
+//! (0=Land, 1=Water), bits4-5=density (see `status::DENSITY_SHIFT`),
+//! bit6=ELEMENTARY_SERVED, bit7=HIGH_SERVED (`#228` — mirrors
+//! `Tile::elementary_served`/`high_served`). See the `status` module below.
 //!
 //! `wilderness` is the per-tile eco value quantised via [`encode_eco`] (128 = neutral).
 //!
+//! `elementary_score`/`high_score` (`#228`) are the per-tile education scores
+//! (`applied / load`, 0.0–1.0) quantised via [`encode_score`]; only meaningful
+//! where the matching `status` served bit is set.
+//!
 //! The TS mirror is in `src/game/protocol/tileBuffer.ts`.
 
-/// Number of bytes per tile in the flat buffer (1+1+1+1+1+1+2+1 = 9).
-pub const BYTES_PER_TILE: usize = 9;
+/// Number of bytes per tile in the flat buffer (1+1+1+1+1+1+2+1+1+1 = 11).
+pub const BYTES_PER_TILE: usize = 11;
 
 /// Byte offsets of each field array, as a function of N (number of tiles).
 pub struct TileBufferOffsets {
@@ -54,6 +59,10 @@ pub struct TileBufferOffsets {
     pub building_id: usize,
     /// `wilderness[N]`  — per-tile eco value quantised to u8 (128 = neutral).
     pub wilderness: usize,
+    /// `elementary_score[N]` — elementary education score quantised to u8, see [`encode_score`].
+    pub elementary_score: usize,
+    /// `high_score[N]`       — high-school education score quantised to u8, see [`encode_score`].
+    pub high_score: usize,
 }
 
 impl TileBufferOffsets {
@@ -67,6 +76,8 @@ impl TileBufferOffsets {
             elevation: n * 5,
             building_id: n * 6,
             wilderness: n * 8,
+            elementary_score: n * 9,
+            high_score: n * 10,
         }
     }
 
@@ -90,6 +101,10 @@ pub mod status {
     /// `Tile::density` (`ZoneDensity as u8`, 0-2), packed at bits 4-5.
     pub const DENSITY_SHIFT: u8 = 4;
     pub const DENSITY_MASK: u8 = 0b11 << DENSITY_SHIFT;
+    /// Mirrors `Tile::elementary_served` — same bit, copied verbatim.
+    pub const ELEMENTARY_SERVED: u8 = 1 << 6;
+    /// Mirrors `Tile::high_served` — same bit, copied verbatim.
+    pub const HIGH_SERVED: u8 = 1 << 7;
 }
 
 /// Encode a happiness float (0.0–2.0) to a u8.
@@ -121,6 +136,18 @@ pub fn decode_eco(v: u8) -> f32 {
     (v as f32 - 128.0) / 127.0 * ECO_RANGE
 }
 
+/// Encode a per-tile education score (0.0–1.0, `applied / load`) to a u8.
+#[inline]
+pub fn encode_score(s: f32) -> u8 {
+    (s.clamp(0.0, 1.0) * 255.0) as u8
+}
+
+/// Decode a u8 education score back to f32.
+#[inline]
+pub fn decode_score(s: u8) -> f32 {
+    s as f32 / 255.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,7 +164,9 @@ mod tests {
         assert_eq!(off.elevation, 20480);
         assert_eq!(off.building_id, 24576);
         assert_eq!(off.wilderness, 32768);
-        assert_eq!(TileBufferOffsets::total_bytes(n), 36864);
+        assert_eq!(off.elementary_score, 36864);
+        assert_eq!(off.high_score, 40960);
+        assert_eq!(TileBufferOffsets::total_bytes(n), 45056);
     }
 
     #[test]
@@ -155,8 +184,19 @@ mod tests {
     #[test]
     fn bytes_per_tile_matches_layout() {
         // underground(1) + surface(1) + overhead(1) + status(1) + happiness(1)
-        //   + elevation(1) + building_id(2) + wilderness(1) = 9
-        assert_eq!(BYTES_PER_TILE, 9);
+        //   + elevation(1) + building_id(2) + wilderness(1) + elementary_score(1)
+        //   + high_score(1) = 11
+        assert_eq!(BYTES_PER_TILE, 11);
+    }
+
+    #[test]
+    fn score_round_trips_within_tolerance() {
+        for v in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+            let decoded = decode_score(encode_score(v));
+            assert!((decoded - v).abs() < 0.01, "score {v} → {decoded}");
+        }
+        assert_eq!(encode_score(-1.0), encode_score(0.0));
+        assert_eq!(encode_score(2.0), encode_score(1.0));
     }
 
     #[test]
@@ -182,5 +222,11 @@ mod tests {
             0
         );
         assert_eq!(DENSITY_MASK, 0b0011_0000);
+        assert_eq!(ELEMENTARY_SERVED & HIGH_SERVED, 0);
+        assert_eq!(
+            (ELEMENTARY_SERVED | HIGH_SERVED)
+                & (POWERED | WATERED | ABANDONED | WATER_TERRAIN | DENSITY_MASK),
+            0
+        );
     }
 }
