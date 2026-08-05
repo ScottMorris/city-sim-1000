@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="680" viewBox="0 0 880 680" font-family="ui-monospace, 'Cascadia Mono', 'Menlo', monospace">
+  <defs>
+    <marker id="lead" viewBox="0 0 8 8" refX="4" refY="4" markerWidth="5" markerHeight="5">
+      <circle cx="4" cy="4" r="3" fill="#7d8fa8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="880" height="680" rx="14" fill="#0d1420"/>
+  <rect x="0.5" y="0.5" width="879" height="679" rx="14" fill="none" stroke="#2b3b50"/>
+
+  <text x="28" y="38" fill="#dbe6f4" font-size="17" font-weight="bold">WIDGET — TOOLBAR FOOTPRINT UNCHANGED · POPOVER BECOMES THE HEAD UNIT</text>
+  <text x="28" y="58" fill="#7d8fa8" font-size="11">mockup, emergency takeover state shown · annotations map to milestones R1–R4</text>
+
+  <!-- Toolbar widget strip -->
+  <rect x="40" y="84" width="500" height="60" rx="10" fill="#16202e" stroke="#ff5d5d"/>
+  <!-- prev -->
+  <rect x="56" y="98" width="34" height="32" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <path d="M80 106 L70 114 L80 122 z M70 106 L60 114 L70 122 z" fill="#a9bad1" transform="translate(1,0)"/>
+  <!-- play/pause -->
+  <rect x="98" y="98" width="34" height="32" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <rect x="108" y="106" width="5" height="16" fill="#dbe6f4"/>
+  <rect x="118" y="106" width="5" height="16" fill="#dbe6f4"/>
+  <!-- next -->
+  <rect x="140" y="98" width="34" height="32" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <path d="M148 106 L158 114 L148 122 z M158 106 L168 114 L158 122 z" fill="#a9bad1"/>
+  <!-- marquee -->
+  <rect x="186" y="98" width="288" height="32" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="198" y="119" fill="#ffd28a" font-size="12">⚡ Residents are asked to conserve po…</text>
+  <!-- cover -->
+  <rect x="484" y="94" width="40" height="40" rx="6" fill="#0d1420" stroke="#2b3b50"/>
+  <rect x="492" y="112" width="6" height="14" fill="#4dd9e8"/>
+  <rect x="500" y="104" width="6" height="22" fill="#f5a623"/>
+  <rect x="508" y="108" width="6" height="18" fill="#4dd9e8"/>
+
+  <!-- popover notch -->
+  <path d="M112 168 L124 154 L136 168 z" fill="#121b28" stroke="#2b3b50"/>
+
+  <!-- Popover / head unit -->
+  <rect x="40" y="168" width="500" height="472" rx="12" fill="#121b28" stroke="#2b3b50"/>
+
+  <!-- header -->
+  <rect x="60" y="188" width="56" height="56" rx="8" fill="#0d1420" stroke="#2b3b50"/>
+  <rect x="72" y="212" width="7" height="22" fill="#4dd9e8"/>
+  <rect x="82" y="202" width="7" height="32" fill="#f5a623"/>
+  <rect x="92" y="208" width="7" height="26" fill="#4dd9e8"/>
+  <text x="132" y="208" fill="#dbe6f4" font-size="14" font-weight="bold">SC1K 101.3 — THE GRID</text>
+  <text x="132" y="226" fill="#7d8fa8" font-size="11">news-talk · DJ Nova · civic-dry</text>
+  <circle cx="466" cy="202" r="5" fill="#6fe3a1"/>
+  <text x="478" y="206" fill="#9beec0" font-size="11">LIVE</text>
+
+  <!-- badges -->
+  <rect x="60" y="258" width="196" height="26" rx="13" fill="#2a1420" stroke="#ff5d5d"/>
+  <text x="76" y="275" fill="#ff9c9c" font-size="11" font-weight="bold">⚡ EMERGENCY BULLETIN</text>
+  <rect x="266" y="258" width="102" height="26" rx="13" fill="#0d1f24" stroke="#4dd9e8"/>
+  <circle cx="282" cy="271" r="4" fill="#4dd9e8"/>
+  <text x="292" y="275" fill="#9fe9f2" font-size="11">VOICE</text>
+  <rect x="332" y="266" width="3" height="10" fill="#4dd9e8"/>
+  <rect x="337" y="263" width="3" height="13" fill="#4dd9e8"/>
+  <rect x="342" y="268" width="3" height="8" fill="#4dd9e8"/>
+  <rect x="347" y="264" width="3" height="12" fill="#4dd9e8"/>
+
+  <!-- caption block -->
+  <rect x="60" y="298" width="460" height="96" rx="8" fill="#0d1420" stroke="#2b3b50"/>
+  <text x="76" y="322" fill="#55657c" font-size="12">This is an SC1K civic alert. Electrical demand</text>
+  <rect x="68" y="330" width="444" height="22" rx="4" fill="#1d2434"/>
+  <text x="76" y="346" fill="#ffd28a" font-size="12">has exceeded available generation. Residents</text>
+  <text x="76" y="370" fill="#55657c" font-size="12">are asked to conserve power while engineers…</text>
+
+  <!-- transcript -->
+  <text x="60" y="424" fill="#7d8fa8" font-size="11" font-weight="bold">EARLIER THIS HOUR</text>
+  <rect x="60" y="434" width="460" height="26" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <rect x="70" y="440" width="42" height="14" rx="7" fill="#1d2434" stroke="#4dd9e8"/>
+  <text x="91" y="451" fill="#9fe9f2" font-size="9" text-anchor="middle">ID</text>
+  <text x="122" y="452" fill="#a9bad1" font-size="11">You're listening to SC1K, one-oh-one…</text>
+  <text x="498" y="452" fill="#55657c" font-size="10" text-anchor="end">:42</text>
+  <rect x="60" y="466" width="460" height="26" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <rect x="70" y="472" width="42" height="14" rx="7" fill="#1d2434" stroke="#6fe3a1"/>
+  <text x="91" y="483" fill="#9beec0" font-size="9" text-anchor="middle">PSA</text>
+  <text x="122" y="484" fill="#a9bad1" font-size="11">Leave a little wilderness in your city…</text>
+  <text x="498" y="484" fill="#55657c" font-size="10" text-anchor="end">:35</text>
+  <rect x="60" y="498" width="460" height="26" rx="5" fill="#0d1420" stroke="#2b3b50"/>
+  <rect x="70" y="504" width="42" height="14" rx="7" fill="#1d2434" stroke="#f5a623"/>
+  <text x="91" y="515" fill="#ffd28a" font-size="9" text-anchor="middle">NEWS</text>
+  <text x="122" y="516" fill="#a9bad1" font-size="11">Construction crews active along the east…</text>
+  <text x="498" y="516" fill="#55657c" font-size="10" text-anchor="end">:28</text>
+
+  <!-- dial -->
+  <rect x="60" y="544" width="460" height="72" rx="8" fill="#0d1420" stroke="#2b3b50"/>
+  <line x1="84" y1="586" x2="496" y2="586" stroke="#2b3b50" stroke-width="2"/>
+  <g stroke="#3a4c64">
+    <line x1="84" y1="578" x2="84" y2="594"/><line x1="125" y1="581" x2="125" y2="591"/>
+    <line x1="166" y1="578" x2="166" y2="594"/><line x1="207" y1="581" x2="207" y2="591"/>
+    <line x1="248" y1="578" x2="248" y2="594"/><line x1="289" y1="581" x2="289" y2="591"/>
+    <line x1="330" y1="578" x2="330" y2="594"/><line x1="371" y1="581" x2="371" y2="591"/>
+    <line x1="412" y1="578" x2="412" y2="594"/><line x1="453" y1="581" x2="453" y2="591"/>
+    <line x1="496" y1="578" x2="496" y2="594"/>
+  </g>
+  <text x="84" y="608" fill="#55657c" font-size="9" text-anchor="middle">88</text>
+  <text x="166" y="608" fill="#55657c" font-size="9" text-anchor="middle">92</text>
+  <text x="248" y="608" fill="#55657c" font-size="9" text-anchor="middle">96</text>
+  <text x="330" y="608" fill="#55657c" font-size="9" text-anchor="middle">100</text>
+  <text x="412" y="608" fill="#55657c" font-size="9" text-anchor="middle">104</text>
+  <text x="496" y="608" fill="#55657c" font-size="9" text-anchor="middle">108</text>
+  <circle cx="102" cy="586" r="4" fill="#4dd9e8"/>
+  <circle cx="248" cy="586" r="4" fill="#4dd9e8"/>
+  <circle cx="453" cy="586" r="4" fill="none" stroke="#ff5d5d" stroke-dasharray="2 2"/>
+  <line x1="343" y1="566" x2="343" y2="600" stroke="#f5a623" stroke-width="3"/>
+  <text x="343" y="560" fill="#ffd28a" font-size="10" text-anchor="middle">101.3</text>
+  <text x="76" y="566" fill="#7d8fa8" font-size="10">TUNING</text>
+
+  <!-- annotations -->
+  <g font-size="11" fill="#a9bad1">
+    <path d="M560 106 L178 114" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="102" fill="#dbe6f4" font-weight="bold">R1 · segment-aware skip</text>
+    <text x="568" y="118">next skips segments; emergency</text>
+    <text x="568" y="132">bulletins are not skippable</text>
+
+    <path d="M560 168 L128 122" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="164" fill="#dbe6f4" font-weight="bold">R1 · pause = tune out</text>
+    <text x="568" y="180">broadcast clock keeps running;</text>
+    <text x="568" y="194">resume fast-forwards to now</text>
+
+    <path d="M560 250 L252 271" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="246" fill="#dbe6f4" font-weight="bold">R1 · kind badge + EBS state</text>
+    <text x="568" y="262">widget data-state drives a</text>
+    <text x="568" y="276">sound-off-legible takeover look</text>
+
+    <path d="M560 330 L516 340" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="326" fill="#dbe6f4" font-weight="bold">R1 · captions, always</text>
+    <text x="568" y="342">marquee line + full script here;</text>
+    <text x="568" y="356">compact mode pins this popover</text>
+
+    <path d="M560 414 L364 271" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="410" fill="#dbe6f4" font-weight="bold">R3 · live-voice indicator</text>
+    <text x="568" y="426">speechBus active; tap opens</text>
+    <text x="568" y="440">speech settings</text>
+
+    <path d="M560 486 L524 486" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="482" fill="#dbe6f4" font-weight="bold">R2 · bounded transcript</text>
+    <text x="568" y="498">catch the bulletin you</text>
+    <text x="568" y="512">half-heard; session-only</text>
+
+    <path d="M560 574 L524 580" stroke="#7d8fa8" fill="none" marker-end="url(#lead)" opacity="0.7"/>
+    <text x="568" y="570" fill="#dbe6f4" font-weight="bold">R4 · tuning dial</text>
+    <text x="568" y="586">undertone static between stops;</text>
+    <text x="568" y="600">dashed stop = pirate station</text>
+  </g>
+
+  <text x="28" y="660" fill="#55657c" font-size="10">docs/radio-spec.md · "Widget changes — from player to head unit"</text>
+</svg>
