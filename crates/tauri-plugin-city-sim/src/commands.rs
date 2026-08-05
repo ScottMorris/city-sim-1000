@@ -12,7 +12,7 @@ use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
-use city_sim_core::state::{EducationStats, GameState};
+use city_sim_core::state::{BudgetHistoryEntry, EducationStats, GameState};
 use city_sim_core::utilities::{UtilityComponent, UtilityKind};
 use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::{CommandResult, Policies, Tool, ViewStratum};
@@ -52,6 +52,12 @@ pub struct TickEvent {
     /// Seats consumed per school building (`#228`) — see
     /// `city_sim_core::state::GameState::education_seats_used`.
     pub education_seats_used: Vec<WireEducationSeatsUsed>,
+    /// Rolling 200-day budget history (`#229`) — see
+    /// `city_sim_core::state::BudgetHistoryEntry`. Note this `TickEvent`
+    /// carries no headline `BudgetStats` fields (`revenue`/`expenses`/`net`)
+    /// at all yet — the desktop budget modal's ledger becomes real once this
+    /// ships, but its top-line numbers are a separate, pre-existing gap.
+    pub budget_history: Vec<WireBudgetHistoryEntry>,
     pub demand_residential: f32,
     pub demand_commercial: f32,
     pub demand_industrial: f32,
@@ -168,6 +174,29 @@ pub struct WireEducationSeatsUsed {
     pub used: f32,
 }
 
+/// One entry in [`TickEvent::budget_history`]. Mirrors
+/// `SimHost::budget_history_json` on the WASM path, sent as real values here
+/// since Tauri IPC serialises the whole `TickEvent` natively.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireBudgetHistoryEntry {
+    pub day: u32,
+    pub revenue: f32,
+    pub expenses: f32,
+    pub net: f32,
+}
+
+impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
+    fn from(e: &BudgetHistoryEntry) -> Self {
+        Self {
+            day: e.day,
+            revenue: e.revenue,
+            expenses: e.expenses,
+            net: e.net,
+        }
+    }
+}
+
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
 
 pub enum SimCmd {
@@ -279,6 +308,11 @@ fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) 
             v.sort_by_key(|e| e.building_id);
             v
         },
+        budget_history: s
+            .budget_history
+            .iter()
+            .map(WireBudgetHistoryEntry::from)
+            .collect(),
         demand_residential: s.demand.residential,
         demand_commercial: s.demand.commercial,
         demand_industrial: s.demand.industrial,

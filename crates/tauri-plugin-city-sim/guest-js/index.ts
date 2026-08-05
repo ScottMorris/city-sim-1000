@@ -50,6 +50,14 @@ export interface TickEvent {
    * `city_sim_core::state::GameState::education_seats_used`.
    */
   educationSeatsUsed:   WireEducationSeatsUsed[]
+  /**
+   * Rolling 200-day budget history — see
+   * `city_sim_core::state::BudgetHistoryEntry`. Note this `TickEvent` carries
+   * no headline `revenue`/`expenses`/`net` fields at all yet — the desktop
+   * budget modal's ledger becomes real once this is adopted, but its
+   * top-line numbers are a separate, pre-existing gap.
+   */
+  budgetHistory:      WireBudgetHistoryEntry[]
   demandResidential:  number   // f32 [0, 100]
   demandCommercial:   number   // f32 [0, 100]
   demandIndustrial:   number   // f32 [0, 100]
@@ -132,6 +140,14 @@ export interface WireEducationStats {
 export interface WireEducationSeatsUsed {
   buildingId:  number   // u32
   used:        number   // f32, unrounded
+}
+
+/** One entry in {@link TickEvent.budgetHistory}. */
+export interface WireBudgetHistoryEntry {
+  day:       number   // u32
+  revenue:   number   // f32
+  expenses:  number   // f32
+  net:       number   // f32
 }
 
 /**
