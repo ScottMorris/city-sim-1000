@@ -250,14 +250,14 @@ describe('WasmSimBridge undo/redo', () => {
     worker.emit({
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
       buildingsJson: '[]',
-      powerComponentsJson: JSON.stringify([{ id: 1, produced: 60, used: 30, sourceCount: 1, utilization: 0.5 }]),
+      powerComponentsJson: JSON.stringify([{ id: 1, produced: 60, used: 30, sourceCount: 1, utilisation: 0.5 }]),
       waterComponentsJson: '[]',
     });
 
     bridge.step(1 / 20);
 
     expect(state.utilities.powerComponents).toEqual([
-      { id: 1, produced: 60, used: 30, sourceCount: 1, utilization: 0.5 },
+      { id: 1, produced: 60, used: 30, sourceCount: 1, utilisation: 0.5 },
     ]);
     expect(state.utilities.waterComponents).toEqual([]);
   });

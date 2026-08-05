@@ -104,8 +104,8 @@ pub struct WireUtilityComponent {
     pub produced: f32,
     pub used: f32,
     pub source_count: u16,
-    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilization`.
-    pub utilization: f32,
+    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilisation`.
+    pub utilisation: f32,
 }
 
 impl From<&UtilityComponent> for WireUtilityComponent {
@@ -115,7 +115,7 @@ impl From<&UtilityComponent> for WireUtilityComponent {
             produced: c.produced,
             used: c.used,
             source_count: c.source_count,
-            utilization: c.utilization(),
+            utilisation: c.utilisation(),
         }
     }
 }

@@ -154,7 +154,7 @@ export interface UtilityComponentStats {
   used: number;
   sourceCount: number;
   /** `used / produced`, clamped to `[0, 1]`. */
-  utilization: number;
+  utilisation: number;
 }
 
 export interface UtilityStats {

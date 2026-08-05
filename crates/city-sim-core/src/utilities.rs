@@ -133,7 +133,7 @@ impl UtilityComponent {
     /// 1]`. A segment can be momentarily overloaded (`used > produced`) when
     /// a funding brownout lands mid-tick, hence the clamp rather than an
     /// assertion.
-    pub fn utilization(&self) -> f32 {
+    pub fn utilisation(&self) -> f32 {
         if self.produced <= 0.0 {
             return 0.0;
         }
@@ -1004,28 +1004,28 @@ mod tests {
     }
 
     #[test]
-    fn utilization_is_zero_with_no_production() {
-        assert_eq!(UtilityComponent::default().utilization(), 0.0);
+    fn utilisation_is_zero_with_no_production() {
+        assert_eq!(UtilityComponent::default().utilisation(), 0.0);
     }
 
     #[test]
-    fn utilization_clamps_to_one_when_overloaded() {
+    fn utilisation_clamps_to_one_when_overloaded() {
         let c = UtilityComponent {
             produced: 50.0,
             used: 80.0,
             ..UtilityComponent::default()
         };
-        assert_eq!(c.utilization(), 1.0);
+        assert_eq!(c.utilisation(), 1.0);
     }
 
     #[test]
-    fn utilization_is_the_used_over_produced_fraction() {
+    fn utilisation_is_the_used_over_produced_fraction() {
         let c = UtilityComponent {
             produced: 100.0,
             used: 25.0,
             ..UtilityComponent::default()
         };
-        assert_eq!(c.utilization(), 0.25);
+        assert_eq!(c.utilisation(), 0.25);
     }
 
     // --- orthogonal_neighbours tests ---

@@ -849,7 +849,7 @@ mod tests {
             starved.used,
             starved.produced
         );
-        assert_eq!(starved.utilization(), 1.0);
+        assert_eq!(starved.utilisation(), 1.0);
 
         let surplus = components
             .iter()

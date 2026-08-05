@@ -100,7 +100,7 @@ export interface WireUtilityComponent {
   used:         number   // f32, unrounded
   sourceCount:  number   // u16
   /** `used / produced`, clamped to `[0, 1]`. */
-  utilization:  number   // f32
+  utilisation:  number   // f32
 }
 
 /**

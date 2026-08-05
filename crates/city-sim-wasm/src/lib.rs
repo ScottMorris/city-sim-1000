@@ -529,8 +529,8 @@ struct WireUtilityComponent {
     produced: f32,
     used: f32,
     source_count: u16,
-    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilization`.
-    utilization: f32,
+    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilisation`.
+    utilisation: f32,
 }
 
 impl From<&UtilityComponent> for WireUtilityComponent {
@@ -540,7 +540,7 @@ impl From<&UtilityComponent> for WireUtilityComponent {
             produced: c.produced,
             used: c.used,
             source_count: c.source_count,
-            utilization: c.utilization(),
+            utilisation: c.utilisation(),
         }
     }
 }

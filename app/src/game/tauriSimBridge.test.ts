@@ -46,7 +46,7 @@ interface WireUtilityComponent {
   produced: number;
   used: number;
   sourceCount: number;
-  utilization: number;
+  utilisation: number;
 }
 
 interface SimAlert {
