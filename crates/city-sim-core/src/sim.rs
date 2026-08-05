@@ -1126,6 +1126,11 @@ mod tests {
                 b.status = BuildingStatus::Active;
                 b
             });
+            // Residential draws both power and water once a water system
+            // exists — reused as the consumer for both networks so a single
+            // linear 3-tile grid exercises the power *and* water halves of
+            // the fix below (the `water_produced - water_used` arithmetic
+            // is otherwise untested whenever `water_used` is 0).
             set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Residential);
             s.tile_at_mut(1, 0).unwrap().building_id = Some(2);
             s.buildings.push({
@@ -1133,14 +1138,27 @@ mod tests {
                 b.status = BuildingStatus::Active;
                 b
             });
+            s.tile_at_mut(2, 0).unwrap().water_output = 50;
+            s.tile_at_mut(2, 0).unwrap().building_id = Some(3);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(3, TileKind::WaterPump, (2, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
         }
         recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        recompute_utility_network(&mut sim.state, UtilityKind::Water);
         sim.compute_utility_use();
         assert_eq!(
             sim.state.utilities.power_used, 2,
             "one Residential zone draws 1.5 MW, rounds to 2"
         );
+        assert_eq!(
+            sim.state.utilities.water_used, 1,
+            "the same zone draws 1.0 kL/day once a water system exists"
+        );
         let expected_power = sim.state.utilities.power;
+        let expected_water = sim.state.utilities.water;
 
         // Round-trip through the real snapshot format, the same path a
         // save/load or an undo/redo restore takes.
@@ -1152,7 +1170,9 @@ mod tests {
             sim.state.utilities.power_used, 2,
             "load_state must not zero *_used before the next tick's compute_utility_use()"
         );
+        assert_eq!(sim.state.utilities.water_used, 1);
         assert_eq!(sim.state.utilities.power, expected_power);
+        assert_eq!(sim.state.utilities.water, expected_water);
         assert_eq!(
             sim.state
                 .utility_networks
@@ -1160,6 +1180,13 @@ mod tests {
                 .len(),
             1,
             "components must be populated immediately after load, not wait for the next tick"
+        );
+        assert_eq!(
+            sim.state
+                .utility_networks
+                .components(UtilityKind::Water)
+                .len(),
+            1
         );
     }
 
