@@ -298,6 +298,9 @@ export class TauriSimBridge implements SimBridge {
     s.utilities.waterUsed = event.waterProduced - event.water;
     s.utilities.powerComponents = event.powerComponents;
     s.utilities.waterComponents = event.waterComponents;
+    // `#229` — Rust-computed, replaces the old client-side reconstruction;
+    // this bridge never had one (no `recordDailyBudget` call existed here).
+    s.budgetHistory = event.budgetHistory;
 
     // Demand
     s.demand.residential = event.demandResidential;

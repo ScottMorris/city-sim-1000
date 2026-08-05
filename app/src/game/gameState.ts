@@ -9,7 +9,7 @@ import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
 import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupants';
-import type { BudgetHistory } from './economy';
+import type { BudgetHistoryEntry } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
 import type { ServiceSystemState, TileServiceState } from './services';
@@ -257,7 +257,8 @@ export interface GameState {
   utilities: UtilityStats;
   demand: DemandStats;
   budget: BudgetStats;
-  budgetHistory: BudgetHistory;
+  /** `#229` — Rust-computed, wire-sourced; see `economy.ts`'s doc comment. */
+  budgetHistory: BudgetHistoryEntry[];
   buildings: BuildingInstance[];
   nextBuildingId: number;
   services: ServiceSystemState;
@@ -414,7 +415,7 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
         }
       }
     },
-    budgetHistory: { daily: [], lastRecordedDay: 0 },
+    budgetHistory: [],
     demand: { residential: 30, commercial: 30, industrial: 30 },
     buildings: [],
     nextBuildingId: 1,

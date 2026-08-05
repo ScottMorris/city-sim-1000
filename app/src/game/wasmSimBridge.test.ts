@@ -285,6 +285,18 @@ describe('WasmSimBridge undo/redo', () => {
     expect(state.buildings[0].state.serviceLoad.slotsUsed[ServiceId.EducationElementary]).toBe(12);
   });
 
+  it('decodes budgetHistoryJson into state.budgetHistory on step() flush', () => {
+    const { worker, bridge, state } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      budgetHistoryJson: JSON.stringify([{ day: 3, revenue: 100, expenses: 40, net: 60 }]),
+    });
+
+    bridge.step(1 / 20);
+
+    expect(state.budgetHistory).toEqual([{ day: 3, revenue: 100, expenses: 40, net: 60 }]);
+  });
+
   it('discards a pending alert when an undo lands before step() flushes it', () => {
     const { worker, bridge, events } = makeBridge();
     worker.emit({

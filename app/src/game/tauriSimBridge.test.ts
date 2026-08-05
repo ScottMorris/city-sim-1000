@@ -67,11 +67,19 @@ interface WireEducationSeatsUsed {
   used: number;
 }
 
+interface WireBudgetHistoryEntry {
+  day: number;
+  revenue: number;
+  expenses: number;
+  net: number;
+}
+
 interface TickEvent {
   tick: number; day: number; population: number; jobs: number; money: number;
   power: number; water: number; powerProduced: number; waterProduced: number;
   powerComponents: WireUtilityComponent[]; waterComponents: WireUtilityComponent[];
   education: WireEducationStats; educationSeatsUsed: WireEducationSeatsUsed[];
+  budgetHistory: WireBudgetHistoryEntry[];
   demandResidential: number; demandCommercial: number; demandIndustrial: number;
   wildernessScore: number; wildernessTrend: number;
   width: number; height: number;
@@ -94,6 +102,7 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
       score: 1, elementaryCoverage: 1, highCoverage: 1
     },
     educationSeatsUsed: [],
+    budgetHistory: [],
     demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
     wildernessScore: 0, wildernessTrend: 0,
     width: 8, height: 8,
@@ -247,6 +256,19 @@ describe('TauriSimBridge onTick decode', () => {
     expect(s.demand.industrial).toBe(10);
     expect(s.wilderness.score).toBe(33);
     expect(s.wilderness.trend).toBe(-1.5);
+  });
+
+  it('adopts event.budgetHistory verbatim, replacing whatever the mirror held before', async () => {
+    const { bridge, emit } = await makeBridge();
+
+    emit(baseTickEvent({ budgetHistory: [{ day: 1, revenue: 100, expenses: 40, net: 60 }] }));
+    expect(bridge.getState().budgetHistory).toEqual([{ day: 1, revenue: 100, expenses: 40, net: 60 }]);
+
+    emit(baseTickEvent({ budgetHistory: [{ day: 1, revenue: 100, expenses: 40, net: 60 }, { day: 2, revenue: 110, expenses: 45, net: 65 }] }));
+    expect(bridge.getState().budgetHistory).toEqual([
+      { day: 1, revenue: 100, expenses: 40, net: 60 },
+      { day: 2, revenue: 110, expenses: 45, net: 65 },
+    ]);
   });
 
   it('decodes every field from its SoA wire offset, matching the WASM path exactly', async () => {

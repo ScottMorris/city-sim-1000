@@ -1,9 +1,15 @@
 import { GameState } from './gameState';
 import { getCalendarPosition, DAYS_PER_MONTH } from './time';
 
-export const BUDGET_HISTORY_LENGTH = 200;
 export const MONTHS_PER_QUARTER = 3;
 
+/**
+ * `#229`: mirrors `city_sim_core::state::BudgetHistoryEntry` exactly. Rust
+ * is the sole source now — the ring buffer, its 200-day cap, and the
+ * day-boundary dedup this used to need client-side all live in
+ * `economy::record_daily_budget`; the wire's `budgetHistory` array is
+ * adopted verbatim by both bridges, see `wasmSimBridge.ts`/`tauriSimBridge.ts`.
+ */
 export interface BudgetHistoryEntry {
   day: number;
   revenue: number;
@@ -11,43 +17,11 @@ export interface BudgetHistoryEntry {
   net: number;
 }
 
-export interface BudgetHistory {
-  daily: BudgetHistoryEntry[];
-  lastRecordedDay: number;
-}
-
 export interface BudgetBucket {
   label: string;
   revenue: number;
   expenses: number;
   net: number;
-}
-
-export function ensureBudgetHistory(state: GameState): BudgetHistory {
-  if (!state.budgetHistory) {
-    state.budgetHistory = { daily: [], lastRecordedDay: 0 };
-  } else {
-    state.budgetHistory.daily = state.budgetHistory.daily ?? [];
-    state.budgetHistory.lastRecordedDay = state.budgetHistory.lastRecordedDay ?? 0;
-  }
-  return state.budgetHistory;
-}
-
-export function recordDailyBudget(state: GameState) {
-  const history = ensureBudgetHistory(state);
-  const currentDay = Math.floor(state.day);
-  if (currentDay <= history.lastRecordedDay) return;
-  const entry: BudgetHistoryEntry = {
-    day: currentDay,
-    revenue: state.budget.revenue,
-    expenses: state.budget.expenses,
-    net: state.budget.net
-  };
-  history.daily.push(entry);
-  while (history.daily.length > BUDGET_HISTORY_LENGTH) {
-    history.daily.shift();
-  }
-  history.lastRecordedDay = currentDay;
 }
 
 function sumBucket(entries: BudgetHistoryEntry[], startDay: number, endDay: number): BudgetBucket {
@@ -60,7 +34,7 @@ function sumBucket(entries: BudgetHistoryEntry[], startDay: number, endDay: numb
 }
 
 export function getRecentMonths(state: GameState): BudgetBucket[] {
-  const history = ensureBudgetHistory(state);
+  const daily = state.budgetHistory ?? [];
   const currentMonth = getCalendarPosition(state.day).month;
   const months: BudgetBucket[] = [];
   for (let i = 0; i < MONTHS_PER_QUARTER; i++) {
@@ -68,7 +42,7 @@ export function getRecentMonths(state: GameState): BudgetBucket[] {
     if (monthNumber < 1) break;
     const startDay = (monthNumber - 1) * DAYS_PER_MONTH + 1;
     const endDay = monthNumber * DAYS_PER_MONTH;
-    const bucket = sumBucket(history.daily, startDay, endDay);
+    const bucket = sumBucket(daily, startDay, endDay);
     const label = `Month ${monthNumber}`;
     months.push({ ...bucket, label });
   }
@@ -76,10 +50,10 @@ export function getRecentMonths(state: GameState): BudgetBucket[] {
 }
 
 export function getQuarterSummary(state: GameState): BudgetBucket {
-  const history = ensureBudgetHistory(state);
+  const daily = state.budgetHistory ?? [];
   const endDay = Math.floor(state.day);
   const startDay = Math.max(1, endDay - DAYS_PER_MONTH * MONTHS_PER_QUARTER + 1);
-  const bucket = sumBucket(history.daily, startDay, endDay);
+  const bucket = sumBucket(daily, startDay, endDay);
   return { ...bucket, label: `Last ${MONTHS_PER_QUARTER} months` };
 }
 
