@@ -6,6 +6,8 @@ One document per feature: what it is, why it exists, what the code actually does
 
 - [City Narrative](city-narrative.md) — the toggleable storytelling layer over simulation events.
 - [Wilderness Score](wilderness-score.md) — the ecosystem-preservation metric and its consequences.
+- [Utility Network Connected Components](utility-network-components.md) — per-segment power/water stats instead of one pooled city-wide total.
+- [Education Stats and Service Load Over the Wire](education-over-the-wire.md) — the client stops re-deriving school coverage; it reads Rust's answer.
 
 ## Recovery docs (2026-07 migration audit)
 

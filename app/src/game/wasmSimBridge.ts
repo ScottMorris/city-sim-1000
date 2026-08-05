@@ -227,7 +227,7 @@ export class WasmSimBridge implements SimBridge {
     // stops. When the posted tick AND mutationSeq both match what's already
     // applied, nothing meaningful could have changed and the buffer is
     // byte-identical to what's already applied, so skip the full tile-array
-    // rebuild + building-list rebuild + recomputeEducation.
+    // rebuild + building-list rebuild + education JSON parse.
     if (
       this.pendingStats !== null &&
       this.pendingStats.tick === this.lastAppliedTick &&
