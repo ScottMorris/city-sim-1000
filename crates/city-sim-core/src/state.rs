@@ -449,6 +449,15 @@ pub struct GameState {
     /// Wilderness score, trend, and breakdown — recomputed every
     /// `WildernessTunables::recompute_interval_ticks` by the tick loop.
     pub wilderness: WildernessStats,
+    /// Power/water connected-component labelling — rebuilt from scratch by
+    /// every `recompute_utility_network` call, same lifecycle as the derived
+    /// `FLAG_POWERED`/`FLAG_WATERED` tile flags. `#[serde(skip)]` rather than
+    /// persisted: it's fully recomputed from the grid, so carrying it across
+    /// a snapshot boundary would buy nothing and cost a `VERSION` bump for
+    /// bytes nothing needs to load. Empty until the first recompute after a
+    /// fresh `GameState` or a snapshot restore.
+    #[serde(skip)]
+    pub utility_networks: crate::utilities::UtilityNetworks,
 }
 
 impl GameState {
@@ -483,6 +492,7 @@ impl GameState {
             budget_history: VecDeque::new(),
             policies: Policies::default(),
             wilderness: WildernessStats::default(),
+            utility_networks: crate::utilities::UtilityNetworks::default(),
         }
     }
 

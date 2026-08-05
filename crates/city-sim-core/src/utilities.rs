@@ -6,7 +6,7 @@
 use crate::buildings::BuildingStatus;
 use crate::occupants::Network;
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 /// Which utility network to recompute.
 ///
@@ -98,6 +98,110 @@ pub(crate) fn is_carrier(tile: &Tile, kind: UtilityKind) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Connected components
+// ---------------------------------------------------------------------------
+
+/// One physically-connected segment of a utility network — the tiles
+/// reachable from each other through carriers, for one [`UtilityKind`].
+///
+/// Rebuilt from scratch on every [`recompute_utility_network`] call, the same
+/// lifecycle as the per-tile `FLAG_POWERED`/`FLAG_WATERED` flags: an id is
+/// stable only within one recompute, and a grid edit can renumber every
+/// segment on the next one. Nothing needs cross-tick identity today — see
+/// `docs/features/utility-network-components.md`.
+#[derive(Debug, Clone, Default)]
+pub struct UtilityComponent {
+    /// 1-based; matches the label written into [`UtilityNetworks`]'s label
+    /// grid for this kind. `0` in that grid means "on no component".
+    pub id: u16,
+    /// Effective output of every source on this segment, funding-scaled for
+    /// power. Deliberately left unrounded: [`recompute_utility_network`]
+    /// rounds only the *sum* across all components, once, so the city-wide
+    /// total is exactly what it was before components existed. Round for
+    /// display at the wire boundary or in the UI, not here.
+    pub produced: f32,
+    /// Consumption attributed to this segment by `Simulation::compute_utility_use`.
+    /// Zero until the first tick after a recompute.
+    pub used: f32,
+    /// Distinct buildings feeding this segment, deduped so a multi-tile
+    /// plant counts once.
+    pub source_count: u16,
+}
+
+impl UtilityComponent {
+    /// Fraction of this segment's output currently drawn, clamped to `[0,
+    /// 1]`. A segment can be momentarily overloaded (`used > produced`) when
+    /// a funding brownout lands mid-tick, hence the clamp rather than an
+    /// assertion.
+    pub fn utilization(&self) -> f32 {
+        if self.produced <= 0.0 {
+            return 0.0;
+        }
+        (self.used / self.produced).min(1.0)
+    }
+}
+
+/// Per-kind connected-component labelling for [`GameState::utility_networks`].
+///
+/// `#[serde(skip)]` on the `GameState` field: this is derived from the grid,
+/// so persisting it would buy nothing and cost a snapshot `VERSION` bump —
+/// see the field's doc comment in `state.rs`.
+#[derive(Debug, Clone, Default)]
+pub struct UtilityNetworks {
+    /// Component id per tile, index-aligned with `state.tiles`. `0` = not on
+    /// this kind's network.
+    pub power_labels: Vec<u16>,
+    pub water_labels: Vec<u16>,
+    pub power_components: Vec<UtilityComponent>,
+    pub water_components: Vec<UtilityComponent>,
+}
+
+impl UtilityNetworks {
+    /// The component id at `tile_index`, for the given kind — `None` if the
+    /// tile isn't on that network.
+    pub fn labels(&self, kind: UtilityKind) -> &[u16] {
+        match kind {
+            UtilityKind::Power => &self.power_labels,
+            UtilityKind::Water => &self.water_labels,
+        }
+    }
+
+    pub fn components(&self, kind: UtilityKind) -> &[UtilityComponent] {
+        match kind {
+            UtilityKind::Power => &self.power_components,
+            UtilityKind::Water => &self.water_components,
+        }
+    }
+
+    /// The component a tile belongs to, if any.
+    pub fn component_at(&self, kind: UtilityKind, tile_index: usize) -> Option<&UtilityComponent> {
+        let label = *self.labels(kind).get(tile_index)?;
+        (label != 0).then(|| &self.components(kind)[(label - 1) as usize])
+    }
+
+    fn set(&mut self, kind: UtilityKind, labels: Vec<u16>, components: Vec<UtilityComponent>) {
+        match kind {
+            UtilityKind::Power => {
+                self.power_labels = labels;
+                self.power_components = components;
+            }
+            UtilityKind::Water => {
+                self.water_labels = labels;
+                self.water_components = components;
+            }
+        }
+    }
+}
+
+/// Raw (unscaled, undeduped) output of one source tile.
+fn raw_output(tile: &Tile, kind: UtilityKind) -> f32 {
+    match kind {
+        UtilityKind::Power => tile.power_plant_mw as f32,
+        UtilityKind::Water => tile.water_output as f32,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Orthogonal neighbour iterator
 // ---------------------------------------------------------------------------
 
@@ -126,9 +230,13 @@ fn orthogonal_neighbours(
 /// Recompute one utility network (power or water) for the whole map.
 ///
 /// 1. Clears the relevant flag (FLAG_POWERED / FLAG_WATERED) on every tile.
-/// 2. Seeds the BFS queue from all source tiles.
-/// 3. Propagates through carriers via orthogonal adjacency.
-/// 4. Updates the matching fields in `state.utilities`.
+/// 2. Floods outward from each source tile in turn, labelling every tile it
+///    reaches with a connected-component id — a source reached by an earlier
+///    source's flood shares that component rather than starting a new one,
+///    so this is still one pass over the reachable tiles, not a BFS per
+///    source over the whole map.
+/// 3. Updates the matching city-wide fields in `state.utilities`, and stores
+///    the per-component breakdown in `state.utility_networks`.
 pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
     let flag = match kind {
         UtilityKind::Power => FLAG_POWERED,
@@ -140,9 +248,14 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
         tile.set_flag(flag, false);
     }
 
-    // Collect sources, seed their flags, build initial queue. See
-    // `is_effective_source` for the status gating (power/water) and, for
-    // pumps, the `#200` source-connection gate.
+    let mut labels = vec![0u16; state.tiles.len()];
+    let mut components: Vec<UtilityComponent> = Vec::new();
+    let mut seen_buildings: HashSet<u16> = HashSet::new();
+
+    // Sources in tile-index order — same order the flat BFS used to seed
+    // in, so labelling stays deterministic. See `is_effective_source` for
+    // the status gating (power/water) and, for pumps, the `#200`
+    // source-connection gate.
     let sources: Vec<usize> = state
         .tiles
         .iter()
@@ -151,105 +264,90 @@ pub fn recompute_utility_network(state: &mut GameState, kind: UtilityKind) {
         .map(|(i, _)| i)
         .collect();
 
-    for &idx in &sources {
-        state.tiles[idx].set_flag(flag, true);
-    }
+    for &src in &sources {
+        let comp_idx = if labels[src] != 0 {
+            // Already reached by an earlier source's flood (two plants on
+            // one wire) — shares that component, no re-flood needed.
+            (labels[src] - 1) as usize
+        } else {
+            let id = components.len() as u16 + 1;
+            components.push(UtilityComponent {
+                id,
+                ..UtilityComponent::default()
+            });
+            state.tiles[src].set_flag(flag, true);
+            labels[src] = id;
 
-    let mut queue: VecDeque<usize> = sources.into_iter().collect();
-
-    // BFS
-    while let Some(idx) = queue.pop_front() {
-        let (x, y) = state.index_to_xy(idx);
-        for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
-            let nidx = (ny * state.width + nx) as usize;
-            // Read phase (immutable)
-            {
-                let t = &state.tiles[nidx];
-                if t.flags & flag != 0 {
-                    continue;
-                }
-                if !is_carrier(t, kind) {
-                    continue;
+            let mut queue: VecDeque<usize> = VecDeque::new();
+            queue.push_back(src);
+            while let Some(cur) = queue.pop_front() {
+                let (x, y) = state.index_to_xy(cur);
+                for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
+                    let nidx = (ny * state.width + nx) as usize;
+                    // Read phase (immutable)
+                    {
+                        let t = &state.tiles[nidx];
+                        if t.flags & flag != 0 {
+                            continue;
+                        }
+                        if !is_carrier(t, kind) {
+                            continue;
+                        }
+                    }
+                    // Write phase (mutable)
+                    state.tiles[nidx].set_flag(flag, true);
+                    labels[nidx] = id;
+                    queue.push_back(nidx);
                 }
             }
-            // Write phase (mutable)
-            state.tiles[nidx].set_flag(flag, true);
-            queue.push_back(nidx);
+            components.len() - 1
+        };
+
+        // Attribute this source's output, deduped by `building_id` so a
+        // multi-tile plant (all of whose tiles are sources on the same
+        // component) counts once — matches the TS `listPowerPlants` dedup.
+        let tile = &state.tiles[src];
+        let counted = match tile.building_id {
+            Some(bid) => seen_buildings.insert(bid),
+            None => true,
+        };
+        if counted {
+            let comp = &mut components[comp_idx];
+            comp.produced += raw_output(tile, kind);
+            comp.source_count += 1;
         }
     }
 
-    // Update utility stats
+    // Update utility stats. City-wide totals are the *rounded sum* of the
+    // per-component figures — mathematically the single rounding step this
+    // function always did (`Σ(raw_i × fund)` = `fund × Σ raw_i`), so this is
+    // not a behaviour change: see `UtilityComponent::produced`.
     match kind {
         UtilityKind::Power => {
             // Underfunded power departments brown out: plant output scales
             // with the funding level (100% funding → full output, exact).
-            let raw = sum_output_power(state);
             let fund = city_sim_protocol::commands::BudgetPolicy::funding_multiplier(
                 state.policies.budget.fund_power,
             );
-            let produced = (raw as f32 * fund).round() as i32;
-            state.utilities.power_produced = produced;
+            for c in &mut components {
+                c.produced *= fund;
+            }
+            let produced: f32 = components.iter().map(|c| c.produced).sum();
+            state.utilities.power_produced = produced.round() as i32;
             // power_used is updated by the economy tick; zero it here so
             // a fresh recompute starts clean.
             state.utilities.power_used = 0;
-            state.utilities.power = produced;
+            state.utilities.power = state.utilities.power_produced;
         }
         UtilityKind::Water => {
-            let produced = sum_output_water(state);
-            state.utilities.water_produced = produced;
+            let produced: f32 = components.iter().map(|c| c.produced).sum();
+            state.utilities.water_produced = produced.round() as i32;
             state.utilities.water_used = 0;
-            state.utilities.water = produced;
+            state.utilities.water = state.utilities.water_produced;
         }
     }
-}
 
-// ---------------------------------------------------------------------------
-// Output summation helpers (dedup by building_id to avoid counting 2×2 plants
-// multiple times, matching the TS `listPowerPlants` dedup logic)
-// ---------------------------------------------------------------------------
-
-fn sum_output_power(state: &GameState) -> i32 {
-    let mut seen: std::collections::HashSet<u16> = std::collections::HashSet::new();
-    let mut total = 0;
-    for tile in &state.tiles {
-        if tile.power_plant_mw <= 0 {
-            continue;
-        }
-        match tile.building_id {
-            Some(bid) if seen.insert(bid) => {
-                total += tile.power_plant_mw;
-            }
-            Some(_) => {} // duplicate tile of same plant
-            None => {
-                total += tile.power_plant_mw;
-            }
-        }
-    }
-    total
-}
-
-fn sum_output_water(state: &GameState) -> i32 {
-    let mut seen: std::collections::HashSet<u16> = std::collections::HashSet::new();
-    let mut total = 0;
-    for tile in &state.tiles {
-        // `#200` defect 2: this used to sum every `water_output > 0` tile
-        // regardless of status, so an unpowered (or, now, unconnected) pump
-        // still padded the HUD total while the BFS correctly refused to seed
-        // from it. Same predicate as the seeding filter above.
-        if !is_effective_source(state, tile, UtilityKind::Water) {
-            continue;
-        }
-        match tile.building_id {
-            Some(bid) if seen.insert(bid) => {
-                total += tile.water_output;
-            }
-            Some(_) => {}
-            None => {
-                total += tile.water_output;
-            }
-        }
-    }
-    total
+    state.utility_networks.set(kind, labels, components);
 }
 
 // ---------------------------------------------------------------------------
@@ -676,6 +774,197 @@ mod tests {
         recompute_utility_network(&mut g, UtilityKind::Water);
         assert_eq!(g.utilities.water_produced, 50);
         assert!(g.tile_at(0, 0).unwrap().is_watered());
+    }
+
+    // --- connected component tests ---
+
+    /// The issue's headline verification: two grids with no shared wire are
+    /// two components with independent `produced` values, even though the
+    /// city-wide total still pools them (unchanged aggregate behaviour).
+    #[test]
+    fn two_disconnected_power_grids_report_independent_produced() {
+        let mut g = grid(7, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        place(&mut g, 1, 0, TileKind::Road);
+        // (2,0)..=(4,0) are plain Land — breaks the chain into two segments.
+        g.tile_at_mut(5, 0).unwrap().power_plant_mw = 80;
+        g.tile_at_mut(5, 0).unwrap().building_id = Some(2);
+        set_v4_kind(g.tile_at_mut(5, 0).unwrap(), TileKind::Road);
+        place(&mut g, 6, 0, TileKind::Road);
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        assert_eq!(
+            g.utilities.power_produced, 140,
+            "city-wide total still pools every component"
+        );
+        let mut produced: Vec<i32> = g
+            .utility_networks
+            .components(UtilityKind::Power)
+            .iter()
+            .map(|c| c.produced.round() as i32)
+            .collect();
+        produced.sort_unstable();
+        assert_eq!(
+            produced,
+            vec![60, 80],
+            "two disconnected grids report as two independent components"
+        );
+    }
+
+    #[test]
+    fn two_plants_on_one_segment_share_one_component() {
+        let mut g = grid(3, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        place(&mut g, 1, 0, TileKind::Road);
+        g.tile_at_mut(2, 0).unwrap().power_plant_mw = 80;
+        g.tile_at_mut(2, 0).unwrap().building_id = Some(2);
+        set_v4_kind(g.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        let components = g.utility_networks.components(UtilityKind::Power);
+        assert_eq!(components.len(), 1, "one wire joins both plants");
+        assert_eq!(components[0].produced.round() as i32, 140);
+        assert_eq!(components[0].source_count, 2);
+    }
+
+    #[test]
+    fn component_deduplicates_a_two_by_two_plant() {
+        let mut g = grid(4, 2);
+        for y in 0..2 {
+            for x in 0..2 {
+                let t = g.tile_at_mut(x, y).unwrap();
+                t.power_plant_mw = 60;
+                t.building_id = Some(1);
+            }
+        }
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        let components = g.utility_networks.components(UtilityKind::Power);
+        assert_eq!(components.len(), 1);
+        assert_eq!(
+            components[0].produced.round() as i32,
+            60,
+            "the plant's 4 tiles must not be counted as 4 sources"
+        );
+        assert_eq!(components[0].source_count, 1);
+    }
+
+    #[test]
+    fn brownout_scales_every_component_by_the_same_funding_fraction() {
+        let mut g = grid(7, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        place(&mut g, 1, 0, TileKind::Road);
+        g.tile_at_mut(5, 0).unwrap().power_plant_mw = 80;
+        g.tile_at_mut(5, 0).unwrap().building_id = Some(2);
+        set_v4_kind(g.tile_at_mut(5, 0).unwrap(), TileKind::Road);
+        place(&mut g, 6, 0, TileKind::Road);
+        g.policies.budget.fund_power = 50;
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        assert_eq!(
+            g.utilities.power_produced, 70,
+            "city total is still the rounded sum of the brownout-scaled components"
+        );
+        let mut produced: Vec<i32> = g
+            .utility_networks
+            .components(UtilityKind::Power)
+            .iter()
+            .map(|c| c.produced.round() as i32)
+            .collect();
+        produced.sort_unstable();
+        assert_eq!(produced, vec![30, 40]);
+    }
+
+    #[test]
+    fn label_grid_marks_off_network_tiles_as_zero() {
+        let mut g = grid(3, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        // (1,0), (2,0) are plain Land — off network.
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        let labels = g.utility_networks.labels(UtilityKind::Power);
+        assert_ne!(labels[0], 0);
+        assert_eq!(labels[1], 0);
+        assert_eq!(labels[2], 0);
+    }
+
+    #[test]
+    fn component_at_resolves_the_owning_component() {
+        let mut g = grid(3, 1);
+        g.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::Road);
+        place(&mut g, 1, 0, TileKind::Road);
+
+        recompute_utility_network(&mut g, UtilityKind::Power);
+
+        let networks = &g.utility_networks;
+        let on_network = g.tile_index(1, 0).unwrap();
+        let off_network = g.tile_index(2, 0).unwrap();
+        assert_eq!(
+            networks
+                .component_at(UtilityKind::Power, on_network)
+                .unwrap()
+                .produced
+                .round() as i32,
+            60
+        );
+        assert!(networks
+            .component_at(UtilityKind::Power, off_network)
+            .is_none());
+    }
+
+    #[test]
+    fn inactive_pump_produces_no_water_component() {
+        use crate::buildings::{BuildingInstance, BuildingStatus};
+        let mut g = grid(3, 1);
+        g.tile_at_mut(0, 0).unwrap().water_output = 50;
+        set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
+        g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+        let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+        b.status = BuildingStatus::InactiveNoPower;
+        g.buildings.push(b);
+
+        recompute_utility_network(&mut g, UtilityKind::Water);
+
+        assert!(g.utility_networks.components(UtilityKind::Water).is_empty());
+    }
+
+    #[test]
+    fn utilization_is_zero_with_no_production() {
+        assert_eq!(UtilityComponent::default().utilization(), 0.0);
+    }
+
+    #[test]
+    fn utilization_clamps_to_one_when_overloaded() {
+        let c = UtilityComponent {
+            produced: 50.0,
+            used: 80.0,
+            ..UtilityComponent::default()
+        };
+        assert_eq!(c.utilization(), 1.0);
+    }
+
+    #[test]
+    fn utilization_is_the_used_over_produced_fraction() {
+        let c = UtilityComponent {
+            produced: 100.0,
+            used: 25.0,
+            ..UtilityComponent::default()
+        };
+        assert_eq!(c.utilization(), 0.25);
     }
 
     // --- orthogonal_neighbours tests ---
