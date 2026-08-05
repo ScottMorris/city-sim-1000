@@ -182,6 +182,10 @@ Shell script headers go after the `#!` line:
 - `docs/testing.md` is the map: the three architecture harnesses (golden city, visual regression, soak), what each does and does not cover, every command, and the remaining gaps.
 - **Regenerating a committed baseline is a deliberate act.** `golden_city.expected` and the screenshots under `app/e2e/__screenshots__/` are derived artefacts, so a wrong derivation and a stale expectation look identical from the outside. Never regenerate to make a build pass; name and justify every line or image that moved, in the same commit as the behaviour change that moved it. See `docs/testing.md`.
 
+### Test names
+
+Don't put issue numbers in test names (`fn` names, `it(...)`/`describe(...)` titles) — `#200` in a name goes stale the moment the code around it is refactored or the fix is folded into something bigger, and it reads as though the *test* belongs to the issue rather than to the behaviour. Name the test after the behaviour it pins; put the issue number in a comment or doc comment above it instead, where there's room for the actual context (what regressed, why this shape of test proves it).
+
 ### Prove a test has teeth
 
 **When you add or change a test, break the thing it covers and confirm the test goes red. Then revert, and state the mutation and its result.** A test that cannot fail is worse than no test: it reports safety that does not exist, and it is invisible without this step.

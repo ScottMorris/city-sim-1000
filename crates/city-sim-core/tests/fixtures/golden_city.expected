@@ -15,7 +15,7 @@
 # byte to dump separately (#177's TS/wire follow-up deleted the projection;
 # the wire now carries `occ`/`terrain`/`density` directly, see `crate::wire`).
 
-script grid=24x16 seed=20260729 ticks=400 directives=158 script_hash=0xc0e82f5c5d415cb2
+script grid=24x16 seed=20260729 ticks=400 directives=159 script_hash=0x2de1189d46bbf335
 
 [refusals]
 refuse Bulldoze 20 13 (underground) -> Nothing to demolish here
@@ -31,13 +31,13 @@ refuse CoalPlant 23 15 -> Needs 2×2 tiles in-bounds
 [scalars]
 tick 400
 day 14
-money 54834
+money 54822
 population 141
 jobs 117
 buildings 32
 next_building_id 36
-tile_revision 189
-state_hash 0xcecdea2bd6e255d6
+tile_revision 190
+state_hash 0x4f62a999a5da958f
 
 [utilities]
 power 24
@@ -48,7 +48,7 @@ water_produced 50
 water_used 35
 
 [demand]
-residential 24.2078
+residential 24.2024
 commercial 18.1779
 industrial 8.0000
 
@@ -97,14 +97,14 @@ maint_zones_com 9.6000
 maint_zones_ind 8.4000
 
 [wilderness]
-score 44.4922
-trend -0.2961
-fast_ema 44.4922
-slow_ema 44.7883
+score 44.4479
+trend -0.2965
+fast_ema 44.4480
+slow_ema 44.7445
 seeded true
 forests 54.0000
 parks 20.0000
-open_land 259.0000
+open_land 258.0000
 water_edge 2.0000
 patch 5.0473
 fragmentation -4.0000
@@ -388,7 +388,7 @@ tile 235   (19, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
 tile 236   (20, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
 tile 237   (21, 9) terrain=Land  flags=[P--] density=Low    bid=-     occ=PowerLine
 tile 238   (22, 9) terrain=Land  flags=[PW-] density=Low    bid=3     occ=Structure
-tile 239   (23, 9) terrain=Land  flags=[---] density=Low    bid=-     occ=-
+tile 239   (23, 9) terrain=Water flags=[---] density=Low    bid=-     occ=-
 tile 240   ( 0,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
 tile 241   ( 1,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-
 tile 242   ( 2,10) terrain=Land  flags=[---] density=Low    bid=-     occ=-

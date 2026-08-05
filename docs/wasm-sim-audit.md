@@ -38,9 +38,9 @@ Item counts: 5 blockers (P0), 8 high (P1), 8 medium/low (P2).
 - Rust: `bulldoze()` removes the building if any, **else removes the underground pipe if any**, else reverts to Land (`commands.rs:339–351`). Bulldozing a road with a pipe beneath removes the pipe and keeps the road — inverted vs TS.
 - Root cause: the protocol has no way to express the underground-view context; `SimCommand::ApplyTool` carries only tool + coordinates (`crates/city-sim-protocol/src/commands.rs:42–49`).
 
-### A3. Water production is not gated on a source connection (P1)
+### A3. Water production is not gated on a source connection (P1) — ✅ resolved (#200)
 - TS: a pump/tower only contributes `waterOutput` when `hasWaterSourceConnection()` finds an adjacent water carrier outside its own footprint (`app/src/game/utilities/water.ts:41–64`, also `simulation.ts:226–235`).
-- Rust: any tile with `water_output > 0` on an Active building seeds the BFS and is summed into `water_produced` (`crates/city-sim-core/src/utilities.rs:132–155`, `sum_output_water`). A standalone pump on bare land supplies water in Rust but not in TS.
+- Rust (fixed): a pump's footprint must be orthogonally adjacent to `Terrain::Water` to seed the BFS or count toward `water_produced` — strict footprint adjacency, a deliberately new rule rather than a port of the TS check above (which, read closely, never actually consulted terrain). See `docs/features/water-source-gating.md`.
 
 ### A4. Money is truncated to whole dollars every tick (P0)
 - TS: `money` is a float; per-tick accrual `netPerDay * dt/1.5` accumulates fractionally (`simulation.ts:501`).
@@ -144,7 +144,7 @@ Rust computes education for demand/decay (`education.rs`, wired in `sim.rs:133`)
 | P0 | TS/Rust command-log desync on rejected commands | B4 |
 | P1 | Power line destroys zones | A1 |
 | P1 | Bulldoze precedence + missing underground-mode context | A2 |
-| P1 | Water production not gated on source connection | A3 |
+| P1 | ~~Water production not gated on source connection~~ (resolved, #200) | A3 |
 | P1 | Population snaps to capacity on loss | A5 |
 | P1 | Bylaws/settings have no effect in WASM mode | A6 |
 | P1 | Budget by-type breakdowns missing from wire | A8 |

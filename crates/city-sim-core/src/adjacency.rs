@@ -3,7 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-use crate::occupants::Network;
+use crate::occupants::{Network, Terrain};
 use crate::state::{GameState, Tile, FLAG_POWERED, FLAG_WATERED};
 use std::collections::{HashSet, VecDeque};
 
@@ -184,6 +184,36 @@ pub fn tile_has_water(state: &GameState, x: u32, y: u32) -> bool {
         if let Some(n) = state.tile_at(nx, ny) {
             if n.flags & FLAG_WATERED != 0 && n.conducts(Network::Water) {
                 return true;
+            }
+        }
+    }
+    false
+}
+
+/// Returns true if any tile in the footprint rooted at `origin` is
+/// orthogonally adjacent to a `Terrain::Water` tile.
+///
+/// Shared by [`crate::buildings::update_building_states`] (drives
+/// `BuildingStatus::InactiveNoSource`) and the water BFS's source filter in
+/// `utilities.rs` (drives whether a pump seeds the network) — one predicate,
+/// so a pump's status and its actual water output cannot disagree (`#200`).
+pub fn footprint_touches_water(
+    state: &GameState,
+    origin: (u32, u32),
+    footprint: (u32, u32),
+) -> bool {
+    let (ox, oy) = origin;
+    let (w, h) = footprint;
+    for dy in 0..h {
+        for dx in 0..w {
+            let (x, y) = (ox + dx, oy + dy);
+            for (nx, ny) in orthogonal_neighbours(state.width, state.height, x, y) {
+                if state
+                    .tile_at(nx, ny)
+                    .is_some_and(|t| t.terrain() == Terrain::Water)
+                {
+                    return true;
+                }
             }
         }
     }
@@ -499,5 +529,26 @@ mod tests {
     fn tile_has_power_false_when_not_powered() {
         let s = g(2, 1);
         assert!(!tile_has_power(&s, 0, 0));
+    }
+
+    /// `footprint_touches_water`'s per-tile coordinate is `(ox + dx, oy + dy)`
+    /// — every prior caller placed the building at the origin `(0, 0)`, where
+    /// `+`, `-`, and `*` all agree, so mutating either `+` to `-`/`*` survived
+    /// undetected. A footprint away from the origin, with water only beside
+    /// its *far* corner, makes the three arithmetics disagree: only `+`
+    /// reaches the tile with water next door.
+    #[test]
+    fn footprint_touches_water_uses_addition_not_the_origin_alone() {
+        let mut s = g(6, 6);
+        // 2×2 footprint at (3,4)–(4,5). Water at (5,5), east of the far
+        // corner (4,5) only — nowhere near the origin tile (3,4) itself.
+        s.tile_at_mut(5, 5).unwrap().terrain = Terrain::Water;
+        assert!(footprint_touches_water(&s, (3, 4), (2, 2)));
+    }
+
+    #[test]
+    fn footprint_touches_water_false_away_from_the_origin_with_no_water() {
+        let s = g(6, 6);
+        assert!(!footprint_touches_water(&s, (3, 4), (2, 2)));
     }
 }

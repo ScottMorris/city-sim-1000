@@ -4,6 +4,8 @@ export enum BuildingStatus {
   Active = 'active',
   InactiveNoPower = 'inactive_no_power',
   InactiveNoWater = 'inactive_no_water',
+  /** A water source (pump) whose footprint doesn't touch water terrain (#200). */
+  InactiveNoSource = 'inactive_no_source',
   InactiveDamaged = 'inactive_damaged'
 }
 

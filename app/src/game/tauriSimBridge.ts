@@ -43,6 +43,7 @@ import { decodeTileBuffer } from './protocol/tileBuffer';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
+import { footprintTouchesWater } from './adjacency';
 import {
   start as pluginStart,
   applyTool as pluginApplyTool,
@@ -356,15 +357,22 @@ export class TauriSimBridge implements SimBridge {
       const needsPower = template ? template.requiresPower !== false : false;
       const needsWater =
         hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
+      // A pump only produces when its footprint touches water terrain (#200)
+      // — distinct from needsWater above, which gates a *consumer* on
+      // network coverage; a pump doesn't consume water.
+      const needsSource = kind === TileKind.WaterPump;
+      const origin = { x: b.originX, y: b.originY };
       if (needsPower && !originTile?.powered) {
         bstate.status = BuildingStatus.InactiveNoPower;
+      } else if (needsSource && template && !footprintTouchesWater(s, origin, template.footprint)) {
+        bstate.status = BuildingStatus.InactiveNoSource;
       } else if (needsWater && !originTile?.watered) {
         bstate.status = BuildingStatus.InactiveNoWater;
       }
       return {
         id: b.id,
         templateId: kind as string,
-        origin: { x: b.originX, y: b.originY },
+        origin,
         state: bstate
       };
     });

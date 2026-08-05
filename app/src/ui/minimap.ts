@@ -349,6 +349,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       if (tile.abandoned) severity = 2;
       if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
       if (buildingStatus === BuildingStatus.InactiveNoWater) severity = Math.max(severity, 2);
+      if (buildingStatus === BuildingStatus.InactiveNoSource) severity = Math.max(severity, 2);
       if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
       if (zone && !tile.powered) severity = Math.max(severity, 2);
       if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
