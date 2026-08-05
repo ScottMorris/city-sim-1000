@@ -12,7 +12,7 @@ use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
-use city_sim_core::state::GameState;
+use city_sim_core::state::{EducationStats, GameState};
 use city_sim_core::utilities::{UtilityComponent, UtilityKind};
 use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::{CommandResult, Policies, Tool, ViewStratum};
@@ -46,6 +46,12 @@ pub struct TickEvent {
     pub power_components: Vec<WireUtilityComponent>,
     /// Water network connected components — see `power_components`.
     pub water_components: Vec<WireUtilityComponent>,
+    /// City-wide education coverage snapshot (`#228`) — see
+    /// `city_sim_core::state::EducationStats`.
+    pub education: WireEducationStats,
+    /// Seats consumed per school building (`#228`) — see
+    /// `city_sim_core::state::GameState::education_seats_used`.
+    pub education_seats_used: Vec<WireEducationSeatsUsed>,
     pub demand_residential: f32,
     pub demand_commercial: f32,
     pub demand_industrial: f32,
@@ -118,6 +124,48 @@ impl From<&UtilityComponent> for WireUtilityComponent {
             utilisation: c.utilisation(),
         }
     }
+}
+
+/// Wire shape of [`TickEvent::education`]. Mirrors `state::EducationStats`
+/// field-for-field; mirrors `SimHost::education_json` on the WASM path, sent
+/// as real values here since Tauri IPC serialises the whole `TickEvent`
+/// natively.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireEducationStats {
+    pub elementary_served: f32,
+    pub elementary_capacity: f32,
+    pub elementary_load: f32,
+    pub high_served: f32,
+    pub high_capacity: f32,
+    pub high_load: f32,
+    pub score: f32,
+    pub elementary_coverage: f32,
+    pub high_coverage: f32,
+}
+
+impl From<&EducationStats> for WireEducationStats {
+    fn from(s: &EducationStats) -> Self {
+        Self {
+            elementary_served: s.elementary_served,
+            elementary_capacity: s.elementary_capacity,
+            elementary_load: s.elementary_load,
+            high_served: s.high_served,
+            high_capacity: s.high_capacity,
+            high_load: s.high_load,
+            score: s.score,
+            elementary_coverage: s.elementary_coverage,
+            high_coverage: s.high_coverage,
+        }
+    }
+}
+
+/// One entry in [`TickEvent::education_seats_used`].
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WireEducationSeatsUsed {
+    pub building_id: u32,
+    pub used: f32,
 }
 
 // ── Internal command sent from invoke handlers to the sim thread ──────────────
@@ -221,6 +269,16 @@ fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) 
             .iter()
             .map(WireUtilityComponent::from)
             .collect(),
+        education: WireEducationStats::from(&s.education),
+        education_seats_used: {
+            let mut v: Vec<WireEducationSeatsUsed> = s
+                .education_seats_used
+                .iter()
+                .map(|(&building_id, &used)| WireEducationSeatsUsed { building_id, used })
+                .collect();
+            v.sort_by_key(|e| e.building_id);
+            v
+        },
         demand_residential: s.demand.residential,
         demand_commercial: s.demand.commercial,
         demand_industrial: s.demand.industrial,

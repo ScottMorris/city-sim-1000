@@ -40,6 +40,16 @@ export interface TickEvent {
   powerComponents:    WireUtilityComponent[]
   /** Water network connected components — see {@link powerComponents}. */
   waterComponents:    WireUtilityComponent[]
+  /**
+   * City-wide education coverage snapshot — see
+   * `city_sim_core::state::EducationStats`.
+   */
+  education:            WireEducationStats
+  /**
+   * Seats consumed per school building — see
+   * `city_sim_core::state::GameState::education_seats_used`.
+   */
+  educationSeatsUsed:   WireEducationSeatsUsed[]
   demandResidential:  number   // f32 [0, 100]
   demandCommercial:   number   // f32 [0, 100]
   demandIndustrial:   number   // f32 [0, 100]
@@ -50,12 +60,13 @@ export interface TickEvent {
   /**
    * The exact SoA wire buffer `city_sim_protocol::tile_buffer` describes —
    * `underground[N] | surface[N] | overhead[N] | status[N] | happiness[N] |
-   * elevation[N] | building_id[N×2] | wilderness[N]`, produced by
-   * `city_sim_core::wire::encode_tile_buffer`, the same function the WASM
-   * host's `tile_buffer()` calls. Per-tile `building_id` (u16le, 0 = none)
-   * lets the desktop client read `tile.buildingId` straight off the wire,
-   * the same as WASM, instead of deriving tile coverage from `buildings`
-   * below and a template footprint that could disagree with the engine's own.
+   * elevation[N] | building_id[N×2] | wilderness[N] | elementary_score[N] |
+   * high_score[N]`, produced by `city_sim_core::wire::encode_tile_buffer`,
+   * the same function the WASM host's `tile_buffer()` calls. Per-tile
+   * `building_id` (u16le, 0 = none) lets the desktop client read
+   * `tile.buildingId` straight off the wire, the same as WASM, instead of
+   * deriving tile coverage from `buildings` below and a template footprint
+   * that could disagree with the engine's own.
    */
   tiles:              number[]
   /**
@@ -101,6 +112,26 @@ export interface WireUtilityComponent {
   sourceCount:  number   // u16
   /** `used / produced`, clamped to `[0, 1]`. */
   utilisation:  number   // f32
+}
+
+/** {@link TickEvent.education} — mirrors `city_sim_core::state::EducationStats`. */
+export interface WireEducationStats {
+  elementaryServed:     number   // f32
+  elementaryCapacity:   number   // f32
+  elementaryLoad:       number   // f32
+  highServed:           number   // f32
+  highCapacity:         number   // f32
+  highLoad:             number   // f32
+  /** Combined coverage score in [0, 1]: elementary × 0.6 + high × 0.4. */
+  score:                number   // f32
+  elementaryCoverage:   number   // f32
+  highCoverage:         number   // f32
+}
+
+/** One entry in {@link TickEvent.educationSeatsUsed}, unrounded — round for display in TS. */
+export interface WireEducationSeatsUsed {
+  buildingId:  number   // u32
+  used:        number   // f32, unrounded
 }
 
 /**
