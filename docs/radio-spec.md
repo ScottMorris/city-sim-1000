@@ -1,6 +1,6 @@
 # SC1K Radio — design spec for the city's broadcast layer
 
-**Status:** design draft, 2026-08. Nothing here is implemented yet; milestones at the end map the build-out. Companion reading: `docs/features/city-narrative.md` (the narrative layer this plugs into), issues #19 (radio spots, text-first), #22 (optional LLM narrator), #13 (narrative epic).
+**Status:** design draft, 2026-08. Nothing here is implemented yet; milestones at the end map the build-out, tracked by epic [#248](https://github.com/ScottMorris/city-sim-1000/issues/248). Companion reading: `docs/features/city-narrative.md` (the narrative layer this plugs into), issues #19 (radio spots, text-first), #22 (optional LLM narrator), #13 (narrative epic).
 
 ## Vision
 
