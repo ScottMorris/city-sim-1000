@@ -9,13 +9,16 @@ use city_sim_core::{
     import::{from_tile_buffer, ImportStats},
     sim::Simulation,
     snapshot,
-    state::{BudgetHistoryEntry, EducationStats},
-    utilities::{UtilityComponent, UtilityKind},
+    utilities::UtilityKind,
     wire::encode_tile_buffer,
 };
 use city_sim_protocol::{
     commands::{Policies, Tool, ViewStratum},
     tile_buffer::BYTES_PER_TILE,
+    wire_types::{
+        WireBudgetHistoryEntry, WireBuilding, WireEducationSeatsUsed, WireEducationStats,
+        WireUtilityComponent,
+    },
 };
 use wasm_bindgen::prelude::*;
 
@@ -541,108 +544,5 @@ impl SimHost {
             .map(WireBudgetHistoryEntry::from)
             .collect();
         serde_json::to_string(&wire).unwrap_or_default()
-    }
-}
-
-/// One row of [`SimHost::buildings_json`]'s wire shape.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireBuilding {
-    id: u32,
-    /// `TileKind as u8` — decode with `tileKindFromU8` in TS, matching every
-    /// other wire use of `TileKind`.
-    kind: u8,
-    origin_x: u32,
-    origin_y: u32,
-}
-
-/// One row of [`SimHost::power_components_json`]/[`SimHost::water_components_json`]'s
-/// wire shape.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireUtilityComponent {
-    id: u16,
-    produced: f32,
-    used: f32,
-    source_count: u16,
-    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilisation`.
-    utilisation: f32,
-}
-
-impl From<&UtilityComponent> for WireUtilityComponent {
-    fn from(c: &UtilityComponent) -> Self {
-        Self {
-            id: c.id,
-            produced: c.produced,
-            used: c.used,
-            source_count: c.source_count,
-            utilisation: c.utilisation(),
-        }
-    }
-}
-
-/// Wire shape of [`SimHost::education_json`]. Mirrors `state::EducationStats`
-/// field-for-field; kept as a separate type rather than deriving `Serialize`
-/// directly on the engine struct, matching the `WireBuilding`/
-/// `WireUtilityComponent` precedent of wire-agnostic engine types.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireEducationStats {
-    elementary_served: f32,
-    elementary_capacity: f32,
-    elementary_load: f32,
-    high_served: f32,
-    high_capacity: f32,
-    high_load: f32,
-    score: f32,
-    elementary_coverage: f32,
-    high_coverage: f32,
-}
-
-impl From<&EducationStats> for WireEducationStats {
-    fn from(s: &EducationStats) -> Self {
-        Self {
-            elementary_served: s.elementary_served,
-            elementary_capacity: s.elementary_capacity,
-            elementary_load: s.elementary_load,
-            high_served: s.high_served,
-            high_capacity: s.high_capacity,
-            high_load: s.high_load,
-            score: s.score,
-            elementary_coverage: s.elementary_coverage,
-            high_coverage: s.high_coverage,
-        }
-    }
-}
-
-/// One row of [`SimHost::education_seats_used_json`]'s wire shape.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireEducationSeatsUsed {
-    building_id: u32,
-    used: f32,
-}
-
-/// One row of [`SimHost::budget_history_json`]'s wire shape. A local
-/// duplicate rather than deriving `Serialize` directly on the engine's
-/// `BudgetHistoryEntry`, matching the `WireBuilding`/`WireUtilityComponent`
-/// precedent of wire-agnostic engine types.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireBudgetHistoryEntry {
-    day: u32,
-    revenue: f32,
-    expenses: f32,
-    net: f32,
-}
-
-impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
-    fn from(e: &BudgetHistoryEntry) -> Self {
-        Self {
-            day: e.day,
-            revenue: e.revenue,
-            expenses: e.expenses,
-            net: e.net,
-        }
     }
 }

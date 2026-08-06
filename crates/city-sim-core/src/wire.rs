@@ -14,8 +14,12 @@
 //! Byte layout: [`city_sim_protocol::tile_buffer`].
 
 use crate::occupants::Terrain;
-use crate::state::{GameState, Tile, DERIVED_FLAG_MASK};
+use crate::state::{BudgetHistoryEntry, EducationStats, GameState, Tile, DERIVED_FLAG_MASK};
+use crate::utilities::UtilityComponent;
 use city_sim_protocol::tile_buffer::{encode_happiness, encode_score, status, TileBufferOffsets};
+use city_sim_protocol::wire_types::{
+    WireBudgetHistoryEntry, WireEducationStats, WireUtilityComponent,
+};
 
 /// The `underground` wire byte: bits 0–2, already absolute — no shift needed.
 #[inline]
@@ -81,6 +85,53 @@ pub fn encode_tile_buffer(state: &GameState) -> Vec<u8> {
         buf[o.high_score + i] = encode_score(tile.high_score);
     }
     buf
+}
+
+// ── Wire conversions for the summary structs shared by both hosts ──────────
+//
+// These live here rather than in `city-sim-protocol` alongside the
+// `city_sim_protocol::wire_types` structs themselves because that crate does
+// not (and must not) depend on `city-sim-core` — `UtilityComponent`,
+// `EducationStats`, and `BudgetHistoryEntry` are only visible from this side
+// of the dependency edge.
+
+impl From<&UtilityComponent> for WireUtilityComponent {
+    fn from(c: &UtilityComponent) -> Self {
+        Self {
+            id: c.id,
+            produced: c.produced,
+            used: c.used,
+            source_count: c.source_count,
+            utilisation: c.utilisation(),
+        }
+    }
+}
+
+impl From<&EducationStats> for WireEducationStats {
+    fn from(s: &EducationStats) -> Self {
+        Self {
+            elementary_served: s.elementary_served,
+            elementary_capacity: s.elementary_capacity,
+            elementary_load: s.elementary_load,
+            high_served: s.high_served,
+            high_capacity: s.high_capacity,
+            high_load: s.high_load,
+            score: s.score,
+            elementary_coverage: s.elementary_coverage,
+            high_coverage: s.high_coverage,
+        }
+    }
+}
+
+impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
+    fn from(e: &BudgetHistoryEntry) -> Self {
+        Self {
+            day: e.day,
+            revenue: e.revenue,
+            expenses: e.expenses,
+            net: e.net,
+        }
+    }
 }
 
 #[cfg(test)]

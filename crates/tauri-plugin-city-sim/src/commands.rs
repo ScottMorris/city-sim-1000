@@ -12,11 +12,15 @@ use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
 use city_sim_core::snapshot;
-use city_sim_core::state::{BudgetHistoryEntry, EducationStats, GameState};
-use city_sim_core::utilities::{UtilityComponent, UtilityKind};
+use city_sim_core::state::GameState;
+use city_sim_core::utilities::UtilityKind;
 use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::{CommandResult, Policies, Tool, ViewStratum};
 use city_sim_protocol::events::SimAlert;
+use city_sim_protocol::wire_types::{
+    WireBudgetHistoryEntry, WireBuilding, WireEducationSeatsUsed, WireEducationStats,
+    WireUtilityComponent,
+};
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
 
@@ -91,110 +95,6 @@ pub struct TickEvent {
     /// `city_sim_core::sim::Simulation::take_alerts`. Empty on most ticks;
     /// only non-empty the tick a power/water balance crosses zero.
     pub alerts: Vec<SimAlert>,
-}
-
-/// One entry in [`TickEvent::buildings`].
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireBuilding {
-    pub id: u32,
-    /// `TileKind as u8` — decode with `tileKindFromU8` in TS, matching every
-    /// other wire use of `TileKind`.
-    pub kind: u8,
-    pub origin_x: u32,
-    pub origin_y: u32,
-}
-
-/// One entry in [`TickEvent::power_components`]/[`TickEvent::water_components`].
-/// Mirrors `SimHost::power_components_json`/`water_components_json` on the
-/// WASM path, sent as real values here since Tauri IPC serialises the whole
-/// `TickEvent` natively.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireUtilityComponent {
-    pub id: u16,
-    pub produced: f32,
-    pub used: f32,
-    pub source_count: u16,
-    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilisation`.
-    pub utilisation: f32,
-}
-
-impl From<&UtilityComponent> for WireUtilityComponent {
-    fn from(c: &UtilityComponent) -> Self {
-        Self {
-            id: c.id,
-            produced: c.produced,
-            used: c.used,
-            source_count: c.source_count,
-            utilisation: c.utilisation(),
-        }
-    }
-}
-
-/// Wire shape of [`TickEvent::education`]. Mirrors `state::EducationStats`
-/// field-for-field; mirrors `SimHost::education_json` on the WASM path, sent
-/// as real values here since Tauri IPC serialises the whole `TickEvent`
-/// natively.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireEducationStats {
-    pub elementary_served: f32,
-    pub elementary_capacity: f32,
-    pub elementary_load: f32,
-    pub high_served: f32,
-    pub high_capacity: f32,
-    pub high_load: f32,
-    pub score: f32,
-    pub elementary_coverage: f32,
-    pub high_coverage: f32,
-}
-
-impl From<&EducationStats> for WireEducationStats {
-    fn from(s: &EducationStats) -> Self {
-        Self {
-            elementary_served: s.elementary_served,
-            elementary_capacity: s.elementary_capacity,
-            elementary_load: s.elementary_load,
-            high_served: s.high_served,
-            high_capacity: s.high_capacity,
-            high_load: s.high_load,
-            score: s.score,
-            elementary_coverage: s.elementary_coverage,
-            high_coverage: s.high_coverage,
-        }
-    }
-}
-
-/// One entry in [`TickEvent::education_seats_used`].
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireEducationSeatsUsed {
-    pub building_id: u32,
-    pub used: f32,
-}
-
-/// One entry in [`TickEvent::budget_history`]. Mirrors
-/// `SimHost::budget_history_json` on the WASM path, sent as real values here
-/// since Tauri IPC serialises the whole `TickEvent` natively.
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WireBudgetHistoryEntry {
-    pub day: u32,
-    pub revenue: f32,
-    pub expenses: f32,
-    pub net: f32,
-}
-
-impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
-    fn from(e: &BudgetHistoryEntry) -> Self {
-        Self {
-            day: e.day,
-            revenue: e.revenue,
-            expenses: e.expenses,
-            net: e.net,
-        }
-    }
 }
 
 // ── Internal command sent from invoke handlers to the sim thread ──────────────

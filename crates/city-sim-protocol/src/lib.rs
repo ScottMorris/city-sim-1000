@@ -8,3 +8,4 @@ pub mod events;
 pub mod legacy_tile_buffer;
 pub mod tile_buffer;
 pub mod tile_kind;
+pub mod wire_types;
