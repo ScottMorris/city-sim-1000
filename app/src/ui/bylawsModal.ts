@@ -3,8 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { projectLightingPolicy } from '../game/bylawAnalytics';
-import { DEFAULT_BYLAWS, LIGHTING_POLICIES, type LightingBylaw } from '../game/bylaws';
+import { LIGHTING_POLICIES, previewLightingPolicy, type LightingPolicy } from '../game/bylaws';
 import type { GameState } from '../game/gameState';
 import { Occupant, zoneOccupant } from '../game/protocol/occupants';
 import {
@@ -16,7 +15,7 @@ import { showToast } from './dialogs';
 
 type BylawsModalOptions = {
   getState: () => GameState;
-  onSelectLighting: (lighting: LightingBylaw) => void;
+  onSelectLighting: (lighting: LightingPolicy) => void;
   onWildernessPolicyChange?: (policy: WildernessPolicy) => void;
   onClose?: () => void;
 };
@@ -246,12 +245,15 @@ export function initBylawsModal(options: BylawsModalOptions) {
 
     const renderLightingOptions = () => {
       const state = getState();
-      const currentLighting = state.bylaws?.lighting ?? DEFAULT_BYLAWS.lighting;
+      const currentLighting = state.policies.lighting;
       const currentPolicy = LIGHTING_POLICIES[currentLighting];
+      const appliedPowerUse = state.utilities.powerUsed;
+      const appliedMaintenance =
+        state.budget.breakdown.details.buildings.civic + state.budget.breakdown.details.buildings.zones;
       lightingOptions.innerHTML = '';
       Object.values(LIGHTING_POLICIES).forEach((policy) => {
-        const projection = projectLightingPolicy(state, policy.id);
-        const monthlyDelta = projection.deltaMaintenance * DAYS_PER_MONTH;
+        const projection = previewLightingPolicy(currentLighting, policy.id, appliedPowerUse, appliedMaintenance);
+        const monthlyDelta = projection.maintenanceDelta * DAYS_PER_MONTH;
         const moodDelta = policy.happinessTarget - currentPolicy.happinessTarget;
 
         const option = document.createElement('label');
@@ -267,7 +269,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           if (policy.id === currentLighting) return;
           onSelectLighting(policy.id);
           renderLightingOptions();
-          const toastPower = formatDelta(projection.deltaPowerUse, { unit: 'MW' });
+          const toastPower = formatDelta(projection.powerUseDelta, { unit: 'MW' });
           const toastUpkeep = formatDelta(monthlyDelta, { currency: true, unit: '/mo', precision: 0 });
           showToast(`Lighting bylaw set to ${policy.label} (${toastPower}, ${toastUpkeep}).`, {
             severity: 'info',
@@ -287,7 +289,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
         const deltas = document.createElement('div');
         deltas.className = 'bylaws-option-deltas';
         deltas.append(
-          createDeltaPill('Power demand', projection.deltaPowerUse, { unit: 'MW' }),
+          createDeltaPill('Power demand', projection.powerUseDelta, { unit: 'MW' }),
           createDeltaPill('Upkeep', monthlyDelta, { currency: true, unit: '/mo', precision: 0 }),
           createDeltaPill('Mood target', moodDelta, { precision: 2 })
         );

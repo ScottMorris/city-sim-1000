@@ -9,8 +9,7 @@ import { formatCurrency } from '../utils/currency';
 import { showToast } from './dialogs';
 import { computeRunwayDays, getQuarterSummary, getRecentMonths } from '../game/economy';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
-import { DEFAULT_BYLAWS, LIGHTING_POLICIES, applyLightingPolicy } from '../game/bylaws';
-import { computeLightingBaseStats } from '../game/bylawAnalytics';
+import { DEFAULT_LIGHTING_POLICY, LIGHTING_POLICIES, previewLightingPolicy } from '../game/bylaws';
 import type { BudgetInsights } from '../game/narrative/types';
 import {
   clampBudgetPolicy,
@@ -410,14 +409,24 @@ export function initBudgetModal(options: BudgetModalOptions) {
       const state = getState();
       const budget = state.budget;
       const runwayDays = computeRunwayDays(state.money, budget.netPerDay);
-      const lighting = state.bylaws?.lighting ?? DEFAULT_BYLAWS.lighting;
+      const lighting = state.policies.lighting;
       const lightingPolicy = LIGHTING_POLICIES[lighting];
-      const lightingBase = computeLightingBaseStats(state);
-      const baselineLighting = applyLightingPolicy(lightingBase, DEFAULT_BYLAWS.lighting);
-      const activeLighting = applyLightingPolicy(lightingBase, lighting);
-      const lightingPowerDelta = activeLighting.powerUse - baselineLighting.powerUse;
-      const lightingUpkeepDeltaPerMonth =
-        (activeLighting.maintenance - baselineLighting.maintenance) * DAYS_PER_MONTH;
+      // These are the engine's real, already-scaled figures — read straight
+      // off the wire, no client-side re-simulation. `neutralPreview` rescales
+      // them at display time (known multiplier ratio) to recover what the
+      // neutral bylaw would have produced, purely to show the delta the
+      // active bylaw is responsible for.
+      const appliedPowerUse = state.utilities.powerUsed;
+      const appliedMaintenance =
+        state.budget.breakdown.details.buildings.civic + state.budget.breakdown.details.buildings.zones;
+      const neutralPreview = previewLightingPolicy(
+        lighting,
+        DEFAULT_LIGHTING_POLICY,
+        appliedPowerUse,
+        appliedMaintenance
+      );
+      const lightingPowerDelta = appliedPowerUse - neutralPreview.powerUse;
+      const lightingUpkeepDeltaPerMonth = (appliedMaintenance - neutralPreview.maintenance) * DAYS_PER_MONTH;
 
       summary.innerHTML = `
         <div class="summary-card">

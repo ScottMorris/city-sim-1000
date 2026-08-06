@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: MIT
 
 import { PowerPlantType } from './constants';
-import { BylawState, DEFAULT_BYLAWS } from './bylaws';
 import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
@@ -314,8 +313,12 @@ export interface GameState {
   buildings: BuildingInstance[];
   nextBuildingId: number;
   education: EducationStats;
-  bylaws: BylawState;
-  /** Every player-adjustable policy family (budget, wilderness, ...). */
+  /**
+   * Every player-adjustable policy family (budget, wilderness, lighting —
+   * the Bylaws screen's lighting standard included, `#9` follow-up). Fully
+   * engine-owned and persisted in the CSIM snapshot; `ClientState` carries
+   * no bylaws slice any more.
+   */
   policies: Policies;
   /** Wilderness score, trend, and breakdown — computed by the Rust sim. */
   wilderness: WildernessStats;
@@ -529,7 +532,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       elementaryCoverage: 1,
       highCoverage: 1
     },
-    bylaws: { ...DEFAULT_BYLAWS },
     policies: createDefaultPolicies(),
     wilderness: createDefaultWildernessStats(),
     settings: createDefaultSettings()

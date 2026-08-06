@@ -62,7 +62,7 @@ import { loadGlobalSfxOverrides, saveGlobalSfxOverrides } from './game/globalSfx
 import { initNewsTicker } from './ui/newsTicker';
 import type { RadioWidget } from './ui/radio';
 import { initLoadingScreen } from './ui/loadingScreen';
-import { DEFAULT_BYLAWS } from './game/bylaws';
+import { extractLegacyLightingPolicy } from './game/bylaws';
 import { buildCitySnapshot } from './game/narrative/snapshot';
 import { NarrativeManager } from './game/narrative/narrativeManager';
 import { getCalendarPosition } from './game/time';
@@ -538,6 +538,17 @@ function performRedo(): void {
 async function loadCityContainer(container: SaveContainer): Promise<void> {
   await bridge.loadSnapshot(container.engineSnapshot);
   applyClientState(state, container.client);
+  // Migration: a CSAV saved before the lighting bylaw moved into engine
+  // `Policies` still carries `bylaws.lighting` in its client JSON — decoded
+  // verbatim by `decodeSave`'s `as ClientState` cast even though `ClientState`
+  // no longer declares that field. Fold it into a one-time `SetPolicies` so
+  // the choice survives the upgrade, mirroring `importLegacyCity`'s handling
+  // of the pre-CSAV JSON format.
+  const legacyLighting = extractLegacyLightingPolicy(container.client);
+  if (legacyLighting) {
+    state.policies = { ...state.policies, lighting: legacyLighting };
+    bridge.send(setPoliciesCmd(state.policies));
+  }
   afterCityLoaded();
 }
 
@@ -1216,8 +1227,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const bylawsModal = initBylawsModal({
     getState: () => state,
     onSelectLighting: (lighting) => {
-      state.bylaws = state.bylaws ?? { ...DEFAULT_BYLAWS };
-      state.bylaws.lighting = lighting;
+      state.policies = { ...state.policies, lighting };
+      bridge.send(setPoliciesCmd(state.policies));
     },
     onWildernessPolicyChange: (policy) => {
       state.policies = { ...state.policies, wilderness: policy };

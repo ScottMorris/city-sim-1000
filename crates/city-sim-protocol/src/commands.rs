@@ -112,6 +112,54 @@ pub struct WildernessPolicy {
     pub green_industry: bool,
 }
 
+/// City-wide lighting standard (Bylaws screen). A named enum rather than a
+/// bare string so an invalid id can never decode — mirrors the `LightingPolicy`
+/// re-export in `app/src/game/bylaws.ts` one-for-one via the `ts-rs` export.
+///
+/// `Mixed` is the neutral default: both multipliers below are exactly `1.0`,
+/// so an unset bylaw reproduces the pre-bylaw numbers bit-for-bit — the same
+/// contract `BudgetPolicy::default()`/`WildernessPolicy::default()` keep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "LightingPolicy.ts")]
+pub enum LightingPolicy {
+    /// Blend of LED retrofits and heritage lamps — the neutral baseline.
+    #[default]
+    Mixed,
+    /// LED-first rollout: trims civic/zone power draw and upkeep.
+    Efficient,
+    /// Nostalgic lamps: more power and upkeep, more ambience.
+    CarbonArc,
+}
+
+impl LightingPolicy {
+    /// City-wide multiplier on civic + zone building power draw (MW).
+    ///
+    /// Applied in `city_sim_core::sim::Sim::compute_utility_use`, and only to
+    /// civic/zone buildings' consumption — never to power *production*
+    /// (`utilities::recompute_utility_network`'s funding-scaled supply side)
+    /// and never to a power plant's own draw (power plants don't have any).
+    pub fn power_use_multiplier(self) -> f32 {
+        match self {
+            LightingPolicy::Mixed => 1.0,
+            LightingPolicy::Efficient => 0.82,
+            LightingPolicy::CarbonArc => 1.18,
+        }
+    }
+
+    /// City-wide multiplier on civic + zone building maintenance ($/day).
+    ///
+    /// Applied in `city_sim_core::economy::compute_daily_budget`, alongside
+    /// — not instead of — the department funding multiplier.
+    pub fn maintenance_multiplier(self) -> f32 {
+        match self {
+            LightingPolicy::Mixed => 1.0,
+            LightingPolicy::Efficient => 0.9,
+            LightingPolicy::CarbonArc => 1.05,
+        }
+    }
+}
+
 /// Every player-adjustable policy, grouped under one roof.
 ///
 /// New policy families nest here as additional fields rather than as new
@@ -129,6 +177,9 @@ pub struct Policies {
     /// Wilderness programmes (Bylaws screen).
     #[serde(default)]
     pub wilderness: WildernessPolicy,
+    /// City-wide lighting standard (Bylaws screen).
+    #[serde(default)]
+    pub lighting: LightingPolicy,
 }
 
 impl Policies {
@@ -137,6 +188,7 @@ impl Policies {
         Self {
             budget: self.budget.clamped(),
             wilderness: self.wilderness,
+            lighting: self.lighting,
         }
     }
 }
@@ -276,6 +328,7 @@ mod tests {
                 nature_reserve: true,
                 green_industry: false,
             },
+            lighting: LightingPolicy::CarbonArc,
         };
         let bytes = to_allocvec(&policies).unwrap();
         let back: Policies = from_bytes(&bytes).unwrap();
@@ -287,6 +340,7 @@ mod tests {
         let p = Policies::default();
         assert_eq!(p.budget, BudgetPolicy::default());
         assert_eq!(p.wilderness, WildernessPolicy::default());
+        assert_eq!(p.lighting, LightingPolicy::Mixed);
     }
 
     #[test]
@@ -297,9 +351,45 @@ mod tests {
                 ..BudgetPolicy::default()
             },
             wilderness: WildernessPolicy::default(),
+            lighting: LightingPolicy::Efficient,
         }
         .clamped();
         assert_eq!(p.budget.tax_residential, MAX_TAX_RATE);
+        // `lighting` has no illegal range to clamp — `clamped()` must still
+        // carry it through untouched rather than silently resetting it.
+        assert_eq!(p.lighting, LightingPolicy::Efficient);
+    }
+
+    #[test]
+    fn default_lighting_policy_is_mixed_and_neutral() {
+        let p = LightingPolicy::default();
+        assert_eq!(p, LightingPolicy::Mixed);
+        assert_eq!(p.power_use_multiplier(), 1.0);
+        assert_eq!(p.maintenance_multiplier(), 1.0);
+    }
+
+    #[test]
+    fn non_default_lighting_policies_are_not_neutral() {
+        // Pins the exact multipliers against `app/src/game/bylaws.ts`'s
+        // `LIGHTING_POLICIES` display table — the two must agree, since the
+        // TS table exists only to preview what these values will do.
+        assert_eq!(LightingPolicy::Efficient.power_use_multiplier(), 0.82);
+        assert_eq!(LightingPolicy::Efficient.maintenance_multiplier(), 0.9);
+        assert_eq!(LightingPolicy::CarbonArc.power_use_multiplier(), 1.18);
+        assert_eq!(LightingPolicy::CarbonArc.maintenance_multiplier(), 1.05);
+    }
+
+    #[test]
+    fn lighting_policy_round_trips_postcard() {
+        for policy in [
+            LightingPolicy::Mixed,
+            LightingPolicy::Efficient,
+            LightingPolicy::CarbonArc,
+        ] {
+            let bytes = to_allocvec(&policy).unwrap();
+            let back: LightingPolicy = from_bytes(&bytes).unwrap();
+            assert_eq!(back, policy);
+        }
     }
 
     #[test]

@@ -273,6 +273,12 @@ impl Simulation {
         // Mirrors the building-state gate above: no water system yet means
         // water use is stubbed to zero, not accumulated into a deficit.
         let water_active = self.water_enabled && self.state.has_water_system();
+        // Lighting bylaw (#9 follow-up): scales civic + zone power draw only
+        // — never a power plant's own draw (`is_power_plant` templates carry
+        // `power_use: 0.0` today, but the gate is explicit rather than
+        // relying on that). `LightingPolicy::Mixed` (default) multiplies by
+        // 1.0, so an unset bylaw reproduces the pre-bylaw numbers exactly.
+        let light_power = self.state.policies.lighting.power_use_multiplier();
         let mut power_used: f32 = 0.0;
         let mut water_used: f32 = 0.0;
         for b in &self.state.buildings {
@@ -282,7 +288,12 @@ impl Simulation {
             let Some(tmpl) = get_building_template(b.kind) else {
                 continue;
             };
-            power_used += tmpl.power_use;
+            let scaled_power_use = if tmpl.is_civic || tmpl.is_zone {
+                tmpl.power_use * light_power
+            } else {
+                tmpl.power_use
+            };
+            power_used += scaled_power_use;
             let wu = if water_active { tmpl.water_use } else { 0.0 };
             water_used += wu;
 
@@ -300,16 +311,16 @@ impl Simulation {
             if let Some(idx) = self.state.tile_index(b.origin.0, b.origin.1) {
                 if let Some(&label) = self.state.utility_networks.power_labels.get(idx) {
                     debug_assert!(
-                        label != 0 || tmpl.power_use <= 0.0,
+                        label != 0 || scaled_power_use <= 0.0,
                         "Active building {:?} draws {} MW but its origin tile is unlabelled \
                          (unpowered) — the requires_power invariant this attribution relies on \
                          may be broken",
                         b.kind,
-                        tmpl.power_use
+                        scaled_power_use
                     );
                     if label != 0 {
                         self.state.utility_networks.power_components[(label - 1) as usize].used +=
-                            tmpl.power_use;
+                            scaled_power_use;
                     }
                 }
                 if water_active {
@@ -1190,6 +1201,57 @@ mod tests {
                 .components(UtilityKind::Water)
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn lighting_bylaw_scales_civic_and_zone_power_use_only() {
+        use crate::buildings::BuildingInstance;
+        use crate::migrate::set_v4_kind;
+        use city_sim_protocol::building_kind::BuildingKind;
+        use city_sim_protocol::commands::LightingPolicy;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut sim = Simulation::new(2, 1, 1);
+        {
+            let s = &mut sim.state;
+            s.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+            s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(1, BuildingKind::CoalPlant, (0, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+            set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Residential);
+            s.tile_at_mut(1, 0).unwrap().building_id = Some(2);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(2, BuildingKind::Residential, (1, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+        }
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        let neutral_used = sim.state.utilities.power_used;
+        assert_eq!(neutral_used, 2, "Residential draws 1.5 MW, rounds to 2");
+
+        sim.state.policies.lighting = LightingPolicy::Efficient;
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        assert_eq!(
+            sim.state.utilities.power_used, 1,
+            "1.5 MW * 0.82 efficient multiplier rounds to 1"
+        );
+
+        // The coal plant's own maintenance/output are power-plant concerns,
+        // not power *use* — this only pins that the plant's presence didn't
+        // itself contribute a scaled draw (it has none to scale).
+        sim.state.policies.lighting = LightingPolicy::CarbonArc;
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        assert_eq!(
+            sim.state.utilities.power_used, 2,
+            "1.5 MW * 1.18 carbon-arc multiplier rounds to 2"
         );
     }
 
