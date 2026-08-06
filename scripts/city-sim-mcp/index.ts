@@ -217,7 +217,7 @@ server.tool(
 
 server.tool(
   'get_tile',
-  'Get the state of a single tile: kind, powered, watered, abandoned, happiness, elevation, buildingId.',
+  'Get the state of a single tile: kind, powered, watered, abandoned, happiness, elevation, buildingId. `kind` is one dominant label picked by display precedence (structure > zone > trees > power line > rail > road) — a tile can carry a road on the surface, a power line overhead, and a pipe underground all at once, and `kind` only ever shows the winner. `occupants` gives the full picture as `{ underground: string[], surface: string[], overhead: string[] }`, e.g. to confirm a `water_pipe` placement actually landed underneath a road rather than being masked by it.',
   {
     x: z.number().int().describe('Tile column (0 = left edge)'),
     y: z.number().int().describe('Tile row (0 = top edge)'),

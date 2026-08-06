@@ -14,7 +14,7 @@ import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
 import { nextStrokeId } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { dominantOccupantLabel } from './protocol/tileLabel';
+import { dominantOccupantLabel, occupantsByStratum } from './protocol/tileLabel';
 
 // Bresenham's line — returns all integer (x,y) pairs from (x0,y0) to (x1,y1).
 function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
@@ -195,6 +195,14 @@ export function initMcpBridge(
     if (!t) return null;
     return {
       kind: dominantOccupantLabel(s, t),
+      // `kind` collapses to one label per the legacy display precedence
+      // (structure > zone > trees > power line > rail > road) — a tile can
+      // carry a road on the surface *and* a power line overhead *and* a
+      // pipe underground all at once. `occupants` is the same information
+      // without the collapse, so a script can tell "there's a road here,
+      // just hidden behind a power line" from "no road here" — e.g. to
+      // confirm a `water_pipe` placement actually landed underneath a road.
+      occupants: occupantsByStratum(s, t),
       powered: t.powered,
       watered: t.watered,
       abandoned: t.abandoned ?? false,
