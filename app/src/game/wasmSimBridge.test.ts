@@ -183,6 +183,33 @@ describe('WasmSimBridge undo/redo', () => {
     expect(state.tiles).toHaveLength(before);
   });
 
+  it('newCity mutates the existing mirror in place instead of orphaning main.ts\'s reference', async () => {
+    // Regression test: newCity() used to do `this.state = fresh`, rebinding
+    // the bridge's mirror to a new object. main.ts holds the object handed
+    // to the constructor (`state` here) for the lifetime of the page and
+    // never re-reads it from `bridge.getState()`, so that rebind orphaned
+    // main.ts's reference on the pre-reset city forever — the renderer/HUD
+    // kept redrawing stale data while `getState()`/MCP tools correctly saw
+    // the new one. Found via an MCP playtest calling the `reset` tool.
+    const { worker, state, bridge } = makeBridge();
+    const fresh = createInitialState(4, 4, 99);
+    const pending = bridge.newCity(fresh);
+    await Promise.resolve(); // let the readyPromise chain post the message
+    const sent = worker.sent.find(m => m.type === 'new_city');
+    expect(sent).toBeDefined();
+    const requestId = (sent!.payload as { requestId: number }).requestId;
+    worker.emit({
+      type: 'load_result', requestId, ok: true,
+      width: 4, height: 4, seed: 99, policies: fresh.policies,
+      bytes: new Uint8Array(4 * 4 * 8), stats: { ...zeroStats(), money: fresh.money },
+      history: flags(false, false)
+    });
+    await pending;
+    expect(bridge.getState()).toBe(state);
+    expect(state.width).toBe(4);
+    expect(state.seed).toBe(99);
+  });
+
   it('emits HistoryChanged only on flag transitions', () => {
     const { worker, bridge, events } = makeBridge();
     const historyEvents = () => events.filter(e => e.type === 'HistoryChanged');
