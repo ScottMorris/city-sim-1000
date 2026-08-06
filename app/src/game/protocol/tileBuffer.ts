@@ -1,3 +1,8 @@
+// tileBuffer.ts — TS decoder for the live SoA tile buffer wire format.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import type { Tile } from '../gameState';
 import { ServiceId } from '../services';
 import { Terrain, ZoneDensity } from './occupants';

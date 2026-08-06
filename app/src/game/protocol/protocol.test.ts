@@ -1,3 +1,8 @@
+// protocol.test.ts — TileKind/tile-buffer/legacy-tile-buffer parity with the Rust source.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
  * Protocol parity tests — asserts the TS mirror matches the Rust source.
  *
