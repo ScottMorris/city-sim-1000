@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: MIT
 
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from '../constants';
-import { TileKind } from '../gameState';
 import { Tool } from '../toolTypes';
 import { ServiceId } from '../services';
 
@@ -14,6 +13,32 @@ export enum BuildingCategory {
   Zone = 'zone'
 }
 
+/**
+ * Which static building this template is — the live, renderer/gameplay-facing
+ * identity a `BuildingTemplate` carries, as opposed to `id` (the save/MCP/
+ * `Tool`-compatible lookup key; identical in value to the corresponding
+ * member here for every template except the three zone lots, whose `id`
+ * carries a `zone-` prefix `BuildingKind` never did). Deliberately its own
+ * enum rather than a reuse of `TileKind`: `TileKind` is frozen legacy-save
+ * vocabulary now (`docs/tile-model.md`), and every member's string value is
+ * copied from it once, on purpose, so today's save/MCP spelling doesn't move.
+ */
+export enum BuildingKind {
+  HydroPlant = 'hydro',
+  CoalPlant = 'coal',
+  WindTurbine = 'wind',
+  SolarFarm = 'solar',
+  WaterPump = 'pump',
+  WaterTower = 'water_tower',
+  Park = 'park',
+  ParkLarge = 'park_large',
+  ElementarySchool = 'elementary_school',
+  HighSchool = 'high_school',
+  Residential = 'residential',
+  Commercial = 'commercial',
+  Industrial = 'industrial'
+}
+
 export interface BuildingTemplate {
   id: string;
   name: string;
@@ -21,7 +46,7 @@ export interface BuildingTemplate {
   footprint: { width: number; height: number };
   cost: number;
   maintenance: number;
-  tileKind: TileKind;
+  kind: BuildingKind;
   spriteKey?: string;
   requiresPower?: boolean;
   requiresWater?: boolean;
@@ -36,6 +61,14 @@ export interface BuildingTemplate {
     coverageRadius: number;
     capacity: number;
   };
+  /** Flat-colour fallback for the renderer's structure ladder rung
+   *  (`dominantColour`/`minimapBaseColour` in `rendering/tileRenderUtils.ts`/
+   *  `ui/minimap.ts`) — the display colour a live instance of this template
+   *  paints when no sprite has resolved for its tile. Zone templates leave
+   *  this unset: a developed lot's occupant is a zone tag, not `Structure`
+   *  (see `isDevelopedZone`), so the structure rung never looks at their
+   *  colour — the zone rung reads `OCCUPANT_COLOURS` instead. */
+  colour?: number;
 }
 
 export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
@@ -46,7 +79,8 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].maintenancePerDay,
-    tileKind: TileKind.HydroPlant,
+    kind: BuildingKind.HydroPlant,
+    colour: 0x50d1ff,
     requiresPower: false,
     power: { type: PowerPlantType.Hydro, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].outputMw }
   },
@@ -57,7 +91,8 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Coal].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Coal].maintenancePerDay,
-    tileKind: TileKind.CoalPlant,
+    kind: BuildingKind.CoalPlant,
+    colour: 0x888888,
     requiresPower: false,
     power: { type: PowerPlantType.Coal, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Coal].outputMw }
   },
@@ -68,7 +103,8 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Wind].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Wind].maintenancePerDay,
-    tileKind: TileKind.WindTurbine,
+    kind: BuildingKind.WindTurbine,
+    colour: 0xddeeff,
     requiresPower: false,
     power: { type: PowerPlantType.Wind, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Wind].outputMw }
   },
@@ -79,75 +115,82 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Solar].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Solar].maintenancePerDay,
-    tileKind: TileKind.SolarFarm,
+    kind: BuildingKind.SolarFarm,
+    colour: 0xffdd44,
     requiresPower: false,
     power: { type: PowerPlantType.Solar, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Solar].outputMw }
   }
 };
 
 export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
-  [TileKind.WaterPump]: {
-    id: TileKind.WaterPump,
+  [BuildingKind.WaterPump]: {
+    id: BuildingKind.WaterPump,
     name: 'Water Pump',
     category: BuildingCategory.Civic,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.WaterPump],
     maintenance: 5,
-    tileKind: TileKind.WaterPump,
+    kind: BuildingKind.WaterPump,
+    colour: 0x4ac6b7,
     requiresPower: true,
     waterOutput: 50
   },
-  [TileKind.WaterTower]: {
-    id: TileKind.WaterTower,
+  [BuildingKind.WaterTower]: {
+    id: BuildingKind.WaterTower,
     name: 'Water Tower',
     category: BuildingCategory.Civic,
     footprint: { width: 2, height: 2 },
     cost: BUILD_COST[Tool.WaterTower],
     maintenance: 12,
-    tileKind: TileKind.WaterTower,
+    kind: BuildingKind.WaterTower,
+    colour: 0x94d1ff,
     requiresPower: true,
     waterOutput: 120
   },
-  [TileKind.Park]: {
-    id: TileKind.Park,
+  [BuildingKind.Park]: {
+    id: BuildingKind.Park,
     name: 'Small Park',
     category: BuildingCategory.Civic,
     footprint: { width: 1, height: 1 },
     cost: 10,
     maintenance: 0.05,
-    tileKind: TileKind.Park,
+    kind: BuildingKind.Park,
+    colour: 0x2fa05a,
     requiresPower: false
   },
-  [TileKind.ParkLarge]: {
-    id: TileKind.ParkLarge,
+  [BuildingKind.ParkLarge]: {
+    id: BuildingKind.ParkLarge,
     name: 'Large Park',
     category: BuildingCategory.Civic,
     footprint: { width: 2, height: 2 },
     cost: 32,
     maintenance: 0.16,
-    tileKind: TileKind.ParkLarge,
+    kind: BuildingKind.ParkLarge,
+    colour: 0x2fa05a,
     requiresPower: false
   },
-  [TileKind.ElementarySchool]: {
-    id: TileKind.ElementarySchool,
+  [BuildingKind.ElementarySchool]: {
+    id: BuildingKind.ElementarySchool,
     name: 'Elementary School',
     category: BuildingCategory.Civic,
     footprint: { width: 2, height: 2 },
     cost: BUILD_COST[Tool.ElementarySchool],
     maintenance: 40,
-    tileKind: TileKind.ElementarySchool,
+    kind: BuildingKind.ElementarySchool,
+    colour: 0x6aa7ff,
     requiresPower: true,
     powerUse: 4,
     service: { id: ServiceId.EducationElementary, coverageRadius: 8, capacity: 180 }
   },
-  [TileKind.HighSchool]: {
-    id: TileKind.HighSchool,
+  [BuildingKind.HighSchool]: {
+    id: BuildingKind.HighSchool,
     name: 'High School',
     category: BuildingCategory.Civic,
     footprint: { width: 2, height: 2 },
     cost: BUILD_COST[Tool.HighSchool],
     maintenance: 55,
-    tileKind: TileKind.HighSchool,
+    kind: BuildingKind.HighSchool,
+    colour: 0x8f7bff,
     requiresPower: true,
     powerUse: 5,
     service: { id: ServiceId.EducationHigh, coverageRadius: 9, capacity: 160 }
@@ -155,40 +198,40 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
 };
 
 export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
-  [TileKind.Residential]: {
+  [BuildingKind.Residential]: {
     id: 'zone-residential',
     name: 'Residential Lot',
     category: BuildingCategory.Zone,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.Residential],
     maintenance: 1,
-    tileKind: TileKind.Residential,
+    kind: BuildingKind.Residential,
     requiresPower: true,
     powerUse: 1.5,
     waterUse: 1,
     populationCapacity: 14
   },
-  [TileKind.Commercial]: {
+  [BuildingKind.Commercial]: {
     id: 'zone-commercial',
     name: 'Commercial Lot',
     category: BuildingCategory.Zone,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.Commercial],
     maintenance: 1.2,
-    tileKind: TileKind.Commercial,
+    kind: BuildingKind.Commercial,
     requiresPower: true,
     powerUse: 2.5,
     waterUse: 1.5,
     jobsCapacity: 8
   },
-  [TileKind.Industrial]: {
+  [BuildingKind.Industrial]: {
     id: 'zone-industrial',
     name: 'Industrial Lot',
     category: BuildingCategory.Zone,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.Industrial],
     maintenance: 1.4,
-    tileKind: TileKind.Industrial,
+    kind: BuildingKind.Industrial,
     requiresPower: true,
     powerUse: 3,
     waterUse: 2,

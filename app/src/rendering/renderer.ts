@@ -5,11 +5,11 @@
 
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { Camera } from './camera';
-import { GameState, MinimapOverlay, TileKind, ViewStratum, getTile } from '../game/gameState';
+import { GameState, MinimapOverlay, ViewStratum, getTile } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
 import { ECO_RANGE } from '../game/protocol/tileBuffer';
 import { BuildingStatus } from '../game/buildings/state';
-import { getBuildingTemplate, getToolCost } from '../game/buildings/templates';
+import { BuildingKind, getBuildingTemplate, getToolCost } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveIndicatorKey, resolveTileSprite } from './tileRenderUtils';
@@ -43,7 +43,6 @@ export class MapRenderer {
   private container: Container;
   private tileLabels: Map<number, Text>;
   private labelPool: Text[] = [];
-  private palette: Record<TileKind, number>;
   private tileTextures: TileTextures;
   private tileSprites: Map<number, Sprite>;
   private overlaySprites: Map<number, Sprite>;
@@ -57,9 +56,8 @@ export class MapRenderer {
     parent: HTMLElement,
     camera: Camera,
     tileSize: number,
-    palette: Record<TileKind, number>,
     tileTextures: TileTextures = {
-      tiles: {},
+      terrain: {},
       road: {},
       rail: {},
       railCrossing: {},
@@ -81,7 +79,6 @@ export class MapRenderer {
     this.parent = parent;
     this.camera = camera;
     this.tileSize = tileSize;
-    this.palette = palette;
     this.tileTextures = tileTextures;
     this.spriteLayer = new Container();
     // Drawn above the tile sprites: infrastructure that crosses rather than
@@ -209,7 +206,7 @@ export class MapRenderer {
           // overlay on top, and count it as sprited so the debug label
           // doesn't also stamp a "P" over it.
           this.hideSprite(idx);
-          const color = getTileColour(tile, this.palette, buildingLookup);
+          const color = getTileColour(tile, buildingLookup);
           this.mapLayer
             .rect(this.camera.x + x * size, this.camera.y + y * size, size, size)
             .fill({ color, alpha: 0.95 * surfaceAlpha });
@@ -223,7 +220,7 @@ export class MapRenderer {
         } else {
           this.hideSprite(idx);
           this.hideOverlaySprite(idx);
-          const color = getTileColour(tile, this.palette, buildingLookup);
+          const color = getTileColour(tile, buildingLookup);
           this.mapLayer
             .rect(
               this.camera.x + x * size,
@@ -253,8 +250,8 @@ export class MapRenderer {
             const t = getTile(state, x + dx, y + dy);
             if (!t) return false;
             if (hasOccupant(t.underground, Occupant.Pipe)) return true;
-            const templateKind = t.buildingId !== undefined ? buildingLookup.get(t.buildingId)?.template?.tileKind : undefined;
-            return templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower;
+            const templateKind = t.buildingId !== undefined ? buildingLookup.get(t.buildingId)?.template?.kind : undefined;
+            return templateKind === BuildingKind.WaterPump || templateKind === BuildingKind.WaterTower;
           };
 
           this.mapLayer.rect(cx - offset, cy - offset, pipeWidth, pipeWidth).fill({ color: 0x555555 });
@@ -335,7 +332,7 @@ export class MapRenderer {
     for (const entry of buildingLookup.values()) {
       const template = entry.template;
       if (!template) continue;
-      if (template.tileKind !== TileKind.WaterPump && template.tileKind !== TileKind.WaterTower) continue;
+      if (template.kind !== BuildingKind.WaterPump && template.kind !== BuildingKind.WaterTower) continue;
       const { width, height } = template.footprint;
       const { x: originX, y: originY } = entry.origin;
 
@@ -399,7 +396,7 @@ export class MapRenderer {
     if (overlay === 'base' && stratum !== 'underground') return;
 
     const templateKindOf = (tile: NonNullable<ReturnType<typeof getTile>>) =>
-      tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
+      tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.kind : undefined;
 
     const pickTint = (tile: ReturnType<typeof getTile>) => {
       if (!tile) return null;
@@ -422,7 +419,7 @@ export class MapRenderer {
         }
 
         const templateKind = templateKindOf(tile);
-        if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
+        if (templateKind === BuildingKind.WaterPump || templateKind === BuildingKind.WaterTower) {
           return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
         }
         // Show watered status on buildings/zones
@@ -463,7 +460,7 @@ export class MapRenderer {
 
       if (overlay === 'education') {
         const templateKind = templateKindOf(tile);
-        if (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) {
+        if (templateKind === BuildingKind.ElementarySchool || templateKind === BuildingKind.HighSchool) {
           return { color: 0x8f7bff, alpha: 0.4 };
         }
         if (isZone(tile)) {
@@ -486,7 +483,7 @@ export class MapRenderer {
         return { color: tile.watered ? WATER_OVERLAY_COLOUR : 0x888888, alpha: 0.6 };
       }
       const templateKind = templateKindOf(tile);
-      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
+      if (templateKind === BuildingKind.WaterPump || templateKind === BuildingKind.WaterTower) {
         return { color: tile.powered ? 0x7ad5ff : 0xffcc70, alpha: 0.4 };
       }
       if (tile.watered) return { color: WATER_OVERLAY_COLOUR, alpha: 0.2 };
@@ -557,10 +554,10 @@ export class MapRenderer {
     if (!skipFitCheck && !this.footprintFits(state, origin, footprint)) return;
     const reach = computeEducationReach(state, origin, templateId);
     if (!reach.size) return;
-    const color =
-      templateId === TileKind.HighSchool || templateId === Tool.HighSchool
-        ? 0x8f7bff
-        : 0x6aa7ff;
+    // `templateId` is either a `BuildingTemplate.id` (an existing school) or a
+    // `Tool` (the hover preview before one's placed) — the same string either
+    // way, since every school template's `id` is its placing `Tool`'s value.
+    const color = templateId === BuildingKind.HighSchool ? 0x8f7bff : 0x6aa7ff;
 
     for (const idx of reach) {
       const x = idx % state.width;

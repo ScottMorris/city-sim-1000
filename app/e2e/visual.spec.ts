@@ -41,7 +41,7 @@
 // one minimap tile going rail-brown to road-grey — a step of 0.155, smaller than
 // that.
 // Measured: with the engine reverted and `threshold: 0.2`, all four baselines
-// pass and only the `kindAt` assertions below notice. If either setting is ever
+// pass and only the `tileAt` assertions below notice. If either setting is ever
 // loosened, this spec stops being able to see the delta it exists for.
 //
 // Run:     bun run test:visual
@@ -84,9 +84,14 @@ const line = (page: Page, t: string, x1: number, y1: number, x2: number, y2: num
 const rect = (page: Page, t: string, x1: number, y1: number, x2: number, y2: number) =>
   mcp(page, 'apply_tool_rect', { tool: t, x1, y1, x2, y2 });
 
-async function kindAt(page: Page, x: number, y: number): Promise<string> {
-  const t = (await mcp(page, 'get_tile', { x, y })) as { kind: string };
-  return t.kind;
+interface McpTile {
+  terrain: 'land' | 'water';
+  occupants: { underground: string[]; surface: string[]; overhead: string[] };
+  buildingId: number | null;
+}
+
+async function tileAt(page: Page, x: number, y: number): Promise<McpTile> {
+  return (await mcp(page, 'get_tile', { x, y })) as McpTile;
 }
 
 /**
@@ -183,7 +188,7 @@ async function buildFixture(page: Page): Promise<void> {
   // "Transparent twins of the hydro set … grass fill omitted"), and
   // `minimap.ts` tests `powerOverlay` before anything else, so both spellings
   // take the hydro palette there too. Deleting the `PowerLine` rung from
-  // `wire_kind` leaves all four baselines byte-identical; only the `kindAt`
+  // `wire_kind` leaves all four baselines byte-identical; only the `tileAt`
   // assertion below notices. So delta 2's documented visual consequence is
   // real as a code path and nil as a rendering, and this pair of tiles is
   // pinned numerically rather than visually. Keep them in the shot anyway:
@@ -236,24 +241,34 @@ test.describe('tile derivation — visual regression', () => {
 
     await buildFixture(page);
 
-    // Assert the derived kinds before looking at pixels. A build that silently
-    // failed (a refusal, a renamed tool) would otherwise show up as an
-    // inscrutable image diff; this names it instead. These four also pin the
-    // three deltas numerically, on the TypeScript side of the wire.
+    // Assert the derived tile state before looking at pixels. A build that
+    // silently failed (a refusal, a renamed tool) would otherwise show up as
+    // an inscrutable image diff; this names it instead. These also pin the
+    // three deltas on the TypeScript side of the wire — as strata facts now,
+    // there being no single collapsed `kind` left to pin them as.
+    const roadLastCrossing = await tileAt(page, 15, 26);
     expect
-      .soft(await kindAt(page, 15, 26), 'delta 1: road-last crossing is spelled rail')
-      .toBe('rail');
+      .soft(roadLastCrossing.occupants.surface, 'delta 1: road-last crossing carries both road and rail')
+      .toEqual(expect.arrayContaining(['road', 'rail']));
+    const railLastCrossing = await tileAt(page, 20, 26);
     expect
-      .soft(await kindAt(page, 20, 26), 'delta 1: rail-last crossing is spelled rail')
-      .toBe('rail');
+      .soft(railLastCrossing.occupants.surface, 'delta 1: rail-last crossing carries both road and rail')
+      .toEqual(expect.arrayContaining(['road', 'rail']));
+    const regradedLine = await tileAt(page, 37, 26);
     expect
-      .soft(await kindAt(page, 37, 26), 'delta 2: a regraded hydro line stays a line')
-      .toBe('powerline');
+      .soft(regradedLine.occupants.overhead, 'delta 2: a regraded hydro line stays a line')
+      .toContain('powerline');
+    const razedPark = await tileAt(page, 48, 24);
     expect
-      .soft(await kindAt(page, 48, 24), 'delta 3: a razed park leaves bare ground')
+      .soft(razedPark.buildingId, 'delta 3: a razed park leaves no ghost building behind')
+      .toBeNull();
+    expect
+      .soft(razedPark.terrain, 'delta 3: a razed park leaves bare ground')
       .toBe('land');
-    expect.soft(await kindAt(page, 50, 24), 'the un-razed park control').toBe('park');
-    expect.soft(await kindAt(page, 43, 28), 'the bulldozer does not drain a lake').toBe('water');
+    const unrazedPark = await tileAt(page, 50, 24);
+    expect.soft(unrazedPark.occupants.surface, 'the un-razed park control').toContain('park');
+    const lakeTile = await tileAt(page, 43, 28);
+    expect.soft(lakeTile.terrain, 'the bulldozer does not drain a lake').toBe('water');
 
     // Collapse the minimap so it cannot drift into a canvas clip if the HUD
     // is ever relaid out. It comes back for its own shot below.

@@ -1,31 +1,30 @@
-// sprites.ts — tile size constant and the flat-colour fallback palette per TileKind.
+// sprites.ts — tile size constant and the flat-colour fallback palettes, split by axis.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { TileKind } from '../game/gameState';
+import { Occupant, Terrain } from '../game/protocol/occupants';
 
 export const TILE_SIZE = 28;
 
-export const palette: Record<TileKind, number> = {
-  [TileKind.Land]: 0x345c3d,
-  [TileKind.Water]: 0x234c7f,
-  [TileKind.Tree]: 0x3c7a4b,
-  [TileKind.Road]: 0x7f8894,
-  [TileKind.Rail]: 0x8c6b3e,
-  [TileKind.Residential]: 0xb3e675,
-  [TileKind.Commercial]: 0x5bc0eb,
-  [TileKind.Industrial]: 0xf08c42,
-  [TileKind.PowerLine]: 0xe9d985,
-  [TileKind.HydroPlant]: 0x50d1ff,
-  [TileKind.CoalPlant]: 0x888888,
-  [TileKind.WindTurbine]: 0xddeeff,
-  [TileKind.SolarFarm]: 0xffdd44,
-  [TileKind.WaterPump]: 0x4ac6b7,
-  [TileKind.WaterTower]: 0x94d1ff,
-  [TileKind.WaterPipe]: 0x73c3c9,
-  [TileKind.ElementarySchool]: 0x6aa7ff,
-  [TileKind.HighSchool]: 0x8f7bff,
-  [TileKind.Park]: 0x2fa05a,
-  [TileKind.ParkLarge]: 0x2fa05a
+/** The ground itself — independent of anything occupying it. */
+export const TERRAIN_COLOURS: Record<Terrain, number> = {
+  [Terrain.Land]: 0x345c3d,
+  [Terrain.Water]: 0x234c7f
+};
+
+/** Flat-colour fallback per occupant, for the occupants that can win a
+ *  tile's display colour on their own (rather than through a
+ *  `BuildingTemplate.colour` lookup) — trees, transport, power lines, and
+ *  the three zone tags. Structures resolve through their template instead
+ *  (see `BuildingTemplate.colour`), so `Occupant.Structure` has no entry
+ *  here. */
+export const OCCUPANT_COLOURS: Partial<Record<Occupant, number>> = {
+  [Occupant.Trees]: 0x3c7a4b,
+  [Occupant.Road]: 0x7f8894,
+  [Occupant.Rail]: 0x8c6b3e,
+  [Occupant.ZoneResidential]: 0xb3e675,
+  [Occupant.ZoneCommercial]: 0x5bc0eb,
+  [Occupant.ZoneIndustrial]: 0xf08c42,
+  [Occupant.PowerLine]: 0xe9d985
 };

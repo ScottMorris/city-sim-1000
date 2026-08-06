@@ -42,7 +42,7 @@ import { initAutosave } from './game/autosave';
 import { initMcpBridge } from './game/mcpBridge';
 import { createCamera, centerCamera, screenToTile, zoomAt } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
-import { palette, TILE_SIZE } from './rendering/sprites';
+import { TILE_SIZE } from './rendering/sprites';
 import { loadPaletteTexture, loadTileTextures } from './rendering/tileAtlas';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import { createHud } from './ui/hud';
@@ -1166,7 +1166,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     viewport.style.setProperty('--toolbar-visible-height', '0px');
   }
 
-  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette, tileTextures);
+  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, tileTextures);
   await renderer.init(wrapper);
   centerCamera(state, wrapper, TILE_SIZE, camera);
 
@@ -1441,8 +1441,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     },
     onJumpToTile: ({ x, y }) => centerCameraOnTile(x, y),
     getViewportSize: minimapViewport,
-    onStratumToggle: toggleViewStratum,
-    palette
+    onStratumToggle: toggleViewStratum
   });
   syncMinimapSettings(state.settings.minimap);
 

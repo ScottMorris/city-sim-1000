@@ -208,7 +208,7 @@ interface Tile {
 }
 ```
 
-`TileKind` still exists (`gameState.ts`) but only as a building-template key (`Residential`, `WaterPump`, `HydroPlant`, ...) and in the frozen legacy `.citysim` save format — never as a per-tile field. A level crossing (road + rail on the same tile), a hydro line strung over a road, or a zoned lot developed under a power line are all just multiple bits in the relevant stratum, not special cases.
+`TileKind` still exists (`gameState.ts`) but only in the frozen legacy `.citysim` save format — never as a per-tile field, and no longer as the building-template key either: `buildings/templates.ts`'s `BuildingTemplate.kind` is a separate `BuildingKind` enum (`Residential`, `WaterPump`, `HydroPlant`, ...) with the same string values, so save/MCP spelling didn't move. A level crossing (road + rail on the same tile), a hydro line strung over a road, or a zoned lot developed under a power line are all just multiple bits in the relevant stratum, not special cases.
 
 ### Tile Rendering Requirements
 

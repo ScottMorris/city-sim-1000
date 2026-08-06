@@ -1,54 +1,53 @@
-// tileLabel.ts — dominantOccupantLabel: a tile's current display kind, computed live from strata.
+// tileLabel.ts — occupantsByStratum: a tile's occupants, labelled and grouped by stratum, computed live from strata.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { TileKind } from '../gameState';
 import type { GameState, Tile } from '../gameState';
-import { getBuildingTemplate } from '../buildings/templates';
-import { legacyKind } from './legacyProjection';
+import { BuildingKind, getBuildingTemplate } from '../buildings/templates';
 import { Occupant, iterSet } from './occupants';
 
-function structureKindOf(state: GameState, buildingId: number | undefined): TileKind | undefined {
+/**
+ * Display/wire labels for the occupants that are infrastructure rather than
+ * buildings — nothing behind them carries a `BuildingKind`, so they own
+ * their vocabulary here. Values are the spellings `get_tile`/the HUD tile
+ * inspector have always used (formerly read off `TileKind`'s members; the
+ * strings must not move — MCP scripts filter on them). The two reserved
+ * occupants (`Subway`/`Fibre`) have no label yet — see `occupants.ts`.
+ */
+const OCCUPANT_LABELS: Partial<Record<Occupant, string>> = {
+  [Occupant.Pipe]: 'water_pipe',
+  [Occupant.Road]: 'road',
+  [Occupant.Rail]: 'rail',
+  [Occupant.PowerLine]: 'powerline',
+  [Occupant.Trees]: 'tree'
+};
+
+function structureKindOf(state: GameState, buildingId: number | undefined): BuildingKind | undefined {
   if (buildingId === undefined) return undefined;
   const instance = state.buildings.find((b) => b.id === buildingId);
-  return instance ? getBuildingTemplate(instance.templateId)?.tileKind : undefined;
+  return instance ? getBuildingTemplate(instance.templateId)?.kind : undefined;
 }
 
 /**
- * The tile's dominant occupant, as a display/query string — used by the HUD
- * tile inspector, the minimap, and `mcpBridge.ts`'s `get_tile`/
- * `get_tiles_where` handlers. Deliberately separate from `legacyKind`, even
- * though today's derivation is identical: this one only needs to stay
- * human-readable and current, `legacyKind` needs to stay byte-exact with old
- * saves forever, and nothing here should have to care if those two
- * requirements ever pull apart.
+ * One occupant's label. `Structure` resolves through the building instance
+ * to its `BuildingKind` — a live buildable identity; zone tags label as the
+ * `BuildingKind` their grown lot would carry; plain infrastructure reads
+ * `OCCUPANT_LABELS`. `undefined` covers the two reserved occupants
+ * (`Subway`/`Fibre`) with no label yet — see `occupants.ts`.
  */
-export function dominantOccupantLabel(state: GameState, tile: Tile): string {
-  return legacyKind({
-    terrain: tile.terrain,
-    surface: tile.surface,
-    overhead: tile.overhead,
-    buildingId: tile.buildingId,
-    structureKindOf: (buildingId) => structureKindOf(state, buildingId)
-  });
-}
-
-/** One occupant's label — same `TileKind` vocabulary `dominantOccupantLabel` uses, so a
- * script filtering on either agrees on spelling. `Structure` resolves through the building
- * instance the same way `dominantOccupantLabel` does; `undefined` covers the two reserved
- * occupants (`Subway`/`Fibre`) with no `TileKind` yet — see `occupants.ts`. */
 function occupantLabel(state: GameState, tile: Tile, occupant: Occupant): string | undefined {
   switch (occupant) {
-    case Occupant.Pipe: return TileKind.WaterPipe;
-    case Occupant.Road: return TileKind.Road;
-    case Occupant.Rail: return TileKind.Rail;
-    case Occupant.ZoneResidential: return TileKind.Residential;
-    case Occupant.ZoneCommercial: return TileKind.Commercial;
-    case Occupant.ZoneIndustrial: return TileKind.Industrial;
+    case Occupant.Pipe:
+    case Occupant.Road:
+    case Occupant.Rail:
+    case Occupant.PowerLine:
+    case Occupant.Trees:
+      return OCCUPANT_LABELS[occupant];
+    case Occupant.ZoneResidential: return BuildingKind.Residential;
+    case Occupant.ZoneCommercial: return BuildingKind.Commercial;
+    case Occupant.ZoneIndustrial: return BuildingKind.Industrial;
     case Occupant.Structure: return structureKindOf(state, tile.buildingId);
-    case Occupant.PowerLine: return TileKind.PowerLine;
-    case Occupant.Trees: return TileKind.Tree;
     case Occupant.Subway:
     case Occupant.Fibre:
       return undefined;
@@ -56,14 +55,12 @@ function occupantLabel(state: GameState, tile: Tile, occupant: Occupant): string
 }
 
 /**
- * Every occupant on `tile`, grouped by stratum and labelled — the detail
- * `dominantOccupantLabel` deliberately collapses away by design (it picks
- * one winner per the legacy display precedence: structure > zone > trees >
- * power line > rail > road). A tile can carry a road on the surface *and* a
- * power line overhead *and* a pipe underground at once; a caller that only
- * reads `dominantOccupantLabel`'s single string can't tell the difference
- * between "no road here" and "there's a road, but a power line is winning
- * the display slot" — this is what `get_tile` needs to answer that.
+ * Every occupant on `tile`, grouped by stratum and labelled. A tile can
+ * carry a road on the surface *and* a power line overhead *and* a pipe
+ * underground all at once — this lists every one of them rather than
+ * picking a single winner by some display precedence, which is what
+ * `get_tile`/`get_tiles_where` (`mcpBridge.ts`) and the HUD tile inspector
+ * (`ui/hud.ts`) need it for.
  */
 export function occupantsByStratum(state: GameState, tile: Tile): Record<'underground' | 'surface' | 'overhead', string[]> {
   // Each field already only ever carries its own stratum's bits — see

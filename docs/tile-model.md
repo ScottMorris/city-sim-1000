@@ -280,7 +280,7 @@ Strangler, not big bang. Feature work continued throughout, on both sides of the
 8. Delete the shim fields from `Tile` and let `tsc --noEmit` prove every consumer had actually converted.
 9. This doc.
 
-`kind` narrows to what `legacyKind`/`legacyFlags` in `protocol/legacyProjection.ts` still need it for: importing old `.citysim` saves, and exporting the current strata back into the byte-exact-forever legacy format the frozen importer expects. Nothing else reads it — there is no field left to read.
+`kind` narrowed further still, from step 9 onward: `protocol/legacyProjection.ts`'s `legacyKind`/`legacyFlags` — a TS port of the same precedence ladder, kept alive purely as a *display* need for the renderer, the minimap, and `mcpBridge.ts` — was itself deleted once those three surfaces converted to reading occupant bits natively (`rendering/tileRenderUtils.ts`'s `dominantColour`/`baseGroundTexture`, `ui/minimap.ts`'s `minimapBaseColour`). No `kind`-shaped precedence exists in TS at all any more. The only place the ladder still lives is Rust's `tile_from_v4` (`city_sim_core::migrate`), decoding an old `.citysim` JSON save's flattened `kind`+flags spelling into strata on import — the one direction that format is still read.
 
 Two originally-anticipated bugs came bundled with the TS-side conversion, both fixed as part of the rendering-layer phase: an undeveloped zoned lot crossed by a power line drew a debug "P" glyph instead of the wire (the renderer bailed out of compositing an overlay before a base sprite existed), and a power pole rendered straight through an already-built house instead of severing at the tile edge.
 

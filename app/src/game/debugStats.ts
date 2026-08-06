@@ -1,6 +1,11 @@
+// debugStats.ts — derived debug-overlay figures (demand breakdown, job capacity by zone type).
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { BuildingStatus } from './buildings/state';
-import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
-import { GameState, TileKind } from './gameState';
+import { BuildingCategory, BuildingKind, getBuildingTemplate } from './buildings/templates';
+import { GameState } from './gameState';
 import { computeDemand } from './demand';
 import { computeLabourStats, LabourStats } from './computeLabourStats';
 import { ServiceId } from './services';
@@ -127,8 +132,8 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
       if (template.populationCapacity) populationCapacity += template.populationCapacity;
       if (template.jobsCapacity) {
         jobCapacity += template.jobsCapacity;
-        if (template.tileKind === TileKind.Commercial) commercialJobCapacity += template.jobsCapacity;
-        if (template.tileKind === TileKind.Industrial) industrialJobCapacity += template.jobsCapacity;
+        if (template.kind === BuildingKind.Commercial) commercialJobCapacity += template.jobsCapacity;
+        if (template.kind === BuildingKind.Industrial) industrialJobCapacity += template.jobsCapacity;
       }
     }
   }
