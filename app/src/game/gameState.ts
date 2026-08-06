@@ -48,7 +48,7 @@ export interface Tile {
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
   buildingId?: number;
-  /** Per-tile wilderness intensity, 0–1 (0.5 = neutral). From the sim's eco field. */
+  /** Per-tile eco value, −10..+10 (0 = neutral). From the sim's eco field (see `protocol/tileBuffer.ts`'s `decodeEco`). */
   wilderness?: number;
   services: TileServiceState;
 
