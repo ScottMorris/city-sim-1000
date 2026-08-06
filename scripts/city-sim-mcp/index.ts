@@ -217,7 +217,7 @@ server.tool(
 
 server.tool(
   'get_tile',
-  'Get the state of a single tile: kind, powered, watered, abandoned, happiness, elevation, buildingId.',
+  'Get the state of a single tile: kind, powered, watered, abandoned, happiness, elevation, buildingId. `kind` is one dominant label picked by display precedence (structure > zone > trees > power line > rail > road) — a tile can carry a road on the surface, a power line overhead, and a pipe underground all at once, and `kind` only ever shows the winner. `occupants` gives the full picture as `{ underground: string[], surface: string[], overhead: string[] }`, e.g. to confirm a `water_pipe` placement actually landed underneath a road rather than being masked by it.',
   {
     x: z.number().int().describe('Tile column (0 = left edge)'),
     y: z.number().int().describe('Tile row (0 = top edge)'),
@@ -227,24 +227,27 @@ server.tool(
 
 server.tool(
   'get_tiles_where',
-  'Return all (x, y) positions matching a given tile kind. Useful for finding existing roads, zones, utilities, etc.',
+  'Return all (x, y) positions matching a given tile kind. Useful for finding existing roads, zones, utilities, etc. By default this only matches each tile\'s single dominant kind (picked by display precedence: structure > zone > trees > power line > rail > road) — a road hidden under a power line won\'t match `kind: "road"` unless `anyStratum` is set, since the power line is winning the display slot. Set `anyStratum: true` to match any tile that has the given kind present in ANY stratum (underground/surface/overhead), regardless of which one wins the display precedence — see `get_tile`\'s `occupants` field for the same distinction on a single tile.',
   {
     kind: z.enum([
       'land', 'water', 'tree',
       'road', 'rail',
       'residential', 'commercial', 'industrial',
-      'powerline', 'hydro',
+      'powerline',
+      'hydro', 'coal', 'wind', 'solar',
       'pump', 'water_tower', 'water_pipe',
       'elementary_school', 'high_school',
       'park', 'park_large',
-    ]).describe('Tile kind string. Note: all power plant types (coal/wind/solar/hydro) share the kind "hydro"'),
+    ]).describe('Tile kind string. Each power plant type has its own distinct kind (hydro/coal/wind/solar), not a shared one.'),
+    anyStratum: z.boolean().optional()
+      .describe('When true, match a tile if `kind` appears in any of its strata, not just the one dominant/display kind. Default false. Has no effect for `kind: "land"` or `"water"` — those describe the terrain itself, not an occupant, so they never appear in any stratum and `anyStratum: true` will find nothing for them; leave it false (the default) to find land/water tiles.'),
   },
-  async ({ kind }) => textResult(await callGame('get_tiles_where', { kind })),
+  async ({ kind, anyStratum }) => textResult(await callGame('get_tiles_where', { kind, anyStratum })),
 );
 
 server.tool(
   'apply_tool',
-  'Apply a build or demolish action at tile (x, y). Returns money before/after, the resulting tile state, and a sim state snapshot.',
+  'Apply a build or demolish action at tile (x, y). Returns money before/after, the resulting tile state, a sim state snapshot, and `success`/`message` reporting whether the engine actually accepted the command (e.g. wrong stratum, insufficient funds, no road access) — check `success` rather than assuming the placement landed.',
   {
     tool: z.enum([
       'inspect',
@@ -285,7 +288,7 @@ server.tool(
 
 server.tool(
   'apply_tool_line',
-  'Apply a build tool along a straight line from (x1,y1) to (x2,y2) using Bresenham\'s algorithm. Ideal for roads, power lines, or pipes. Returns number of tiles placed and money delta.',
+  'Apply a build tool along a straight line from (x1,y1) to (x2,y2) using Bresenham\'s algorithm. Ideal for roads, power lines, or pipes. Returns `placed` (tiles the engine actually accepted), `attempted` (total tiles on the line), and `firstFailureMessage` (the engine\'s reason for the first rejected tile, if `placed` < `attempted`) alongside the money delta.',
   {
     tool: z.enum([
       'road', 'rail', 'powerline',
@@ -305,7 +308,7 @@ server.tool(
 
 server.tool(
   'apply_tool_rect',
-  'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns number of tiles placed and money delta.',
+  'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns `placed` (tiles the engine actually accepted), `attempted` (total tiles in the rectangle), and `firstFailureMessage` (the engine\'s reason for the first rejected tile, if `placed` < `attempted`) alongside the money delta.',
   {
     tool: z.enum([
       'residential', 'commercial', 'industrial', 'park', 'park_large',
