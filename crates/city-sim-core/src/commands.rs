@@ -12,8 +12,8 @@ use crate::occupants::{
 };
 use crate::state::{GameState, Tile, FLAG_ABANDONED};
 use city_sim_protocol::{
+    building_kind::BuildingKind,
     commands::{CommandResult, Tool, ViewStratum},
-    tile_kind::TileKind,
 };
 
 // ---------------------------------------------------------------------------
@@ -329,44 +329,60 @@ pub fn apply_tool(
             CommandResult::ok()
         }
 
-        // Power plants — each uses its own TileKind; per-type MW output and
+        // Power plants — each uses its own BuildingKind; per-type MW output and
         // maintenance are stored in BuildingInstance for the budget and power BFS.
         Tool::HydroPlant => place_footprint_building(
             state,
-            TileKind::HydroPlant,
+            BuildingKind::HydroPlant,
             x,
             y,
             cost,
             HYDRO_PLANT_MW,
             150.0,
         ),
-        Tool::CoalPlant => {
-            place_footprint_building(state, TileKind::CoalPlant, x, y, cost, COAL_PLANT_MW, 300.0)
-        }
+        Tool::CoalPlant => place_footprint_building(
+            state,
+            BuildingKind::CoalPlant,
+            x,
+            y,
+            cost,
+            COAL_PLANT_MW,
+            300.0,
+        ),
         Tool::WindTurbine => place_footprint_building(
             state,
-            TileKind::WindTurbine,
+            BuildingKind::WindTurbine,
             x,
             y,
             cost,
             WIND_TURBINE_MW,
             30.0,
         ),
-        Tool::SolarFarm => {
-            place_footprint_building(state, TileKind::SolarFarm, x, y, cost, SOLAR_FARM_MW, 20.0)
+        Tool::SolarFarm => place_footprint_building(
+            state,
+            BuildingKind::SolarFarm,
+            x,
+            y,
+            cost,
+            SOLAR_FARM_MW,
+            20.0,
+        ),
+        Tool::WaterPump => {
+            place_footprint_building(state, BuildingKind::WaterPump, x, y, cost, 0, 0.0)
         }
-        Tool::WaterPump => place_footprint_building(state, TileKind::WaterPump, x, y, cost, 0, 0.0),
         Tool::WaterTower => {
-            place_footprint_building(state, TileKind::WaterTower, x, y, cost, 0, 0.0)
+            place_footprint_building(state, BuildingKind::WaterTower, x, y, cost, 0, 0.0)
         }
         Tool::ElementarySchool => {
-            place_footprint_building(state, TileKind::ElementarySchool, x, y, cost, 0, 0.0)
+            place_footprint_building(state, BuildingKind::ElementarySchool, x, y, cost, 0, 0.0)
         }
         Tool::HighSchool => {
-            place_footprint_building(state, TileKind::HighSchool, x, y, cost, 0, 0.0)
+            place_footprint_building(state, BuildingKind::HighSchool, x, y, cost, 0, 0.0)
         }
-        Tool::Park => place_footprint_building(state, TileKind::Park, x, y, cost, 0, 0.0),
-        Tool::ParkLarge => place_footprint_building(state, TileKind::ParkLarge, x, y, cost, 0, 0.0),
+        Tool::Park => place_footprint_building(state, BuildingKind::Park, x, y, cost, 0, 0.0),
+        Tool::ParkLarge => {
+            place_footprint_building(state, BuildingKind::ParkLarge, x, y, cost, 0, 0.0)
+        }
 
         Tool::Bulldoze => bulldoze(state, x, y, cost, stratum),
     }
@@ -449,11 +465,11 @@ pub fn remove_building(state: &mut GameState, building_id: u32) {
 /// plant).  Power plants pass their per-type constant; all other buildings pass 0.
 ///
 /// `maintenance_per_day`: stored on the `BuildingInstance` so each power plant type
-/// can carry its own cost without needing a separate `TileKind`.  Pass 0.0 to fall
-/// back to the template's `maintenance` field at budget time.
+/// can carry its own cost without needing a separate `BuildingKind`.  Pass 0.0 to
+/// fall back to the template's `maintenance` field at budget time.
 fn place_footprint_building(
     state: &mut GameState,
-    kind: TileKind,
+    kind: BuildingKind,
     x: u32,
     y: u32,
     cost: i64,
@@ -635,16 +651,17 @@ mod tests {
     use super::*;
     use crate::migrate::set_v4_kind;
     use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
+    use city_sim_protocol::tile_kind::TileKind;
 
     fn gs(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
     }
 
-    /// The `TileKind` of the `BuildingInstance` covering (x,y), if any — the
-    /// one place a specific structure kind still lives since #177 step 3
+    /// The `BuildingKind` of the `BuildingInstance` covering (x,y), if any —
+    /// the one place a specific structure kind still lives since #177 step 3
     /// (`Occupant::Structure` is one flat tag; the structure's own kind is on
     /// its `BuildingInstance`, not the tile).
-    fn structure_kind_at(s: &GameState, x: u32, y: u32) -> Option<TileKind> {
+    fn structure_kind_at(s: &GameState, x: u32, y: u32) -> Option<BuildingKind> {
         let id = s.tile_at(x, y)?.building_id? as u32;
         s.buildings.iter().find(|b| b.id == id).map(|b| b.kind)
     }
@@ -760,7 +777,7 @@ mod tests {
         let before = s.money;
         let r = apply_tool(&mut s, Tool::WaterPump, 0, 0, ViewStratum::Surface);
         assert!(r.success);
-        assert_eq!(structure_kind_at(&s, 0, 0), Some(TileKind::WaterPump));
+        assert_eq!(structure_kind_at(&s, 0, 0), Some(BuildingKind::WaterPump));
         assert!(s.tile_at(0, 0).unwrap().building_id.is_some());
         assert_eq!(s.buildings.len(), 1);
         assert_eq!(s.money, before - tool_cost(Tool::WaterPump));
@@ -774,7 +791,10 @@ mod tests {
         let bid = s.tile_at(0, 0).unwrap().building_id.unwrap();
         for dy in 0..2 {
             for dx in 0..2 {
-                assert_eq!(structure_kind_at(&s, dx, dy), Some(TileKind::WaterTower));
+                assert_eq!(
+                    structure_kind_at(&s, dx, dy),
+                    Some(BuildingKind::WaterTower)
+                );
                 assert_eq!(s.tile_at(dx, dy).unwrap().building_id, Some(bid));
             }
         }
@@ -1394,7 +1414,7 @@ mod tests {
         assert!(r.success);
         assert_eq!(
             structure_kind_at(&s, 0, 0),
-            Some(TileKind::ElementarySchool)
+            Some(BuildingKind::ElementarySchool)
         );
         assert_eq!(s.buildings.len(), 1);
     }
@@ -1449,7 +1469,7 @@ mod tests {
             );
             assert_eq!(
                 structure_kind_at(&s, 1, 1),
-                Some(TileKind::WaterPump),
+                Some(BuildingKind::WaterPump),
                 "tile should not change"
             );
         }
@@ -1579,7 +1599,7 @@ mod tests {
 
             assert_eq!(
                 structure_kind_at(&s, 5, 5),
-                Some(TileKind::CoalPlant),
+                Some(BuildingKind::CoalPlant),
                 "{tool:?} moved the plant"
             );
             let t = s.tile_at(5, 5).unwrap();
@@ -1785,7 +1805,7 @@ mod tests {
         let r = apply_tool(&mut s, Tool::Tree, 5, 5, ViewStratum::Surface);
         assert!(!r.success, "a canopy was planted over a live plant");
         assert_eq!(s.money, before_money, "charged on rejection");
-        assert_eq!(structure_kind_at(&s, 5, 5), Some(TileKind::CoalPlant));
+        assert_eq!(structure_kind_at(&s, 5, 5), Some(BuildingKind::CoalPlant));
         assert_eq!(s.buildings.len(), 1);
 
         // Open ground still takes a tree.
@@ -1809,7 +1829,7 @@ mod tests {
             assert!(apply_tool(&mut s, tool, 1, 1, ViewStratum::Surface).success);
             let r = apply_tool(&mut s, Tool::Park, 1, 1, ViewStratum::Surface);
             assert!(r.success, "a park was refused over {tool:?}");
-            assert_eq!(structure_kind_at(&s, 1, 1), Some(TileKind::Park));
+            assert_eq!(structure_kind_at(&s, 1, 1), Some(BuildingKind::Park));
         }
     }
 
@@ -1877,14 +1897,18 @@ mod tests {
     #[test]
     fn all_power_plants_place_with_correct_tile_kind() {
         // Regression: before the BUG-30 fix, CoalPlant/WindTurbine/SolarFarm all
-        // wrote TileKind::HydroPlant. After the fix their TileKinds were added to
+        // wrote BuildingKind::HydroPlant. After the fix their kinds were added to
         // the protocol but get_building_template was not updated, so placement
         // failed with "Unknown building type" for every non-hydro plant.
         let cases = [
-            (Tool::HydroPlant, TileKind::HydroPlant, HYDRO_PLANT_MW),
-            (Tool::CoalPlant, TileKind::CoalPlant, COAL_PLANT_MW),
-            (Tool::WindTurbine, TileKind::WindTurbine, WIND_TURBINE_MW),
-            (Tool::SolarFarm, TileKind::SolarFarm, SOLAR_FARM_MW),
+            (Tool::HydroPlant, BuildingKind::HydroPlant, HYDRO_PLANT_MW),
+            (Tool::CoalPlant, BuildingKind::CoalPlant, COAL_PLANT_MW),
+            (
+                Tool::WindTurbine,
+                BuildingKind::WindTurbine,
+                WIND_TURBINE_MW,
+            ),
+            (Tool::SolarFarm, BuildingKind::SolarFarm, SOLAR_FARM_MW),
         ];
         for (tool, expected_kind, expected_mw) in cases {
             let mut s = gs(6, 6);

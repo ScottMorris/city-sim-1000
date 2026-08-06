@@ -7,7 +7,9 @@ use crate::buildings::BuildingInstance;
 use crate::occupants::{Occupant, Overhead, Stratum, StratumSet, Surface, Terrain, Underground};
 use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::Policies;
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 use std::collections::{HashMap, VecDeque};
 
@@ -538,7 +540,7 @@ impl GameState {
     pub fn has_water_system(&self) -> bool {
         self.buildings
             .iter()
-            .any(|b| matches!(b.kind, TileKind::WaterPump | TileKind::WaterTower))
+            .any(|b| matches!(b.kind, BuildingKind::WaterPump | BuildingKind::WaterTower))
             || self.tiles.iter().any(|t| t.has_occupant(Occupant::Pipe))
     }
 
@@ -546,33 +548,41 @@ impl GameState {
         self.tile_index(x, y).map(|i| &mut self.tiles[i])
     }
 
-    /// Overwrite untouched `Land` tiles with natural `Water`/`Tree` terrain
-    /// from a row-major kind byte array (one `TileKind` u8 per tile).
+    /// Overwrite untouched `Land` tiles with natural `Water` terrain from a
+    /// row-major `Terrain as u8` byte array (`Terrain::Land` = 0,
+    /// `Terrain::Water` = 1 — see `Terrain`'s discriminants).
     ///
-    /// Only `Water` and `Tree` are accepted — anything else in the array is
-    /// ignored so player-built kinds present in a display snapshot can never
-    /// leak into the engine as free construction. Tiles that are no longer
-    /// `Land` (already built on) are left alone.
+    /// Only `1` (`Water`) is accepted — anything else in the array (including
+    /// `0`/`Land`, and any byte that isn't a declared `Terrain`) is a no-op,
+    /// so player-built terrain present in a display snapshot can never leak
+    /// into the engine as free construction. Tiles that are no longer `Land`
+    /// (already built on) are left alone.
     ///
-    /// "No longer `Land`" was `kind != TileKind::Land`, and the question it was
-    /// asking is *has anything happened to this cell yet?* — which the strata
-    /// answer as bare land carrying nothing you can see. A hydro line is not a
-    /// disqualifier: it lived in `FLAG_POWER_OVERLAY` on a `kind = Land` tile,
-    /// so a terraformed line has always been seeded straight over. A buried
-    /// pipe is not one either, for the same reason.
-    pub fn seed_natural_terrain(&mut self, kinds: &[u8]) {
-        let n = self.tiles.len().min(kinds.len());
-        for (tile, &kind_byte) in self.tiles.iter_mut().zip(kinds.iter()).take(n) {
+    /// This byte array carries bare terrain only — no tree canopy. Both TS
+    /// bridges' `terrainBytes` only ever emit `Land`/`Water` (never a third
+    /// value), and always did even back when this function decoded the byte
+    /// as a `TileKind`: a `TileKind::Tree` arm exhumed here was dead code,
+    /// unreachable from either bridge, so it was dropped rather than ported —
+    /// see `seed_natural_terrain_ignores_a_tree_byte_because_no_caller_sends_one`.
+    ///
+    /// "No longer `Land`" was `kind != TileKind::Land` before the strata, and
+    /// the question it was asking is *has anything happened to this cell
+    /// yet?* — which the strata answer as bare land carrying nothing you can
+    /// see. A hydro line is not a disqualifier: it lived in
+    /// `FLAG_POWER_OVERLAY` on a `kind = Land` tile, so a terraformed line has
+    /// always been seeded straight over. A buried pipe is not one either, for
+    /// the same reason.
+    pub fn seed_natural_terrain(&mut self, terrain_bytes: &[u8]) {
+        let n = self.tiles.len().min(terrain_bytes.len());
+        for (tile, &byte) in self.tiles.iter_mut().zip(terrain_bytes.iter()).take(n) {
             let untouched = tile.terrain == Terrain::Land
                 && tile.occupants_in(Stratum::Surface) == 0
                 && !tile.has_occupant(Occupant::Trees);
             if !untouched {
                 continue;
             }
-            match TileKind::from_u8(kind_byte) {
-                Some(TileKind::Water) => tile.terrain = Terrain::Water,
-                Some(TileKind::Tree) => tile.set_occupant(Occupant::Trees, true),
-                _ => {}
+            if byte == Terrain::Water as u8 {
+                tile.terrain = Terrain::Water;
             }
         }
         self.tile_revision += 1;
@@ -599,14 +609,61 @@ mod tests {
 
         s.buildings.push(crate::buildings::BuildingInstance::new(
             1,
-            TileKind::WaterPump,
+            BuildingKind::WaterPump,
             (0, 0),
         ));
         assert!(s.has_water_system(), "a pump opts in");
-        s.buildings[0].kind = TileKind::WaterTower;
+        s.buildings[0].kind = BuildingKind::WaterTower;
         assert!(s.has_water_system(), "a tower opts in");
-        s.buildings[0].kind = TileKind::Residential;
+        s.buildings[0].kind = BuildingKind::Residential;
         assert!(!s.has_water_system(), "zones alone do not opt in");
+    }
+
+    #[test]
+    fn seed_natural_terrain_paints_water_and_leaves_land_alone() {
+        let mut s = GameState::new(3, 1, 0);
+        s.seed_natural_terrain(&[0, 1, 0]);
+        assert_eq!(s.tiles[0].terrain, Terrain::Land);
+        assert_eq!(s.tiles[1].terrain, Terrain::Water);
+        assert_eq!(s.tiles[2].terrain, Terrain::Land);
+    }
+
+    /// Confirms the byte really is `Terrain as u8`, not a coincidence of
+    /// `0`/`1` meaning the same thing under two different encodings — the
+    /// dead `TileKind::Tree` arm this replaced happened to be byte `2`, so a
+    /// regression back to decoding `TileKind` would only show up on a byte
+    /// no real caller sends. Any byte that isn't exactly `Terrain::Water as
+    /// u8` — including a `TileKind::Water` value of `1`, which is the same
+    /// number by coincidence, and only proves this test doesn't distinguish
+    /// them — must leave the tile as `Land`.
+    #[test]
+    fn seed_natural_terrain_ignores_a_tree_byte_because_no_caller_sends_one() {
+        let mut s = GameState::new(1, 1, 0);
+        // `2` was `TileKind::Tree`'s byte; neither TS bridge ever sends it.
+        s.seed_natural_terrain(&[2]);
+        assert_eq!(s.tiles[0].terrain, Terrain::Land);
+        assert!(!s.tiles[0].has_occupant(Occupant::Trees));
+    }
+
+    #[test]
+    fn seed_natural_terrain_leaves_a_built_tile_alone() {
+        let mut s = GameState::new(1, 1, 0);
+        set_v4_kind(&mut s.tiles[0], TileKind::Road);
+        s.seed_natural_terrain(&[1]);
+        assert_eq!(
+            s.tiles[0].terrain,
+            Terrain::Land,
+            "a tile that already has something on it must not be reterrained"
+        );
+        assert!(s.tiles[0].has_occupant(Occupant::Road));
+    }
+
+    #[test]
+    fn seed_natural_terrain_ignores_bytes_past_the_tile_count() {
+        let mut s = GameState::new(1, 1, 0);
+        // Longer than the tile vector — must not panic or read out of bounds.
+        s.seed_natural_terrain(&[1, 1, 1, 1]);
+        assert_eq!(s.tiles[0].terrain, Terrain::Water);
     }
 
     fn gs() -> GameState {

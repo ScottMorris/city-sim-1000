@@ -297,14 +297,15 @@ export async function setPolicies(policies: Policies): Promise<void> {
 }
 
 /**
- * Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+ * Seed the natural terrain baseline (row-major `Terrain` u8 byte per tile —
+ * `Land` = 0, `Water` = 1).
  *
- * Only Water/Tree kinds are applied onto untouched Land tiles, so player-built
- * kinds present in a display snapshot can never leak into the engine. Call
- * once, right after `start()`.
+ * Only Water is applied onto untouched Land tiles, so player-built terrain
+ * present in a display snapshot can never leak into the engine. Call once,
+ * right after `start()`.
  */
-export async function setNaturalTerrain(kinds: Uint8Array): Promise<void> {
-  await invoke('plugin:city-sim|set_natural_terrain', { kinds: Array.from(kinds) })
+export async function setNaturalTerrain(terrainBytes: Uint8Array): Promise<void> {
+  await invoke('plugin:city-sim|set_natural_terrain', { terrainBytes: Array.from(terrainBytes) })
 }
 
 export async function stop(): Promise<void> {

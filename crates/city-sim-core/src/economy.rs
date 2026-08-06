@@ -7,7 +7,9 @@ use crate::buildings::get_building_template;
 use crate::occupants::{LedgerLine, Occupant, LEDGER_LINE_COUNT};
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
 use crate::wilderness::{tourism_dividend, WildernessTunables};
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::BudgetPolicy;
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
@@ -120,7 +122,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
             continue;
         };
         // Power plants carry their own maintenance in BuildingInstance so coal,
-        // wind, and solar can differ from hydro without separate TileKind variants.
+        // wind, and solar can differ from hydro without separate BuildingKind variants.
         let maint = if building.maintenance_per_day > 0.0 {
             building.maintenance_per_day
         } else {
@@ -132,27 +134,29 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         if tmpl.is_power_plant {
             maint_power += maint;
             match building.kind {
-                TileKind::HydroPlant => maint_power_hydro += maint,
-                TileKind::CoalPlant => maint_power_coal += maint,
-                TileKind::WindTurbine => maint_power_wind += maint,
-                TileKind::SolarFarm => maint_power_solar += maint,
+                BuildingKind::HydroPlant => maint_power_hydro += maint,
+                BuildingKind::CoalPlant => maint_power_coal += maint,
+                BuildingKind::WindTurbine => maint_power_wind += maint,
+                BuildingKind::SolarFarm => maint_power_solar += maint,
                 _ => {}
             }
         } else if tmpl.is_civic {
             maint_civic += maint;
             match building.kind {
-                TileKind::Park | TileKind::ParkLarge => maint_civic_park += maint,
-                TileKind::WaterPump => maint_civic_pump += maint,
-                TileKind::WaterTower => maint_civic_tower += maint,
-                TileKind::ElementarySchool | TileKind::HighSchool => maint_civic_school += maint,
+                BuildingKind::Park | BuildingKind::ParkLarge => maint_civic_park += maint,
+                BuildingKind::WaterPump => maint_civic_pump += maint,
+                BuildingKind::WaterTower => maint_civic_tower += maint,
+                BuildingKind::ElementarySchool | BuildingKind::HighSchool => {
+                    maint_civic_school += maint
+                }
                 _ => {}
             }
         } else if tmpl.is_zone {
             maint_zones += maint;
             match building.kind {
-                TileKind::Residential => maint_zones_res += maint,
-                TileKind::Commercial => maint_zones_com += maint,
-                TileKind::Industrial => maint_zones_ind += maint,
+                BuildingKind::Residential => maint_zones_res += maint,
+                BuildingKind::Commercial => maint_zones_com += maint,
+                BuildingKind::Industrial => maint_zones_ind += maint,
                 _ => {}
             }
         }
@@ -515,15 +519,15 @@ mod tests {
     fn building_maintenance_categorised_correctly() {
         let mut s = gs(4, 4);
         // Zone building
-        let mut res = BuildingInstance::new(1, TileKind::Residential, (0, 0));
+        let mut res = BuildingInstance::new(1, BuildingKind::Residential, (0, 0));
         res.status = BuildingStatus::Active;
         s.buildings.push(res);
         // Civic building
-        let mut park = BuildingInstance::new(2, TileKind::Park, (1, 0));
+        let mut park = BuildingInstance::new(2, BuildingKind::Park, (1, 0));
         park.status = BuildingStatus::Active;
         s.buildings.push(park);
         // Power plant
-        let mut plant = BuildingInstance::new(3, TileKind::HydroPlant, (2, 0));
+        let mut plant = BuildingInstance::new(3, BuildingKind::HydroPlant, (2, 0));
         plant.status = BuildingStatus::Active;
         s.buildings.push(plant);
         let b = compute_daily_budget(&s);
@@ -537,7 +541,7 @@ mod tests {
     fn power_plant_maintenance_per_day_overrides_template() {
         let mut s = gs(4, 4);
         // Coal plant: maintenance_per_day = 300 (template value is 150 for HydroPlant)
-        let mut coal = BuildingInstance::new(1, TileKind::HydroPlant, (0, 0));
+        let mut coal = BuildingInstance::new(1, BuildingKind::HydroPlant, (0, 0));
         coal.status = BuildingStatus::Active;
         coal.maintenance_per_day = 300.0;
         s.buildings.push(coal);
@@ -648,15 +652,15 @@ mod tests {
     #[test]
     fn power_maintenance_breaks_down_by_plant_type() {
         let mut s = gs(8, 8);
-        let mut hydro = BuildingInstance::new(1, TileKind::HydroPlant, (0, 0));
+        let mut hydro = BuildingInstance::new(1, BuildingKind::HydroPlant, (0, 0));
         hydro.status = BuildingStatus::Active;
         hydro.maintenance_per_day = 150.0;
         s.buildings.push(hydro);
-        let mut coal = BuildingInstance::new(2, TileKind::CoalPlant, (2, 0));
+        let mut coal = BuildingInstance::new(2, BuildingKind::CoalPlant, (2, 0));
         coal.status = BuildingStatus::Active;
         coal.maintenance_per_day = 300.0;
         s.buildings.push(coal);
-        let mut wind = BuildingInstance::new(3, TileKind::WindTurbine, (4, 0));
+        let mut wind = BuildingInstance::new(3, BuildingKind::WindTurbine, (4, 0));
         wind.status = BuildingStatus::Active;
         wind.maintenance_per_day = 30.0;
         s.buildings.push(wind);

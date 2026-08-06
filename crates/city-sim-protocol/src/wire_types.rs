@@ -22,8 +22,7 @@
 #[serde(rename_all = "camelCase")]
 pub struct WireBuilding {
     pub id: u32,
-    /// `TileKind as u8` — decode with `tileKindFromU8` in TS, matching every
-    /// other wire use of `TileKind`.
+    /// `BuildingKind as u8` — decode with `BUILDING_KIND_BY_U8` in TS.
     pub kind: u8,
     pub origin_x: u32,
     pub origin_y: u32,

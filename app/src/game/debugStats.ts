@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 import { BuildingStatus } from './buildings/state';
-import { BuildingCategory, BuildingKind, getBuildingTemplate } from './buildings/templates';
+import { LedgerGroup, BuildingKind, getBuildingTemplate } from './buildings/templates';
 import { GameState } from './gameState';
 import { computeDemand } from './demand';
 import { computeLabourStats, LabourStats } from './computeLabourStats';
@@ -114,7 +114,7 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     const isActive = building.state.status === BuildingStatus.Active;
     const contributesCapacity =
       isActive ||
-      (template.category === BuildingCategory.Zone &&
+      (template.category === LedgerGroup.Zone &&
         (building.state.status === BuildingStatus.InactiveNoPower ||
           building.state.status === BuildingStatus.InactiveNoWater));
     if (!isActive && !contributesCapacity) continue;

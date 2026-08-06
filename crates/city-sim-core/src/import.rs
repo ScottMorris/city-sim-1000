@@ -142,7 +142,12 @@ pub fn from_tile_buffer(
             if let Some((mw, _)) = plant_stats(kind) {
                 tile.power_plant_mw = mw as i32;
             }
-            if let Some(tmpl) = get_building_template(kind) {
+            // `building_kind_of` is the legacy-import boundary: `kind` is a
+            // v4 wire byte here, and `get_building_template` is indexed by
+            // the live `BuildingKind` a `BuildingInstance` actually carries.
+            if let Some(tmpl) =
+                crate::migrate::building_kind_of(kind).and_then(get_building_template)
+            {
                 if tmpl.water_output > 0 {
                     tile.water_output = tmpl.water_output;
                 }
@@ -161,9 +166,15 @@ pub fn from_tile_buffer(
         if state.buildings.iter().any(|b| b.id == id) {
             continue;
         }
+        // A `building_id` with no matching `BuildingKind` is malformed
+        // legacy data — nothing legitimate produces it — so it is skipped
+        // rather than crashing the import.
+        let Some(building_kind) = crate::migrate::building_kind_of(kind) else {
+            continue;
+        };
         let x = (i as u32) % width;
         let y = (i as u32) / width;
-        let mut instance = BuildingInstance::new(id, kind, (x, y));
+        let mut instance = BuildingInstance::new(id, building_kind, (x, y));
         if let Some((_, maintenance)) = plant_stats(kind) {
             instance.maintenance_per_day = maintenance;
         }
@@ -226,11 +237,11 @@ mod tests {
             return TileKind::Water;
         }
         if let Some(kind) = lookup.structure_kind(tile) {
-            return kind;
+            return crate::migrate::tile_kind_of(kind);
         }
         if let Some(zone) = tile.zone_occupant() {
             if let Some(kind) = zone_template_kind(zone) {
-                return kind;
+                return crate::migrate::tile_kind_of(kind);
             }
         }
         if tile.has_occupant(Occupant::Trees) {

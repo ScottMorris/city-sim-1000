@@ -30,13 +30,12 @@
  */
 
 import type { GameState, Tile, ViewStratum } from './gameState';
-import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
+import { BuildingKind, getBuildingTemplate } from './buildings/templates';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { buildingKindFromU8 } from './protocol/buildingKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
@@ -271,7 +270,7 @@ export class TauriSimBridge implements SimBridge {
   private async seedEngine(state: GameState): Promise<void> {
     const terrain = new Uint8Array(state.tiles.length);
     for (let i = 0; i < terrain.length; i++) {
-      terrain[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
+      terrain[i] = state.tiles[i].terrain === Terrain.Water ? Terrain.Water : Terrain.Land;
     }
     await this.plugin.setNaturalTerrain(terrain);
     await this.plugin.setPolicies(state.policies);
@@ -345,19 +344,24 @@ export class TauriSimBridge implements SimBridge {
     // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
     // until a pump, tower, or pipe exists, buildings don't require water.
     let hasWaterSystem = event.buildings.some((b) => {
-      const kind = tileKindFromU8(b.kind);
-      return kind === TileKind.WaterPump || kind === TileKind.WaterTower;
+      const kind = buildingKindFromU8(b.kind);
+      return kind === BuildingKind.WaterPump || kind === BuildingKind.WaterTower;
     });
     for (let i = 0; i < n && !hasWaterSystem; i++) {
       if (hasOccupant(s.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
     }
     const seatsUsedByBuildingId = new Map(event.educationSeatsUsed.map((e) => [e.buildingId, e.used]));
     s.buildings = event.buildings.map((b) => {
-      const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
+      // `b.kind` decodes via `BUILDING_KIND_BY_U8`; an unrecognised byte
+      // (should never happen against a matching engine build) falls back to
+      // the empty string, which `getBuildingTemplate` returns `undefined`
+      // for, same as the old `TileKind.Land` fallback did (Land has no
+      // building template either).
+      const kind: string = buildingKindFromU8(b.kind) ?? '';
       // Derive status from the tile flags the status byte already set —
       // same derivation as the WASM path, for the same reason.
       const originTile = s.tiles[b.originY * s.width + b.originX];
-      const template = getBuildingTemplate(kind as string);
+      const template = getBuildingTemplate(kind);
       const bstate = createBuildingState();
       const needsPower = template ? template.requiresPower !== false : false;
       const needsWater =
@@ -365,7 +369,7 @@ export class TauriSimBridge implements SimBridge {
       // A pump only produces when its footprint touches water terrain (#200)
       // — distinct from needsWater above, which gates a *consumer* on
       // network coverage; a pump doesn't consume water.
-      const needsSource = kind === TileKind.WaterPump;
+      const needsSource = kind === BuildingKind.WaterPump;
       const origin = { x: b.originX, y: b.originY };
       if (needsPower && !originTile?.powered) {
         bstate.status = BuildingStatus.InactiveNoPower;
@@ -382,7 +386,7 @@ export class TauriSimBridge implements SimBridge {
       }
       return {
         id: b.id,
-        templateId: kind as string,
+        templateId: kind,
         origin,
         state: bstate
       };

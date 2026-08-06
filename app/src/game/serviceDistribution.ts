@@ -5,7 +5,7 @@
 
 import { getOrthogonalNeighbourCoords, isZone } from './adjacency';
 import { BuildingStatus } from './buildings/state';
-import { BuildingCategory, BuildingKind, getBuildingTemplate } from './buildings/templates';
+import { LedgerGroup, BuildingKind, getBuildingTemplate } from './buildings/templates';
 import type { GameState, Tile } from './gameState';
 import { getTile } from './gameState';
 import { Occupant, hasOccupant } from './protocol/occupants';
@@ -39,7 +39,7 @@ export function computeZoneLoads(state: GameState, workerShare = DEFAULT_WORKER_
     const template = getBuildingTemplate(building.templateId);
     if (!template) continue;
     if (building.state.status !== BuildingStatus.Active) continue;
-    if (template.category !== BuildingCategory.Zone) continue;
+    if (template.category !== LedgerGroup.Zone) continue;
     if (template.populationCapacity) totalPopCap += template.populationCapacity;
     if (template.jobsCapacity) {
       if (template.kind === BuildingKind.Commercial) totalComCap += template.jobsCapacity;
@@ -55,7 +55,7 @@ export function computeZoneLoads(state: GameState, workerShare = DEFAULT_WORKER_
     const template = getBuildingTemplate(building.templateId);
     if (!template) continue;
     if (building.state.status !== BuildingStatus.Active) continue;
-    if (template.category !== BuildingCategory.Zone) continue;
+    if (template.category !== LedgerGroup.Zone) continue;
     const idx = building.origin.y * state.width + building.origin.x;
 
     if (template.populationCapacity) {

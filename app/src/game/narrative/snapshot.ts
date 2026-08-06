@@ -1,6 +1,6 @@
 import { getCalendarPosition } from '../time';
 import { BuildingStatus } from '../buildings/state';
-import { BuildingCategory, getBuildingTemplate } from '../buildings/templates';
+import { LedgerGroup, getBuildingTemplate } from '../buildings/templates';
 import type { GameState } from '../gameState';
 import { computeLabourStats } from '../computeLabourStats';
 import type { CitySnapshot } from './types';
@@ -17,7 +17,7 @@ function computeCapacities(state: GameState) {
     const isActive = building.state.status === BuildingStatus.Active;
     const contributesCapacity =
       isActive ||
-      (template.category === BuildingCategory.Zone &&
+      (template.category === LedgerGroup.Zone &&
         (building.state.status === BuildingStatus.InactiveNoPower ||
           building.state.status === BuildingStatus.InactiveNoWater));
     if (!contributesCapacity) continue;

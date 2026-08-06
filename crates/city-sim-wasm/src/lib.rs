@@ -266,14 +266,15 @@ impl SimHost {
         Ok(())
     }
 
-    /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+    /// Seed the natural terrain baseline (row-major `Terrain as u8` byte per
+    /// tile — `Land` = 0, `Water` = 1).
     ///
-    /// Only `Water`/`Tree` kinds are applied — see
-    /// `GameState::seed_natural_terrain`. Call once, after construction and
-    /// before any commands. Terrain lives inside the state, so undo snapshots
-    /// and save snapshots carry it automatically.
-    pub fn set_natural_terrain(&mut self, kinds: &[u8]) {
-        self.sim.state.seed_natural_terrain(kinds);
+    /// Only `Water` is applied — see `GameState::seed_natural_terrain`. Call
+    /// once, after construction and before any commands. Terrain lives
+    /// inside the state, so undo snapshots and save snapshots carry it
+    /// automatically.
+    pub fn set_natural_terrain(&mut self, terrain_bytes: &[u8]) {
+        self.sim.state.seed_natural_terrain(terrain_bytes);
     }
 
     /// Advance the simulation by `dt` seconds (real time). The speed
@@ -460,12 +461,12 @@ impl SimHost {
     }
 
     /// The building list as JSON (`Vec<WireBuilding>`) — `id`, template
-    /// `kind` (as the `TileKind` u8, matching every other wire use of
-    /// `TileKind`), and footprint origin.
+    /// `kind` (as the `BuildingKind` u8 — decode with `BUILDING_KIND_BY_U8`
+    /// in TS), and footprint origin.
     ///
     /// The live tile buffer's `Structure` occupant bit says only that a
     /// building stands on a tile, not which one — since #177's TS/wire
-    /// follow-up, a structure's `TileKind` lives on its `BuildingInstance`,
+    /// follow-up, a structure's `BuildingKind` lives on its `BuildingInstance`,
     /// not on the tile. TS needs this list to resolve `building_id` to a
     /// template; call it alongside `tile_buffer()`. Status/health/trouble are
     /// deliberately not carried here — TS derives building status locally

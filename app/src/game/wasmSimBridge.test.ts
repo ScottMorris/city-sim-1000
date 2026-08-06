@@ -5,9 +5,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { WasmSimBridge } from './wasmSimBridge';
-import { createInitialState, TileKind } from './gameState';
+import { createInitialState } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
-import { tileKindToU8 } from './protocol/tileKind';
+import { buildingKindToU8 } from './protocol/buildingKind';
+import { BuildingKind } from './buildings/templates';
 import { ServiceId } from './services';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
@@ -273,7 +274,7 @@ describe('WasmSimBridge undo/redo', () => {
     };
     worker.emit({
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
-      buildingsJson: JSON.stringify([{ id: 7, kind: tileKindToU8(TileKind.ElementarySchool), originX: 0, originY: 0 }]),
+      buildingsJson: JSON.stringify([{ id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0 }]),
       powerComponentsJson: '[]', waterComponentsJson: '[]',
       educationJson: JSON.stringify(educationStats),
       educationSeatsUsedJson: JSON.stringify([{ buildingId: 7, used: 12 }]),

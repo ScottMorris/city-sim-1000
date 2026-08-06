@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, expect, it, vi } from 'vitest';
-import { createInitialState, TileKind } from './gameState';
+import { createInitialState } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
 import { Occupant, Terrain, ZoneDensity } from './protocol/occupants';
 import { BYTES_PER_TILE, STATUS, decodeEco, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
-import { tileKindToU8 } from './protocol/tileKind';
+import { buildingKindToU8 } from './protocol/buildingKind';
+import { BuildingKind } from './buildings/templates';
 import { ServiceId } from './services';
 import type { FromSim } from './protocol/events';
 import { Tool } from './toolTypes';
@@ -313,7 +314,7 @@ describe('TauriSimBridge onTick decode', () => {
       highServed: 0, highCapacity: 0, highLoad: 0,
       score: 0.6, elementaryCoverage: 0.6, highCoverage: 1,
     };
-    const school: WireBuilding = { id: 7, kind: tileKindToU8(TileKind.ElementarySchool), originX: 0, originY: 0 };
+    const school: WireBuilding = { id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0 };
 
     emit(baseTickEvent({
       education,
@@ -331,7 +332,7 @@ describe('TauriSimBridge onTick decode', () => {
     const { bridge, emit } = await makeBridge();
     const n = GRID_TILES;
     const o = tileBufferOffsets(n);
-    const coalPlant: WireBuilding = { id: 7, kind: tileKindToU8(TileKind.CoalPlant), originX: 0, originY: 0 };
+    const coalPlant: WireBuilding = { id: 7, kind: buildingKindToU8(BuildingKind.CoalPlant), originX: 0, originY: 0 };
 
     // CoalPlant's real 2x2 footprint, written straight onto the wire — no TS
     // template footprint is consulted for tile coverage any more.
@@ -348,7 +349,7 @@ describe('TauriSimBridge onTick decode', () => {
     expect(s1.tiles[8].buildingId).toBe(7);
     expect(s1.tiles[9].buildingId).toBe(7);
     expect(s1.buildings).toHaveLength(1);
-    expect(s1.buildings[0]).toMatchObject({ id: 7, templateId: TileKind.CoalPlant, origin: { x: 0, y: 0 } });
+    expect(s1.buildings[0]).toMatchObject({ id: 7, templateId: BuildingKind.CoalPlant, origin: { x: 0, y: 0 } });
 
     // Razed: the next TickEvent's wire carries building_id 0 everywhere, and no buildings.
     emit(baseTickEvent({ buildings: [] }));
@@ -366,7 +367,7 @@ describe('TauriSimBridge onTick decode', () => {
     // a pump) doesn't need its footprint to touch water terrain, so this
     // stays a pure power-gating test rather than tripping the #200 source
     // gate covered separately below.
-    const tower: WireBuilding = { id: 1, kind: tileKindToU8(TileKind.WaterTower), originX: 2, originY: 2 };
+    const tower: WireBuilding = { id: 1, kind: buildingKindToU8(BuildingKind.WaterTower), originX: 2, originY: 2 };
     const o = tileBufferOffsets(GRID_TILES);
     const originIndex = 2 * 8 + 2;
 
@@ -381,7 +382,7 @@ describe('TauriSimBridge onTick decode', () => {
 
   it('marks a water pump InactiveNoSource until its footprint touches water terrain', async () => {
     const { bridge, emit } = await makeBridge();
-    const pump: WireBuilding = { id: 3, kind: tileKindToU8(TileKind.WaterPump), originX: 2, originY: 2 };
+    const pump: WireBuilding = { id: 3, kind: buildingKindToU8(BuildingKind.WaterPump), originX: 2, originY: 2 };
     const o = tileBufferOffsets(GRID_TILES);
     const originIndex = 2 * 8 + 2;
     const neighbourIndex = 2 * 8 + 3; // (3,2), orthogonally east of the pump
@@ -402,7 +403,7 @@ describe('TauriSimBridge onTick decode', () => {
 
   it('marks a water-consuming building InactiveNoWater only once a water system exists and it is unwatered', async () => {
     const { bridge, emit } = await makeBridge();
-    const house: WireBuilding = { id: 2, kind: tileKindToU8(TileKind.Residential), originX: 5, originY: 5 };
+    const house: WireBuilding = { id: 2, kind: buildingKindToU8(BuildingKind.Residential), originX: 5, originY: 5 };
     const o = tileBufferOffsets(GRID_TILES);
     const originIndex = 5 * 8 + 5;
     const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
