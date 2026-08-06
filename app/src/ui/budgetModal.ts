@@ -416,7 +416,8 @@ export function initBudgetModal(options: BudgetModalOptions) {
       const baselineLighting = applyLightingPolicy(lightingBase, DEFAULT_BYLAWS.lighting);
       const activeLighting = applyLightingPolicy(lightingBase, lighting);
       const lightingPowerDelta = activeLighting.powerUse - baselineLighting.powerUse;
-      const lightingUpkeepDeltaPerMonth = (activeLighting.maintenance - baselineLighting.maintenance) * 9;
+      const lightingUpkeepDeltaPerMonth =
+        (activeLighting.maintenance - baselineLighting.maintenance) * DAYS_PER_MONTH;
 
       summary.innerHTML = `
         <div class="summary-card">
