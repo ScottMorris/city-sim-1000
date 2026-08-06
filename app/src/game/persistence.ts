@@ -1,3 +1,8 @@
+// persistence.ts — save/load: IndexedDB CSAV containers, legacy JSON back-fill, and downloads.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { LOCAL_STORAGE_KEY } from './constants';
 import { DEFAULT_BYLAWS } from './bylaws';
 import {

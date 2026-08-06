@@ -1,3 +1,8 @@
+// persistence.test.ts — save/load: serialize/deserialize round trips and legacy back-fill.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect } from 'vitest';
 import { serialize, deserialize, copyState } from './persistence';
 import {

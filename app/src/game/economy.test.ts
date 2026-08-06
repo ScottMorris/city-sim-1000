@@ -1,3 +1,8 @@
+// economy.test.ts — budget-history bucketing and runway estimation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from './gameState';
 import { computeRunwayDays, getQuarterSummary, getRecentMonths, type BudgetHistoryEntry } from './economy';

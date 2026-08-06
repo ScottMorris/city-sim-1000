@@ -1,3 +1,8 @@
+// economy.ts — budget-history bucketing (recent months, quarter summary) and runway estimation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { GameState } from './gameState';
 import { getCalendarPosition, DAYS_PER_MONTH } from './time';
 
