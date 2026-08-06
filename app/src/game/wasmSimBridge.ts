@@ -18,7 +18,7 @@ import { getBuildingTemplate } from './buildings/templates';
 import { createTileServiceState } from './services';
 import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
-import { recordDailyBudget } from './economy';
+import type { BudgetHistoryEntry } from './economy';
 import type { FromSim } from './protocol/events';
 import type { SimStats, SimAlertWire } from '../workers/wasmSim.worker';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
@@ -81,19 +81,19 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; mutationSeq: number; alerts: SimAlertWire[] }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; alerts: SimAlertWire[] }
   | { type: 'apply_result'; success: boolean; message: string | null; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'snapshot_result'; requestId: number; bytes: Uint8Array }
   | { type: 'load_result'; requestId: number; ok: false; error?: string }
   | {
       type: 'load_result'; requestId: number; ok: true;
       width: number; height: number; seed: number;
       policies: GameState['policies'];
-      bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; mutationSeq: number; history: WorkerHistoryFlags;
+      bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags;
     };
 
 /** One entry decoded from a `buildingsJson` payload — see `SimHost::buildings_json` (Rust). */
@@ -131,6 +131,7 @@ export class WasmSimBridge implements SimBridge {
   private pendingWaterComponentsJson = '';
   private pendingEducationJson = '';
   private pendingEducationSeatsUsedJson = '';
+  private pendingBudgetHistoryJson = '';
   private pendingStats: SimStats | null = null;
   private pendingMutationSeq = 0;
   /**
@@ -246,6 +247,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingWaterComponentsJson,
         this.pendingEducationJson,
         this.pendingEducationSeatsUsedJson,
+        this.pendingBudgetHistoryJson,
       );
       this.pendingTileBuffer = null;
       this.dirtySinceLastStep = true;
@@ -438,6 +440,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingWaterComponentsJson = msg.waterComponentsJson;
         this.pendingEducationJson = msg.educationJson;
         this.pendingEducationSeatsUsedJson = msg.educationSeatsUsedJson;
+        this.pendingBudgetHistoryJson = msg.budgetHistoryJson;
         this.pendingStats = msg.stats;
         this.pendingMutationSeq = msg.mutationSeq;
         // Staged, not dispatched here — see pendingAlerts' field doc. Concat
@@ -460,7 +463,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.pendingAlerts = [];
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -476,7 +479,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.pendingAlerts = [];
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -506,7 +509,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingAlerts = [];
         this.adoptDimensions(msg.width, msg.height, msg.seed);
         this.state.policies = msg.policies;
-        this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson);
+        this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson);
         this.updateStats(msg.stats);
         this.lastAppliedTick = msg.stats.tick;
         this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -624,10 +627,6 @@ export class WasmSimBridge implements SimBridge {
     wild.breakdown.transport     = stats.wildernessTransport;
     wild.breakdown.power         = stats.wildernessPower;
     wild.breakdown.civic         = stats.wildernessCivic;
-    // Record the daily budget history TS-side so the quarterly panel works
-    // on the WASM path (the Rust sim keeps its own history internally but it
-    // isn't carried over the stats wire).
-    recordDailyBudget(this.state);
     this.handler?.({
       type: 'TickStats',
       data: {
@@ -649,6 +648,7 @@ export class WasmSimBridge implements SimBridge {
     waterComponentsJson: string,
     educationJson: string,
     educationSeatsUsedJson: string,
+    budgetHistoryJson: string,
   ): void {
     const n = this.state.tiles.length;
 
@@ -672,6 +672,10 @@ export class WasmSimBridge implements SimBridge {
     const seatsUsed: WireEducationSeatsUsed[] = educationSeatsUsedJson
       ? JSON.parse(educationSeatsUsedJson)
       : [];
+    // `#229` — Rust-computed, replaces the old client-side reconstruction.
+    if (budgetHistoryJson) {
+      this.state.budgetHistory = JSON.parse(budgetHistoryJson) as BudgetHistoryEntry[];
+    }
 
     decodeTileBuffer(this.state.tiles, bytes);
 

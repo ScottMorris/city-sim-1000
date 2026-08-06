@@ -1,3 +1,8 @@
+// persistence.test.ts — save/load: serialize/deserialize round trips and legacy back-fill.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { describe, it, expect } from 'vitest';
 import { serialize, deserialize, copyState } from './persistence';
 import {
@@ -203,9 +208,16 @@ describe('scalar and structural back-fill', () => {
       delete parsed.education;
       delete parsed.bylaws;
     });
-    expect(state.budgetHistory).toEqual({ daily: [], lastRecordedDay: 0 });
+    expect(state.budgetHistory).toEqual([]);
     expect(state.education).toEqual(createEmptyEducationStats());
     expect(state.bylaws).toEqual(DEFAULT_BYLAWS);
+  });
+
+  it('reads a legacy {daily, lastRecordedDay}-shaped budgetHistory as its bare daily array', () => {
+    const state = degrade((parsed) => {
+      parsed.budgetHistory = { daily: [{ day: 3, revenue: 10, expenses: 5, net: 5 }], lastRecordedDay: 3 };
+    });
+    expect(state.budgetHistory).toEqual([{ day: 3, revenue: 10, expenses: 5, net: 5 }]);
   });
 
   it('back-fills a missing bylaws section without clobbering the rest', () => {

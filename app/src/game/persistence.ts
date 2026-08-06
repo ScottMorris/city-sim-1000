@@ -1,3 +1,8 @@
+// persistence.ts — save/load: IndexedDB CSAV containers, legacy JSON back-fill, and downloads.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { LOCAL_STORAGE_KEY } from './constants';
 import { DEFAULT_BYLAWS } from './bylaws';
 import {
@@ -166,9 +171,15 @@ export function deserialize(payload: string): GameState {
       zonesByType: parsed.budget.breakdown.details.buildings?.zonesByType ?? {}
     };
   }
-  parsed.budgetHistory = parsed.budgetHistory ?? { daily: [], lastRecordedDay: 0 };
-  parsed.budgetHistory.daily = parsed.budgetHistory.daily ?? [];
-  parsed.budgetHistory.lastRecordedDay = parsed.budgetHistory.lastRecordedDay ?? 0;
+  // `#229`: budgetHistory used to be a `{daily, lastRecordedDay}` wrapper —
+  // the wrapper only existed to gate the client's own now-deleted daily
+  // recompute, so a save carrying the old shape reads its `.daily` array
+  // straight through; a save with neither shape starts empty (nothing to
+  // reconstruct once the client-side recompute is gone — the wire overwrites
+  // this on the first tick regardless).
+  parsed.budgetHistory = Array.isArray(parsed.budgetHistory)
+    ? parsed.budgetHistory
+    : (parsed.budgetHistory?.daily ?? []);
   // Fold policies into the grouped `policies` shape. Legacy saves carry flat
   // `budgetPolicy`/`wildernessPolicy` keys; saves from before those features
   // get the neutral defaults.
