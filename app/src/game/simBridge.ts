@@ -10,16 +10,11 @@
 import type { GameState } from './gameState';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import type { BuildingTemplate } from './buildings/templates';
 import type { LegacyEngineImport } from '../workers/wasmSim.worker';
 
 export type { LegacyEngineImport };
 
 export type { SimCommand, CommandResult, FromSim };
-
-// BuildingTemplate re-exported so callers of getMetadata() don't need a
-// separate import from buildings/templates.
-export type { BuildingTemplate };
 
 export interface SimBridge {
   /**
@@ -112,14 +107,6 @@ export interface SimBridge {
    */
   canUndo(): boolean;
   canRedo(): boolean;
-
-  /**
-   * Return all building templates known to this bridge, or null if the bridge
-   * has not yet exported metadata. WASM and Tauri bridges return null until
-   * Option B (Rust metadata export) is implemented; UI callers fall back to
-   * the TS `templates.ts` table.
-   */
-  getMetadata(): BuildingTemplate[] | null;
 
   /**
    * Tear down the bridge (terminate Worker, release SharedArrayBuffer, etc.).

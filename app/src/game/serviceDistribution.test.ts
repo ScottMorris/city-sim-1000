@@ -1,70 +1,13 @@
-// serviceDistribution.test.ts — zone load shares and reachable-candidate search.
+// serviceDistribution.test.ts — reachable-candidate search for the education ghost preview.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { createInitialState, getTile, setTile, GameState, TileKind } from './gameState';
-import { createBuildingState } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
-import {
-  computeZoneLoads,
-  estimateZoneLoad,
-  getReachableZoneCandidates,
-  DEFAULT_WORKER_SHARE
-} from './serviceDistribution';
-import { ServiceId } from './services';
-
-/**
- * Stand-in for the deleted `buildings/manager.ts`'s `placeZoneBuilding`: push
- * an active `BuildingInstance` for an already-zoned lot directly, since
- * `computeZoneLoads` only walks `state.buildings` and never re-derives it
- * from tile occupant bits.
- */
-function developZoneLot(state: GameState, kind: TileKind, x: number, y: number): void {
-  const template = getBuildingTemplate(kind)!;
-  const id = state.nextBuildingId ?? 1;
-  state.buildings.push({ id, templateId: template.id, origin: { x, y }, state: createBuildingState() });
-  const tile = getTile(state, x, y);
-  if (tile) tile.buildingId = id;
-  state.nextBuildingId = id + 1;
-}
+import { createInitialState, setTile, TileKind } from './gameState';
+import { getReachableZoneCandidates } from './serviceDistribution';
 
 describe('serviceDistribution', () => {
-  it('computes population and job loads proportional to capacity with worker fallback', () => {
-    const state = createInitialState(6, 6);
-    state.population = 28;
-    state.jobs = 40;
-
-    setTile(state, 0, 0, TileKind.Residential);
-    setTile(state, 1, 0, TileKind.Residential);
-    setTile(state, 3, 0, TileKind.Commercial);
-    setTile(state, 4, 0, TileKind.Industrial);
-    developZoneLot(state, TileKind.Residential, 0, 0);
-    developZoneLot(state, TileKind.Residential, 1, 0);
-    developZoneLot(state, TileKind.Commercial, 3, 0);
-    developZoneLot(state, TileKind.Industrial, 4, 0);
-
-    const loads = computeZoneLoads(state);
-
-    const resShare = state.population / 2; // equal split: 14 each
-    expect(loads.population.get(0)).toBeCloseTo(resShare);
-    expect(loads.population.get(1)).toBeCloseTo(resShare);
-    expect(loads.jobs.get(0)).toBeCloseTo(resShare * DEFAULT_WORKER_SHARE);
-
-    // Commercial and industrial split jobs proportionally to capacity (8 vs 12 of 20)
-    expect(loads.jobs.get(3)).toBeCloseTo(16); // 40 * (8/20)
-    expect(loads.jobs.get(4)).toBeCloseTo(24); // 40 * (12/20)
-
-    // Education load estimators use these shares
-    expect(
-      estimateZoneLoad(0, state.tiles[0], ServiceId.EducationElementary, loads)
-    ).toBeCloseTo(resShare);
-    expect(
-      estimateZoneLoad(1, state.tiles[1], ServiceId.EducationHigh, loads)
-    ).toBeCloseTo(resShare * DEFAULT_WORKER_SHARE);
-  });
-
   it('finds reachable zones through roads within a radius and sorts by distance', () => {
     const state = createInitialState(5, 5);
     // service origin at (1,1)

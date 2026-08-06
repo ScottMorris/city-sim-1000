@@ -2,5 +2,15 @@
 
 /**
  * Result returned synchronously for `ApplyTool` commands.
+ *
+ * `stroke_id` correlates this result back to the `ApplyTool` send that
+ * produced it — the drag-paint stroke id the caller already supplied. Both
+ * transports stamp it on at their command boundary (`SimHost::apply_tool`'s
+ * caller in the WASM worker; the Tauri `apply_tool` command) rather than
+ * inside `city_sim_core::commands::apply_tool` itself, which has no
+ * `stroke_id` parameter — every internal `CommandResult::ok()`/`fail()`
+ * call site is unaffected. Replaces `mcpBridge.ts`'s blind FIFO result
+ * queue, which mismatched results under Tauri's unordered IPC arrival and
+ * any interleaving with a human player's own `ApplyTool` sends.
  */
-export type CommandResult = { success: boolean, message: string | null, };
+export type CommandResult = { success: boolean, message: string | null, strokeId: number, };

@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 import { GameState, Tile } from './gameState';
-import { Network, Terrain, conducts, tileOccupants, zoneOccupant } from './protocol/occupants';
+import { Network, conducts, tileOccupants, zoneOccupant } from './protocol/occupants';
 
 const ORTHOGONAL_DIRS: Array<[number, number]> = [
   [0, -1],
@@ -75,32 +75,4 @@ export function isWaterCarrier(tile: Tile | undefined): boolean {
     tile.buildingId,
     false
   );
-}
-
-/**
- * Whether any tile in the footprint rooted at `origin` is orthogonally
- * adjacent to a `Terrain.Water` tile.
- *
- * Mirrors `footprint_touches_water` in `crates/city-sim-core/src/adjacency.rs`
- * — used client-side to reconstruct `BuildingStatus.InactiveNoSource` for a
- * pump, the same way `originTile.powered`/`.watered` already reconstruct
- * `InactiveNoPower`/`InactiveNoWater` from wire tile flags rather than a wire
- * status field (`#200`).
- */
-export function footprintTouchesWater(
-  state: GameState,
-  origin: { x: number; y: number },
-  footprint: { width: number; height: number }
-): boolean {
-  for (let dy = 0; dy < footprint.height; dy++) {
-    for (let dx = 0; dx < footprint.width; dx++) {
-      const x = origin.x + dx;
-      const y = origin.y + dy;
-      for (const [nx, ny] of getOrthogonalNeighbourCoords(state, x, y)) {
-        const neighbour = state.tiles[ny * state.width + nx];
-        if (neighbour?.terrain === Terrain.Water) return true;
-      }
-    }
-  }
-  return false;
 }

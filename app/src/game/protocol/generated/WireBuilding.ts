@@ -8,4 +8,14 @@ export type WireBuilding = { id: number,
 /**
  * `BuildingKind as u8` — decode with `BUILDING_KIND_BY_U8` in TS.
  */
-kind: number, originX: number, originY: number, };
+kind: number, originX: number, originY: number, 
+/**
+ * `BuildingStatus as u8` (`#200`) — decode with `BUILDING_STATUS_BY_U8`
+ * in TS. Replaces the client-side power/water-flag reconstruction both
+ * bridges used to run per building.
+ */
+status: number, 
+/**
+ * 0–100; see `city_sim_core::buildings::BuildingInstance::health`.
+ */
+health: number, };

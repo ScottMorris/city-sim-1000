@@ -44,7 +44,14 @@ export type FromSim =
   | { type: 'Ready' }
   | { type: 'Alert'; data: SimAlert }
   | { type: 'Narrative'; data: NarrativeEvent }
-  | { type: 'CommandResult'; success: boolean; message?: string }
+  /**
+   * `strokeId` correlates this result back to the `ApplyTool` send that
+   * produced it (mirrors the wire `CommandResult.strokeId` — see
+   * `city_sim_protocol::commands::CommandResult`'s doc comment). Both
+   * bridges always populate it now: `mcpBridge.ts`'s result queue keys
+   * pending sends by it instead of assuming FIFO/arrival-order matching.
+   */
+  | { type: 'CommandResult'; success: boolean; message?: string; strokeId: number }
   | { type: 'TickStats'; data: TickStats }
   | { type: 'HistoryChanged'; data: HistoryFlags }
   /**

@@ -59,7 +59,7 @@ function zeroStats(): SimStats {
     'wildernessForests', 'wildernessParks', 'wildernessOpenLand',
     'wildernessWaterEdge', 'wildernessPatch', 'wildernessFragmentation',
     'wildernessZones', 'wildernessIndustry', 'wildernessTransport',
-    'wildernessPower', 'wildernessCivic'
+    'wildernessPower', 'wildernessCivic', 'abandonedCount', 'avgHappiness'
   ]) {
     stats[key] = 0;
   }
@@ -296,6 +296,70 @@ describe('WasmSimBridge undo/redo', () => {
     bridge.step(1 / 20);
 
     expect(state.budgetHistory).toEqual([{ day: 3, revenue: 100, expenses: 40, net: 60 }]);
+  });
+
+  it('decodes demandBreakdownJson into state.demand.breakdown and state.labour on step() flush', () => {
+    const { worker, bridge, state } = makeBridge();
+    const zeroClass = {
+      base: 0, fillFraction: 0, fillTerm: 0, workforceTerm: 0, labourTerm: 0,
+      pendingZones: 0, pendingPenaltyRaw: 0, pendingPenaltyCapped: 0, pendingPenaltyApplied: 0,
+      pressureRelief: 0, utilityPenalty: 0, demandBeforeUtilities: 0, floorApplied: false, seeded: true, value: 0,
+    };
+    const demand = { residential: { ...zeroClass, value: 60 }, commercial: zeroClass, industrial: zeroClass };
+    const labour = {
+      population: 100, resCapacity: 140, jobCapacity: 40,
+      workers: 55, employed: 40, unemployed: 15, unemploymentRate: 0.27, vacancyRate: 0,
+    };
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      demandBreakdownJson: JSON.stringify({ demand, labour }),
+    });
+
+    bridge.step(1 / 20);
+
+    expect(state.demand.breakdown).toEqual(demand);
+    expect(state.labour).toEqual(labour);
+  });
+
+  // `#200`'s wire-adoption follow-up: building status/health used to be
+  // reconstructed client-side from tile power/water flags. `buildings_json`
+  // now carries the engine's own real status/health directly.
+  it.each([
+    [0, 'active'],
+    [1, 'inactive_no_power'],
+    [2, 'inactive_no_water'],
+    [3, 'inactive_no_source'],
+    [4, 'inactive_damaged'],
+  ] as const)('decodes WireBuilding.status byte %i as %s, verbatim off the wire', (statusByte, expected) => {
+    const { worker, bridge, state } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      buildingsJson: JSON.stringify([{
+        id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0,
+        status: statusByte, health: 100,
+      }]),
+      powerComponentsJson: '[]', waterComponentsJson: '[]',
+    });
+
+    bridge.step(1 / 20);
+
+    expect(state.buildings[0].state.status).toBe(expected);
+  });
+
+  it('decodes WireBuilding.health verbatim', () => {
+    const { worker, bridge, state } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      buildingsJson: JSON.stringify([{
+        id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0,
+        status: 0, health: 37,
+      }]),
+      powerComponentsJson: '[]', waterComponentsJson: '[]',
+    });
+
+    bridge.step(1 / 20);
+
+    expect(state.buildings[0].state.health).toBe(37);
   });
 
   it('discards a pending alert when an undo lands before step() flushes it', () => {

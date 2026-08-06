@@ -41,6 +41,8 @@ interface WireBuilding {
   kind: number;
   originX: number;
   originY: number;
+  status: number;
+  health: number;
 }
 
 interface WireUtilityComponent {
@@ -75,13 +77,59 @@ interface WireBudgetHistoryEntry {
   net: number;
 }
 
+// Mirrors `WireBudgetStats` (`city_sim_protocol::wire_types`) — every field
+// `TickEvent.budget` carries. Zero everywhere is a legal (if uninteresting)
+// budget snapshot, so `baseTickEvent`'s default below is exactly this.
+interface WireBudgetStats {
+  revenue: number; expenses: number; net: number; netPerDay: number; netPerMonth: number;
+  revenueBase: number; revenuePop: number; revenueCommercial: number; revenueIndustrial: number; revenueTourism: number;
+  expensesTransport: number; expensesBuildings: number; expensesPolicies: number;
+  maintPower: number; maintCivic: number; maintZones: number;
+  maintRoads: number; maintRail: number; maintPowerLines: number; maintPipes: number;
+  maintPowerHydro: number; maintPowerCoal: number; maintPowerWind: number; maintPowerSolar: number;
+  maintCivicPark: number; maintCivicPump: number; maintCivicTower: number; maintCivicSchool: number;
+  maintZonesRes: number; maintZonesCom: number; maintZonesInd: number;
+}
+
+// Mirrors `WireWildernessBreakdown`.
+interface WireWildernessBreakdown {
+  forests: number; parks: number; openLand: number; waterEdge: number; patch: number;
+  fragmentation: number; zones: number; industry: number; transport: number; power: number; civic: number;
+}
+
+// Mirrors `WireLabourStats`.
+interface WireLabourStats {
+  population: number; resCapacity: number; jobCapacity: number;
+  workers: number; employed: number; unemployed: number;
+  unemploymentRate: number; vacancyRate: number;
+}
+
+// Mirrors `WireDemandClassBreakdown`/`WireDemandBreakdown`.
+interface WireDemandClassBreakdown {
+  base: number; fillFraction: number; fillTerm: number; workforceTerm: number; labourTerm: number;
+  pendingZones: number; pendingPenaltyRaw: number; pendingPenaltyCapped: number; pendingPenaltyApplied: number;
+  pressureRelief: number; utilityPenalty: number; demandBeforeUtilities: number;
+  floorApplied: boolean; seeded: boolean; value: number;
+}
+interface WireDemandBreakdown {
+  residential: WireDemandClassBreakdown;
+  commercial: WireDemandClassBreakdown;
+  industrial: WireDemandClassBreakdown;
+}
+
 interface TickEvent {
   tick: number; day: number; population: number; jobs: number; money: number;
   power: number; water: number; powerProduced: number; waterProduced: number;
+  powerUsed: number; waterUsed: number;
+  budget: WireBudgetStats;
+  wildernessBreakdown: WireWildernessBreakdown;
   powerComponents: WireUtilityComponent[]; waterComponents: WireUtilityComponent[];
   education: WireEducationStats; educationSeatsUsed: WireEducationSeatsUsed[];
   budgetHistory: WireBudgetHistoryEntry[];
   demandResidential: number; demandCommercial: number; demandIndustrial: number;
+  demandBreakdown: WireDemandBreakdown;
+  labour: WireLabourStats;
+  abandonedCount: number; avgHappiness: number;
   wildernessScore: number; wildernessTrend: number;
   width: number; height: number;
   tiles: number[];
@@ -92,10 +140,43 @@ interface TickEvent {
 
 const GRID_TILES = 8 * 8;
 
+const ZERO_BUDGET: WireBudgetStats = {
+  revenue: 0, expenses: 0, net: 0, netPerDay: 0, netPerMonth: 0,
+  revenueBase: 0, revenuePop: 0, revenueCommercial: 0, revenueIndustrial: 0, revenueTourism: 0,
+  expensesTransport: 0, expensesBuildings: 0, expensesPolicies: 0,
+  maintPower: 0, maintCivic: 0, maintZones: 0,
+  maintRoads: 0, maintRail: 0, maintPowerLines: 0, maintPipes: 0,
+  maintPowerHydro: 0, maintPowerCoal: 0, maintPowerWind: 0, maintPowerSolar: 0,
+  maintCivicPark: 0, maintCivicPump: 0, maintCivicTower: 0, maintCivicSchool: 0,
+  maintZonesRes: 0, maintZonesCom: 0, maintZonesInd: 0,
+};
+
+const ZERO_WILDERNESS_BREAKDOWN: WireWildernessBreakdown = {
+  forests: 0, parks: 0, openLand: 0, waterEdge: 0, patch: 0,
+  fragmentation: 0, zones: 0, industry: 0, transport: 0, power: 0, civic: 0,
+};
+
+const ZERO_LABOUR: WireLabourStats = {
+  population: 0, resCapacity: 0, jobCapacity: 0,
+  workers: 0, employed: 0, unemployed: 0, unemploymentRate: 0, vacancyRate: 0,
+};
+
+function zeroDemandClass(value: number): WireDemandClassBreakdown {
+  return {
+    base: 0, fillFraction: 0, fillTerm: 0, workforceTerm: 0, labourTerm: 0,
+    pendingZones: 0, pendingPenaltyRaw: 0, pendingPenaltyCapped: 0, pendingPenaltyApplied: 0,
+    pressureRelief: 0, utilityPenalty: 0, demandBeforeUtilities: value,
+    floorApplied: false, seeded: true, value,
+  };
+}
+
 function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   return {
     tick: 0, day: 0, population: 0, jobs: 0, money: 0,
     power: 0, water: 0, powerProduced: 0, waterProduced: 0,
+    powerUsed: 0, waterUsed: 0,
+    budget: ZERO_BUDGET,
+    wildernessBreakdown: ZERO_WILDERNESS_BREAKDOWN,
     powerComponents: [], waterComponents: [],
     education: {
       elementaryServed: 0, elementaryCapacity: 0, elementaryLoad: 0,
@@ -105,6 +186,11 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
     educationSeatsUsed: [],
     budgetHistory: [],
     demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
+    demandBreakdown: {
+      residential: zeroDemandClass(0), commercial: zeroDemandClass(0), industrial: zeroDemandClass(0)
+    },
+    labour: ZERO_LABOUR,
+    abandonedCount: 0, avgHappiness: 1,
     wildernessScore: 0, wildernessTrend: 0,
     width: 8, height: 8,
     tiles: new Array(GRID_TILES * BYTES_PER_TILE).fill(0),
@@ -115,10 +201,15 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   };
 }
 
+/** A `WireBuilding` with `status`/`health` defaulted to Active/100 — override just what a test cares about. */
+function wireBuilding(overrides: Partial<WireBuilding> & Pick<WireBuilding, 'id' | 'kind' | 'originX' | 'originY'>): WireBuilding {
+  return { status: 0, health: 100, ...overrides };
+}
+
 function makeFakePlugin(): TauriPluginBindings {
   return {
     start: vi.fn(),
-    applyTool: vi.fn().mockResolvedValue({ success: true, message: null }),
+    applyTool: vi.fn().mockResolvedValue({ success: true, message: null, strokeId: 0 }),
     setSpeed: vi.fn(),
     setPolicies: vi.fn(),
     setNaturalTerrain: vi.fn(),
@@ -216,25 +307,46 @@ describe('TauriSimBridge command routing', () => {
 
   it('forwards a refused ApplyTool\'s message as a CommandResult once the plugin resolves', async () => {
     const { bridge, plugin, events } = await makeBridge();
-    vi.mocked(plugin.applyTool).mockResolvedValueOnce({ success: false, message: 'Not enough funds' });
+    const strokeId = nextStrokeId();
+    vi.mocked(plugin.applyTool).mockResolvedValueOnce({ success: false, message: 'Not enough funds', strokeId });
 
-    bridge.send(applyToolCmd(Tool.Road, 3, 4, nextStrokeId(), 'surface'));
+    bridge.send(applyToolCmd(Tool.Road, 3, 4, strokeId, 'surface'));
     // send() itself must still answer synchronously and optimistically —
     // the real result arrives later, over the resolved promise.
     await Promise.resolve();
     await Promise.resolve();
 
     const result = events.find((e) => e.type === 'CommandResult');
-    expect(result).toEqual({ type: 'CommandResult', success: false, message: 'Not enough funds' });
+    expect(result).toEqual({ type: 'CommandResult', success: false, message: 'Not enough funds', strokeId });
+  });
+
+  it('forwards the plugin\'s own strokeId, not the send-time closure value, in case they ever disagree', async () => {
+    const { bridge, plugin, events } = await makeBridge();
+    const sentStrokeId = nextStrokeId();
+    // A deliberately different id in the resolved result — proves the bridge
+    // reads `result.strokeId` (the Rust-stamped value) rather than closing
+    // over the id it sent, per `send()`'s doc comment.
+    vi.mocked(plugin.applyTool).mockResolvedValueOnce({ success: true, message: null, strokeId: sentStrokeId + 1 });
+
+    bridge.send(applyToolCmd(Tool.Road, 3, 4, sentStrokeId, 'surface'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const result = events.find((e) => e.type === 'CommandResult');
+    expect(result).toEqual({ type: 'CommandResult', success: true, message: undefined, strokeId: sentStrokeId + 1 });
   });
 });
 
 describe('TauriSimBridge onTick decode', () => {
-  it('copies stats, derives used from produced/balance, and copies demand and wilderness', async () => {
+  it('copies stats, utility usage, demand headline, and wilderness score/trend verbatim', async () => {
     const { bridge, emit } = await makeBridge();
     emit(baseTickEvent({
       tick: 42, day: 3, population: 100, jobs: 50, money: 5000,
       power: 20, water: -5, powerProduced: 80, waterProduced: 15,
+      // `powerUsed`/`waterUsed` ride the wire directly now — deliberately
+      // NOT `produced - balance` here, proving the bridge no longer
+      // re-derives them by subtraction.
+      powerUsed: 999, waterUsed: 999,
       demandResidential: 60, demandCommercial: 40, demandIndustrial: 10,
       wildernessScore: 33, wildernessTrend: -1.5
     }));
@@ -249,14 +361,38 @@ describe('TauriSimBridge onTick decode', () => {
     expect(s.utilities.water).toBe(-5);
     expect(s.utilities.powerProduced).toBe(80);
     expect(s.utilities.waterProduced).toBe(15);
-    // consumed = produced - balance
-    expect(s.utilities.powerUsed).toBe(60);
-    expect(s.utilities.waterUsed).toBe(20);
+    expect(s.utilities.powerUsed).toBe(999);
+    expect(s.utilities.waterUsed).toBe(999);
     expect(s.demand.residential).toBe(60);
     expect(s.demand.commercial).toBe(40);
     expect(s.demand.industrial).toBe(10);
     expect(s.wilderness.score).toBe(33);
     expect(s.wilderness.trend).toBe(-1.5);
+  });
+
+  it('copies budget, wilderness breakdown, demand breakdown, labour, and map aggregates verbatim — previously all zeroed on this transport', async () => {
+    const { bridge, emit } = await makeBridge();
+    const budget: WireBudgetStats = { ...ZERO_BUDGET, revenue: 500, expenses: 300, net: 200, netPerDay: 40, netPerMonth: 1200 };
+    const wildernessBreakdown: WireWildernessBreakdown = { ...ZERO_WILDERNESS_BREAKDOWN, forests: 12, parks: 4 };
+    const labour: WireLabourStats = { ...ZERO_LABOUR, population: 100, jobCapacity: 40, unemploymentRate: 0.2, vacancyRate: 0.1 };
+    const demandBreakdown: WireDemandBreakdown = {
+      residential: zeroDemandClass(60), commercial: zeroDemandClass(40), industrial: zeroDemandClass(10)
+    };
+
+    emit(baseTickEvent({ budget, wildernessBreakdown, demandBreakdown, labour, abandonedCount: 7, avgHappiness: 0.42 }));
+
+    const s = bridge.getState();
+    expect(s.budget.revenue).toBe(500);
+    expect(s.budget.expenses).toBe(300);
+    expect(s.budget.net).toBe(200);
+    expect(s.budget.netPerDay).toBe(40);
+    expect(s.budget.netPerMonth).toBe(1200);
+    expect(s.wilderness.breakdown.forests).toBe(12);
+    expect(s.wilderness.breakdown.parks).toBe(4);
+    expect(s.demand.breakdown).toEqual(demandBreakdown);
+    expect(s.labour).toEqual(labour);
+    expect(s.abandonedCount).toBe(7);
+    expect(s.avgHappiness).toBe(0.42);
   });
 
   it('adopts event.budgetHistory verbatim, replacing whatever the mirror held before', async () => {
@@ -314,7 +450,7 @@ describe('TauriSimBridge onTick decode', () => {
       highServed: 0, highCapacity: 0, highLoad: 0,
       score: 0.6, elementaryCoverage: 0.6, highCoverage: 1,
     };
-    const school: WireBuilding = { id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0 };
+    const school: WireBuilding = wireBuilding({ id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0 });
 
     emit(baseTickEvent({
       education,
@@ -332,7 +468,7 @@ describe('TauriSimBridge onTick decode', () => {
     const { bridge, emit } = await makeBridge();
     const n = GRID_TILES;
     const o = tileBufferOffsets(n);
-    const coalPlant: WireBuilding = { id: 7, kind: buildingKindToU8(BuildingKind.CoalPlant), originX: 0, originY: 0 };
+    const coalPlant: WireBuilding = wireBuilding({ id: 7, kind: buildingKindToU8(BuildingKind.CoalPlant), originX: 0, originY: 0 });
 
     // CoalPlant's real 2x2 footprint, written straight onto the wire — no TS
     // template footprint is consulted for tile coverage any more.
@@ -361,63 +497,33 @@ describe('TauriSimBridge onTick decode', () => {
     expect(s2.buildings).toHaveLength(0);
   });
 
-  it('marks a power-requiring building InactiveNoPower until its origin tile reads powered', async () => {
+  // `#200`'s wire-adoption follow-up: building status/health used to be
+  // reconstructed client-side from tile power/water flags (a ~40-line
+  // derivation, tested above in prior revisions of this file). The engine
+  // now computes the real status and sends it directly as `WireBuilding
+  // .status`/`.health` — this bridge's only remaining job is decoding the u8.
+  it.each([
+    [0, 'active'],
+    [1, 'inactive_no_power'],
+    [2, 'inactive_no_water'],
+    [3, 'inactive_no_source'],
+    [4, 'inactive_damaged'],
+  ] as const)('decodes WireBuilding.status byte %i as %s, verbatim off the wire', async (statusByte, expected) => {
     const { bridge, emit } = await makeBridge();
-    // WaterTower, not WaterPump: it requires power like a pump, but (unlike
-    // a pump) doesn't need its footprint to touch water terrain, so this
-    // stays a pure power-gating test rather than tripping the #200 source
-    // gate covered separately below.
-    const tower: WireBuilding = { id: 1, kind: buildingKindToU8(BuildingKind.WaterTower), originX: 2, originY: 2 };
-    const o = tileBufferOffsets(GRID_TILES);
-    const originIndex = 2 * 8 + 2;
-
-    emit(baseTickEvent({ buildings: [tower] }));
-    expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_power');
-
-    const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
-    tiles[o.status + originIndex] = STATUS.POWERED;
-    emit(baseTickEvent({ tiles, buildings: [tower] }));
-    expect(bridge.getState().buildings[0].state.status).toBe('active');
+    const house = wireBuilding({
+      id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0, status: statusByte,
+    });
+    emit(baseTickEvent({ buildings: [house] }));
+    expect(bridge.getState().buildings[0].state.status).toBe(expected);
   });
 
-  it('marks a water pump InactiveNoSource until its footprint touches water terrain', async () => {
+  it('decodes WireBuilding.health verbatim', async () => {
     const { bridge, emit } = await makeBridge();
-    const pump: WireBuilding = { id: 3, kind: buildingKindToU8(BuildingKind.WaterPump), originX: 2, originY: 2 };
-    const o = tileBufferOffsets(GRID_TILES);
-    const originIndex = 2 * 8 + 2;
-    const neighbourIndex = 2 * 8 + 3; // (3,2), orthogonally east of the pump
-
-    const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
-    tiles[o.status + originIndex] = STATUS.POWERED;
-
-    // Powered, but nowhere near water: no source to draw from.
-    emit(baseTickEvent({ tiles, buildings: [pump] }));
-    expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_source');
-
-    // A water-terrain neighbour appears: the pump comes online.
-    const tilesWithWater = tiles.slice();
-    tilesWithWater[o.status + neighbourIndex] = STATUS.WATER_TERRAIN;
-    emit(baseTickEvent({ tiles: tilesWithWater, buildings: [pump] }));
-    expect(bridge.getState().buildings[0].state.status).toBe('active');
-  });
-
-  it('marks a water-consuming building InactiveNoWater only once a water system exists and it is unwatered', async () => {
-    const { bridge, emit } = await makeBridge();
-    const house: WireBuilding = { id: 2, kind: buildingKindToU8(BuildingKind.Residential), originX: 5, originY: 5 };
-    const o = tileBufferOffsets(GRID_TILES);
-    const originIndex = 5 * 8 + 5;
-    const tiles = new Array(GRID_TILES * BYTES_PER_TILE).fill(0);
-    tiles[o.status + originIndex] = STATUS.POWERED; // powered, but not watered
-
-    // No water system yet (no pump/tower building, no buried pipe) — water need is not evaluated.
-    emit(baseTickEvent({ tiles, buildings: [house] }));
-    expect(bridge.getState().buildings[0].state.status).toBe('active');
-
-    // A buried pipe brings the water system online; the same unwatered tile now reads InactiveNoWater.
-    const tilesWithPipe = tiles.slice();
-    tilesWithPipe[o.underground] = 1 << Occupant.Pipe;
-    emit(baseTickEvent({ tiles: tilesWithPipe, buildings: [house] }));
-    expect(bridge.getState().buildings[0].state.status).toBe('inactive_no_water');
+    const house = wireBuilding({
+      id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0, health: 37,
+    });
+    emit(baseTickEvent({ buildings: [house] }));
+    expect(bridge.getState().buildings[0].state.health).toBe(37);
   });
 
   it('emits HistoryChanged only on undo/redo flag transitions', async () => {

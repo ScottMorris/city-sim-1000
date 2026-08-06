@@ -170,10 +170,57 @@ export interface UtilityStats {
   waterComponents: UtilityComponentStats[];
 }
 
+/**
+ * Every intermediate value the engine's demand formula derives for one zone
+ * class on the way to its final clamped percentage — mirrors Rust's
+ * `DemandComputation` (`crates/city-sim-core/src/demand.rs`), wired as
+ * `WireDemandClassBreakdown`. Replaces the TS shadow model that used to
+ * recompute these locally (`app/src/game/demand.ts`, deleted).
+ */
+export interface DemandClassBreakdown {
+  base: number;
+  fillFraction: number;
+  fillTerm: number;
+  workforceTerm: number;
+  labourTerm: number;
+  pendingZones: number;
+  pendingPenaltyRaw: number;
+  pendingPenaltyCapped: number;
+  pendingPenaltyApplied: number;
+  pressureRelief: number;
+  utilityPenalty: number;
+  demandBeforeUtilities: number;
+  floorApplied: boolean;
+  seeded: boolean;
+  value: number;
+}
+
 export interface DemandStats {
   residential: number;
   commercial: number;
   industrial: number;
+  breakdown: {
+    residential: DemandClassBreakdown;
+    commercial: DemandClassBreakdown;
+    industrial: DemandClassBreakdown;
+  };
+}
+
+/**
+ * City-wide labour aggregates — mirrors Rust's `LabourStats`
+ * (`crates/city-sim-core/src/demand.rs`), wired as `WireLabourStats`.
+ * Replaces the TS-side `computeLabourStats.ts` recompute (including its
+ * hard-coded 0.55 worker-share constant).
+ */
+export interface LabourStats {
+  population: number;
+  resCapacity: number;
+  jobCapacity: number;
+  workers: number;
+  employed: number;
+  unemployed: number;
+  unemploymentRate: number;
+  vacancyRate: number;
 }
 
 /** Per-category eco totals for the wilderness tooltip — mirrors
@@ -255,6 +302,12 @@ export interface GameState {
   jobs: number;
   utilities: UtilityStats;
   demand: DemandStats;
+  /** City-wide labour aggregates — see `LabourStats`. */
+  labour: LabourStats;
+  /** Number of tiles flagged abandoned — see `GameState::abandoned_count` (Rust). */
+  abandonedCount: number;
+  /** Mean tile happiness across the grid — see `GameState::avg_happiness` (Rust). */
+  avgHappiness: number;
   budget: BudgetStats;
   /** `#229` — Rust-computed, wire-sourced; see `economy.ts`'s doc comment. */
   budgetHistory: BudgetHistoryEntry[];
@@ -316,6 +369,41 @@ export function createDefaultNarrativeSettings(): NarrativeSettings {
 export function createDefaultUiSettings(): UiSettings {
   return {
     mode: 'auto'
+  };
+}
+
+/** A starter-seed breakdown row — matches what the engine reports before the
+ *  first real demand tick runs (`seeded: true`, no derivation yet). */
+export function createDefaultDemandClassBreakdown(value: number): DemandClassBreakdown {
+  return {
+    base: 0,
+    fillFraction: 0,
+    fillTerm: 0,
+    workforceTerm: 0,
+    labourTerm: 0,
+    pendingZones: 0,
+    pendingPenaltyRaw: 0,
+    pendingPenaltyCapped: 0,
+    pendingPenaltyApplied: 0,
+    pressureRelief: 0,
+    utilityPenalty: 0,
+    demandBeforeUtilities: value,
+    floorApplied: false,
+    seeded: true,
+    value
+  };
+}
+
+export function createDefaultLabourStats(): LabourStats {
+  return {
+    population: 0,
+    resCapacity: 0,
+    jobCapacity: 0,
+    workers: 0,
+    employed: 0,
+    unemployed: 0,
+    unemploymentRate: 0,
+    vacancyRate: 0
   };
 }
 
@@ -413,7 +501,19 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       }
     },
     budgetHistory: [],
-    demand: { residential: 30, commercial: 30, industrial: 30 },
+    demand: {
+      residential: 30,
+      commercial: 30,
+      industrial: 30,
+      breakdown: {
+        residential: createDefaultDemandClassBreakdown(30),
+        commercial: createDefaultDemandClassBreakdown(30),
+        industrial: createDefaultDemandClassBreakdown(30)
+      }
+    },
+    labour: createDefaultLabourStats(),
+    abandonedCount: 0,
+    avgHappiness: 1,
     buildings: [],
     nextBuildingId: 1,
     // No schools yet → no load anywhere → full coverage, matching

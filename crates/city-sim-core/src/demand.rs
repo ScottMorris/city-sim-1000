@@ -97,9 +97,52 @@ pub struct DemandInput {
     pub floor_override: Option<f32>,
 }
 
-pub fn compute_demand(i: &DemandInput) -> f32 {
+/// Every intermediate value `compute_demand` derives on the way to its final
+/// clamped percentage — not just the answer.
+///
+/// Exposed on the wire as `WireDemandClassBreakdown` (`city-sim-protocol`) so
+/// the debug overlay can show the engine's own derivation instead of running
+/// a parallel TS copy of this formula (the deleted `app/src/game/demand.ts`
+/// shadow, `#200`'s wire-adoption follow-up). Field-for-field mirror of the
+/// `DemandComputation` interface that TS module used to return locally.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemandComputation {
+    pub base: f32,
+    pub fill_fraction: f32,
+    pub fill_term: f32,
+    pub workforce_term: f32,
+    pub labour_term: f32,
+    pub pending_zones: f32,
+    pub pending_penalty_raw: f32,
+    pub pending_penalty_capped: f32,
+    pub pending_penalty_applied: f32,
+    pub pressure_relief: f32,
+    pub utility_penalty: f32,
+    pub demand_before_utilities: f32,
+    pub floor_applied: bool,
+    pub seeded: bool,
+    pub value: f32,
+}
+
+pub fn compute_demand(i: &DemandInput) -> DemandComputation {
     if i.seeded {
-        return i.seeded_value;
+        return DemandComputation {
+            base: i.base,
+            fill_fraction: i.fill_fraction,
+            fill_term: i.base * (1.0 - i.fill_fraction),
+            workforce_term: i.workforce_term,
+            labour_term: i.labour_term,
+            pending_zones: i.pending_zones,
+            pending_penalty_raw: 0.0,
+            pending_penalty_capped: 0.0,
+            pending_penalty_applied: 0.0,
+            pressure_relief: 0.0,
+            utility_penalty: i.utility_penalty,
+            demand_before_utilities: i.seeded_value,
+            floor_applied: false,
+            seeded: true,
+            value: i.seeded_value,
+        };
     }
 
     let fill_term = i.base * (1.0 - i.fill_fraction);
@@ -132,7 +175,37 @@ pub fn compute_demand(i: &DemandInput) -> f32 {
         }
     };
 
-    (demand_before_utilities - i.utility_penalty).clamp(0.0, 100.0)
+    let value = (demand_before_utilities - i.utility_penalty).clamp(0.0, 100.0);
+
+    DemandComputation {
+        base: i.base,
+        fill_fraction: i.fill_fraction,
+        fill_term,
+        workforce_term: i.workforce_term,
+        labour_term: i.labour_term,
+        pending_zones: i.pending_zones,
+        pending_penalty_raw,
+        pending_penalty_capped,
+        pending_penalty_applied,
+        pressure_relief,
+        utility_penalty: i.utility_penalty,
+        demand_before_utilities,
+        floor_applied: demand_before_utilities > demand_after_penalty,
+        seeded: false,
+        value,
+    }
+}
+
+/// Per-class demand breakdown for all three zone classes, plus the labour
+/// aggregates the same city-count pass already produces — one function
+/// serving both the debug overlay's demand section (`#200`, item 3) and the
+/// narrative snapshot's capacity/labour fields (item 4), so neither TS
+/// caller re-walks tiles/buildings to get numbers this pass already has.
+pub struct DemandBreakdown {
+    pub residential: DemandComputation,
+    pub commercial: DemandComputation,
+    pub industrial: DemandComputation,
+    pub labour: LabourStats,
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +291,23 @@ fn count_city(state: &GameState) -> CityCounters {
 }
 
 /// Compute `DemandStats` from the current `GameState` — matches the demand
-/// assembly block in `simulation.ts:tick()`.
+/// assembly block in `simulation.ts:tick()`. A thin wrapper over
+/// `compute_city_demand_breakdown` that drops everything but the final
+/// clamped percentages; call that instead if the derivation itself (or the
+/// labour aggregates) is wanted too, e.g. for the wire.
 ///
 /// Education is stubbed to 0 until P3-8 (score=0, high_coverage=0).
 pub fn compute_city_demand(state: &GameState) -> DemandStats {
+    let b = compute_city_demand_breakdown(state);
+    DemandStats {
+        residential: b.residential.value,
+        commercial: b.commercial.value,
+        industrial: b.industrial.value,
+    }
+}
+
+/// Full per-class derivation plus labour aggregates — see `DemandBreakdown`.
+pub fn compute_city_demand_breakdown(state: &GameState) -> DemandBreakdown {
     let c = count_city(state);
 
     let pop = state.population as f32;
@@ -363,10 +449,11 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
         },
     });
 
-    DemandStats {
+    DemandBreakdown {
         residential,
         commercial,
         industrial,
+        labour,
     }
 }
 
@@ -401,13 +488,65 @@ mod tests {
             seeded_value: 42.0,
             ..input(70.0, 0.5, 0.0)
         };
-        assert_eq!(compute_demand(&i), 42.0);
+        assert_eq!(compute_demand(&i).value, 42.0);
+    }
+
+    #[test]
+    fn seeded_still_reports_a_real_fill_term_alongside_the_seeded_value() {
+        // The seeded early-return's `value` is just `seeded_value`, but every
+        // other field on `DemandComputation` — `fill_term` in particular —
+        // still has to carry the honest derived number, not a placeholder:
+        // the wire sends this whole struct to the debug overlay, seeded city
+        // or not.
+        let i = DemandInput {
+            seeded: true,
+            seeded_value: 42.0,
+            ..input(70.0, 0.5, 0.0)
+        };
+        let d = compute_demand(&i);
+        assert_eq!(
+            d.fill_term, 35.0,
+            "70 * (1 - 0.5) = 35, independent of seeded_value"
+        );
+    }
+
+    #[test]
+    fn floor_applied_is_true_only_when_the_floor_actually_raised_the_value() {
+        // Low fill (< FLOOR_FILL_THRESHOLD) with a low base_demand: the floor
+        // clamps demand_after_penalty up to DEMAND_FLOOR, so floor_applied
+        // must be true.
+        let floored = compute_demand(&DemandInput {
+            base: 0.0,
+            ..input(0.0, 0.0, 0.0)
+        });
+        assert!(
+            floored.floor_applied,
+            "a near-zero base should hit the floor"
+        );
+        assert_eq!(floored.demand_before_utilities, DEMAND_FLOOR);
+
+        // High fill (>= FLOOR_FILL_THRESHOLD): no floor is applied at all,
+        // regardless of how low demand_after_penalty is.
+        let not_floored = compute_demand(&input(70.0, 1.0, 0.0));
+        assert!(
+            !not_floored.floor_applied,
+            "fill >= threshold should skip the floor entirely"
+        );
+
+        // Low fill, but base_demand already comfortably above the floor:
+        // the max() picks demand_after_penalty, not DEMAND_FLOOR, so
+        // floor_applied must be false even though the floor path was taken.
+        let above_floor = compute_demand(&input(70.0, 0.0, 0.0));
+        assert!(
+            !above_floor.floor_applied,
+            "demand_after_penalty (70) already exceeds the floor (8) — nothing should have been raised"
+        );
     }
 
     #[test]
     fn empty_city_fills_from_base() {
         // 0% fill → fill_term = base; no pending penalty; should be near base (clamped)
-        let v = compute_demand(&input(70.0, 0.0, 0.0));
+        let v = compute_demand(&input(70.0, 0.0, 0.0)).value;
         // fill_term = 70*(1-0) = 70; no labour/pending → demand = max(70, floor=8) = 70
         assert!((v - 70.0).abs() < 0.01, "expected ~70, got {v}");
     }
@@ -416,7 +555,7 @@ mod tests {
     fn full_city_has_low_demand() {
         // 100% fill → fill_term = 0; demand should hit the floor (8) or lower
         let i = input(70.0, 1.0, 0.0);
-        let v = compute_demand(&i);
+        let v = compute_demand(&i).value;
         // fill >= FLOOR_FILL_THRESHOLD → no floor applied; demand could be 0
         assert!(
             v <= DEMAND_FLOOR,
@@ -426,19 +565,19 @@ mod tests {
 
     #[test]
     fn pending_zones_reduce_demand() {
-        let without = compute_demand(&input(70.0, 0.0, 0.0));
-        let with_pending = compute_demand(&input(70.0, 0.0, 20.0));
+        let without = compute_demand(&input(70.0, 0.0, 0.0)).value;
+        let with_pending = compute_demand(&input(70.0, 0.0, 20.0)).value;
         assert!(with_pending < without, "pending zones should reduce demand");
     }
 
     #[test]
     fn utility_penalty_reduces_demand() {
-        let without = compute_demand(&input(70.0, 0.5, 0.0));
+        let without = compute_demand(&input(70.0, 0.5, 0.0)).value;
         let with_penalty = DemandInput {
             utility_penalty: 15.0,
             ..input(70.0, 0.5, 0.0)
         };
-        let v = compute_demand(&with_penalty);
+        let v = compute_demand(&with_penalty).value;
         assert!(v < without, "utility penalty should reduce demand");
     }
 
@@ -448,12 +587,12 @@ mod tests {
             base: 200.0,
             ..input(0.0, 0.0, 0.0)
         };
-        assert!(compute_demand(&high) <= 100.0);
+        assert!(compute_demand(&high).value <= 100.0);
         let low = DemandInput {
             utility_penalty: 200.0,
             ..input(70.0, 0.5, 0.0)
         };
-        assert!(compute_demand(&low) >= 0.0);
+        assert!(compute_demand(&low).value >= 0.0);
     }
 
     #[test]
@@ -465,6 +604,22 @@ mod tests {
         assert!(d.residential > 0.0, "residential demand should be positive");
         assert!(d.commercial >= 0.0);
         assert!(d.industrial >= 0.0);
+    }
+
+    #[test]
+    fn compute_city_demand_breakdown_matches_compute_city_demand() {
+        // The thin `compute_city_demand` wrapper must report exactly the
+        // `.value` the full breakdown computed — proves the wrapper isn't
+        // running a second, divergent derivation.
+        let s = GameState::new(4, 4, 0);
+        let stats = compute_city_demand(&s);
+        let breakdown = compute_city_demand_breakdown(&s);
+        assert_eq!(stats.residential, breakdown.residential.value);
+        assert_eq!(stats.commercial, breakdown.commercial.value);
+        assert_eq!(stats.industrial, breakdown.industrial.value);
+        // The labour aggregates riding along are the same one-pass count,
+        // not zeroed placeholders.
+        assert_eq!(breakdown.labour.population, s.population as f32);
     }
 
     #[test]

@@ -13,12 +13,19 @@
 //!
 //! Byte layout: [`city_sim_protocol::tile_buffer`].
 
+use crate::buildings::BuildingInstance;
+use crate::demand::{DemandBreakdown, DemandComputation, LabourStats};
 use crate::occupants::Terrain;
-use crate::state::{BudgetHistoryEntry, EducationStats, GameState, Tile, DERIVED_FLAG_MASK};
+use crate::state::{
+    BudgetHistoryEntry, BudgetStats, EducationStats, GameState, Tile, DERIVED_FLAG_MASK,
+};
 use crate::utilities::UtilityComponent;
+use crate::wilderness::WildernessBreakdown;
 use city_sim_protocol::tile_buffer::{encode_happiness, encode_score, status, TileBufferOffsets};
 use city_sim_protocol::wire_types::{
-    WireBudgetHistoryEntry, WireEducationStats, WireUtilityComponent,
+    WireBudgetHistoryEntry, WireBudgetStats, WireBuilding, WireDemandBreakdown,
+    WireDemandClassBreakdown, WireEducationStats, WireLabourStats, WireUtilityComponent,
+    WireWildernessBreakdown,
 };
 
 /// The `underground` wire byte: bits 0–2, already absolute — no shift needed.
@@ -123,6 +130,19 @@ impl From<&EducationStats> for WireEducationStats {
     }
 }
 
+impl From<&BuildingInstance> for WireBuilding {
+    fn from(b: &BuildingInstance) -> Self {
+        Self {
+            id: b.id,
+            kind: b.kind as u8,
+            origin_x: b.origin.0,
+            origin_y: b.origin.1,
+            status: b.status as u8,
+            health: b.health,
+        }
+    }
+}
+
 impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
     fn from(e: &BudgetHistoryEntry) -> Self {
         Self {
@@ -134,11 +154,136 @@ impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
     }
 }
 
+impl From<&BudgetStats> for WireBudgetStats {
+    fn from(b: &BudgetStats) -> Self {
+        Self {
+            revenue: b.revenue,
+            expenses: b.expenses,
+            net: b.net,
+            net_per_day: b.net_per_day,
+            net_per_month: b.net_per_month,
+            revenue_base: b.revenue_base,
+            revenue_pop: b.revenue_pop,
+            revenue_commercial: b.revenue_commercial,
+            revenue_industrial: b.revenue_industrial,
+            revenue_tourism: b.revenue_tourism,
+            expenses_transport: b.expenses_transport,
+            expenses_buildings: b.expenses_buildings,
+            expenses_policies: b.expenses_policies,
+            maint_power: b.maint_power,
+            maint_civic: b.maint_civic,
+            maint_zones: b.maint_zones,
+            maint_roads: b.maint_roads,
+            maint_rail: b.maint_rail,
+            maint_power_lines: b.maint_power_lines,
+            maint_pipes: b.maint_pipes,
+            maint_power_hydro: b.maint_power_hydro,
+            maint_power_coal: b.maint_power_coal,
+            maint_power_wind: b.maint_power_wind,
+            maint_power_solar: b.maint_power_solar,
+            maint_civic_park: b.maint_civic_park,
+            maint_civic_pump: b.maint_civic_pump,
+            maint_civic_tower: b.maint_civic_tower,
+            maint_civic_school: b.maint_civic_school,
+            maint_zones_res: b.maint_zones_res,
+            maint_zones_com: b.maint_zones_com,
+            maint_zones_ind: b.maint_zones_ind,
+        }
+    }
+}
+
+impl From<&WildernessBreakdown> for WireWildernessBreakdown {
+    fn from(w: &WildernessBreakdown) -> Self {
+        Self {
+            forests: w.forests,
+            parks: w.parks,
+            open_land: w.open_land,
+            water_edge: w.water_edge,
+            patch: w.patch,
+            fragmentation: w.fragmentation,
+            zones: w.zones,
+            industry: w.industry,
+            transport: w.transport,
+            power: w.power,
+            civic: w.civic,
+        }
+    }
+}
+
+impl From<&LabourStats> for WireLabourStats {
+    fn from(l: &LabourStats) -> Self {
+        Self {
+            population: l.population,
+            res_capacity: l.res_capacity,
+            job_capacity: l.job_capacity,
+            workers: l.workers,
+            employed: l.employed,
+            unemployed: l.unemployed,
+            unemployment_rate: l.unemployment_rate,
+            vacancy_rate: l.vacancy_rate,
+        }
+    }
+}
+
+impl From<&DemandComputation> for WireDemandClassBreakdown {
+    fn from(d: &DemandComputation) -> Self {
+        Self {
+            base: d.base,
+            fill_fraction: d.fill_fraction,
+            fill_term: d.fill_term,
+            workforce_term: d.workforce_term,
+            labour_term: d.labour_term,
+            pending_zones: d.pending_zones,
+            pending_penalty_raw: d.pending_penalty_raw,
+            pending_penalty_capped: d.pending_penalty_capped,
+            pending_penalty_applied: d.pending_penalty_applied,
+            pressure_relief: d.pressure_relief,
+            utility_penalty: d.utility_penalty,
+            demand_before_utilities: d.demand_before_utilities,
+            floor_applied: d.floor_applied,
+            seeded: d.seeded,
+            value: d.value,
+        }
+    }
+}
+
+impl From<&DemandBreakdown> for WireDemandBreakdown {
+    fn from(d: &DemandBreakdown) -> Self {
+        Self {
+            residential: WireDemandClassBreakdown::from(&d.residential),
+            commercial: WireDemandClassBreakdown::from(&d.commercial),
+            industrial: WireDemandClassBreakdown::from(&d.industrial),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::buildings::{BuildingInstance, BuildingStatus};
     use crate::occupants::Occupant;
     use crate::state::{GameState, FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
+    use city_sim_protocol::building_kind::BuildingKind;
+
+    #[test]
+    fn wire_building_carries_status_and_health_verbatim() {
+        let mut b = BuildingInstance::new(9, BuildingKind::WaterPump, (3, 4));
+        b.status = BuildingStatus::InactiveNoSource;
+        b.health = 42;
+
+        let wire = WireBuilding::from(&b);
+
+        assert_eq!(wire.id, 9);
+        assert_eq!(wire.kind, BuildingKind::WaterPump as u8);
+        assert_eq!(wire.origin_x, 3);
+        assert_eq!(wire.origin_y, 4);
+        assert_eq!(wire.status, BuildingStatus::InactiveNoSource as u8);
+        assert_eq!(
+            wire.status, 3,
+            "InactiveNoSource must be discriminant 3 — the TS decode table is order-sensitive"
+        );
+        assert_eq!(wire.health, 42);
+    }
 
     #[test]
     fn underground_byte_is_absolute_no_shift() {

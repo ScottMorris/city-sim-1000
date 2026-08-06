@@ -204,11 +204,11 @@ export function createHud(elements: HudElements) {
                 ? state.buildings.find((b) => b.id === hasTileSelection.buildingId)
                 : undefined;
             const template = building ? getBuildingTemplate(building.templateId) : undefined;
-            const buildingStatus = building
-              ? building.state.status
-              : template?.requiresPower === false || hasTileSelection.powered
-                ? BuildingStatus.Active
-                : BuildingStatus.InactiveNoPower;
+            // No invented status for a tile with no building instance — the
+            // wire carries the real status now (`#200`'s wire-adoption
+            // follow-up); a bare tile just shows nothing here (`buildingBlock`
+            // below only renders once `building` exists anyway).
+            const buildingStatus = building?.state.status;
             const statusLabel =
               buildingStatus === BuildingStatus.Active
                 ? 'Active'
@@ -218,7 +218,9 @@ export function createHud(elements: HudElements) {
                     ? 'No Water'
                     : buildingStatus === BuildingStatus.InactiveNoSource
                       ? 'No Water Source — build next to water'
-                      : 'Damaged';
+                      : buildingStatus === BuildingStatus.InactiveDamaged
+                        ? 'Damaged'
+                        : '';
             const powerUse =
               template && template.powerUse !== undefined ? `${template.powerUse.toFixed(1)} MW` : null;
             const waterUse =

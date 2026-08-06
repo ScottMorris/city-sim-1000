@@ -22,6 +22,7 @@ import { BuildingKind } from '../game/buildings/templates';
 import { ServiceId } from '../game/services';
 import { TILE_SIZE, OCCUPANT_COLOURS, TERRAIN_COLOURS } from '../rendering/sprites';
 import { createBuildingLookup, type BuildingLookup } from '../rendering/tileRenderUtils';
+import { computeAlertSeverity } from '../rendering/alertSeverity';
 
 export interface MinimapOptions {
   root: HTMLElement;
@@ -410,14 +411,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     if (settings.overlay === 'alerts') {
       const zone = isZone(tile);
       const buildingStatus = tile.buildingId !== undefined ? buildingStatuses.get(tile.buildingId) : undefined;
-      let severity = 0;
-      if (tile.abandoned) severity = 2;
-      if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
-      if (buildingStatus === BuildingStatus.InactiveNoWater) severity = Math.max(severity, 2);
-      if (buildingStatus === BuildingStatus.InactiveNoSource) severity = Math.max(severity, 2);
-      if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
-      if (zone && !tile.powered) severity = Math.max(severity, 2);
-      if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
+      const severity = computeAlertSeverity(tile, buildingStatus, zone);
 
       if (severity === 0) {
         if (zone) return 'rgba(123, 255, 183, 0.35)';
