@@ -13,6 +13,7 @@ import { createInitialState } from './gameState';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
 import { nextStrokeId } from './protocol/commands';
+import type { FromSim } from './protocol/events';
 import { dominantOccupantLabel } from './protocol/tileLabel';
 
 // Bresenham's line — returns all integer (x,y) pairs from (x0,y0) to (x1,y1).
@@ -38,11 +39,7 @@ const MCP_WS_PORT = 5174;
 // the surface, with an explicit `stratum` param letting a script override it.
 // `Tool.WaterPipe` defaults to underground instead: the engine refuses it
 // outright from any other stratum (`#198`), same as the real UI auto-switches
-// the view the moment the tool is selected (`SPEC.md`'s Water Pipe entry) —
-// without this, every `apply_tool_line`/`apply_tool_rect` water-pipe script
-// that doesn't pass `stratum: 'underground'` explicitly would place nothing
-// while still reporting a `placed` count, since those two handlers fire
-// commands without checking each one's `CommandResult`.
+// the view the moment the tool is selected (`SPEC.md`'s Water Pipe entry).
 // Exported (only) so it's unit-testable — everything else here needs a live
 // WebSocket connection to exercise.
 export function stratumParam(params: Record<string, unknown>): ViewStratum {
@@ -52,13 +49,74 @@ export function stratumParam(params: Record<string, unknown>): ViewStratum {
   return params.tool === Tool.WaterPipe ? 'underground' : 'surface';
 }
 
+/** The bits of `CommandResult` a caller needs — kept separate from `FromSim`
+ * so this file stays testable without importing the full protocol union. */
+export interface CommandResultLike {
+  success: boolean;
+  message?: string;
+}
+
+/**
+ * Correlates `ApplyTool` sends to the `CommandResult`s the worker reports
+ * back for them. The wire message carries no id (`{ type: 'CommandResult',
+ * success, message }` — see `protocol/events.ts`), but the worker posts
+ * exactly one `apply_result` per `apply_tool` message it receives, in the
+ * order received (`wasmSim.worker.ts`'s `case 'apply_tool'`), so matching
+ * each pending send to the oldest still-unresolved entry is reliable *as
+ * long as MCP mode is the only source of `ApplyTool` commands* — true for
+ * scripted play, not for a human clicking the same tab at the same time.
+ * Exported (only) so it's unit-testable — see `stratumParam`'s doc comment.
+ */
+export function createCommandResultQueue() {
+  const pending: Array<(result: CommandResultLike) => void> = [];
+  return {
+    /**
+     * Call once per `ApplyTool` send, in send order. `cancel` drops the
+     * entry without resolving it — callers that give up waiting (a timeout)
+     * must call it, or a later, unrelated `CommandResult` would shift into
+     * this slot and resolve the wrong send.
+     */
+    expectNext(): { promise: Promise<CommandResultLike>; cancel: () => void } {
+      let resolve!: (result: CommandResultLike) => void;
+      const promise = new Promise<CommandResultLike>(res => { resolve = res; });
+      pending.push(resolve);
+      return { promise, cancel: () => {
+        const i = pending.indexOf(resolve);
+        if (i !== -1) pending.splice(i, 1);
+      } };
+    },
+    /** Call once per `CommandResult` message received, in arrival order. */
+    resolveNext(result: CommandResultLike): void {
+      pending.shift()?.(result);
+    },
+  };
+}
+
+/** Reduces a batch of `ApplyTool` results (`apply_tool_line`/`_rect`) down
+ * to a placed/attempted count plus one representative failure message —
+ * enough to tell a script "some of this didn't land" without a result per
+ * tile. Exported (only) so it's unit-testable — see `stratumParam`'s doc
+ * comment. */
+export function summarizeApplyResults(results: CommandResultLike[]) {
+  const failures = results.filter(r => !r.success);
+  return {
+    placed: results.length - failures.length,
+    attempted: results.length,
+    firstFailureMessage: failures[0]?.message ?? null,
+  };
+}
+
 // Use setTimeout rather than rAF — background/unfocused Chromium tabs throttle
 // rAF to 1 fps, which would stall every MCP command for seconds and freeze the HUD.
 function waitMs(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function initMcpBridge(bridge: SimBridge, state: GameState): void {
+export function initMcpBridge(
+  bridge: SimBridge,
+  state: GameState,
+  tapSimMessages: (tap: (msg: FromSim) => void) => void,
+): void {
   if (!new URLSearchParams(location.search).has('mcp')) return;
 
   console.info('[MCP] MCP mode active — connecting to ws://localhost:5174');
@@ -66,6 +124,25 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
   let ws: WebSocket | null = null;
   let currentSpeed = 1;
   const replyOverrides = new Map<string, (result: unknown, error?: string) => void>();
+  const commandResults = createCommandResultQueue();
+  tapSimMessages(msg => {
+    if (msg.type === 'CommandResult') commandResults.resolveNext(msg);
+  });
+
+  // Fire an ApplyTool command and resolve once its CommandResult arrives —
+  // or after 2s with an assumed success, so a dropped/never-sent result
+  // (e.g. a bridge implementation that doesn't emit CommandResult) can't
+  // hang an MCP call forever.
+  function sendApplyTool(
+    tool: Tool, x: number, y: number, strokeId: number, stratum: ViewStratum,
+  ): Promise<CommandResultLike> {
+    const { promise, cancel } = commandResults.expectNext();
+    bridge.send({ type: 'ApplyTool', tool, x, y, strokeId, stratum });
+    return Promise.race([
+      promise,
+      new Promise<CommandResultLike>(resolve => setTimeout(() => { cancel(); resolve({ success: true }); }, 2000)),
+    ]);
+  }
 
   function connect(): void {
     const sock = new WebSocket(`ws://localhost:${MCP_WS_PORT}`);
@@ -159,13 +236,16 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const x = params.x as number;
           const y = params.y as number;
           const moneyBefore = bridge.getState().money;
-          bridge.send({ type: 'ApplyTool', tool, x, y, strokeId: nextStrokeId(), stratum: stratumParam(params) });
+          const pendingResult = sendApplyTool(tool, x, y, nextStrokeId(), stratumParam(params));
           await waitMs(150);
+          const result = await pendingResult;
           reply(id, {
             moneyBefore,
             moneyAfter: bridge.getState().money,
             tile: tileAt(x, y),
             state: simState(),
+            success: result.success,
+            message: result.message ?? null,
           });
           break;
         }
@@ -212,11 +292,10 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const moneyBefore = bridge.getState().money;
           const lineStroke = nextStrokeId();
           const stratum = stratumParam(params);
-          for (const [px, py] of pts) {
-            bridge.send({ type: 'ApplyTool', tool, x: px, y: py, strokeId: lineStroke, stratum });
-          }
+          const pending = pts.map(([px, py]) => sendApplyTool(tool, px, py, lineStroke, stratum));
           await waitMs(150);
-          reply(id, { placed: pts.length, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
+          const summary = summarizeApplyResults(await Promise.all(pending));
+          reply(id, { ...summary, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
           break;
         }
 
@@ -229,15 +308,15 @@ export function initMcpBridge(bridge: SimBridge, state: GameState): void {
           const moneyBefore = bridge.getState().money;
           const rectStroke = nextStrokeId();
           const stratum = stratumParam(params);
-          let placed = 0;
+          const pending: Promise<CommandResultLike>[] = [];
           for (let ry = ay; ry <= by; ry++) {
             for (let rx = ax; rx <= bx; rx++) {
-              bridge.send({ type: 'ApplyTool', tool, x: rx, y: ry, strokeId: rectStroke, stratum });
-              placed++;
+              pending.push(sendApplyTool(tool, rx, ry, rectStroke, stratum));
             }
           }
           await waitMs(150);
-          reply(id, { placed, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
+          const summary = summarizeApplyResults(await Promise.all(pending));
+          reply(id, { ...summary, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
           break;
         }
 

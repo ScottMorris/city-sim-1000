@@ -244,7 +244,7 @@ server.tool(
 
 server.tool(
   'apply_tool',
-  'Apply a build or demolish action at tile (x, y). Returns money before/after, the resulting tile state, and a sim state snapshot.',
+  'Apply a build or demolish action at tile (x, y). Returns money before/after, the resulting tile state, a sim state snapshot, and `success`/`message` reporting whether the engine actually accepted the command (e.g. wrong stratum, insufficient funds, no road access) — check `success` rather than assuming the placement landed.',
   {
     tool: z.enum([
       'inspect',
@@ -285,7 +285,7 @@ server.tool(
 
 server.tool(
   'apply_tool_line',
-  'Apply a build tool along a straight line from (x1,y1) to (x2,y2) using Bresenham\'s algorithm. Ideal for roads, power lines, or pipes. Returns number of tiles placed and money delta.',
+  'Apply a build tool along a straight line from (x1,y1) to (x2,y2) using Bresenham\'s algorithm. Ideal for roads, power lines, or pipes. Returns `placed` (tiles the engine actually accepted), `attempted` (total tiles on the line), and `firstFailureMessage` (the engine\'s reason for the first rejected tile, if `placed` < `attempted`) alongside the money delta.',
   {
     tool: z.enum([
       'road', 'rail', 'powerline',
@@ -305,7 +305,7 @@ server.tool(
 
 server.tool(
   'apply_tool_rect',
-  'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns number of tiles placed and money delta.',
+  'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns `placed` (tiles the engine actually accepted), `attempted` (total tiles in the rectangle), and `firstFailureMessage` (the engine\'s reason for the first rejected tile, if `placed` < `attempted`) alongside the money delta.',
   {
     tool: z.enum([
       'residential', 'commercial', 'industrial', 'park', 'park_large',
