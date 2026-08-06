@@ -332,7 +332,7 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  /** One-time import of a legacy JSON save — see `buildLegacyEngineImport`. */
+  /** One-time import of a legacy JSON save — see `transcodeLegacySave`. */
   async importLegacy(imp: LegacyEngineImport): Promise<void> {
     await this.readyPromise;
     return this.requestLoad(requestId => {

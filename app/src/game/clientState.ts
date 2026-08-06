@@ -81,8 +81,18 @@ export function extractClientState(state: GameState): ClientState {
   return { settings: state.settings, bylaws: state.bylaws };
 }
 
-/** Merge a loaded client slice onto the live display mirror. */
-export function applyClientState(state: GameState, client?: Partial<ClientState>): void {
+/**
+ * Merge a loaded client slice onto the live display mirror. `client.settings`/
+ * `client.bylaws` may themselves be partial (a legacy JSON save's raw
+ * `settings`/`bylaws` fields, transcoded verbatim by
+ * `persistence.ts`'s `transcodeLegacySave` with no back-fill of their own) —
+ * `ensureSettingsShape` and the bylaws merge below back-fill defaults for
+ * whatever is missing, at any nesting level.
+ */
+export function applyClientState(
+  state: GameState,
+  client?: { settings?: Partial<GameSettings>; bylaws?: Partial<BylawState> }
+): void {
   state.settings = ensureSettingsShape(client?.settings);
   state.bylaws = { ...DEFAULT_BYLAWS, ...(client?.bylaws ?? {}) };
   if (!state.bylaws.lighting) {

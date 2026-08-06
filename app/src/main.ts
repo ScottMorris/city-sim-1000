@@ -28,12 +28,12 @@ import type { SimBridge } from './game/simBridge';
 import { applyToolCmd, nextStrokeId, setPoliciesCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import {
-  buildLegacyEngineImport,
   buildSaveMeta,
   clearLegacyBrowserSave,
   decodeSave,
   encodeSave,
   loadLegacyBrowserSave,
+  type LegacySaveTranscode,
   type SaveContainer
 } from './game/persistence';
 import { applyClientState, ensureSettingsShape, extractClientState } from './game/clientState';
@@ -534,10 +534,10 @@ async function loadCityContainer(container: SaveContainer): Promise<void> {
 }
 
 /** One-time import of a legacy JSON save, then upgrade it to CSAV. */
-async function importLegacyCity(legacy: GameState): Promise<void> {
-  await bridge.importLegacy(buildLegacyEngineImport(legacy));
-  applyClientState(state, { settings: legacy.settings, bylaws: legacy.bylaws });
-  bridge.send(setPoliciesCmd(legacy.policies));
+async function importLegacyCity(imp: LegacySaveTranscode): Promise<void> {
+  await bridge.importLegacy(imp.engine);
+  applyClientState(state, imp.client);
+  bridge.send(setPoliciesCmd(imp.policies));
   afterCityLoaded();
   try {
     // Upgrade in place; only drop the old localStorage save once the CSAV

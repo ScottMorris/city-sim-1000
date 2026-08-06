@@ -1,5 +1,5 @@
 // legacyProjection.ts — TS port of the precedence Rust's (deleted) display.rs
-// wire_kind/wire_flags/wire_underground used to run.
+// wire_kind/wire_flags used to run.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -9,21 +9,27 @@
  * from the real strata. `Tile` itself carries no shim fields any more (the
  * strangler window they existed for closed once every consumer converted to
  * reading `terrain`/`underground`/`surface`/`overhead` directly) — this
- * module survives as the two permanent things a v4 spelling is still needed
- * for: importing old `.citysim` JSON saves (`tileFromV4`, via
- * `persistence.ts`'s `deserialize`), and exporting the current strata back
- * into that format for the frozen legacy importer (`legacyKind`/
- * `legacyFlags`, via `persistence.ts`'s `buildLegacyEngineImport`) — plus
- * `dominantOccupantLabel` (`protocol/tileLabel.ts`) and the one minimap
- * mode that still cares about v4-style precedence for display.
+ * module survives purely as a *display* need now: `dominantOccupantLabel`
+ * (`protocol/tileLabel.ts`, used by the HUD tile inspector, the minimap, and
+ * `mcpBridge.ts`), the renderer (`tileRenderUtils.ts`), and the one minimap
+ * mode that still wants v4-style precedence to pick a single label for a
+ * tile that may carry several occupants at once.
  *
- * Mirrors `city_sim_core::display::{wire_kind, wire_flags, wire_underground}`
- * exactly (as they were before deletion) — precedence: terrain > structure >
- * zone > trees > line > rail > road > land.
+ * The other historical reason this module existed — importing old
+ * `.citysim` JSON saves — is gone: `persistence.ts`'s `transcodeLegacySave`
+ * transcodes a save's raw JSON fields directly into the frozen v4 wire
+ * buffer with no strata round trip, so Rust's `tile_from_v4`
+ * (`city_sim_core::migrate`) is the sole place a v4 spelling is decoded into
+ * strata now. `legacyKind`/`legacyFlags` below are display-only exports —
+ * *encoding* strata into a v4 spelling, never decoding one.
+ *
+ * Mirrors `city_sim_core::display::{wire_kind, wire_flags}` exactly (as they
+ * were before deletion) — precedence: terrain > structure > zone > trees >
+ * line > rail > road > land.
  */
 
 import { TileKind } from '../gameState';
-import { Occupant, Terrain, ZoneDensity, hasOccupant, withOccupant, zoneOccupant } from './occupants';
+import { Occupant, Terrain, hasOccupant, zoneOccupant } from './occupants';
 
 const ZONE_KIND: Partial<Record<Occupant, TileKind>> = {
   [Occupant.ZoneResidential]: TileKind.Residential,
@@ -76,73 +82,3 @@ export function legacyFlags(t: LegacyProjectionInput, kind: TileKind) {
   };
 }
 
-/** The v4 `underground` TileKind — `WaterPipe` or `undefined`. */
-export function legacyUndergroundKind(underground: number): TileKind | undefined {
-  return hasOccupant(underground, Occupant.Pipe) ? TileKind.WaterPipe : undefined;
-}
-
-/**
- * The ten `TileKind`s that derive to the single `Structure` occupant. Mirrors
- * `occupants::is_structure_kind`.
- */
-const STRUCTURE_KINDS: ReadonlySet<TileKind> = new Set([
-  TileKind.HydroPlant,
-  TileKind.CoalPlant,
-  TileKind.WindTurbine,
-  TileKind.SolarFarm,
-  TileKind.WaterPump,
-  TileKind.WaterTower,
-  TileKind.ElementarySchool,
-  TileKind.HighSchool,
-  TileKind.Park,
-  TileKind.ParkLarge
-]);
-
-export interface V4Strata {
-  terrain: Terrain;
-  underground: number;
-  surface: number;
-  overhead: number;
-  density: ZoneDensity;
-}
-
-/**
- * Decode a v4-shaped tile spelling into strata occupant bits. Mirrors
- * `migrate::tile_from_v4` — used only to import old `.citysim` JSON saves
- * (`persistence.ts`'s `deserialize`), which never encoded zone density, so
- * `density` is always `Low` here (matches the Rust importer's documented
- * fidelity limit).
- */
-export function tileFromV4(
-  kind: TileKind,
-  flags: { roadUnderlay?: boolean; railUnderlay?: boolean; powerOverlay?: boolean },
-  underground: TileKind | undefined,
-  buildingId: number | undefined
-): V4Strata {
-  const hasPipe = underground === TileKind.WaterPipe;
-  const hasRoad = kind === TileKind.Road || !!flags.roadUnderlay;
-  const hasRail = kind === TileKind.Rail || !!flags.railUnderlay;
-  const hasLine = kind === TileKind.PowerLine || !!flags.powerOverlay;
-  const hasStructure = STRUCTURE_KINDS.has(kind) && buildingId !== undefined;
-
-  let undergroundBits = 0;
-  let surface = 0;
-  let overhead = 0;
-  undergroundBits = withOccupant(undergroundBits, Occupant.Pipe, hasPipe);
-  surface = withOccupant(surface, Occupant.Road, hasRoad);
-  surface = withOccupant(surface, Occupant.Rail, hasRail);
-  surface = withOccupant(surface, Occupant.ZoneResidential, kind === TileKind.Residential);
-  surface = withOccupant(surface, Occupant.ZoneCommercial, kind === TileKind.Commercial);
-  surface = withOccupant(surface, Occupant.ZoneIndustrial, kind === TileKind.Industrial);
-  surface = withOccupant(surface, Occupant.Structure, hasStructure);
-  overhead = withOccupant(overhead, Occupant.PowerLine, hasLine);
-  overhead = withOccupant(overhead, Occupant.Trees, kind === TileKind.Tree);
-
-  return {
-    terrain: kind === TileKind.Water ? Terrain.Water : Terrain.Land,
-    underground: undergroundBits,
-    surface,
-    overhead,
-    density: ZoneDensity.Low
-  };
-}
