@@ -1,9 +1,18 @@
+// commands.ts — SimCommand, fiscal/wilderness policy types, and the TS mirror of Rust's BudgetPolicy/WildernessPolicy/Policies.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
- * SimCommand — TS mirror of crates/sim_protocol/src/commands.rs.
- *
- * Commands flow from the UI into the SimBridge:
+ * SimCommand — commands flow from the UI into the SimBridge:
  *   WasmSimBridge  — posts them to the Worker
  *   TauriSimBridge — invokes the native plugin
+ *
+ * Not a mirror of any Rust type: `crates/city-sim-protocol`'s own
+ * `SimCommand` drifted from what both bridges actually send (its `ApplyTool`
+ * never gained `strokeId`) and was deleted as dead code. `BudgetPolicy`,
+ * `WildernessPolicy`, and `Policies` below still mirror the Rust types of
+ * the same names in `crates/city-sim-protocol/src/commands.rs`.
  */
 
 import { Tool } from '../toolTypes';
