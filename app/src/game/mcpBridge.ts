@@ -8,7 +8,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { SimBridge } from './simBridge';
-import type { GameState, ViewStratum } from './gameState';
+import type { GameState, Tile, ViewStratum } from './gameState';
 import { createInitialState } from './gameState';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
@@ -104,6 +104,21 @@ export function summarizeApplyResults(results: CommandResultLike[]) {
     attempted: results.length,
     firstFailureMessage: failures[0]?.message ?? null,
   };
+}
+
+/**
+ * `get_tiles_where`'s matcher. By default matches `dominantOccupantLabel`
+ * only — the same single collapsed label `get_tile`'s `kind` returns — so a
+ * road hidden under a power line won't match `kind: "road"`. `anyStratum`
+ * widens the check to `occupantsByStratum`'s full per-layer breakdown, so
+ * a script can find every tile carrying a kind regardless of what's winning
+ * the display slot. Exported (only) so it's unit-testable — see
+ * `stratumParam`'s doc comment.
+ */
+export function tileMatchesKind(state: GameState, tile: Tile, kind: string, anyStratum: boolean): boolean {
+  if (!anyStratum) return dominantOccupantLabel(state, tile) === kind;
+  const occupants = occupantsByStratum(state, tile);
+  return occupants.underground.includes(kind) || occupants.surface.includes(kind) || occupants.overhead.includes(kind);
 }
 
 // Use setTimeout rather than rAF — background/unfocused Chromium tabs throttle
@@ -230,10 +245,9 @@ export function initMcpBridge(
         case 'get_tiles_where': {
           const s = bridge.getState();
           const kind = params.kind as string;
+          const anyStratum = params.anyStratum === true;
           const hits = s.tiles.flatMap((t, i) =>
-            dominantOccupantLabel(s, t) === kind
-              ? [{ x: i % s.width, y: Math.floor(i / s.width) }]
-              : [],
+            tileMatchesKind(s, t, kind, anyStratum) ? [{ x: i % s.width, y: Math.floor(i / s.width) }] : [],
           );
           reply(id, hits);
           break;

@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { stratumParam, createCommandResultQueue, summarizeApplyResults } from './mcpBridge';
+import { stratumParam, createCommandResultQueue, summarizeApplyResults, tileMatchesKind } from './mcpBridge';
 import { Tool } from './toolTypes';
+import { createInitialState, getTile, setTile, TileKind } from './gameState';
+import { Occupant, Terrain, setTileOccupant } from './protocol/occupants';
 
 describe('stratumParam', () => {
   it('defaults to surface when the param is absent', () => {
@@ -89,5 +91,38 @@ describe('summarizeApplyResults', () => {
 
   it('handles an empty batch', () => {
     expect(summarizeApplyResults([])).toEqual({ placed: 0, attempted: 0, firstFailureMessage: null });
+  });
+});
+
+describe('tileMatchesKind', () => {
+  it('without anyStratum, matches only the dominant (display) label — a road under a power line does not match "road"', () => {
+    const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.Road);
+    const tile = getTile(state, 1, 1)!;
+    setTileOccupant(tile, Occupant.PowerLine, true);
+
+    expect(tileMatchesKind(state, tile, TileKind.PowerLine, false)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Road, false)).toBe(false); // hidden behind the power line
+  });
+
+  it('with anyStratum, matches a kind present in any stratum, not just the dominant one', () => {
+    const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.Road);
+    const tile = getTile(state, 1, 1)!;
+    setTileOccupant(tile, Occupant.PowerLine, true);
+    setTileOccupant(tile, Occupant.Pipe, true);
+
+    expect(tileMatchesKind(state, tile, TileKind.PowerLine, true)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Road, true)).toBe(true); // no longer hidden
+    expect(tileMatchesKind(state, tile, TileKind.WaterPipe, true)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Rail, true)).toBe(false);
+  });
+
+  it('anyStratum does not change the result for a tile with only one occupant', () => {
+    const state = createInitialState(3, 3);
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Land; // procedural generation may have placed water here
+    expect(tileMatchesKind(state, tile, TileKind.Land, false)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Land, true)).toBe(false); // "land" is the absence of occupants, not an occupant itself
   });
 });

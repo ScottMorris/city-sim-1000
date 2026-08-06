@@ -227,19 +227,22 @@ server.tool(
 
 server.tool(
   'get_tiles_where',
-  'Return all (x, y) positions matching a given tile kind. Useful for finding existing roads, zones, utilities, etc.',
+  'Return all (x, y) positions matching a given tile kind. Useful for finding existing roads, zones, utilities, etc. By default this only matches each tile\'s single dominant kind (picked by display precedence: structure > zone > trees > power line > rail > road) — a road hidden under a power line won\'t match `kind: "road"` unless `anyStratum` is set, since the power line is winning the display slot. Set `anyStratum: true` to match any tile that has the given kind present in ANY stratum (underground/surface/overhead), regardless of which one wins the display precedence — see `get_tile`\'s `occupants` field for the same distinction on a single tile.',
   {
     kind: z.enum([
       'land', 'water', 'tree',
       'road', 'rail',
       'residential', 'commercial', 'industrial',
-      'powerline', 'hydro',
+      'powerline',
+      'hydro', 'coal', 'wind', 'solar',
       'pump', 'water_tower', 'water_pipe',
       'elementary_school', 'high_school',
       'park', 'park_large',
-    ]).describe('Tile kind string. Note: all power plant types (coal/wind/solar/hydro) share the kind "hydro"'),
+    ]).describe('Tile kind string. Each power plant type has its own distinct kind (hydro/coal/wind/solar), not a shared one.'),
+    anyStratum: z.boolean().optional()
+      .describe('When true, match a tile if `kind` appears in any of its strata, not just the one dominant/display kind. Default false. Has no effect for `kind: "land"` or `"water"` — those describe the terrain itself, not an occupant, so they never appear in any stratum and `anyStratum: true` will find nothing for them; leave it false (the default) to find land/water tiles.'),
   },
-  async ({ kind }) => textResult(await callGame('get_tiles_where', { kind })),
+  async ({ kind, anyStratum }) => textResult(await callGame('get_tiles_where', { kind, anyStratum })),
 );
 
 server.tool(
