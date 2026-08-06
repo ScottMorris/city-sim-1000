@@ -189,15 +189,15 @@ export class TauriSimBridge implements SimBridge {
         void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId, STRATUM_TO_ID[cmd.stratum]).then((result) => {
           this.handler?.({ type: 'CommandResult', success: result.success, message: result.message ?? undefined });
         });
-        return { success: true };
+        return { success: true, message: null };
       }
       case 'SetSpeed':
         void this.plugin.setSpeed(cmd.multiplier);
-        return { success: true };
+        return { success: true, message: null };
       case 'SetPolicies':
         this.state.policies = cmd.policies;
         void this.plugin.setPolicies(cmd.policies);
-        return { success: true };
+        return { success: true, message: null };
     }
   }
 

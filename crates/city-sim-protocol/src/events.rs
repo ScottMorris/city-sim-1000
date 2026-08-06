@@ -3,7 +3,10 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+use ts_rs::TS;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, TS)]
+#[ts(export_to = "SimAlert.ts")]
 pub struct SimAlert {
     pub kind: AlertKind,
     pub message: String,
@@ -11,7 +14,8 @@ pub struct SimAlert {
     pub sticky: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, TS)]
+#[ts(export_to = "AlertKind.ts")]
 pub enum AlertKind {
     PowerDeficit,
     PowerRestored,

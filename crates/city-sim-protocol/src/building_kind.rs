@@ -3,10 +3,13 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
+use ts_rs::TS;
+
 /// Which category a [`BuildingKind`] belongs to — the high nibble of its
 /// discriminant. `Safety` and `Health` are reserved: declared here so the
 /// alphabet has room for them, but no [`BuildingKind`] carries either yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, TS)]
+#[ts(export_to = "BuildingCategory.ts")]
 #[repr(u8)]
 pub enum BuildingCategory {
     Zone = 1,
@@ -30,8 +33,16 @@ pub enum BuildingCategory {
 /// design. `0x00` is reserved and never valid: every real member's high
 /// nibble is its [`BuildingCategory`] (1–7) and the low nibble distinguishes
 /// members within that category.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, TS)]
 #[serde(into = "u8", try_from = "u8")]
+// ts-rs's serde-compat does not understand `into`/`try_from` (unlike `rename`,
+// `rename_all`, `tag`, ...  — see the crate's supported-attribute list), so
+// without this override it would derive the TS shape from the enum's own
+// variants (a string-literal union) and silently lie about the wire, which is
+// a plain `u8` routed through `Into<u8>`/`TryFrom<u8>`. `#[ts(type = "number")]`
+// pins the generated type to what is actually serialised. Do not remove this
+// without also removing the `serde(into/try_from)` pair above.
+#[ts(type = "number", export_to = "BuildingKind.ts")]
 #[repr(u8)]
 pub enum BuildingKind {
     // Zone

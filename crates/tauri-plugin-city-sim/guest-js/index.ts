@@ -16,139 +16,28 @@
 import { invoke, Channel } from '@tauri-apps/api/core'
 
 // ── Shared types ─────────────────────────────────────────────────────────────
+//
+// `TickEvent` and the `Wire*` shapes below are `ts-rs`-generated mirrors of
+// `tauri-plugin-city-sim::commands::TickEvent` and
+// `city_sim_protocol::wire_types` — see `tests/export_bindings.rs` (this
+// crate) for how `generated/` is produced, and its doc comment for why this
+// package carries its own copy rather than importing `app/`'s. Hand-mirrored
+// copies of these shapes drifted three times in this repo's history before
+// codegen replaced them; do not reintroduce a hand-written copy.
 
-/**
- * Stats and tile buffer streamed from the sim engine each tick (~20 Hz).
- * Field names are camelCase (Rust side uses `#[serde(rename_all = "camelCase")]`).
- */
-export interface TickEvent {
-  tick:               number   // u64 — safe as number up to ~450 trillion ticks
-  day:                number   // u32
-  population:         number   // u32
-  jobs:               number   // u32
-  money:              number   // i64 — loses precision beyond ±2^53; fine for city budgets
-  power:              number   // i32 (net = produced − used)
-  water:              number   // i32 (net = produced − used)
-  powerProduced:      number   // i32
-  waterProduced:      number   // i32
-  /**
-   * Power network connected components — one entry per physically-connected
-   * segment reached by the last recompute. `produced`/`used` are left
-   * unrounded on the wire; round for display in TS, not here. See
-   * `city_sim_core::utilities::UtilityComponent`.
-   */
-  powerComponents:    WireUtilityComponent[]
-  /** Water network connected components — see {@link powerComponents}. */
-  waterComponents:    WireUtilityComponent[]
-  /**
-   * City-wide education coverage snapshot — see
-   * `city_sim_core::state::EducationStats`.
-   */
-  education:            WireEducationStats
-  /**
-   * Seats consumed per school building — see
-   * `city_sim_core::state::GameState::education_seats_used`.
-   */
-  educationSeatsUsed:   WireEducationSeatsUsed[]
-  /**
-   * Rolling 200-day budget history — see
-   * `city_sim_core::state::BudgetHistoryEntry`. Note this `TickEvent` carries
-   * no headline `revenue`/`expenses`/`net` fields at all yet — the desktop
-   * budget modal's ledger becomes real once this is adopted, but its
-   * top-line numbers are a separate, pre-existing gap.
-   */
-  budgetHistory:      WireBudgetHistoryEntry[]
-  demandResidential:  number   // f32 [0, 100]
-  demandCommercial:   number   // f32 [0, 100]
-  demandIndustrial:   number   // f32 [0, 100]
-  wildernessScore:    number   // f32 [0, 100]
-  wildernessTrend:    number   // f32 — fast EMA − slow EMA; sign gives the arrow
-  width:              number   // u32 — grid width in tiles
-  height:             number   // u32 — grid height in tiles
-  /**
-   * The exact SoA wire buffer `city_sim_protocol::tile_buffer` describes —
-   * `underground[N] | surface[N] | overhead[N] | status[N] | happiness[N] |
-   * elevation[N] | building_id[N×2] | wilderness[N] | elementary_score[N] |
-   * high_score[N]`, produced by `city_sim_core::wire::encode_tile_buffer`,
-   * the same function the WASM host's `tile_buffer()` calls. Per-tile
-   * `building_id` (u16le, 0 = none) lets the desktop client read
-   * `tile.buildingId` straight off the wire, the same as WASM, instead of
-   * deriving tile coverage from `buildings` below and a template footprint
-   * that could disagree with the engine's own.
-   */
-  tiles:              number[]
-  /**
-   * The building list. A `Structure` occupant tile carries a `buildingId`
-   * but not a template kind — that lives here, on the matching entry's
-   * `kind` (a `TileKind` u8 discriminant, decode with `tileKindFromU8`). Not
-   * used to derive per-tile coverage — only to resolve a `buildingId` to its
-   * template kind (power/water gating, the HUD inspector's building name).
-   */
-  buildings:          WireBuilding[]
-  /** Whether an undo/redo step is currently available — drives button state. */
-  canUndo:            boolean
-  canRedo:            boolean
-  /**
-   * Utility deficit/restore alerts raised since the previous tick — see
-   * `city_sim_core::sim::Simulation::take_alerts`. Empty on most ticks; only
-   * non-empty the tick a power/water balance actually crosses zero.
-   */
-  alerts:             SimAlert[]
-}
+export type { TickEvent } from './generated/TickEvent'
+export type { SimAlert } from './generated/SimAlert'
+export type { WireBuilding } from './generated/WireBuilding'
+export type { WireUtilityComponent } from './generated/WireUtilityComponent'
+export type { WireEducationStats } from './generated/WireEducationStats'
+export type { WireEducationSeatsUsed } from './generated/WireEducationSeatsUsed'
+export type { WireBudgetHistoryEntry } from './generated/WireBudgetHistoryEntry'
+export type { CommandResult } from './generated/CommandResult'
+export type { Policies } from './generated/Policies'
 
-/** Mirrors `city_sim_protocol::events::SimAlert`. */
-export interface SimAlert {
-  kind:    'PowerDeficit' | 'PowerRestored' | 'WaterDeficit' | 'WaterRestored' | 'BudgetWarning' | 'Abandonment' | 'Info'
-  message: string
-  sticky:  boolean
-}
-
-/** One entry in {@link TickEvent.buildings}. */
-export interface WireBuilding {
-  id:       number   // u32
-  /** `TileKind` u8 discriminant — decode with `tileKindFromU8`. */
-  kind:     number   // u8
-  originX:  number   // u32
-  originY:  number   // u32
-}
-
-/** One entry in {@link TickEvent.powerComponents}/{@link TickEvent.waterComponents}. */
-export interface WireUtilityComponent {
-  id:           number   // u16 — stable only within one tick's recompute
-  produced:     number   // f32, unrounded
-  used:         number   // f32, unrounded
-  sourceCount:  number   // u16
-  /** `used / produced`, clamped to `[0, 1]`. */
-  utilisation:  number   // f32
-}
-
-/** {@link TickEvent.education} — mirrors `city_sim_core::state::EducationStats`. */
-export interface WireEducationStats {
-  elementaryServed:     number   // f32
-  elementaryCapacity:   number   // f32
-  elementaryLoad:       number   // f32
-  highServed:           number   // f32
-  highCapacity:         number   // f32
-  highLoad:             number   // f32
-  /** Combined coverage score in [0, 1]: elementary × 0.6 + high × 0.4. */
-  score:                number   // f32
-  elementaryCoverage:   number   // f32
-  highCoverage:         number   // f32
-}
-
-/** One entry in {@link TickEvent.educationSeatsUsed}, unrounded — round for display in TS. */
-export interface WireEducationSeatsUsed {
-  buildingId:  number   // u32
-  used:        number   // f32, unrounded
-}
-
-/** One entry in {@link TickEvent.budgetHistory}. */
-export interface WireBudgetHistoryEntry {
-  day:       number   // u32
-  revenue:   number   // f32
-  expenses:  number   // f32
-  net:       number   // f32
-}
+import type { TickEvent } from './generated/TickEvent'
+import type { CommandResult } from './generated/CommandResult'
+import type { Policies } from './generated/Policies'
 
 /**
  * Tool u8 discriminant map — mirrors `sim_protocol::commands::Tool as u8`.
@@ -222,12 +111,6 @@ export async function start(
   await invoke('plugin:city-sim|start', { width, height, seed, onTick: channel })
 }
 
-/** Mirrors `city_sim_protocol::commands::CommandResult`. */
-export interface CommandResult {
-  success: boolean
-  message: string | null
-}
-
 /**
  * Apply a player tool at tile coordinates (x, y).
  *
@@ -262,27 +145,6 @@ export async function applyTool(
  */
 export async function setSpeed(multiplier: number): Promise<void> {
   await invoke('plugin:city-sim|set_speed', { multiplier })
-}
-
-/**
- * Every player-adjustable policy family, grouped under one roof.
- *
- * Mirrors `Policies` in `city-sim-protocol` (camelCase serialisation). New
- * policy families are added here as fields rather than as new commands.
- */
-export interface Policies {
-  budget: {
-    taxResidential: number
-    taxCommercial: number
-    taxIndustrial: number
-    fundTransport: number
-    fundPower: number
-    fundCivic: number
-  }
-  wilderness: {
-    natureReserve: boolean
-    greenIndustry: boolean
-  }
 }
 
 /**

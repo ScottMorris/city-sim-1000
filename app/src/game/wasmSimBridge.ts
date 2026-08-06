@@ -19,14 +19,21 @@ import { createTileServiceState } from './services';
 import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
 import type { BudgetHistoryEntry } from './economy';
-import type { FromSim } from './protocol/events';
-import type { SimStats, SimAlertWire } from '../workers/wasmSim.worker';
+import type { FromSim, SimAlert } from './protocol/events';
+import type { SimStats } from '../workers/wasmSim.worker';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { buildingKindFromU8 } from './protocol/buildingKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
 import { footprintTouchesWater } from './adjacency';
+// `WireBuilding`/`WireEducationSeatsUsed` are decoded from the `buildingsJson`/
+// `educationSeatsUsedJson` payloads (see `SimHost::buildings_json`/
+// `SimHost::education_seats_used_json`, Rust) — `ts-rs`-generated mirrors of
+// `city_sim_protocol::wire_types`; see
+// `crates/city-sim-protocol/tests/export_bindings.rs`.
+import type { WireBuilding } from './protocol/generated/WireBuilding';
+import type { WireEducationSeatsUsed } from './protocol/generated/WireEducationSeatsUsed';
 
 // Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
 // Must remain in sync with city-sim-protocol/src/commands.rs Tool enum.
@@ -81,7 +88,7 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; alerts: SimAlertWire[] }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; alerts: SimAlert[] }
   | { type: 'apply_result'; success: boolean; message: string | null; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags }
@@ -95,20 +102,6 @@ type WorkerToMain =
       policies: GameState['policies'];
       bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags;
     };
-
-/** One entry decoded from a `buildingsJson` payload — see `SimHost::buildings_json` (Rust). */
-interface WireBuilding {
-  id: number;
-  kind: number;
-  originX: number;
-  originY: number;
-}
-
-/** One entry decoded from an `educationSeatsUsedJson` payload — see `SimHost::education_seats_used_json` (Rust). */
-interface WireEducationSeatsUsed {
-  buildingId: number;
-  used: number;
-}
 
 export interface WasmSimBridgeConfig {
   ticksPerSecond?: number;
@@ -144,7 +137,7 @@ export class WasmSimBridge implements SimBridge {
    * no restore alert ever following it — the Rust-side latch resyncs
    * silently on load_state, so nothing else would ever correct it.
    */
-  private pendingAlerts: SimAlertWire[] = [];
+  private pendingAlerts: SimAlert[] = [];
   private pendingUndo: ((happened: boolean) => void) | null = null;
   private pendingRedo: ((happened: boolean) => void) | null = null;
   private canUndoFlag = false;
@@ -299,7 +292,7 @@ export class WasmSimBridge implements SimBridge {
         }
         break;
     }
-    return { success: true };
+    return { success: true, message: null };
   }
 
   onMessage(handler: (msg: FromSim) => void): void {
@@ -543,7 +536,7 @@ export class WasmSimBridge implements SimBridge {
   }
 
   /** Forward each alert as `FromSim::Alert`, plus its paired narrative event if any. */
-  private dispatchAlerts(alerts: SimAlertWire[]): void {
+  private dispatchAlerts(alerts: SimAlert[]): void {
     for (const alert of alerts) {
       this.handler?.({ type: 'Alert', data: alert });
       const narrative = deriveNarrativeEventFromAlert(alert, Date.now());

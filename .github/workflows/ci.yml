@@ -122,6 +122,27 @@ jobs:
         id: rust_tests
         run: cargo nextest run --workspace --exclude city-sim-wasm --profile ci
 
+      # `crates/city-sim-protocol/tests/export_bindings.rs` and
+      # `crates/tauri-plugin-city-sim/tests/export_bindings.rs` (run above, as
+      # part of the workspace test run) regenerate
+      # `app/src/game/protocol/generated/` and
+      # `crates/tauri-plugin-city-sim/guest-js/generated/` deterministically —
+      # see those files' doc comments. If either directory is dirty here, a
+      # `#[derive(TS)]` type changed without the checked-in TS mirror being
+      # regenerated alongside it.
+      - name: Check generated TS bindings are up to date
+        id: ts_bindings_fresh
+        # `git add -N` (intent-to-add) before the diff so a brand new file
+        # under either directory (a new `#[derive(TS)]` type whose output was
+        # never committed) shows up as a diff too — a plain `git diff
+        # --exit-code` only compares tracked files and would silently miss it.
+        run: |
+          git add -N -- app/src/game/protocol/generated/ crates/tauri-plugin-city-sim/guest-js/generated/
+          if ! git diff --exit-code -- app/src/game/protocol/generated/ crates/tauri-plugin-city-sim/guest-js/generated/; then
+            echo "::error::Generated TS bindings are out of date. Run 'cargo test -p city-sim-protocol -p tauri-plugin-city-sim' locally and commit the diff under app/src/game/protocol/generated/ and crates/tauri-plugin-city-sim/guest-js/generated/."
+            exit 1
+          fi
+
       - name: Upload Rust test artefacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -148,6 +169,7 @@ jobs:
             echo "- Command: \`cargo nextest run --workspace --exclude city-sim-wasm --profile ci\`"
             echo "- Includes the golden city (\`tests/golden_city.rs\`) and the default-size soak (\`tests/soak.rs\`)"
             echo "- Golden dump: \`crates/city-sim-core/tests/fixtures/golden_city.expected\` — regenerate deliberately with \`GOLDEN=regen\`, see \`docs/testing.md\`"
+            echo "- Generated TS bindings freshness: \`${{ steps.ts_bindings_fresh.outcome }}\` (\`app/src/game/protocol/generated/\`, \`crates/tauri-plugin-city-sim/guest-js/generated/\`)"
             echo "- Test artefact: \`target/nextest/ci/junit.xml\`"
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
