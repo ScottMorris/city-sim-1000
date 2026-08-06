@@ -25,12 +25,11 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// state (see `city_sim_protocol::commands::LightingPolicy`).
 ///
 /// **v4 and v5 are both refused outright now — a deliberate pre-release
-/// compatibility break, not an oversight.** `origin/main` currently ships
-/// `VERSION = 4` as its one readable shape: a real `.citysim` download or
-/// IndexedDB engine snapshot saved against a released build *is* v4 bytes,
-/// and v5 never left this branch (see the superseded doc this replaces, in
-/// git history, for how that one stayed live). Both are dropped in the same
-/// change: `docs/tile-model.md` states the project's pre-release stance
+/// compatibility break, not an oversight.** A real `.citysim` download or
+/// IndexedDB engine snapshot saved against an older released build genuinely
+/// was v4 bytes, and v5 never left this branch (see the superseded doc this
+/// replaces, in git history, for how that one stayed live). Both are dropped
+/// in the same change: `docs/tile-model.md` states the project's pre-release stance
 /// plainly — the CSIM snapshot format, wire bytes, and u8 alphabets may
 /// change freely before 1.0; only the legacy JSON save vocabulary and the
 /// frozen `legacy_tile_buffer` layout are fixed. A pre-1.0 CSAV file

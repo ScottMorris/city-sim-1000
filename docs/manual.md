@@ -6,7 +6,7 @@ Water is an essential utility for your city. Residential, Commercial, and Indust
 
 ### Production
 
-- **Water Pumps:** Extract water from the ground. Must be placed near water sources (lakes/rivers) for maximum efficiency (planned feature). Currently, they provide a steady supply of water. Requires Power.
+- **Water Pumps:** Extract water from the ground. A pump's footprint must be orthogonally adjacent to a water tile to draw anything at all — a dry pump produces nothing even when powered. Requires Power.
 - **Water Towers:** Store and provide pressure. Require power and a pipe/road connection to contribute to supply.
 
 ### Distribution
@@ -30,7 +30,7 @@ To view and manage your water network, use the **Underground View**.
 ### Water Pipe Tool
 
 - Select the Water Pipe tool to place pipes underground.
-- Cost: $5 per tile.
+- Cost: $4 per tile.
 - Pipes can be placed under roads, buildings, or open land.
 - Use the Underground View to see where you are placing them relative to your city layout.
 
