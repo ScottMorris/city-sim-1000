@@ -9,6 +9,7 @@ import { applyToolCmd, nextStrokeId } from './protocol/commands';
 import { Occupant, Terrain, ZoneDensity } from './protocol/occupants';
 import { BYTES_PER_TILE, STATUS, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
+import { ServiceId } from './services';
 import type { FromSim } from './protocol/events';
 import { Tool } from './toolTypes';
 import { TauriSimBridge, type TauriPluginBindings } from './tauriSimBridge';
@@ -55,10 +56,22 @@ interface SimAlert {
   sticky: boolean;
 }
 
+interface WireEducationStats {
+  elementaryServed: number; elementaryCapacity: number; elementaryLoad: number;
+  highServed: number; highCapacity: number; highLoad: number;
+  score: number; elementaryCoverage: number; highCoverage: number;
+}
+
+interface WireEducationSeatsUsed {
+  buildingId: number;
+  used: number;
+}
+
 interface TickEvent {
   tick: number; day: number; population: number; jobs: number; money: number;
   power: number; water: number; powerProduced: number; waterProduced: number;
   powerComponents: WireUtilityComponent[]; waterComponents: WireUtilityComponent[];
+  education: WireEducationStats; educationSeatsUsed: WireEducationSeatsUsed[];
   demandResidential: number; demandCommercial: number; demandIndustrial: number;
   wildernessScore: number; wildernessTrend: number;
   width: number; height: number;
@@ -75,6 +88,12 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
     tick: 0, day: 0, population: 0, jobs: 0, money: 0,
     power: 0, water: 0, powerProduced: 0, waterProduced: 0,
     powerComponents: [], waterComponents: [],
+    education: {
+      elementaryServed: 0, elementaryCapacity: 0, elementaryLoad: 0,
+      highServed: 0, highCapacity: 0, highLoad: 0,
+      score: 1, elementaryCoverage: 1, highCoverage: 1
+    },
+    educationSeatsUsed: [],
     demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
     wildernessScore: 0, wildernessTrend: 0,
     width: 8, height: 8,
@@ -263,6 +282,27 @@ describe('TauriSimBridge onTick decode', () => {
     expect(tile.elevation).toBe(200);
     expect(tile.buildingId).toBe(42);
     expect(tile.wilderness).toBeCloseTo(64 / 255, 5);
+  });
+
+  it('adopts event.education verbatim and maps educationSeatsUsed onto the matching building\'s slotsUsed', async () => {
+    const { bridge, emit } = await makeBridge();
+    const education: WireEducationStats = {
+      elementaryServed: 12, elementaryCapacity: 180, elementaryLoad: 20,
+      highServed: 0, highCapacity: 0, highLoad: 0,
+      score: 0.6, elementaryCoverage: 0.6, highCoverage: 1,
+    };
+    const school: WireBuilding = { id: 7, kind: tileKindToU8(TileKind.ElementarySchool), originX: 0, originY: 0 };
+
+    emit(baseTickEvent({
+      education,
+      educationSeatsUsed: [{ buildingId: 7, used: 12 }],
+      buildings: [school],
+    }));
+
+    const s = bridge.getState();
+    expect(s.education).toEqual(education);
+    const building = s.buildings.find((b) => b.id === 7);
+    expect(building?.state.serviceLoad.slotsUsed[ServiceId.EducationElementary]).toBe(12);
   });
 
   it('decodes buildingId directly from the wire, independent of event.buildings, and clears it when the wire says none', async () => {

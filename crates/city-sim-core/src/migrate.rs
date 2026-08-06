@@ -232,6 +232,7 @@ pub(crate) fn v4_to_v5(old: v4::GameState) -> GameState {
         next_building_id: old.next_building_id,
         buildings: old.buildings,
         education: old.education,
+        education_seats_used: std::collections::HashMap::new(),
         budget: old.budget,
         budget_history: old.budget_history,
         policies: old.policies,

@@ -24,3 +24,7 @@
 * Snapshot format changes (none needed — see above).
 
 These are exactly the follow-ups #230 was filed to unblock, not part of it.
+
+## See also
+
+`docs/features/education-over-the-wire.md` (`#228`) follows this same pattern — per-tick wire exposure of an already-computed engine value, local per-binding wire structs, `#[serde(skip)]` for the fully-derived `GameState` field.

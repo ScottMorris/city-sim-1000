@@ -1,20 +1,18 @@
-// education.ts — education coverage recompute over school service areas.
+// education.ts — client-side education helpers.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
+//
+// `#228`: education coverage is computed by `city-sim-core`'s
+// `recompute_education` and reaches the client over the wire — see
+// `wasmSimBridge.ts`/`tauriSimBridge.ts`. What remains here is a build-preview
+// helper that has no engine equivalent to call (it previews a school that
+// hasn't been placed yet) plus small readers over `state.education`.
 
-import { BuildingStatus } from './buildings/state';
-import { fundingMultiplier, MAX_FUNDING } from './protocol/commands';
-import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
+import { getBuildingTemplate } from './buildings/templates';
 import type { GameState } from './gameState';
-import { getTile } from './gameState';
 import { ServiceId } from './services';
-import {
-  computeZoneLoads,
-  estimateZoneLoad,
-  getReachableZoneCandidates,
-  DEFAULT_WORKER_SHARE
-} from './serviceDistribution';
+import { getReachableZoneCandidates } from './serviceDistribution';
 
 export interface EducationStats {
   elementaryServed: number;
@@ -28,101 +26,15 @@ export interface EducationStats {
   highCoverage: number;
 }
 
-function clamp(val: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, val));
-}
-export function recomputeEducation(state: GameState): EducationStats {
-  let elementaryLoad = 0;
-  let highLoad = 0;
-  let elementaryServed = 0;
-  let highServed = 0;
-  let elementaryCapacity = 0;
-  let highCapacity = 0;
-  const loads = computeZoneLoads(state, DEFAULT_WORKER_SHARE);
-
-  state.tiles.forEach((tile, idx) => {
-    tile.services.served[ServiceId.EducationElementary] = false;
-    tile.services.served[ServiceId.EducationHigh] = false;
-    tile.services.scores[ServiceId.EducationElementary] = 0;
-    tile.services.scores[ServiceId.EducationHigh] = 0;
-    elementaryLoad += estimateZoneLoad(idx, tile, ServiceId.EducationElementary, loads);
-    highLoad += estimateZoneLoad(idx, tile, ServiceId.EducationHigh, loads);
-  });
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template?.service) continue;
-    if (
-      template.service.id !== ServiceId.EducationElementary &&
-      template.service.id !== ServiceId.EducationHigh
-    )
-      continue;
-    if (building.state.status !== BuildingStatus.Active) continue;
-    // Underfunded civic departments crowd the schools (mirrors
-    // `recompute_education` in city-sim-core; 100% funding → exact).
-    const capacity =
-      (template.service.capacity ?? 0) *
-      fundingMultiplier(state.policies?.budget.fundCivic ?? MAX_FUNDING);
-    if (capacity <= 0) continue;
-
-    if (template.service.id === ServiceId.EducationElementary) elementaryCapacity += capacity;
-    if (template.service.id === ServiceId.EducationHigh) highCapacity += capacity;
-
-    const candidates = getReachableZoneCandidates(
-      state,
-      building.origin,
-      template.footprint,
-      template.service.coverageRadius
-    );
-    let used = 0;
-
-    for (const [idx] of candidates) {
-      if (used >= capacity) break;
-      const x = idx % state.width;
-      const y = Math.floor(idx / state.width);
-      const tile = getTile(state, x, y);
-      if (!tile) continue;
-      const load = estimateZoneLoad(idx, tile, template.service.id, loads);
-      if (load <= 0) continue;
-      const remaining = Math.max(0, capacity - used);
-      if (remaining <= 0) break;
-      const applied = Math.min(load, remaining);
-      if (applied <= 0) continue;
-      used += applied;
-      tile.services.served[template.service.id] = true;
-      tile.services.scores[template.service.id] = applied / load;
-      if (template.service.id === ServiceId.EducationElementary) {
-        elementaryServed += applied;
-      } else {
-        highServed += applied;
-      }
-    }
-
-    building.state.serviceLoad.slotsUsed[template.service.id] = used;
-  }
-
-  const elementaryCoverage =
-    elementaryLoad > 0 ? clamp(elementaryServed / elementaryLoad, 0, 1) : 1;
-  const highCoverage = highLoad > 0 ? clamp(highServed / highLoad, 0, 1) : 1;
-  const score = clamp(elementaryCoverage * 0.6 + highCoverage * 0.4, 0, 1);
-
-  return {
-    elementaryServed,
-    elementaryCapacity,
-    elementaryLoad,
-    highServed,
-    highCapacity,
-    highLoad,
-    score,
-    elementaryCoverage,
-    highCoverage
-  };
-}
-
 export function getEducationScore(state: GameState): number {
-  return state.education?.score ?? 0;
+  return state.education?.score ?? 1;
 }
 
+/**
+ * Defaults for a city with no schools: no load anywhere means full coverage,
+ * not zero — matches `city_sim_core::state::EducationStats::default()`. Used
+ * before the first wire update lands (initial state, legacy-save back-fill).
+ */
 export function createEmptyEducationStats(): EducationStats {
   return {
     elementaryServed: 0,
@@ -131,9 +43,9 @@ export function createEmptyEducationStats(): EducationStats {
     highServed: 0,
     highCapacity: 0,
     highLoad: 0,
-    score: 0,
-    elementaryCoverage: 0,
-    highCoverage: 0
+    score: 1,
+    elementaryCoverage: 1,
+    highCoverage: 1
   };
 }
 

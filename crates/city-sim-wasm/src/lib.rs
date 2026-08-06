@@ -9,6 +9,7 @@ use city_sim_core::{
     import::{from_tile_buffer, ImportStats},
     sim::Simulation,
     snapshot,
+    state::EducationStats,
     utilities::{UtilityComponent, UtilityKind},
     wire::encode_tile_buffer,
 };
@@ -506,6 +507,28 @@ impl SimHost {
             .collect();
         serde_json::to_string(&wire).unwrap_or_default()
     }
+
+    /// City-wide education coverage snapshot (`#228`) — see `state::EducationStats`.
+    pub fn education_json(&self) -> String {
+        let wire = WireEducationStats::from(&self.sim.state.education);
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
+
+    /// Seats consumed per school building (`#228`), sorted by building id for
+    /// deterministic output. `used` is left unrounded; round for display in
+    /// TS, not here — see `WireUtilityComponent`'s doc comment for the same
+    /// convention.
+    pub fn education_seats_used_json(&self) -> String {
+        let mut wire: Vec<WireEducationSeatsUsed> = self
+            .sim
+            .state
+            .education_seats_used
+            .iter()
+            .map(|(&building_id, &used)| WireEducationSeatsUsed { building_id, used })
+            .collect();
+        wire.sort_by_key(|e| e.building_id);
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
 }
 
 /// One row of [`SimHost::buildings_json`]'s wire shape.
@@ -543,4 +566,46 @@ impl From<&UtilityComponent> for WireUtilityComponent {
             utilisation: c.utilisation(),
         }
     }
+}
+
+/// Wire shape of [`SimHost::education_json`]. Mirrors `state::EducationStats`
+/// field-for-field; kept as a separate type rather than deriving `Serialize`
+/// directly on the engine struct, matching the `WireBuilding`/
+/// `WireUtilityComponent` precedent of wire-agnostic engine types.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireEducationStats {
+    elementary_served: f32,
+    elementary_capacity: f32,
+    elementary_load: f32,
+    high_served: f32,
+    high_capacity: f32,
+    high_load: f32,
+    score: f32,
+    elementary_coverage: f32,
+    high_coverage: f32,
+}
+
+impl From<&EducationStats> for WireEducationStats {
+    fn from(s: &EducationStats) -> Self {
+        Self {
+            elementary_served: s.elementary_served,
+            elementary_capacity: s.elementary_capacity,
+            elementary_load: s.elementary_load,
+            high_served: s.high_served,
+            high_capacity: s.high_capacity,
+            high_load: s.high_load,
+            score: s.score,
+            elementary_coverage: s.elementary_coverage,
+            high_coverage: s.high_coverage,
+        }
+    }
+}
+
+/// One row of [`SimHost::education_seats_used_json`]'s wire shape.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireEducationSeatsUsed {
+    building_id: u32,
+    used: f32,
 }

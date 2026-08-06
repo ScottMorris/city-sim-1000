@@ -9,7 +9,7 @@ use crate::rng::SeededRng;
 use crate::wilderness::WildernessStats;
 use city_sim_protocol::commands::Policies;
 use city_sim_protocol::tile_kind::TileKind;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
 // ---------------------------------------------------------------------------
 // Tile flags
@@ -438,6 +438,15 @@ pub struct GameState {
     pub buildings: Vec<BuildingInstance>,
     /// Education coverage stats, recomputed each tick by `education::recompute_education`.
     pub education: EducationStats,
+    /// Seats consumed per school building (building id → seats used),
+    /// rebuilt from scratch by every `recompute_education` call, same
+    /// lifecycle as `utility_networks`. `#[serde(skip)]` rather than
+    /// persisted: it's fully recomputed from `buildings`/`tiles`, so
+    /// carrying it across a snapshot boundary would buy nothing and cost a
+    /// `VERSION` bump for bytes nothing needs to load. Empty until the first
+    /// recompute after a fresh `GameState` or a snapshot restore.
+    #[serde(skip)]
+    pub education_seats_used: HashMap<u32, f32>,
     /// Last computed daily budget snapshot.
     pub budget: BudgetStats,
     /// Rolling 200-day budget history for the finance panel.
@@ -488,6 +497,7 @@ impl GameState {
             next_building_id: 1,
             buildings: Vec::new(),
             education: EducationStats::default(),
+            education_seats_used: HashMap::new(),
             budget: BudgetStats::default(),
             budget_history: VecDeque::new(),
             policies: Policies::default(),

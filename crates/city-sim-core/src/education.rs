@@ -223,6 +223,7 @@ pub fn recompute_education(state: &mut GameState) {
         tile.elementary_score = 0.0;
         tile.high_score = 0.0;
     }
+    state.education_seats_used.clear();
 
     let loads = compute_zone_loads(state);
 
@@ -331,6 +332,10 @@ pub fn recompute_education(state: &mut GameState) {
                 high_served_total += applied;
             }
         }
+
+        state
+            .education_seats_used
+            .insert(state.buildings[i].id, used);
     }
 
     let elementary_coverage = if elementary_load > 0.0 {
@@ -424,6 +429,78 @@ mod tests {
             "residential should be served by nearby school"
         );
         assert!(s.education.elementary_coverage > 0.0);
+    }
+
+    #[test]
+    fn active_school_records_seats_used_under_its_building_id() {
+        let mut s = gs(6, 2);
+        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
+        s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
+        place_building(&mut s, TileKind::Residential, 3, 0);
+        s.population = 14;
+        update_building_states(&mut s, false);
+        recompute_education(&mut s);
+        let used = s
+            .education_seats_used
+            .get(&school_id)
+            .copied()
+            .expect("active school should record a seats-used entry");
+        assert!((used - 14.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn inactive_school_records_no_seats_used() {
+        let mut s = gs(4, 4);
+        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        for dx in 0..2 {
+            for dy in 0..2 {
+                s.tile_at_mut(dx, dy).unwrap().set_flag(FLAG_POWERED, false);
+            }
+        }
+        update_building_states(&mut s, false);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
+        place_building(&mut s, TileKind::Residential, 3, 0);
+        s.population = 14;
+        recompute_education(&mut s);
+        assert!(!s.education_seats_used.contains_key(&school_id));
+    }
+
+    #[test]
+    fn seats_used_is_dropped_once_its_school_is_demolished() {
+        let mut s = gs(6, 2);
+        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
+        s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
+        place_building(&mut s, TileKind::Residential, 3, 0);
+        s.population = 14;
+        update_building_states(&mut s, false);
+        recompute_education(&mut s);
+        assert!(s.education_seats_used.contains_key(&school_id));
+
+        s.buildings.retain(|b| b.id != school_id);
+        recompute_education(&mut s);
+        assert!(!s.education_seats_used.contains_key(&school_id));
+    }
+
+    #[test]
+    fn seats_used_clamps_at_funded_capacity() {
+        // One residential building holds the city's entire (inflated) population
+        // share, so its load (300) exceeds the elementary school's 180-seat
+        // capacity — `used` must clamp at capacity, not the raw load.
+        let mut s = gs(6, 2);
+        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
+        s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
+        place_building(&mut s, TileKind::Residential, 3, 0);
+        s.population = 300;
+        update_building_states(&mut s, false);
+        recompute_education(&mut s);
+        let used = s.education_seats_used[&school_id];
+        assert!((used - 180.0).abs() < 0.001, "used={used}");
     }
 
     #[test]

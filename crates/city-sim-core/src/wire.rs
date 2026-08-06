@@ -15,7 +15,7 @@
 
 use crate::occupants::Terrain;
 use crate::state::{GameState, Tile, DERIVED_FLAG_MASK};
-use city_sim_protocol::tile_buffer::{encode_happiness, status, TileBufferOffsets};
+use city_sim_protocol::tile_buffer::{encode_happiness, encode_score, status, TileBufferOffsets};
 
 /// The `underground` wire byte: bits 0–2, already absolute — no shift needed.
 #[inline]
@@ -36,8 +36,8 @@ pub fn wire_overhead_byte(tile: &Tile) -> u8 {
 }
 
 /// The `status` wire byte: the three derived flags (same bit positions as
-/// `Tile::flags`, copied verbatim), plus terrain and density in the bits the
-/// old flags byte never used.
+/// `Tile::flags`, copied verbatim), plus terrain, density, and education
+/// served flags in the bits the old flags byte never used.
 #[inline]
 pub fn wire_status_byte(tile: &Tile) -> u8 {
     let mut out = tile.flags & DERIVED_FLAG_MASK;
@@ -45,6 +45,12 @@ pub fn wire_status_byte(tile: &Tile) -> u8 {
         out |= status::WATER_TERRAIN;
     }
     out |= (tile.density as u8) << status::DENSITY_SHIFT;
+    if tile.elementary_served {
+        out |= status::ELEMENTARY_SERVED;
+    }
+    if tile.high_served {
+        out |= status::HIGH_SERVED;
+    }
     out
 }
 
@@ -71,6 +77,8 @@ pub fn encode_tile_buffer(state: &GameState) -> Vec<u8> {
         buf[base + 1] = ((bid >> 8) & 0xFF) as u8;
         // 128 = neutral until the first wilderness recompute fills the field.
         buf[o.wilderness + i] = state.wilderness.local_field.get(i).copied().unwrap_or(128);
+        buf[o.elementary_score + i] = encode_score(tile.elementary_score);
+        buf[o.high_score + i] = encode_score(tile.high_score);
     }
     buf
 }
@@ -122,6 +130,10 @@ mod tests {
         s.tiles[1].elevation = 200;
         s.tiles[1].set_building_id(300);
         s.wilderness.local_field = vec![128, 40];
+        s.tiles[1].elementary_served = true;
+        s.tiles[1].elementary_score = 0.5;
+        s.tiles[1].high_served = true;
+        s.tiles[1].high_score = 1.0;
 
         let buf = encode_tile_buffer(&s);
         let o = TileBufferOffsets::for_size(2);
@@ -138,6 +150,11 @@ mod tests {
         assert_eq!(buf[o.overhead + 1], 0b10);
         assert_eq!(buf[o.status], 0);
         assert_eq!(buf[o.status + 1] & status::POWERED, status::POWERED);
+        assert_eq!(
+            buf[o.status + 1] & status::ELEMENTARY_SERVED,
+            status::ELEMENTARY_SERVED
+        );
+        assert_eq!(buf[o.status + 1] & status::HIGH_SERVED, status::HIGH_SERVED);
         assert_eq!(buf[o.happiness], encode_happiness(1.0)); // Tile::default's happiness
         assert_eq!(buf[o.happiness + 1], encode_happiness(2.0));
         assert_eq!(buf[o.elevation], 0);
@@ -154,6 +171,10 @@ mod tests {
         );
         assert_eq!(buf[o.wilderness], 128);
         assert_eq!(buf[o.wilderness + 1], 40);
+        assert_eq!(buf[o.elementary_score], encode_score(0.0));
+        assert_eq!(buf[o.elementary_score + 1], encode_score(0.5));
+        assert_eq!(buf[o.high_score], encode_score(0.0));
+        assert_eq!(buf[o.high_score + 1], encode_score(1.0));
     }
 
     #[test]
@@ -168,5 +189,22 @@ mod tests {
         assert_eq!(byte & status::ABANDONED, status::ABANDONED);
         assert_eq!(byte & status::WATER_TERRAIN, status::WATER_TERRAIN);
         assert_eq!((byte & status::DENSITY_MASK) >> status::DENSITY_SHIFT, 2);
+        assert_eq!(byte & status::ELEMENTARY_SERVED, 0);
+        assert_eq!(byte & status::HIGH_SERVED, 0);
+    }
+
+    #[test]
+    fn status_byte_packs_education_served_flags() {
+        let mut s = GameState::new(1, 1, 0);
+        s.tiles[0].elementary_served = true;
+        let byte = wire_status_byte(&s.tiles[0]);
+        assert_eq!(byte & status::ELEMENTARY_SERVED, status::ELEMENTARY_SERVED);
+        assert_eq!(byte & status::HIGH_SERVED, 0);
+
+        s.tiles[0].elementary_served = false;
+        s.tiles[0].high_served = true;
+        let byte = wire_status_byte(&s.tiles[0]);
+        assert_eq!(byte & status::ELEMENTARY_SERVED, 0);
+        assert_eq!(byte & status::HIGH_SERVED, status::HIGH_SERVED);
     }
 }
