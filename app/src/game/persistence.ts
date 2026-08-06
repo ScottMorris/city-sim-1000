@@ -15,12 +15,7 @@ import {
 import { SeededRng } from './rng';
 import { createBuildingState } from './buildings/state';
 import { getBuildingTemplate } from './buildings/templates';
-import {
-  createEmptyServiceLoad,
-  createServiceSystemState,
-  createTileServiceState,
-  DEFAULT_SERVICE_DEFINITIONS
-} from './services';
+import { createEmptyServiceLoad, createTileServiceState } from './services';
 import { createEmptyEducationStats } from './education';
 import {
   clampBudgetPolicy,
@@ -33,10 +28,6 @@ import { encodeHappiness } from './protocol/tileBuffer';
 import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
 import { legacyFlags, legacyKind, legacyUndergroundKind, tileFromV4 } from './protocol/legacyProjection';
-
-export function serialize(state: GameState): string {
-  return JSON.stringify(state);
-}
 
 export function deserialize(payload: string): GameState {
   const parsed = JSON.parse(payload);
@@ -59,15 +50,6 @@ export function deserialize(payload: string): GameState {
     parsed.utilities.powerComponents = parsed.utilities.powerComponents ?? [];
     parsed.utilities.waterComponents = parsed.utilities.waterComponents ?? [];
   }
-  parsed.services = parsed.services ?? createServiceSystemState();
-  parsed.services.definitions = parsed.services.definitions ?? {
-    ...DEFAULT_SERVICE_DEFINITIONS
-  };
-  Object.entries(DEFAULT_SERVICE_DEFINITIONS).forEach(([id, def]) => {
-    if (!parsed.services.definitions[id]) {
-      parsed.services.definitions[id] = def;
-    }
-  });
   parsed.tiles = parsed.tiles.map((tile: any) => {
     const buildingId = tile.buildingId ?? tile.powerPlantId;
     const base = {
@@ -106,9 +88,6 @@ export function deserialize(payload: string): GameState {
   });
   if (parsed.tick === undefined) {
     parsed.tick = 0;
-  }
-  if (parsed.tileRevision === undefined) {
-    parsed.tileRevision = 0;
   }
   if (!parsed.budget) {
     parsed.budget = {
@@ -278,10 +257,6 @@ export function deserialize(payload: string): GameState {
     ui: { ...defaultSettings.ui, ...(incomingSettings.ui ?? {}) }
   };
   return parsed as GameState;
-}
-
-export function copyState(state: GameState): GameState {
-  return deserialize(serialize(state));
 }
 
 // ---------------------------------------------------------------------------

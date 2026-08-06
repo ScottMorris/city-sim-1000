@@ -5,7 +5,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { createInitialState, getTile, TileKind } from './gameState';
-import { deserialize, serialize } from './persistence';
+import { deserialize } from './persistence';
+import { serialize } from './testSupport/legacyStateSerialize';
 
 describe('buildings — legacy save migration', () => {
   it('rebuilds legacy civic tiles into building instances on load', () => {

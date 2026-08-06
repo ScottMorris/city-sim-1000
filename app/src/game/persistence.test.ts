@@ -4,7 +4,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { serialize, deserialize, copyState } from './persistence';
+import { deserialize } from './persistence';
+import { serialize, copyState } from './testSupport/legacyStateSerialize';
 import {
   TileKind,
   createDefaultSettings,
@@ -12,7 +13,6 @@ import {
 } from './gameState';
 import { DEFAULT_BYLAWS } from './bylaws';
 import { SeededRng } from './rng';
-import { DEFAULT_SERVICE_DEFINITIONS } from './services';
 import { createEmptyEducationStats } from './education';
 import { createDefaultBudgetPolicy } from './protocol/commands';
 
@@ -161,13 +161,11 @@ describe('utilities back-fill', () => {
 });
 
 describe('scalar and structural back-fill', () => {
-  it('defaults tick and tileRevision to 0', () => {
+  it('defaults tick to 0', () => {
     const state = degrade((parsed) => {
       delete parsed.tick;
-      delete parsed.tileRevision;
     });
     expect(state.tick).toBe(0);
-    expect(state.tileRevision).toBe(0);
   });
 
   it('creates a default budget when absent', () => {
@@ -225,16 +223,6 @@ describe('scalar and structural back-fill', () => {
       delete parsed.bylaws.lighting;
     });
     expect(state.bylaws.lighting).toEqual(DEFAULT_BYLAWS.lighting);
-  });
-
-  it('back-fills missing service definitions individually', () => {
-    const firstId = Object.keys(
-      DEFAULT_SERVICE_DEFINITIONS
-    )[0] as keyof typeof DEFAULT_SERVICE_DEFINITIONS;
-    const state = degrade((parsed) => {
-      delete parsed.services.definitions[firstId];
-    });
-    expect(state.services.definitions[firstId]).toEqual(DEFAULT_SERVICE_DEFINITIONS[firstId]);
   });
 });
 
