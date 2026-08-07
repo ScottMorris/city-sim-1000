@@ -30,6 +30,7 @@ mutants.diff
 app/test-results/
 app/playwright-report/
 app/blob-report/
+app/vitest.config.ts.timestamp-*.mjs
 
 # Local agent config — machine-specific, never shared. `.claude/mcp.json` hard-codes
 # an absolute `cwd`, so committing it breaks every other clone and every worktree.
