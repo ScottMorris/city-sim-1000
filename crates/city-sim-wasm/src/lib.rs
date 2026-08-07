@@ -322,7 +322,8 @@ impl SimHost {
     }
 
     /// Alerts raised since the last call — drains the queue. Call once per
-    /// `step()` from the host and forward each entry as `FromSim::Alert`.
+    /// `step()` from the host and forward each entry (a JSON-encoded
+    /// `SimAlert`) to the UI.
     pub fn take_alerts_json(&mut self) -> String {
         serde_json::to_string(&self.sim.take_alerts()).unwrap_or_default()
     }

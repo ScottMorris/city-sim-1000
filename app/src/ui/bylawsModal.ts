@@ -1,3 +1,8 @@
+// bylawsModal.ts — the Bylaws modal: lighting standards and wilderness programme controls.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { projectLightingPolicy } from '../game/bylawAnalytics';
 import { DEFAULT_BYLAWS, LIGHTING_POLICIES, type LightingBylaw } from '../game/bylaws';
 import type { GameState } from '../game/gameState';
@@ -6,6 +11,7 @@ import {
   NATURE_RESERVE_UNLOCK_SCORE,
   type WildernessPolicy
 } from '../game/protocol/commands';
+import { DAYS_PER_MONTH } from '../game/time';
 import { showToast } from './dialogs';
 
 type BylawsModalOptions = {
@@ -14,8 +20,6 @@ type BylawsModalOptions = {
   onWildernessPolicyChange?: (policy: WildernessPolicy) => void;
   onClose?: () => void;
 };
-
-const MONTHLY_EXPENSE_FACTOR = 9; // Mirror the sim's net-per-day/month conversion.
 
 function formatDelta(
   value: number,
@@ -171,7 +175,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           label: '🌿 Nature Reserve',
           lede: 'Rangers connect and protect green space: bigger patch bonuses, gentler fragmentation penalties.',
           costLabel: 'Programme cost',
-          cost: 100 * MONTHLY_EXPENSE_FACTOR,
+          cost: 100 * DAYS_PER_MONTH,
           enabled: policy.natureReserve,
           locked: !reserveUnlocked,
           lockHint: `Unlocks at Wilderness ${NATURE_RESERVE_UNLOCK_SCORE} (currently ${Math.round(score)}).`
@@ -181,7 +185,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           label: '♻️ Green Industry',
           lede: 'Subsidize scrubbers and clean processes so industrial tiles weigh far less on the wilderness score.',
           costLabel: 'Subsidy',
-          cost: industrialZones * 2 * MONTHLY_EXPENSE_FACTOR,
+          cost: industrialZones * 2 * DAYS_PER_MONTH,
           enabled: policy.greenIndustry,
           locked: false
         }
@@ -247,7 +251,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
       lightingOptions.innerHTML = '';
       Object.values(LIGHTING_POLICIES).forEach((policy) => {
         const projection = projectLightingPolicy(state, policy.id);
-        const monthlyDelta = projection.deltaMaintenance * MONTHLY_EXPENSE_FACTOR;
+        const monthlyDelta = projection.deltaMaintenance * DAYS_PER_MONTH;
         const moodDelta = policy.happinessTarget - currentPolicy.happinessTarget;
 
         const option = document.createElement('label');

@@ -90,8 +90,8 @@
 
 ## Fiscal Policy (Tax Rates & Department Funding)
 
-Adjustable from the City Ledger (budget screen) sliders; stored in `GameState.budgetPolicy`
-and mirrored into the Rust sim via `SimCommand::SetBudgetPolicy`.
+Adjustable from the City Ledger (budget screen) sliders; stored in `GameState.policies.budget`
+and sent to the sim via the TS `SimCommand`'s `SetPolicies` variant (`app/src/game/protocol/commands.ts`).
 
 - **Tax rates** per zone class (residential/commercial/industrial): whole percentages, 0–20%,
   neutral default **9%**. Revenue for a class scales by `rate / 9`, so 9% reproduces the
@@ -163,8 +163,8 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
   own City Ledger revenue line.
 - **HUD**: 🌲 ribbon chip with trend arrow (fast vs slow EMA of the score); tooltip lists
   the six biggest breakdown contributors.
-- **Programmes** (Bylaws screen, `GameState.wildernessPolicy`,
-  `SimCommand::SetWildernessPolicy`):
+- **Programmes** (Bylaws screen, `GameState.policies.wilderness`, sent to the sim via the
+  TS `SimCommand`'s `SetPolicies` variant):
   - *Nature Reserve* — unlocks at score 60 (UI-gated; stays available once enabled).
     Patch bonus cap 2 → 3, fragmentation penalty 2 → 1. Costs **$100/day** flat.
   - *Green Industry* — always available. Industrial base eco −5 → −2. Costs

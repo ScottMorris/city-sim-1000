@@ -1,7 +1,15 @@
+// events.ts — FromSim and the TS mirror of Rust's AlertKind/SimAlert.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
- * FromSim — TS mirror of crates/sim_protocol/src/events.rs.
+ * FromSim — messages emitted by the sim back to the UI layer.
  *
- * Messages emitted by the sim back to the UI layer.
+ * Not a mirror of any Rust type: `crates/city-sim-protocol`'s own `FromSim`
+ * was never constructed anywhere in the engine and was deleted as dead code.
+ * `AlertKind` and `SimAlert` below still mirror the Rust types of the same
+ * names in `crates/city-sim-protocol/src/events.rs`.
  */
 
 export type AlertKind =

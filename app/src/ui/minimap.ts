@@ -19,6 +19,7 @@ import { BuildingStatus } from '../game/buildings/state';
 import { isPowerCarrier, isZone } from '../game/adjacency';
 import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
 import { legacyKind, legacyFlags } from '../game/protocol/legacyProjection';
+import { ECO_RANGE } from '../game/protocol/tileBuffer';
 import { ServiceId } from '../game/services';
 import { TILE_SIZE, palette as tilePalette } from '../rendering/sprites';
 import { createBuildingLookup, type BuildingLookup } from '../rendering/tileRenderUtils';
@@ -376,7 +377,10 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
     if (settings.overlay === 'wilderness') {
       if (tile.terrain === Terrain.Water) return '#1f68d6';
-      const delta = (tile.wilderness ?? 0.5) - 0.5;
+      // `tile.wilderness` is the eco value in [-ECO_RANGE, +ECO_RANGE] (0 = neutral,
+      // see tileBuffer decodeEco); rescale to the same ±0.5 display delta this
+      // overlay used before the field carried eco units.
+      const delta = (tile.wilderness ?? 0) / (2 * ECO_RANGE);
       if (delta > 0.02) return `rgba(94, 230, 160, ${Math.min(0.3 + delta * 1.4, 0.95).toFixed(2)})`;
       if (delta < -0.02) return `rgba(154, 160, 168, ${Math.min(0.3 + -delta * 1.4, 0.95).toFixed(2)})`;
       return 'rgba(16, 26, 42, 0.9)';

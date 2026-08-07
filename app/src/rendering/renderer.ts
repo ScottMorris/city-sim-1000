@@ -7,6 +7,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js
 import { Camera } from './camera';
 import { GameState, MinimapOverlay, TileKind, ViewStratum, getTile } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
+import { ECO_RANGE } from '../game/protocol/tileBuffer';
 import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate, getToolCost } from '../game/buildings/templates';
 import { computeEducationReach } from '../game/education';
@@ -451,9 +452,10 @@ export class MapRenderer {
 
       if (overlay === 'wilderness') {
         if (tile.terrain === Terrain.Water) return null;
-        // 0–1 with 0.5 neutral (see tileBuffer decodeEco); tint strength
-        // scales with distance from neutral — lush green up, urban grey down.
-        const delta = (tile.wilderness ?? 0.5) - 0.5;
+        // `tile.wilderness` is the eco value in [-ECO_RANGE, +ECO_RANGE] (0 = neutral,
+        // see tileBuffer decodeEco); rescale to the same ±0.5 display delta this
+        // overlay used before the field carried eco units — lush green up, urban grey down.
+        const delta = (tile.wilderness ?? 0) / (2 * ECO_RANGE);
         if (delta > 0.02) return { color: 0x5ee6a0, alpha: Math.min(0.12 + delta * 0.7, 0.45) };
         if (delta < -0.02) return { color: 0x9aa0a8, alpha: Math.min(0.15 + -delta * 0.8, 0.5) };
         return null;

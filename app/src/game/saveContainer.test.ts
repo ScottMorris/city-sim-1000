@@ -12,9 +12,9 @@ import {
   decodeSave,
   encodeSave,
   isLegacyJsonSave,
-  serialize,
   type SaveContainer
 } from './persistence';
+import { serialize } from './testSupport/legacyStateSerialize';
 import { createInitialState, setTile, TileKind } from './gameState';
 import { extractClientState } from './clientState';
 import { deleteSave, getSave, listSaveMetas, putSave, setIdbFactory } from './saveStore';

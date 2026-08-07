@@ -1,9 +1,7 @@
-// SimCommand, CommandResult, Tool enum, and TileKind mapping for the sim protocol.
+// CommandResult, Tool enum, and player-adjustable policy types for the sim protocol.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
-
-use crate::tile_kind::TileKind;
 
 /// All tools the player can apply to the map.
 ///
@@ -158,7 +156,7 @@ impl From<u8> for ViewStratum {
     /// Decodes the `stratum_idx` byte the WASM and Tauri bridges pass across
     /// their FFI/IPC boundary (mirroring `Tool`'s discriminant convention).
     /// Infallible rather than `TryFrom` — any value but `1` is `Surface`,
-    /// same as a missing/legacy field decoding through `#[serde(default)]`.
+    /// so an absent or unrecognised stratum always acts on the surface.
     fn from(v: u8) -> Self {
         if v == ViewStratum::Underground as u8 {
             ViewStratum::Underground
@@ -166,25 +164,6 @@ impl From<u8> for ViewStratum {
             ViewStratum::Surface
         }
     }
-}
-
-/// A command sent from the UI/bridge into the simulation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[non_exhaustive]
-pub enum SimCommand {
-    /// Apply a tool at tile coordinates (x, y), scoped to `stratum` for
-    /// tools that honour it (currently just `Tool::Bulldoze`).
-    ApplyTool {
-        tool: Tool,
-        x: u16,
-        y: u16,
-        #[serde(default)]
-        stratum: ViewStratum,
-    },
-    /// Adjust simulation speed (multiplier relative to base tick rate).
-    SetSpeed { multiplier: f32 },
-    /// Replace the full set of player policies (budget, wilderness, ...).
-    SetPolicies { policies: Policies },
 }
 
 /// Result returned synchronously for `ApplyTool` commands.
@@ -221,33 +200,6 @@ impl TryFrom<u8> for Tool {
     }
 }
 
-/// Mapping from `Tool` to the `TileKind` it places, where applicable.
-/// Returns `None` for tools that don't directly place a tile kind.
-pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
-    match tool {
-        Tool::Water => Some(TileKind::Water),
-        Tool::Tree => Some(TileKind::Tree),
-        Tool::Road => Some(TileKind::Road),
-        Tool::Rail => Some(TileKind::Rail),
-        Tool::PowerLine => Some(TileKind::PowerLine),
-        Tool::HydroPlant => Some(TileKind::HydroPlant),
-        Tool::CoalPlant => Some(TileKind::CoalPlant),
-        Tool::WindTurbine => Some(TileKind::WindTurbine),
-        Tool::SolarFarm => Some(TileKind::SolarFarm),
-        Tool::WaterPump => Some(TileKind::WaterPump),
-        Tool::WaterTower => Some(TileKind::WaterTower),
-        Tool::WaterPipe => Some(TileKind::WaterPipe),
-        Tool::ElementarySchool => Some(TileKind::ElementarySchool),
-        Tool::HighSchool => Some(TileKind::HighSchool),
-        Tool::Residential => Some(TileKind::Residential),
-        Tool::Commercial => Some(TileKind::Commercial),
-        Tool::Industrial => Some(TileKind::Industrial),
-        Tool::Park => Some(TileKind::Park),
-        Tool::ParkLarge => Some(TileKind::ParkLarge),
-        Tool::Inspect | Tool::TerraformRaise | Tool::TerraformLower | Tool::Bulldoze => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,31 +216,10 @@ mod tests {
     }
 
     #[test]
-    fn command_round_trips_postcard() {
-        let cmd = SimCommand::ApplyTool {
-            tool: Tool::Road,
-            x: 5,
-            y: 10,
-            stratum: ViewStratum::Underground,
-        };
-        let bytes = to_allocvec(&cmd).unwrap();
-        let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(
-            back,
-            SimCommand::ApplyTool {
-                tool: Tool::Road,
-                x: 5,
-                y: 10,
-                stratum: ViewStratum::Underground,
-            }
-        ));
-    }
-
-    #[test]
     fn view_stratum_defaults_to_surface() {
-        // `#[serde(default)]` on `ApplyTool::stratum` falls back to
-        // `ViewStratum::default()` when decoding a command log recorded before
-        // this field existed, so the default must stay `Surface`.
+        // `From<u8>` treats every byte but `1` as `Surface`, and
+        // `ViewStratum::default()` must agree — a tool applied without an
+        // explicit stratum acts on the surface, never underground.
         assert_eq!(ViewStratum::default(), ViewStratum::Surface);
     }
 
@@ -319,9 +250,9 @@ mod tests {
                 green_industry: false,
             },
         };
-        let bytes = to_allocvec(&SimCommand::SetPolicies { policies }).unwrap();
-        let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(back, SimCommand::SetPolicies { policies: p } if p == policies));
+        let bytes = to_allocvec(&policies).unwrap();
+        let back: Policies = from_bytes(&bytes).unwrap();
+        assert_eq!(back, policies);
     }
 
     #[test]

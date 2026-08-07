@@ -12,8 +12,8 @@ import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupan
 import type { BudgetHistoryEntry } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
-import type { ServiceSystemState, TileServiceState } from './services';
-import { createServiceSystemState, createTileServiceState } from './services';
+import type { TileServiceState } from './services';
+import { createTileServiceState } from './services';
 import { SeededRng } from './rng';
 
 export enum TileKind {
@@ -48,7 +48,7 @@ export interface Tile {
   powerPlantType?: PowerPlantType;
   powerPlantId?: number;
   buildingId?: number;
-  /** Per-tile wilderness intensity, 0–1 (0.5 = neutral). From the sim's eco field. */
+  /** Per-tile eco value, −10..+10 (0 = neutral). From the sim's eco field (see `protocol/tileBuffer.ts`'s `decodeEco`). */
   wilderness?: number;
   services: TileServiceState;
 
@@ -244,7 +244,6 @@ export interface GameState {
   width: number;
   height: number;
   tiles: Tile[];
-  tileRevision: number;
   /** Original seed used to initialise the PRNG for this city. */
   seed: number;
   /** Live xoshiro128** state — persisted so saves resume mid-stream. */
@@ -261,7 +260,6 @@ export interface GameState {
   budgetHistory: BudgetHistoryEntry[];
   buildings: BuildingInstance[];
   nextBuildingId: number;
-  services: ServiceSystemState;
   education: EducationStats;
   bylaws: BylawState;
   /** Every player-adjustable policy family (budget, wilderness, ...). */
@@ -382,7 +380,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     width,
     height,
     tiles,
-    tileRevision: 0,
     seed: resolvedSeed,
     rngState: new SeededRng(resolvedSeed).toJSON(),
     money: 100000,
@@ -419,7 +416,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     demand: { residential: 30, commercial: 30, industrial: 30 },
     buildings: [],
     nextBuildingId: 1,
-    services: createServiceSystemState(),
     // No schools yet → no load anywhere → full coverage, matching
     // `city_sim_core::state::EducationStats::default()`.
     education: {
@@ -442,10 +438,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
 
 function getIndex(state: GameState, x: number, y: number): number {
   return y * state.width + x;
-}
-
-export function bumpTileRevision(state: GameState) {
-  state.tileRevision = (state.tileRevision ?? 0) + 1;
 }
 
 export function getTile(state: GameState, x: number, y: number): Tile | undefined {
@@ -492,5 +484,4 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
     tile.powerPlantId = undefined;
     tile.buildingId = undefined;
   }
-  bumpTileRevision(state);
 }

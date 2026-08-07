@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createInitialState, TileKind } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
 import { Occupant, Terrain, ZoneDensity } from './protocol/occupants';
-import { BYTES_PER_TILE, STATUS, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
+import { BYTES_PER_TILE, STATUS, decodeEco, encodeHappiness, tileBufferOffsets } from './protocol/tileBuffer';
 import { tileKindToU8 } from './protocol/tileKind';
 import { ServiceId } from './services';
 import type { FromSim } from './protocol/events';
@@ -303,7 +303,7 @@ describe('TauriSimBridge onTick decode', () => {
     expect(tile.happiness).toBeCloseTo(1.5, 1);
     expect(tile.elevation).toBe(200);
     expect(tile.buildingId).toBe(42);
-    expect(tile.wilderness).toBeCloseTo(64 / 255, 5);
+    expect(tile.wilderness).toBeCloseTo(decodeEco(64), 5);
   });
 
   it('adopts event.education verbatim and maps educationSeatsUsed onto the matching building\'s slotsUsed', async () => {
