@@ -21,7 +21,7 @@ import { ECO_RANGE } from '../game/protocol/tileBuffer';
 import { BuildingKind } from '../game/buildings/templates';
 import { ServiceId } from '../game/services';
 import { TILE_SIZE, OCCUPANT_COLOURS, TERRAIN_COLOURS } from '../rendering/sprites';
-import { createBuildingLookup, type BuildingLookup } from '../rendering/tileRenderUtils';
+import { createBuildingLookup, structureColour, type BuildingLookup } from '../rendering/tileRenderUtils';
 import { computeAlertSeverity } from '../rendering/alertSeverity';
 
 export interface MinimapOptions {
@@ -32,19 +32,6 @@ export interface MinimapOptions {
   getViewportSize: () => { width: number; height: number };
   /** Stratum lives outside `ClientState` (see `ViewStratum`), so toggling it is a plain callback rather than a settings patch. */
   onStratumToggle: () => void;
-}
-
-/**
- * A resolved `Structure` occupant's template colour for the minimap's base
- * mode — same rule `tileRenderUtils.ts`'s `structureColour` uses: only when
- * the tile carries the `Structure` bit, has a `buildingId`, and the lookup
- * resolves a template with a `colour`. `undefined` falls through to the next
- * rung (zone → trees), exactly as the deleted `legacyKind`'s structure
- * branch did on a stale/missing lookup.
- */
-function structureColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number | undefined {
-  if (!hasOccupant(tile.surface, Occupant.Structure) || tile.buildingId === undefined) return undefined;
-  return buildingLookup.get(tile.buildingId)?.template?.colour;
 }
 
 /** Terrain/structure/zone/trees — the four rungs that outrank rail and road

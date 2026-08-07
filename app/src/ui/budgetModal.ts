@@ -421,8 +421,10 @@ export function initBudgetModal(options: BudgetModalOptions) {
       const appliedPowerUse = state.utilities.powerUsed;
       const appliedMaintenance =
         state.budget.breakdown.details.buildings.civic + state.budget.breakdown.details.buildings.zones;
+      // Rescale from `appliedLighting` (the policy the wire figures were
+      // computed under), not the optimistic `lighting` — see `bylawsModal.ts`.
       const neutralPreview = previewLightingPolicy(
-        lighting,
+        state.appliedLighting,
         DEFAULT_LIGHTING_POLICY,
         appliedPowerUse,
         appliedMaintenance
