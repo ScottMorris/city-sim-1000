@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 
 import * as PIXI from 'pixi.js';
-import { TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
+import { Terrain } from '../game/protocol/occupants';
 import { withBasePath } from '../utils/assetPaths';
 
 /**
@@ -36,7 +36,15 @@ export type HydroVariant = RoadVariant | 'isolated';
 export type CarriagewayClass = 'along-ns' | 'along-ew' | 'junction';
 
 export interface TileTextures {
-  tiles: Partial<Record<TileKind, PIXI.Texture>>;
+  /** Keyed by the sim's own `Terrain` enum (`game/protocol/occupants.ts`),
+   *  not a UI-only vocabulary — the ground sprite for a tile IS its terrain,
+   *  one texture per `Terrain` member. */
+  terrain: Partial<Record<Terrain, PIXI.Texture>>;
+  /** Tree canopy is a ground-cover sprite too (it replaces the terrain
+   *  texture beneath it, same as `terrain`'s two entries), but it's an
+   *  `Occupant.Trees` bit, not a `Terrain` value, so it isn't indexed
+   *  alongside them. */
+  treeCanopy?: PIXI.Texture;
   road: Partial<Record<RoadVariant, PIXI.Texture>>;
   rail: Partial<Record<RoadVariant, PIXI.Texture>>;
   railCrossing: Partial<Record<'ns' | 'ew', PIXI.Texture>>;
@@ -68,11 +76,12 @@ export async function loadPaletteTexture(): Promise<PIXI.Texture> {
   return PIXI.Assets.load(assetPath('assets/palette.png'));
 }
 
-const tileTexturePaths: Partial<Record<TileKind, string>> = {
-  [TileKind.Land]:  assetPath('assets/tiles/terrain/grass.png'),
-  [TileKind.Water]: assetPath('assets/tiles/terrain/water.png'),
-  [TileKind.Tree]:  assetPath('assets/tiles/terrain/tree.png')
+const terrainTexturePaths: Record<Terrain, string> = {
+  [Terrain.Land]:  assetPath('assets/tiles/terrain/grass.png'),
+  [Terrain.Water]: assetPath('assets/tiles/terrain/water.png')
 };
+
+const treeCanopyTexturePath = assetPath('assets/tiles/terrain/tree.png');
 
 const roadTexturePaths: Record<RoadVariant, string> = {
   'ns':         assetPath('assets/tiles/roads/road-ns.png'),
@@ -240,12 +249,13 @@ const indicatorTexturePaths = {
 };
 
 export async function loadTileTextures(): Promise<TileTextures> {
-  const tileEntries = await Promise.all(
-    Object.entries(tileTexturePaths).map(async ([kind, path]) => {
+  const terrainEntries = await Promise.all(
+    (Object.entries(terrainTexturePaths) as unknown as [Terrain, string][]).map(async ([key, path]) => {
       const texture = await PIXI.Assets.load<PIXI.Texture>(path);
-      return [kind as TileKind, texture] as const;
+      return [key, texture] as const;
     })
   );
+  const treeCanopy = await PIXI.Assets.load<PIXI.Texture>(treeCanopyTexturePath);
 
   const roadEntries = await Promise.all(
     (Object.entries(roadTexturePaths) as [RoadVariant, string][]).map(async ([variant, path]) => {
@@ -351,7 +361,8 @@ export async function loadTileTextures(): Promise<TileTextures> {
   );
 
   return {
-    tiles:                  Object.fromEntries(tileEntries),
+    terrain:                Object.fromEntries(terrainEntries),
+    treeCanopy,
     road:                   Object.fromEntries(roadEntries),
     rail:                   Object.fromEntries(railEntries),
     railCrossing:           Object.fromEntries(railCrossingEntries),

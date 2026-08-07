@@ -1,52 +1,32 @@
-import { getCalendarPosition } from '../time';
-import { BuildingStatus } from '../buildings/state';
-import { BuildingCategory, getBuildingTemplate } from '../buildings/templates';
+// snapshot.ts — assembles a periodic CitySnapshot for the narrative layer.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+//
+// Population capacity/labour rates, abandoned-tile count, and mean happiness
+// used to be recomputed here from a TS shadow of the engine (a per-building
+// capacity walk, `computeLabourStats.ts`, a per-tile loop) — all four now
+// come straight off the wire (`state.labour`, `state.abandonedCount`,
+// `state.avgHappiness`; `#200`'s wire-adoption follow-up).
+
+import { getCalendarPosition, DAYS_PER_MONTH } from '../time';
+import { computeRunwayDays } from '../economy';
 import type { GameState } from '../gameState';
-import { computeLabourStats } from '../computeLabourStats';
 import type { CitySnapshot } from './types';
 
+/** Display cap for the narrative layer's runway figure — `computeRunwayDays` itself is uncapped (an idle city with a tiny deficit can run for years), but nobody needs to read "1,400 months" on a budget card. */
 const RUNWAY_CAP_MONTHS = 99;
 
-function computeCapacities(state: GameState) {
-  let populationCapacity = 0;
-  let jobCapacity = 0;
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    const isActive = building.state.status === BuildingStatus.Active;
-    const contributesCapacity =
-      isActive ||
-      (template.category === BuildingCategory.Zone &&
-        (building.state.status === BuildingStatus.InactiveNoPower ||
-          building.state.status === BuildingStatus.InactiveNoWater));
-    if (!contributesCapacity) continue;
-    if (template.populationCapacity) populationCapacity += template.populationCapacity;
-    if (template.jobsCapacity) jobCapacity += template.jobsCapacity;
-  }
-
-  return { populationCapacity, jobCapacity };
-}
-
-function computeRunwayMonths(money: number, netPerMonth: number) {
-  if (netPerMonth >= 0) return RUNWAY_CAP_MONTHS;
-  if (money <= 0) return 0;
-  return Math.min(RUNWAY_CAP_MONTHS, money / Math.abs(netPerMonth));
+/** One formula, `computeRunwayDays` (`economy.ts`) — converted to months and capped for display, not a second derivation. */
+function computeRunwayMonths(money: number, netPerDay: number): number {
+  const days = computeRunwayDays(money, netPerDay);
+  if (!Number.isFinite(days)) return RUNWAY_CAP_MONTHS;
+  return Math.min(RUNWAY_CAP_MONTHS, days / DAYS_PER_MONTH);
 }
 
 export function buildCitySnapshot(state: GameState): CitySnapshot {
   const calendar = getCalendarPosition(state.day);
   const year = Math.floor((calendar.month - 1) / 12) + 1;
-  const { populationCapacity, jobCapacity } = computeCapacities(state);
-  const labourStats = computeLabourStats(state.population, populationCapacity, jobCapacity);
-  const tiles = state.tiles;
-  let abandonedCount = 0;
-  let happinessTotal = 0;
-
-  for (const tile of tiles) {
-    if (tile.abandoned) abandonedCount += 1;
-    happinessTotal += tile.happiness ?? 0;
-  }
 
   return {
     time: {
@@ -57,27 +37,27 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
     economy: {
       cash: state.money,
       netPerMonth: state.budget?.netPerMonth ?? 0,
-      runwayMonths: computeRunwayMonths(state.money, state.budget?.netPerMonth ?? 0),
+      runwayMonths: computeRunwayMonths(state.money, state.budget?.netPerDay ?? 0),
       revenue: state.budget?.revenue ?? 0,
       expenses: state.budget?.expenses ?? 0,
       breakdown: {
         revenue: {
-          base: state.budget?.breakdown.revenue.base ?? 0,
-          residents: state.budget?.breakdown.revenue.residents ?? 0,
-          commercial: state.budget?.breakdown.revenue.commercial ?? 0,
-          industrial: state.budget?.breakdown.revenue.industrial ?? 0
+          base: state.budget?.revenueBase ?? 0,
+          residents: state.budget?.revenuePop ?? 0,
+          commercial: state.budget?.revenueCommercial ?? 0,
+          industrial: state.budget?.revenueIndustrial ?? 0
         },
         expenses: {
-          transport: state.budget?.breakdown.expenses.transport ?? 0,
-          buildings: state.budget?.breakdown.expenses.buildings ?? 0
+          transport: state.budget?.expensesTransport ?? 0,
+          buildings: state.budget?.expensesBuildings ?? 0
         }
       }
     },
     population: {
       pop: state.population,
       jobs: state.jobs,
-      unemploymentRate: labourStats.unemploymentRate,
-      vacancyRate: labourStats.vacancyRate
+      unemploymentRate: state.labour.unemploymentRate,
+      vacancyRate: state.labour.vacancyRate
     },
     demand: {
       residential: state.demand.residential,
@@ -90,8 +70,8 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
       powerBalance: state.utilities.power
     },
     map: {
-      abandonedCount,
-      avgHappiness: tiles.length > 0 ? happinessTotal / tiles.length : 0
+      abandonedCount: state.abandonedCount,
+      avgHappiness: state.avgHappiness
     }
   };
 }

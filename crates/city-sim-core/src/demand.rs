@@ -7,7 +7,7 @@ use crate::buildings::{get_building_template, BuildingStatus};
 use crate::occupants::Occupant;
 use crate::state::{DemandStats, GameState};
 use crate::wilderness::{demand_delta, WildernessTunables};
-use city_sim_protocol::tile_kind::TileKind;
+use city_sim_protocol::building_kind::BuildingKind;
 
 /// Population and job capacity totals — extracted from the city count so
 /// the simulation driver can use them for population growth without a second
@@ -36,7 +36,11 @@ const DEMAND_FLOOR: f32 = 8.0;
 const FLOOR_FILL_THRESHOLD: f32 = 0.92;
 const PRESSURE_THRESHOLD: f32 = 60.0;
 const PRESSURE_RELIEF_FACTOR: f32 = 0.5;
-const DEFAULT_WORKER_SHARE: f32 = 0.55;
+
+/// Fraction of a tile's `population` assumed to be working-age — shared with
+/// `education.rs`'s school-catchment population/job-share estimates, which
+/// used to carry their own byte-identical copy of this figure.
+pub const DEFAULT_WORKER_SHARE: f32 = 0.55;
 
 // ---------------------------------------------------------------------------
 // Labour stats (mirrors `computeLabourStats.ts`)
@@ -97,9 +101,52 @@ pub struct DemandInput {
     pub floor_override: Option<f32>,
 }
 
-pub fn compute_demand(i: &DemandInput) -> f32 {
+/// Every intermediate value `compute_demand` derives on the way to its final
+/// clamped percentage — not just the answer.
+///
+/// Exposed on the wire as `WireDemandClassBreakdown` (`city-sim-protocol`) so
+/// the debug overlay can show the engine's own derivation instead of running
+/// a parallel TS copy of this formula (the deleted `app/src/game/demand.ts`
+/// shadow, `#200`'s wire-adoption follow-up). Field-for-field mirror of the
+/// `DemandComputation` interface that TS module used to return locally.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DemandComputation {
+    pub base: f32,
+    pub fill_fraction: f32,
+    pub fill_term: f32,
+    pub workforce_term: f32,
+    pub labour_term: f32,
+    pub pending_zones: f32,
+    pub pending_penalty_raw: f32,
+    pub pending_penalty_capped: f32,
+    pub pending_penalty_applied: f32,
+    pub pressure_relief: f32,
+    pub utility_penalty: f32,
+    pub demand_before_utilities: f32,
+    pub floor_applied: bool,
+    pub seeded: bool,
+    pub value: f32,
+}
+
+pub fn compute_demand(i: &DemandInput) -> DemandComputation {
     if i.seeded {
-        return i.seeded_value;
+        return DemandComputation {
+            base: i.base,
+            fill_fraction: i.fill_fraction,
+            fill_term: i.base * (1.0 - i.fill_fraction),
+            workforce_term: i.workforce_term,
+            labour_term: i.labour_term,
+            pending_zones: i.pending_zones,
+            pending_penalty_raw: 0.0,
+            pending_penalty_capped: 0.0,
+            pending_penalty_applied: 0.0,
+            pressure_relief: 0.0,
+            utility_penalty: i.utility_penalty,
+            demand_before_utilities: i.seeded_value,
+            floor_applied: false,
+            seeded: true,
+            value: i.seeded_value,
+        };
     }
 
     let fill_term = i.base * (1.0 - i.fill_fraction);
@@ -132,7 +179,37 @@ pub fn compute_demand(i: &DemandInput) -> f32 {
         }
     };
 
-    (demand_before_utilities - i.utility_penalty).clamp(0.0, 100.0)
+    let value = (demand_before_utilities - i.utility_penalty).clamp(0.0, 100.0);
+
+    DemandComputation {
+        base: i.base,
+        fill_fraction: i.fill_fraction,
+        fill_term,
+        workforce_term: i.workforce_term,
+        labour_term: i.labour_term,
+        pending_zones: i.pending_zones,
+        pending_penalty_raw,
+        pending_penalty_capped,
+        pending_penalty_applied,
+        pressure_relief,
+        utility_penalty: i.utility_penalty,
+        demand_before_utilities,
+        floor_applied: demand_before_utilities > demand_after_penalty,
+        seeded: false,
+        value,
+    }
+}
+
+/// Per-class demand breakdown for all three zone classes, plus the labour
+/// aggregates the same city-count pass already produces — one function
+/// serving both the debug overlay's demand section (`#200`, item 3) and the
+/// narrative snapshot's capacity/labour fields (item 4), so neither TS
+/// caller re-walks tiles/buildings to get numbers this pass already has.
+pub struct DemandBreakdown {
+    pub residential: DemandComputation,
+    pub commercial: DemandComputation,
+    pub industrial: DemandComputation,
+    pub labour: LabourStats,
 }
 
 // ---------------------------------------------------------------------------
@@ -206,10 +283,10 @@ fn count_city(state: &GameState) -> CityCounters {
         }
         c.population_capacity += tmpl.population_capacity;
         c.job_capacity += tmpl.jobs_capacity;
-        if building.kind == TileKind::Commercial {
+        if building.kind == BuildingKind::Commercial {
             c.commercial_job_capacity += tmpl.jobs_capacity;
         }
-        if building.kind == TileKind::Industrial {
+        if building.kind == BuildingKind::Industrial {
             c.industrial_job_capacity += tmpl.jobs_capacity;
         }
     }
@@ -217,11 +294,21 @@ fn count_city(state: &GameState) -> CityCounters {
     c
 }
 
-/// Compute `DemandStats` from the current `GameState` — matches the demand
-/// assembly block in `simulation.ts:tick()`.
-///
-/// Education is stubbed to 0 until P3-8 (score=0, high_coverage=0).
+/// Compute `DemandStats` from the current `GameState`. A thin wrapper over
+/// `compute_city_demand_breakdown` that drops everything but the final
+/// clamped percentages; call that instead if the derivation itself (or the
+/// labour aggregates) is wanted too, e.g. for the wire.
 pub fn compute_city_demand(state: &GameState) -> DemandStats {
+    let b = compute_city_demand_breakdown(state);
+    DemandStats {
+        residential: b.residential.value,
+        commercial: b.commercial.value,
+        industrial: b.industrial.value,
+    }
+}
+
+/// Full per-class derivation plus labour aggregates — see `DemandBreakdown`.
+pub fn compute_city_demand_breakdown(state: &GameState) -> DemandBreakdown {
     let c = count_city(state);
 
     let pop = state.population as f32;
@@ -281,9 +368,7 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
         .industrial_zones
         .saturating_sub(c.developed_industrial_zones)) as f32;
 
-    // pendingPenaltyEnabled is stored in GameSettings — not yet ported (P3-9+);
-    // default to true matching createDefaultSettings().
-    let pending_penalty_enabled = true;
+    let pending_penalty_enabled = state.policies.pending_penalty_enabled;
 
     // Fiscal policy pressure — taxes above the 9% neutral rate suppress that
     // zone class's demand (2 points per percentage point, and a matching
@@ -363,10 +448,11 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
         },
     });
 
-    DemandStats {
+    DemandBreakdown {
         residential,
         commercial,
         industrial,
+        labour,
     }
 }
 
@@ -377,6 +463,8 @@ pub fn compute_city_demand(state: &GameState) -> DemandStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::apply_tool;
+    use city_sim_protocol::commands::{Tool, ViewStratum};
 
     fn input(base: f32, fill: f32, pending: f32) -> DemandInput {
         DemandInput {
@@ -401,13 +489,65 @@ mod tests {
             seeded_value: 42.0,
             ..input(70.0, 0.5, 0.0)
         };
-        assert_eq!(compute_demand(&i), 42.0);
+        assert_eq!(compute_demand(&i).value, 42.0);
+    }
+
+    #[test]
+    fn seeded_still_reports_a_real_fill_term_alongside_the_seeded_value() {
+        // The seeded early-return's `value` is just `seeded_value`, but every
+        // other field on `DemandComputation` — `fill_term` in particular —
+        // still has to carry the honest derived number, not a placeholder:
+        // the wire sends this whole struct to the debug overlay, seeded city
+        // or not.
+        let i = DemandInput {
+            seeded: true,
+            seeded_value: 42.0,
+            ..input(70.0, 0.5, 0.0)
+        };
+        let d = compute_demand(&i);
+        assert_eq!(
+            d.fill_term, 35.0,
+            "70 * (1 - 0.5) = 35, independent of seeded_value"
+        );
+    }
+
+    #[test]
+    fn floor_applied_is_true_only_when_the_floor_actually_raised_the_value() {
+        // Low fill (< FLOOR_FILL_THRESHOLD) with a low base_demand: the floor
+        // clamps demand_after_penalty up to DEMAND_FLOOR, so floor_applied
+        // must be true.
+        let floored = compute_demand(&DemandInput {
+            base: 0.0,
+            ..input(0.0, 0.0, 0.0)
+        });
+        assert!(
+            floored.floor_applied,
+            "a near-zero base should hit the floor"
+        );
+        assert_eq!(floored.demand_before_utilities, DEMAND_FLOOR);
+
+        // High fill (>= FLOOR_FILL_THRESHOLD): no floor is applied at all,
+        // regardless of how low demand_after_penalty is.
+        let not_floored = compute_demand(&input(70.0, 1.0, 0.0));
+        assert!(
+            !not_floored.floor_applied,
+            "fill >= threshold should skip the floor entirely"
+        );
+
+        // Low fill, but base_demand already comfortably above the floor:
+        // the max() picks demand_after_penalty, not DEMAND_FLOOR, so
+        // floor_applied must be false even though the floor path was taken.
+        let above_floor = compute_demand(&input(70.0, 0.0, 0.0));
+        assert!(
+            !above_floor.floor_applied,
+            "demand_after_penalty (70) already exceeds the floor (8) — nothing should have been raised"
+        );
     }
 
     #[test]
     fn empty_city_fills_from_base() {
         // 0% fill → fill_term = base; no pending penalty; should be near base (clamped)
-        let v = compute_demand(&input(70.0, 0.0, 0.0));
+        let v = compute_demand(&input(70.0, 0.0, 0.0)).value;
         // fill_term = 70*(1-0) = 70; no labour/pending → demand = max(70, floor=8) = 70
         assert!((v - 70.0).abs() < 0.01, "expected ~70, got {v}");
     }
@@ -416,7 +556,7 @@ mod tests {
     fn full_city_has_low_demand() {
         // 100% fill → fill_term = 0; demand should hit the floor (8) or lower
         let i = input(70.0, 1.0, 0.0);
-        let v = compute_demand(&i);
+        let v = compute_demand(&i).value;
         // fill >= FLOOR_FILL_THRESHOLD → no floor applied; demand could be 0
         assert!(
             v <= DEMAND_FLOOR,
@@ -426,19 +566,38 @@ mod tests {
 
     #[test]
     fn pending_zones_reduce_demand() {
-        let without = compute_demand(&input(70.0, 0.0, 0.0));
-        let with_pending = compute_demand(&input(70.0, 0.0, 20.0));
+        let without = compute_demand(&input(70.0, 0.0, 0.0)).value;
+        let with_pending = compute_demand(&input(70.0, 0.0, 20.0)).value;
         assert!(with_pending < without, "pending zones should reduce demand");
+    }
+
+    /// `pending_penalty_enabled` is the toggle itself: with it off, a
+    /// backlog of pending zones must stop suppressing demand — the same
+    /// pending-zone input `pending_zones_reduce_demand` proves suppresses it
+    /// when the toggle is (as it defaults) on.
+    #[test]
+    fn pending_penalty_enabled_gates_the_pending_zone_penalty() {
+        let with_penalty = compute_demand(&input(70.0, 0.0, 20.0));
+        let toggled_off = DemandInput {
+            pending_penalty_enabled: false,
+            ..input(70.0, 0.0, 20.0)
+        };
+        let without_penalty = compute_demand(&toggled_off);
+        assert_eq!(without_penalty.pending_penalty_applied, 0.0);
+        assert!(
+            without_penalty.value > with_penalty.value,
+            "disabling the toggle should recover the demand the penalty suppressed"
+        );
     }
 
     #[test]
     fn utility_penalty_reduces_demand() {
-        let without = compute_demand(&input(70.0, 0.5, 0.0));
+        let without = compute_demand(&input(70.0, 0.5, 0.0)).value;
         let with_penalty = DemandInput {
             utility_penalty: 15.0,
             ..input(70.0, 0.5, 0.0)
         };
-        let v = compute_demand(&with_penalty);
+        let v = compute_demand(&with_penalty).value;
         assert!(v < without, "utility penalty should reduce demand");
     }
 
@@ -448,12 +607,12 @@ mod tests {
             base: 200.0,
             ..input(0.0, 0.0, 0.0)
         };
-        assert!(compute_demand(&high) <= 100.0);
+        assert!(compute_demand(&high).value <= 100.0);
         let low = DemandInput {
             utility_penalty: 200.0,
             ..input(70.0, 0.5, 0.0)
         };
-        assert!(compute_demand(&low) >= 0.0);
+        assert!(compute_demand(&low).value >= 0.0);
     }
 
     #[test]
@@ -465,6 +624,175 @@ mod tests {
         assert!(d.residential > 0.0, "residential demand should be positive");
         assert!(d.commercial >= 0.0);
         assert!(d.industrial >= 0.0);
+    }
+
+    /// `Policies::pending_penalty_enabled` is real wiring, not decoration —
+    /// flipping it on a city with a backlog of undeveloped residential zones
+    /// changes `compute_city_demand`'s answer. Mirrors
+    /// `pending_penalty_enabled_gates_the_pending_zone_penalty` one level up,
+    /// through the actual `GameState` field the toggle now lives on
+    /// (`crates/city-sim-protocol/src/commands.rs`).
+    #[test]
+    fn the_policy_toggle_reaches_compute_city_demand() {
+        let mut s = GameState::new(8, 8, 0);
+        s.money = 1_000_000;
+        for x in 0..6 {
+            assert!(apply_tool(&mut s, Tool::Residential, x, 0, ViewStratum::Surface).success);
+        }
+
+        s.policies.pending_penalty_enabled = true;
+        let with_penalty = compute_city_demand(&s).residential;
+
+        s.policies.pending_penalty_enabled = false;
+        let without_penalty = compute_city_demand(&s).residential;
+
+        assert!(
+            without_penalty > with_penalty,
+            "turning the penalty off should raise residential demand back up \
+             ({without_penalty} should exceed {with_penalty})"
+        );
+    }
+
+    #[test]
+    fn compute_city_demand_breakdown_matches_compute_city_demand() {
+        // The thin `compute_city_demand` wrapper must report exactly the
+        // `.value` the full breakdown computed — proves the wrapper isn't
+        // running a second, divergent derivation.
+        let s = GameState::new(4, 4, 0);
+        let stats = compute_city_demand(&s);
+        let breakdown = compute_city_demand_breakdown(&s);
+        assert_eq!(stats.residential, breakdown.residential.value);
+        assert_eq!(stats.commercial, breakdown.commercial.value);
+        assert_eq!(stats.industrial, breakdown.industrial.value);
+        // The labour aggregates riding along are the same one-pass count,
+        // not zeroed placeholders.
+        assert_eq!(breakdown.labour.population, s.population as f32);
+    }
+
+    /// `count_city`'s per-class zone-counting arms (one `match` arm each for
+    /// `ZoneResidential`/`ZoneCommercial`/`ZoneIndustrial`) and its
+    /// inactive-still-occupies rule, exercised with real developed lots
+    /// rather than an empty grid — `compute_city_demand_on_empty_state`
+    /// above never zones anything, so none of this ran.
+    #[test]
+    fn count_city_covers_each_zone_class_and_the_inactive_still_occupies_rule() {
+        let mut s = GameState::new(8, 8, 0);
+        s.money = 1_000_000;
+
+        // One developed, active lot per zone class — runs all three
+        // zoned/developed counting arms with real accumulation, and gives
+        // each class its own capacity so the three classes don't share one
+        // number by coincidence.
+        assert!(apply_tool(&mut s, Tool::Residential, 0, 0, ViewStratum::Surface).success);
+        assert!(crate::zones::place_zone_building(&mut s, 0, 0));
+        assert!(apply_tool(&mut s, Tool::Commercial, 1, 0, ViewStratum::Surface).success);
+        assert!(crate::zones::place_zone_building(&mut s, 1, 0));
+        assert!(apply_tool(&mut s, Tool::Industrial, 2, 0, ViewStratum::Surface).success);
+        assert!(crate::zones::place_zone_building(&mut s, 2, 0));
+
+        // A second, undeveloped commercial zone — asymmetric on purpose:
+        // with one lot per class the commercial and industrial counts below
+        // are both 1, so a bug that swapped those two match arms would slip
+        // through undetected. This also gives `pending_commercial` a real
+        // nonzero value (zoned 2, developed 1).
+        assert!(apply_tool(&mut s, Tool::Commercial, 4, 0, ViewStratum::Surface).success);
+
+        // A second residential lot, its building `InactiveNoPower` — must
+        // still occupy its capacity slot (the rule at count_city's
+        // `contributes` check), same as `place_zone_building`'s Active
+        // default lot above.
+        assert!(apply_tool(&mut s, Tool::Residential, 3, 0, ViewStratum::Surface).success);
+        assert!(crate::zones::place_zone_building(&mut s, 3, 0));
+        let inactive_lot = s.tile_index(3, 0).unwrap();
+        let inactive_id = s.tiles[inactive_lot].building_id.unwrap() as u32;
+        s.buildings
+            .iter_mut()
+            .find(|b| b.id == inactive_id)
+            .unwrap()
+            .status = BuildingStatus::InactiveNoPower;
+
+        // A third residential building, `InactiveNoSource` — the "still
+        // occupies" rule names only `InactiveNoPower`/`InactiveNoWater`
+        // (count_city's `matches!`), so this one must NOT contribute despite
+        // being the same zone kind as the lot above. No tile needed:
+        // `count_city`'s capacity pass reads `state.buildings` directly.
+        s.buildings.push({
+            let mut unreached = crate::buildings::BuildingInstance::new(
+                s.next_building_id,
+                BuildingKind::Residential,
+                (7, 7),
+            );
+            s.next_building_id += 1;
+            unreached.status = BuildingStatus::InactiveNoSource;
+            unreached
+        });
+
+        // `count_city` itself, not just the demand it feeds — this is what
+        // actually exercises the three zoned/developed match arms
+        // (250-256), since `fill_fraction` below never reads the zoned/
+        // developed counts (only the capacity totals), and a bug swapping
+        // e.g. the commercial and industrial arms would otherwise slip past
+        // every assertion that follows.
+        let counts = count_city(&s);
+        assert_eq!(counts.residential_zones, 2, "two zoned residential lots");
+        assert_eq!(counts.developed_residential_zones, 2, "both developed");
+        assert_eq!(counts.commercial_zones, 2, "one developed + one pending");
+        assert_eq!(counts.developed_commercial_zones, 1);
+        assert_eq!(counts.industrial_zones, 1);
+        assert_eq!(counts.developed_industrial_zones, 1);
+
+        let residential_pop_cap = get_building_template(BuildingKind::Residential)
+            .unwrap()
+            .population_capacity;
+        let commercial_jobs_cap = get_building_template(BuildingKind::Commercial)
+            .unwrap()
+            .jobs_capacity;
+        let industrial_jobs_cap = get_building_template(BuildingKind::Industrial)
+            .unwrap()
+            .jobs_capacity;
+        let pop_cap = (residential_pop_cap * 2) as f32; // Active + InactiveNoPower; InactiveNoSource excluded
+        let job_cap = (commercial_jobs_cap + industrial_jobs_cap) as f32;
+        assert_eq!(counts.population_capacity as f32, pop_cap);
+        assert_eq!(counts.commercial_job_capacity, commercial_jobs_cap);
+        assert_eq!(counts.industrial_job_capacity, industrial_jobs_cap);
+        assert_eq!(counts.job_capacity as f32, job_cap);
+
+        // Different population/jobs so residential's fill (denominator
+        // pop_cap) reads differently from commercial/industrial's (both
+        // denominator job_cap — see the note on their equality below).
+        s.population = (pop_cap / 4.0) as u32; // fill_residential ≈ 0.25
+        s.jobs = (job_cap / 2.0) as u32; // fill_commercial == fill_industrial ≈ 0.5
+
+        let breakdown = compute_city_demand_breakdown(&s);
+        assert!(
+            (breakdown.residential.fill_fraction - 0.25).abs() < 0.01,
+            "residential fill should reflect pop_cap including the still-occupied \
+             InactiveNoPower lot but not the InactiveNoSource one: {}",
+            breakdown.residential.fill_fraction
+        );
+        assert!(
+            (breakdown.commercial.fill_fraction - 0.5).abs() < 0.01,
+            "{}",
+            breakdown.commercial.fill_fraction
+        );
+        assert!(
+            (breakdown.industrial.fill_fraction - 0.5).abs() < 0.01,
+            "{}",
+            breakdown.industrial.fill_fraction
+        );
+        assert_ne!(
+            breakdown.residential.fill_fraction, breakdown.commercial.fill_fraction,
+            "each class must compute its own fill from its own capacity, not share one number"
+        );
+        // Not a gap: `jobs_in_commercial`/`jobs_in_industrial` are each
+        // `(class_cap / job_cap) * jobs`, so dividing back by that same
+        // `class_cap` always recovers `jobs / job_cap` regardless of how the
+        // two classes' capacities compare — commercial and industrial fill
+        // together, by construction, whenever both have capacity.
+        assert_eq!(
+            breakdown.commercial.fill_fraction,
+            breakdown.industrial.fill_fraction
+        );
     }
 
     #[test]

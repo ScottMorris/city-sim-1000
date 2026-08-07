@@ -17,8 +17,8 @@
 //! Known, deliberate fidelity limits (legacy saves only — CSAV saves carry the
 //! engine snapshot and lose nothing):
 //! - Zone density is not stored on TS tiles; grown zones import as Low.
-//! - Building status/health import as fresh `Active`/100 and self-correct on
-//!   the next `update_building_states` tick.
+//! - Building status imports as fresh `Active` and self-corrects on the next
+//!   `update_building_states` tick.
 //! - Derived stats (education, budget breakdown, wilderness) start at their
 //!   defaults and are recomputed within one tick / recompute interval.
 
@@ -142,7 +142,12 @@ pub fn from_tile_buffer(
             if let Some((mw, _)) = plant_stats(kind) {
                 tile.power_plant_mw = mw as i32;
             }
-            if let Some(tmpl) = get_building_template(kind) {
+            // `building_kind_of` is the legacy-import boundary: `kind` is a
+            // v4 wire byte here, and `get_building_template` is indexed by
+            // the live `BuildingKind` a `BuildingInstance` actually carries.
+            if let Some(tmpl) =
+                crate::migrate::building_kind_of(kind).and_then(get_building_template)
+            {
                 if tmpl.water_output > 0 {
                     tile.water_output = tmpl.water_output;
                 }
@@ -161,9 +166,15 @@ pub fn from_tile_buffer(
         if state.buildings.iter().any(|b| b.id == id) {
             continue;
         }
+        // A `building_id` with no matching `BuildingKind` is malformed
+        // legacy data — nothing legitimate produces it — so it is skipped
+        // rather than crashing the import.
+        let Some(building_kind) = crate::migrate::building_kind_of(kind) else {
+            continue;
+        };
         let x = (i as u32) % width;
         let y = (i as u32) / width;
-        let mut instance = BuildingInstance::new(id, kind, (x, y));
+        let mut instance = BuildingInstance::new(id, building_kind, (x, y));
         if let Some((_, maintenance)) = plant_stats(kind) {
             instance.maintenance_per_day = maintenance;
         }
@@ -226,11 +237,11 @@ mod tests {
             return TileKind::Water;
         }
         if let Some(kind) = lookup.structure_kind(tile) {
-            return kind;
+            return crate::migrate::tile_kind_of(kind);
         }
         if let Some(zone) = tile.zone_occupant() {
             if let Some(kind) = zone_template_kind(zone) {
-                return kind;
+                return crate::migrate::tile_kind_of(kind);
             }
         }
         if tile.has_occupant(Occupant::Trees) {
@@ -415,5 +426,68 @@ mod tests {
                 value: 250
             }
         ));
+    }
+
+    /// `docs/features/docs-truth-sweep.md` item 10: the pre-migration TS
+    /// engine billed maintenance and counted water output for a `kind =
+    /// WaterPump`/`Park` tile with **no `building_id`** — a save artifact
+    /// from before every structure carried one — and the stack dropped that
+    /// path as "structurally unreachable" without a test proving what an
+    /// import of such a tile actually does today.
+    ///
+    /// It doesn't lose function silently: `tile_from_v4`'s "a ghost
+    /// structure drops its tag" rule (see its own doc comment) already
+    /// decides this case — `is_structure_kind(kind) && building_id.is_some()`
+    /// — so a `WaterPump` kind with `building_id == 0` decodes with **no**
+    /// `Structure` occupant at all, and this loop's `if let Some(id) =
+    /// building_id` gate (both the per-tile `water_output`/`power_plant_mw`
+    /// stamp above and the building-list rebuild below) never fires for it
+    /// either. The upkeep/output the old engine billed for such a tile
+    /// simply doesn't survive the import — converted to bare, unbilled
+    /// ground, the same outcome a live bulldozed structure gets. That's a
+    /// real (if obscure) fidelity gap for a save old enough to predate
+    /// universal building ids, not a bug: nothing `import_legacy` can
+    /// produce today writes a `Structure` kind with no id, so it doesn't
+    /// "graduate to its own fix" per the sweep item — this test is the
+    /// verification the item asked for.
+    #[test]
+    fn a_structure_tile_with_no_building_id_imports_as_bare_ground_with_no_upkeep_or_output() {
+        let n = 1;
+        let mut buf = vec![0u8; n * LEGACY_BYTES_PER_TILE];
+        let o = LegacyTileBufferOffsets::for_size(n);
+        buf[o.kind] = TileKind::WaterPump as u8;
+        // `o.building_id` bytes are left at 0 from the `vec![0u8; ..]` init —
+        // "no id", the pre-migration ghost-structure case this test pins.
+
+        let imported = from_tile_buffer(
+            1,
+            1,
+            1,
+            [0, 0, 0, 0],
+            &buf,
+            ImportStats {
+                money: 0,
+                day: 1,
+                tick: 0,
+                population: 0,
+                jobs: 0,
+                policies: Policies::default(),
+            },
+        )
+        .expect("a malformed-but-in-range tile must still import, not error");
+
+        assert!(
+            imported.buildings.is_empty(),
+            "no BuildingInstance is synthesized for a structure kind with no building_id"
+        );
+        assert_eq!(
+            imported.tiles[0].water_output, 0,
+            "no water output survives without a BuildingInstance to attribute it to"
+        );
+        assert_eq!(imported.tiles[0].power_plant_mw, 0);
+        assert!(
+            !imported.tiles[0].has_occupant(Occupant::Structure),
+            "tile_from_v4's ghost-structure rule drops the tag when there's no id"
+        );
     }
 }

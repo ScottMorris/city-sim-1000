@@ -1,0 +1,298 @@
+{
+  "tools": [
+    {
+      "name": "Inspect",
+      "u8": 0
+    },
+    {
+      "name": "TerraformRaise",
+      "u8": 1
+    },
+    {
+      "name": "TerraformLower",
+      "u8": 2
+    },
+    {
+      "name": "Water",
+      "u8": 3
+    },
+    {
+      "name": "Tree",
+      "u8": 4
+    },
+    {
+      "name": "Road",
+      "u8": 5
+    },
+    {
+      "name": "Rail",
+      "u8": 6
+    },
+    {
+      "name": "PowerLine",
+      "u8": 7
+    },
+    {
+      "name": "HydroPlant",
+      "u8": 8
+    },
+    {
+      "name": "CoalPlant",
+      "u8": 9
+    },
+    {
+      "name": "WindTurbine",
+      "u8": 10
+    },
+    {
+      "name": "SolarFarm",
+      "u8": 11
+    },
+    {
+      "name": "WaterPump",
+      "u8": 12
+    },
+    {
+      "name": "WaterTower",
+      "u8": 13
+    },
+    {
+      "name": "WaterPipe",
+      "u8": 14
+    },
+    {
+      "name": "ElementarySchool",
+      "u8": 15
+    },
+    {
+      "name": "HighSchool",
+      "u8": 16
+    },
+    {
+      "name": "Residential",
+      "u8": 17
+    },
+    {
+      "name": "Commercial",
+      "u8": 18
+    },
+    {
+      "name": "Industrial",
+      "u8": 19
+    },
+    {
+      "name": "Park",
+      "u8": 20
+    },
+    {
+      "name": "Bulldoze",
+      "u8": 21
+    },
+    {
+      "name": "ParkLarge",
+      "u8": 22
+    }
+  ],
+  "viewStrata": [
+    {
+      "name": "Surface",
+      "u8": 0
+    },
+    {
+      "name": "Underground",
+      "u8": 1
+    }
+  ],
+  "toolRequiredStrata": [
+    {
+      "name": "Inspect",
+      "requiredStratum": null
+    },
+    {
+      "name": "TerraformRaise",
+      "requiredStratum": null
+    },
+    {
+      "name": "TerraformLower",
+      "requiredStratum": null
+    },
+    {
+      "name": "Water",
+      "requiredStratum": null
+    },
+    {
+      "name": "Tree",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Road",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Rail",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "PowerLine",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "HydroPlant",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "CoalPlant",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "WindTurbine",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "SolarFarm",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "WaterPump",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "WaterTower",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "WaterPipe",
+      "requiredStratum": "Underground"
+    },
+    {
+      "name": "ElementarySchool",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "HighSchool",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Residential",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Commercial",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Industrial",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Park",
+      "requiredStratum": "Surface"
+    },
+    {
+      "name": "Bulldoze",
+      "requiredStratum": null
+    },
+    {
+      "name": "ParkLarge",
+      "requiredStratum": "Surface"
+    }
+  ],
+  "buildingStatuses": [
+    {
+      "name": "Active",
+      "u8": 0
+    },
+    {
+      "name": "InactiveNoPower",
+      "u8": 1
+    },
+    {
+      "name": "InactiveNoWater",
+      "u8": 2
+    },
+    {
+      "name": "InactiveNoSource",
+      "u8": 3
+    }
+  ],
+  "buildingKinds": [
+    {
+      "name": "Residential",
+      "u8": 16
+    },
+    {
+      "name": "Commercial",
+      "u8": 17
+    },
+    {
+      "name": "Industrial",
+      "u8": 18
+    },
+    {
+      "name": "HydroPlant",
+      "u8": 32
+    },
+    {
+      "name": "CoalPlant",
+      "u8": 33
+    },
+    {
+      "name": "WindTurbine",
+      "u8": 34
+    },
+    {
+      "name": "SolarFarm",
+      "u8": 35
+    },
+    {
+      "name": "WaterPump",
+      "u8": 48
+    },
+    {
+      "name": "WaterTower",
+      "u8": 49
+    },
+    {
+      "name": "ElementarySchool",
+      "u8": 64
+    },
+    {
+      "name": "HighSchool",
+      "u8": 65
+    },
+    {
+      "name": "Park",
+      "u8": 80
+    },
+    {
+      "name": "ParkLarge",
+      "u8": 81
+    }
+  ],
+  "daysPerMonth": 30,
+  "neutralTaxRate": 9,
+  "maxTaxRate": 20,
+  "maxFunding": 100,
+  "lightingMultipliers": {
+    "mixed": {
+      "power": 1.0,
+      "maintenance": 1.0,
+      "happiness": 1.0
+    },
+    "efficient": {
+      "power": 0.82,
+      "maintenance": 0.9,
+      "happiness": 0.94
+    },
+    "carbonArc": {
+      "power": 1.18,
+      "maintenance": 1.05,
+      "happiness": 1.1
+    }
+  },
+  "wilderness": {
+    "reserveCostPerDay": 100.0,
+    "greenIndustrySubsidyPerZone": 2.0,
+    "reserveUnlockScore": 60.0
+  }
+}

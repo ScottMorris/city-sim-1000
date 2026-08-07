@@ -9,15 +9,29 @@ use city_sim_core::{
     import::{from_tile_buffer, ImportStats},
     sim::Simulation,
     snapshot,
-    state::{BudgetHistoryEntry, EducationStats},
-    utilities::{UtilityComponent, UtilityKind},
+    utilities::UtilityKind,
     wire::encode_tile_buffer,
 };
 use city_sim_protocol::{
     commands::{Policies, Tool, ViewStratum},
     tile_buffer::BYTES_PER_TILE,
+    wire_types::{
+        WireBudgetHistoryEntry, WireBuilding, WireDemandBreakdown, WireEducationSeatsUsed,
+        WireEducationStats, WireLabourStats, WireUtilityComponent,
+    },
 };
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
+
+/// `demand_breakdown_json`'s payload — the per-class derivation plus the
+/// labour aggregates the same city-count pass produces, bundled as one
+/// object so callers don't pay for two separate `GameState` scans.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DemandBreakdownWire {
+    demand: WireDemandBreakdown,
+    labour: WireLabourStats,
+}
 
 #[wasm_bindgen]
 pub fn version() -> String {
@@ -122,6 +136,9 @@ impl SimHost {
     }
     pub fn demand_industrial(&self) -> f32 {
         self.sim.state.demand.industrial
+    }
+    pub fn budget_net(&self) -> f32 {
+        self.sim.state.budget.net
     }
     pub fn budget_net_per_day(&self) -> f32 {
         self.sim.state.budget.net_per_day
@@ -253,7 +270,8 @@ impl SimHost {
         self.sim.state.wilderness.breakdown.civic
     }
     /// Replace the full set of player policies from a camelCase JSON object
-    /// (see `Policies` in `city-sim-protocol` — `{ budget: {...}, wilderness: {...} }`).
+    /// (see `Policies` in `city-sim-protocol` — `{ budget: {...}, wilderness:
+    /// {...}, lighting: "mixed" | "efficient" | "carbonArc" }`).
     /// Missing families keep their serde defaults; out-of-range values are
     /// clamped. Applies from the next tick / wilderness recompute.
     pub fn set_policies(&mut self, json: &str) -> Result<(), JsError> {
@@ -263,14 +281,15 @@ impl SimHost {
         Ok(())
     }
 
-    /// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+    /// Seed the natural terrain baseline (row-major `Terrain as u8` byte per
+    /// tile — `Land` = 0, `Water` = 1).
     ///
-    /// Only `Water`/`Tree` kinds are applied — see
-    /// `GameState::seed_natural_terrain`. Call once, after construction and
-    /// before any commands. Terrain lives inside the state, so undo snapshots
-    /// and save snapshots carry it automatically.
-    pub fn set_natural_terrain(&mut self, kinds: &[u8]) {
-        self.sim.state.seed_natural_terrain(kinds);
+    /// Only `Water` is applied — see `GameState::seed_natural_terrain`. Call
+    /// once, after construction and before any commands. Terrain lives
+    /// inside the state, so undo snapshots and save snapshots carry it
+    /// automatically.
+    pub fn set_natural_terrain(&mut self, terrain_bytes: &[u8]) {
+        self.sim.state.seed_natural_terrain(terrain_bytes);
     }
 
     /// Advance the simulation by `dt` seconds (real time). The speed
@@ -322,7 +341,8 @@ impl SimHost {
     }
 
     /// Alerts raised since the last call — drains the queue. Call once per
-    /// `step()` from the host and forward each entry as `FromSim::Alert`.
+    /// `step()` from the host and forward each entry (a JSON-encoded
+    /// `SimAlert`) to the UI.
     pub fn take_alerts_json(&mut self) -> String {
         serde_json::to_string(&self.sim.take_alerts()).unwrap_or_default()
     }
@@ -456,30 +476,48 @@ impl SimHost {
     }
 
     /// The building list as JSON (`Vec<WireBuilding>`) — `id`, template
-    /// `kind` (as the `TileKind` u8, matching every other wire use of
-    /// `TileKind`), and footprint origin.
+    /// `kind` (as the `BuildingKind` u8 — decode with `BUILDING_KIND_BY_U8`
+    /// in TS), footprint origin, and `status` (`#200`'s wire-adoption
+    /// follow-up — decode with `BUILDING_STATUS_BY_U8`).
     ///
     /// The live tile buffer's `Structure` occupant bit says only that a
     /// building stands on a tile, not which one — since #177's TS/wire
-    /// follow-up, a structure's `TileKind` lives on its `BuildingInstance`,
+    /// follow-up, a structure's `BuildingKind` lives on its `BuildingInstance`,
     /// not on the tile. TS needs this list to resolve `building_id` to a
-    /// template; call it alongside `tile_buffer()`. Status/health/trouble are
-    /// deliberately not carried here — TS derives building status locally
-    /// from the tile's `POWERED`/`WATERED` flags, as it already did before
-    /// this method existed.
+    /// template; call it alongside `tile_buffer()`.
     pub fn buildings_json(&self) -> String {
         let wire: Vec<WireBuilding> = self
             .sim
             .state
             .buildings
             .iter()
-            .map(|b| WireBuilding {
-                id: b.id,
-                kind: b.kind as u8,
-                origin_x: b.origin.0,
-                origin_y: b.origin.1,
-            })
+            .map(WireBuilding::from)
             .collect();
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
+
+    /// City-wide aggregates the narrative snapshot needs — abandoned tile
+    /// count and mean tile happiness. See `GameState::abandoned_count`/
+    /// `avg_happiness`.
+    pub fn abandoned_count(&self) -> u32 {
+        self.sim.state.abandoned_count()
+    }
+    pub fn avg_happiness(&self) -> f32 {
+        self.sim.state.avg_happiness()
+    }
+
+    /// Per-class demand derivation (`WireDemandBreakdown`) plus labour
+    /// aggregates (`WireLabourStats`) as one JSON object — the debug
+    /// overlay's demand section and the narrative snapshot's capacity/labour
+    /// fields both read this instead of re-deriving it in TS (`#200`'s
+    /// wire-adoption follow-up; replaces `app/src/game/demand.ts` and
+    /// `computeLabourStats.ts`).
+    pub fn demand_breakdown_json(&self) -> String {
+        let breakdown = city_sim_core::demand::compute_city_demand_breakdown(&self.sim.state);
+        let wire = DemandBreakdownWire {
+            labour: WireLabourStats::from(&breakdown.labour),
+            demand: WireDemandBreakdown::from(&breakdown),
+        };
         serde_json::to_string(&wire).unwrap_or_default()
     }
 
@@ -540,108 +578,5 @@ impl SimHost {
             .map(WireBudgetHistoryEntry::from)
             .collect();
         serde_json::to_string(&wire).unwrap_or_default()
-    }
-}
-
-/// One row of [`SimHost::buildings_json`]'s wire shape.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireBuilding {
-    id: u32,
-    /// `TileKind as u8` — decode with `tileKindFromU8` in TS, matching every
-    /// other wire use of `TileKind`.
-    kind: u8,
-    origin_x: u32,
-    origin_y: u32,
-}
-
-/// One row of [`SimHost::power_components_json`]/[`SimHost::water_components_json`]'s
-/// wire shape.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireUtilityComponent {
-    id: u16,
-    produced: f32,
-    used: f32,
-    source_count: u16,
-    /// `used / produced`, clamped to `[0, 1]` — see `UtilityComponent::utilisation`.
-    utilisation: f32,
-}
-
-impl From<&UtilityComponent> for WireUtilityComponent {
-    fn from(c: &UtilityComponent) -> Self {
-        Self {
-            id: c.id,
-            produced: c.produced,
-            used: c.used,
-            source_count: c.source_count,
-            utilisation: c.utilisation(),
-        }
-    }
-}
-
-/// Wire shape of [`SimHost::education_json`]. Mirrors `state::EducationStats`
-/// field-for-field; kept as a separate type rather than deriving `Serialize`
-/// directly on the engine struct, matching the `WireBuilding`/
-/// `WireUtilityComponent` precedent of wire-agnostic engine types.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireEducationStats {
-    elementary_served: f32,
-    elementary_capacity: f32,
-    elementary_load: f32,
-    high_served: f32,
-    high_capacity: f32,
-    high_load: f32,
-    score: f32,
-    elementary_coverage: f32,
-    high_coverage: f32,
-}
-
-impl From<&EducationStats> for WireEducationStats {
-    fn from(s: &EducationStats) -> Self {
-        Self {
-            elementary_served: s.elementary_served,
-            elementary_capacity: s.elementary_capacity,
-            elementary_load: s.elementary_load,
-            high_served: s.high_served,
-            high_capacity: s.high_capacity,
-            high_load: s.high_load,
-            score: s.score,
-            elementary_coverage: s.elementary_coverage,
-            high_coverage: s.high_coverage,
-        }
-    }
-}
-
-/// One row of [`SimHost::education_seats_used_json`]'s wire shape.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireEducationSeatsUsed {
-    building_id: u32,
-    used: f32,
-}
-
-/// One row of [`SimHost::budget_history_json`]'s wire shape. A local
-/// duplicate rather than deriving `Serialize` directly on the engine's
-/// `BudgetHistoryEntry`, matching the `WireBuilding`/`WireUtilityComponent`
-/// precedent of wire-agnostic engine types.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireBudgetHistoryEntry {
-    day: u32,
-    revenue: f32,
-    expenses: f32,
-    net: f32,
-}
-
-impl From<&BudgetHistoryEntry> for WireBudgetHistoryEntry {
-    fn from(e: &BudgetHistoryEntry) -> Self {
-        Self {
-            day: e.day,
-            revenue: e.revenue,
-            expenses: e.expenses,
-            net: e.net,
-        }
     }
 }

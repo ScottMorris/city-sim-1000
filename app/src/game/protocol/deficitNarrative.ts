@@ -7,11 +7,12 @@
 import type { SimAlert, AlertKind } from './events';
 import type { SimEvent, SimEventType } from '../narrative/types';
 
-const EVENT_TYPE_BY_ALERT_KIND: Partial<Record<AlertKind, SimEventType>> = {
-  PowerDeficit: 'power_deficit_start',
-  PowerRestored: 'power_deficit_end',
-  WaterDeficit: 'water_deficit_start',
-  WaterRestored: 'water_deficit_end',
+/** Each alert kind's paired narrative event type, plus whether it's the deficit *starting* (vs. being restored) — an explicit typed mapping rather than inferring "starting" from the type string's `_start`/`_end` suffix. */
+const NARRATIVE_EVENT_BY_ALERT_KIND: Partial<Record<AlertKind, { type: SimEventType; starting: boolean }>> = {
+  PowerDeficit: { type: 'power_deficit_start', starting: true },
+  PowerRestored: { type: 'power_deficit_end', starting: false },
+  WaterDeficit: { type: 'water_deficit_start', starting: true },
+  WaterRestored: { type: 'water_deficit_end', starting: false },
 };
 
 /**
@@ -27,9 +28,9 @@ const EVENT_TYPE_BY_ALERT_KIND: Partial<Record<AlertKind, SimEventType>> = {
  * maintained copies, one per bridge.
  */
 export function deriveNarrativeEventFromAlert(alert: SimAlert, now: number): SimEvent | null {
-  const type = EVENT_TYPE_BY_ALERT_KIND[alert.kind];
-  if (!type) return null;
-  const starting = type.endsWith('_start');
+  const entry = NARRATIVE_EVENT_BY_ALERT_KIND[alert.kind];
+  if (!entry) return null;
+  const { type, starting } = entry;
   return {
     id: `${type}-${now}`,
     type,

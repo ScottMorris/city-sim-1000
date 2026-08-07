@@ -140,8 +140,8 @@ export function decodeTileBuffer(tiles: Tile[], bytes: ArrayLike<number>): void 
     const bidBase = o.buildingId + i * 2;
     const bid = bytes[bidBase] | (bytes[bidBase + 1] << 8);
     tile.buildingId = bid === 0 ? undefined : bid;
-    // Normalised 0–1 (0.5 = neutral) for the overlay heatmap.
-    tile.wilderness = bytes[o.wilderness + i] / 255;
+    // Eco value in [-ECO_RANGE, +ECO_RANGE], 0 = neutral (see `decodeEco`).
+    tile.wilderness = decodeEco(bytes[o.wilderness + i]);
     tile.services.served[ServiceId.EducationElementary] = (status & STATUS.ELEMENTARY_SERVED) !== 0;
     tile.services.served[ServiceId.EducationHigh] = (status & STATUS.HIGH_SERVED) !== 0;
     tile.services.scores[ServiceId.EducationElementary] = decodeScore(bytes[o.elementaryScore + i]);

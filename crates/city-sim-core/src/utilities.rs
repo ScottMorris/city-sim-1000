@@ -368,6 +368,7 @@ mod tests {
     use crate::migrate::{set_v4_kind, tile_from_v4};
     use crate::occupants::Occupant;
     use crate::state::Tile;
+    use city_sim_protocol::building_kind::BuildingKind;
     use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags as flags;
     use city_sim_protocol::tile_kind::TileKind;
@@ -560,8 +561,8 @@ mod tests {
     ///
     /// Both tools are exercised because both rewrite `kind` over a tile whose
     /// line lives only in the flag — the water brush by design, since a line
-    /// over water is a pylon span, and the tree by the blindness
-    /// `known_defect_trees_are_planted_through_a_live_hydro_line` describes.
+    /// over water is a pylon span, and the tree by the official Trees +
+    /// PowerLine coexistence `trees_coexist_with_a_live_hydro_line` pins.
     /// The two terraform tools reach the same tile the same way. What neither
     /// leaves standing is the *surface*: a regrade takes the whole surface
     /// stratum with it, which is why this test strings its line over bare
@@ -665,7 +666,7 @@ mod tests {
         g.tile_at_mut(x, y).unwrap().water_output = 50;
         set_v4_kind(g.tile_at_mut(x, y).unwrap(), TileKind::WaterPump);
         g.tile_at_mut(x, y).unwrap().building_id = Some(id as u16);
-        let mut b = BuildingInstance::new(id, TileKind::WaterPump, (x, y));
+        let mut b = BuildingInstance::new(id, BuildingKind::WaterPump, (x, y));
         b.status = BuildingStatus::Active;
         g.buildings.push(b);
     }
@@ -705,7 +706,7 @@ mod tests {
         g.tile_at_mut(0, 0).unwrap().water_output = 50;
         set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
         g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
-        let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+        let mut b = BuildingInstance::new(1, BuildingKind::WaterPump, (0, 0));
         b.status = BuildingStatus::InactiveNoPower;
         g.buildings.push(b);
         g.tile_at_mut(1, 0)
@@ -732,7 +733,7 @@ mod tests {
         g.tile_at_mut(1, 0).unwrap().water_output = 50;
         set_v4_kind(g.tile_at_mut(1, 0).unwrap(), TileKind::WaterPump);
         g.tile_at_mut(1, 0).unwrap().building_id = Some(2);
-        let mut b = BuildingInstance::new(2, TileKind::WaterPump, (1, 0));
+        let mut b = BuildingInstance::new(2, BuildingKind::WaterPump, (1, 0));
         b.status = BuildingStatus::InactiveNoPower;
         g.buildings.push(b);
 
@@ -766,7 +767,7 @@ mod tests {
             .set_flag(crate::state::FLAG_POWERED, true);
         g.buildings.push(crate::buildings::BuildingInstance::new(
             1,
-            TileKind::WaterPump,
+            BuildingKind::WaterPump,
             (0, 0),
         ));
 
@@ -994,7 +995,7 @@ mod tests {
         g.tile_at_mut(0, 0).unwrap().water_output = 50;
         set_v4_kind(g.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
         g.tile_at_mut(0, 0).unwrap().building_id = Some(1);
-        let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+        let mut b = BuildingInstance::new(1, BuildingKind::WaterPump, (0, 0));
         b.status = BuildingStatus::InactiveNoPower;
         g.buildings.push(b);
 

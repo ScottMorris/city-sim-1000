@@ -19,4 +19,5 @@ city-sim-protocol = { path = "../city-sim-protocol" }
 serde        = { workspace = true }
 postcard     = { workspace = true }
 thiserror    = { workspace = true }
+ts-rs        = { workspace = true }
 tauri        = { version = "2" }

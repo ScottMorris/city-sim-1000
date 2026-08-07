@@ -7,7 +7,9 @@ use crate::buildings::get_building_template;
 use crate::occupants::{LedgerLine, Occupant, LEDGER_LINE_COUNT};
 use crate::state::{BudgetHistoryEntry, BudgetStats, GameState};
 use crate::wilderness::{tourism_dividend, WildernessTunables};
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::BudgetPolicy;
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
@@ -15,7 +17,10 @@ use city_sim_protocol::tile_kind::TileKind;
 // ---------------------------------------------------------------------------
 
 const BASE_INCOME: f32 = 120.0;
-const DAYS_PER_MONTH: u32 = 30;
+/// Mirrors `time.ts`'s `DAYS_PER_MONTH` — pinned against it by the wire-parity
+/// fixture (`tests/wire_parity.rs`). `pub` for that fixture generator to read;
+/// no other external caller.
+pub const DAYS_PER_MONTH: u32 = 30;
 
 // Per-tile maintenance per day (from `constants.ts` MAINTENANCE table).
 // Only tiles with no building_id contribute transport maintenance.
@@ -28,8 +33,9 @@ pub(crate) const MAINT_RAIL: f32 = 0.2;
 pub(crate) const MAINT_POWER_LINE: f32 = 0.08;
 pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 
-// Lighting bylaw scaling is not yet ported (P3-9+).  Default bylaw is neutral
-// (multiplier = 1.0), so civic/zone maintenance is unscaled here.
+// Lighting bylaw maintenance scaling lives in `Policies::lighting`
+// (`LightingPolicy::maintenance_multiplier`) — applied below, alongside the
+// department funding multipliers.
 
 // ---------------------------------------------------------------------------
 // compute_daily_budget — pure read of GameState → BudgetStats
@@ -44,8 +50,10 @@ pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 /// - Building maintenance: summed from `state.buildings` templates.
 /// - Revenue: base + population + commercial zones + industrial zones.
 ///
-/// Lighting-bylaw scaling of civic/zone maintenance is stubbed to 1.0 until
-/// bylaws are ported (P3-9+).
+/// The lighting bylaw (`state.policies.lighting`) scales civic + zone
+/// building maintenance — never transport/pipes/power-line upkeep or power
+/// plant maintenance, matching the scope the TS `LIGHTING_POLICIES` display
+/// table always claimed.
 pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     // Per-tile upkeep, accumulated per `BudgetStats` line and before funding.
     let mut upkeep = [0.0_f32; LEDGER_LINE_COUNT];
@@ -120,7 +128,7 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
             continue;
         };
         // Power plants carry their own maintenance in BuildingInstance so coal,
-        // wind, and solar can differ from hydro without separate TileKind variants.
+        // wind, and solar can differ from hydro without separate BuildingKind variants.
         let maint = if building.maintenance_per_day > 0.0 {
             building.maintenance_per_day
         } else {
@@ -132,27 +140,29 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
         if tmpl.is_power_plant {
             maint_power += maint;
             match building.kind {
-                TileKind::HydroPlant => maint_power_hydro += maint,
-                TileKind::CoalPlant => maint_power_coal += maint,
-                TileKind::WindTurbine => maint_power_wind += maint,
-                TileKind::SolarFarm => maint_power_solar += maint,
+                BuildingKind::HydroPlant => maint_power_hydro += maint,
+                BuildingKind::CoalPlant => maint_power_coal += maint,
+                BuildingKind::WindTurbine => maint_power_wind += maint,
+                BuildingKind::SolarFarm => maint_power_solar += maint,
                 _ => {}
             }
         } else if tmpl.is_civic {
             maint_civic += maint;
             match building.kind {
-                TileKind::Park | TileKind::ParkLarge => maint_civic_park += maint,
-                TileKind::WaterPump => maint_civic_pump += maint,
-                TileKind::WaterTower => maint_civic_tower += maint,
-                TileKind::ElementarySchool | TileKind::HighSchool => maint_civic_school += maint,
+                BuildingKind::Park | BuildingKind::ParkLarge => maint_civic_park += maint,
+                BuildingKind::WaterPump => maint_civic_pump += maint,
+                BuildingKind::WaterTower => maint_civic_tower += maint,
+                BuildingKind::ElementarySchool | BuildingKind::HighSchool => {
+                    maint_civic_school += maint
+                }
                 _ => {}
             }
         } else if tmpl.is_zone {
             maint_zones += maint;
             match building.kind {
-                TileKind::Residential => maint_zones_res += maint,
-                TileKind::Commercial => maint_zones_com += maint,
-                TileKind::Industrial => maint_zones_ind += maint,
+                BuildingKind::Residential => maint_zones_res += maint,
+                BuildingKind::Commercial => maint_zones_com += maint,
+                BuildingKind::Industrial => maint_zones_ind += maint,
                 _ => {}
             }
         }
@@ -186,6 +196,20 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     maint_civic_pump *= fund_civic;
     maint_civic_tower *= fund_civic;
     maint_civic_school *= fund_civic;
+
+    // Lighting bylaw — scales civic + zone maintenance on top of funding.
+    // `LightingPolicy::Mixed` (the default) multiplies by 1.0, so an unset
+    // bylaw reproduces the pre-bylaw numbers exactly.
+    let light_maint = state.policies.lighting.maintenance_multiplier();
+    maint_civic *= light_maint;
+    maint_civic_park *= light_maint;
+    maint_civic_pump *= light_maint;
+    maint_civic_tower *= light_maint;
+    maint_civic_school *= light_maint;
+    maint_zones *= light_maint;
+    maint_zones_res *= light_maint;
+    maint_zones_com *= light_maint;
+    maint_zones_ind *= light_maint;
 
     // Revenue
     let revenue_base = BASE_INCOME;
@@ -515,15 +539,15 @@ mod tests {
     fn building_maintenance_categorised_correctly() {
         let mut s = gs(4, 4);
         // Zone building
-        let mut res = BuildingInstance::new(1, TileKind::Residential, (0, 0));
+        let mut res = BuildingInstance::new(1, BuildingKind::Residential, (0, 0));
         res.status = BuildingStatus::Active;
         s.buildings.push(res);
         // Civic building
-        let mut park = BuildingInstance::new(2, TileKind::Park, (1, 0));
+        let mut park = BuildingInstance::new(2, BuildingKind::Park, (1, 0));
         park.status = BuildingStatus::Active;
         s.buildings.push(park);
         // Power plant
-        let mut plant = BuildingInstance::new(3, TileKind::HydroPlant, (2, 0));
+        let mut plant = BuildingInstance::new(3, BuildingKind::HydroPlant, (2, 0));
         plant.status = BuildingStatus::Active;
         s.buildings.push(plant);
         let b = compute_daily_budget(&s);
@@ -534,10 +558,89 @@ mod tests {
     }
 
     #[test]
+    fn lighting_bylaw_scales_civic_and_zone_maintenance_only() {
+        use city_sim_protocol::commands::LightingPolicy;
+
+        // One building of every civic + zone sub-type, so every by-type
+        // breakdown field (`maint_civic_park`/`_pump`/`_tower`/`_school`,
+        // `maint_zones_res`/`_com`/`_ind`) starts non-zero and mutation
+        // testing can catch a dropped scaling line on any single one of
+        // them — not just the `maint_civic`/`maint_zones` aggregates.
+        let mut s = gs(4, 4);
+        let active = |id: u32, kind: BuildingKind, origin: (u32, u32)| {
+            let mut b = BuildingInstance::new(id, kind, origin);
+            b.status = BuildingStatus::Active;
+            b
+        };
+        s.buildings
+            .push(active(1, BuildingKind::Residential, (0, 0)));
+        s.buildings
+            .push(active(2, BuildingKind::Commercial, (1, 0)));
+        s.buildings
+            .push(active(3, BuildingKind::Industrial, (2, 0)));
+        s.buildings.push(active(4, BuildingKind::Park, (3, 0)));
+        s.buildings.push(active(5, BuildingKind::WaterPump, (0, 1)));
+        s.buildings
+            .push(active(6, BuildingKind::WaterTower, (1, 1)));
+        s.buildings
+            .push(active(7, BuildingKind::ElementarySchool, (2, 1)));
+        s.buildings
+            .push(active(8, BuildingKind::HydroPlant, (3, 1)));
+
+        let neutral = compute_daily_budget(&s);
+        s.policies.lighting = LightingPolicy::Efficient;
+        let efficient = compute_daily_budget(&s);
+
+        let scaled = |field: fn(&BudgetStats) -> f32, name: &str| {
+            let base = field(&neutral);
+            assert!(
+                base > 0.0,
+                "{name} must be non-zero in the fixture to prove scaling"
+            );
+            assert!(
+                (field(&efficient) - base * 0.9).abs() < 0.0001,
+                "{name} should scale by the 0.9 efficient multiplier: {} vs expected {}",
+                field(&efficient),
+                base * 0.9
+            );
+        };
+        scaled(|b| b.maint_civic, "maint_civic");
+        scaled(|b| b.maint_civic_park, "maint_civic_park");
+        scaled(|b| b.maint_civic_pump, "maint_civic_pump");
+        scaled(|b| b.maint_civic_tower, "maint_civic_tower");
+        scaled(|b| b.maint_civic_school, "maint_civic_school");
+        scaled(|b| b.maint_zones, "maint_zones");
+        scaled(|b| b.maint_zones_res, "maint_zones_res");
+        scaled(|b| b.maint_zones_com, "maint_zones_com");
+        scaled(|b| b.maint_zones_ind, "maint_zones_ind");
+
+        assert_eq!(
+            efficient.maint_power, neutral.maint_power,
+            "power plant maintenance is untouched by the lighting bylaw"
+        );
+    }
+
+    #[test]
+    fn default_lighting_policy_reproduces_neutral_maintenance() {
+        // The neutral bylaw (`LightingPolicy::default()`, already the field's
+        // zero value) must not move `compute_daily_budget`'s numbers at all —
+        // the exact "golden hash doesn't move" contract this feature promises.
+        let mut s = gs(4, 4);
+        let mut res = BuildingInstance::new(1, BuildingKind::Residential, (0, 0));
+        res.status = BuildingStatus::Active;
+        s.buildings.push(res);
+        let before = compute_daily_budget(&s);
+        s.policies.lighting = Default::default();
+        let after = compute_daily_budget(&s);
+        assert_eq!(before.maint_zones, after.maint_zones);
+        assert_eq!(before.maint_civic, after.maint_civic);
+    }
+
+    #[test]
     fn power_plant_maintenance_per_day_overrides_template() {
         let mut s = gs(4, 4);
         // Coal plant: maintenance_per_day = 300 (template value is 150 for HydroPlant)
-        let mut coal = BuildingInstance::new(1, TileKind::HydroPlant, (0, 0));
+        let mut coal = BuildingInstance::new(1, BuildingKind::HydroPlant, (0, 0));
         coal.status = BuildingStatus::Active;
         coal.maintenance_per_day = 300.0;
         s.buildings.push(coal);
@@ -648,25 +751,37 @@ mod tests {
     #[test]
     fn power_maintenance_breaks_down_by_plant_type() {
         let mut s = gs(8, 8);
-        let mut hydro = BuildingInstance::new(1, TileKind::HydroPlant, (0, 0));
+        let mut hydro = BuildingInstance::new(1, BuildingKind::HydroPlant, (0, 0));
         hydro.status = BuildingStatus::Active;
         hydro.maintenance_per_day = 150.0;
         s.buildings.push(hydro);
-        let mut coal = BuildingInstance::new(2, TileKind::CoalPlant, (2, 0));
+        let mut coal = BuildingInstance::new(2, BuildingKind::CoalPlant, (2, 0));
         coal.status = BuildingStatus::Active;
         coal.maintenance_per_day = 300.0;
         s.buildings.push(coal);
-        let mut wind = BuildingInstance::new(3, TileKind::WindTurbine, (4, 0));
+        let mut wind = BuildingInstance::new(3, BuildingKind::WindTurbine, (4, 0));
         wind.status = BuildingStatus::Active;
         wind.maintenance_per_day = 30.0;
         s.buildings.push(wind);
+        let mut solar = BuildingInstance::new(4, BuildingKind::SolarFarm, (6, 0));
+        solar.status = BuildingStatus::Active;
+        solar.maintenance_per_day = 40.0;
+        s.buildings.push(solar);
+        // Non-default power funding, so the funding-scaling multiply below is
+        // exercised for solar too, not just accumulated at the neutral 1.0×
+        // every other assertion here would pass at regardless.
+        s.policies.budget.fund_power = 50;
         let b = compute_daily_budget(&s);
-        assert!((b.maint_power_hydro - 150.0).abs() < 0.001);
-        assert!((b.maint_power_coal - 300.0).abs() < 0.001);
-        assert!((b.maint_power_wind - 30.0).abs() < 0.001);
-        assert!((b.maint_power_solar).abs() < 0.001);
+        assert!((b.maint_power_hydro - 75.0).abs() < 0.001);
+        assert!((b.maint_power_coal - 150.0).abs() < 0.001);
+        assert!((b.maint_power_wind - 15.0).abs() < 0.001);
         assert!(
-            (b.maint_power - (150.0 + 300.0 + 30.0)).abs() < 0.001,
+            (b.maint_power_solar - 20.0).abs() < 0.001,
+            "SolarFarm must accumulate into maint_power_solar and be scaled \
+             by fund_power same as the other three plant types"
+        );
+        assert!(
+            (b.maint_power - (75.0 + 150.0 + 15.0 + 20.0)).abs() < 0.001,
             "per-type rows must sum to the power total"
         );
     }

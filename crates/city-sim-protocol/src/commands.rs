@@ -1,9 +1,9 @@
-// SimCommand, CommandResult, Tool enum, and TileKind mapping for the sim protocol.
+// CommandResult, Tool enum, and player-adjustable policy types for the sim protocol.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-use crate::tile_kind::TileKind;
+use ts_rs::TS;
 
 /// All tools the player can apply to the map.
 ///
@@ -37,6 +37,37 @@ pub enum Tool {
     ParkLarge = 22,
 }
 
+impl Tool {
+    /// Every variant, in ascending discriminant order — the single source of
+    /// truth `tool_try_from_u8_roundtrips` and the wire-parity fixture
+    /// (`wire_parity.rs`) iterate instead of each hand-rolling `0..=22`.
+    pub const ALL: &'static [Tool] = &[
+        Self::Inspect,
+        Self::TerraformRaise,
+        Self::TerraformLower,
+        Self::Water,
+        Self::Tree,
+        Self::Road,
+        Self::Rail,
+        Self::PowerLine,
+        Self::HydroPlant,
+        Self::CoalPlant,
+        Self::WindTurbine,
+        Self::SolarFarm,
+        Self::WaterPump,
+        Self::WaterTower,
+        Self::WaterPipe,
+        Self::ElementarySchool,
+        Self::HighSchool,
+        Self::Residential,
+        Self::Commercial,
+        Self::Industrial,
+        Self::Park,
+        Self::Bulldoze,
+        Self::ParkLarge,
+    ];
+}
+
 /// SimCity-style fiscal policy: per-class tax rates and per-department
 /// funding levels, adjustable from the budget screen.
 ///
@@ -45,8 +76,9 @@ pub enum Tool {
 /// pre-policy economy exactly. Funding levels are whole percentages (0–100)
 /// with 100 as the fully-funded default; underfunding trims upkeep but has
 /// consequences (brownouts, crowded schools, commuter frustration).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "BudgetPolicy.ts")]
 pub struct BudgetPolicy {
     pub tax_residential: u8,
     pub tax_commercial: u8,
@@ -103,11 +135,94 @@ impl BudgetPolicy {
 /// softens the fragmentation penalty for a flat daily cost.
 /// `green_industry`: industrial tiles do reduced wilderness damage in return
 /// for a per-zone daily subsidy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WildernessPolicy.ts")]
 pub struct WildernessPolicy {
     pub nature_reserve: bool,
     pub green_industry: bool,
+}
+
+/// City-wide lighting standard (Bylaws screen). A named enum rather than a
+/// bare string so an invalid id can never decode — mirrors the `LightingPolicy`
+/// re-export in `app/src/game/bylaws.ts` one-for-one via the `ts-rs` export.
+///
+/// `Mixed` is the neutral default: both multipliers below are exactly `1.0`,
+/// so an unset bylaw reproduces the pre-bylaw numbers bit-for-bit — the same
+/// contract `BudgetPolicy::default()`/`WildernessPolicy::default()` keep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "LightingPolicy.ts")]
+pub enum LightingPolicy {
+    /// Blend of LED retrofits and heritage lamps — the neutral baseline.
+    #[default]
+    Mixed,
+    /// LED-first rollout: trims civic/zone power draw and upkeep.
+    Efficient,
+    /// Nostalgic lamps: more power and upkeep, more ambience.
+    CarbonArc,
+}
+
+impl LightingPolicy {
+    /// City-wide multiplier on civic + zone building power draw (MW).
+    ///
+    /// Applied in `city_sim_core::sim::Sim::compute_utility_use`, and only to
+    /// civic/zone buildings' consumption — never to power *production*
+    /// (`utilities::recompute_utility_network`'s funding-scaled supply side)
+    /// and never to a power plant's own draw (power plants don't have any).
+    pub fn power_use_multiplier(self) -> f32 {
+        match self {
+            LightingPolicy::Mixed => 1.0,
+            LightingPolicy::Efficient => 0.82,
+            LightingPolicy::CarbonArc => 1.18,
+        }
+    }
+
+    /// City-wide multiplier on civic + zone building maintenance ($/day).
+    ///
+    /// Applied in `city_sim_core::economy::compute_daily_budget`, alongside
+    /// — not instead of — the department funding multiplier.
+    pub fn maintenance_multiplier(self) -> f32 {
+        match self {
+            LightingPolicy::Mixed => 1.0,
+            LightingPolicy::Efficient => 0.9,
+            LightingPolicy::CarbonArc => 1.05,
+        }
+    }
+
+    /// City-wide multiplier on the wilderness-driven happiness drift target
+    /// (`wilderness::apply_happiness_drift`'s `target`).
+    ///
+    /// **Normalized from the pre-mechanism TS display trio.** Before this
+    /// method existed, `app/src/game/bylaws.ts` carried a decorative
+    /// `happinessTarget` table — 1.02 / 0.96 / 1.12 for Mixed / Efficient /
+    /// CarbonArc — that was never applied to anything; the bylaws modal just
+    /// printed it as a preview. Copied verbatim, that table would have made
+    /// `Mixed` (the `#[default]` variant) a non-neutral +2% multiplier, which
+    /// breaks the contract every other policy default in this file keeps: an
+    /// unset bylaw must reproduce the pre-bylaw numbers bit-for-bit
+    /// (`golden_city.expected` must not move). So each figure here is the old
+    /// one divided by the old `Mixed` figure (1.02), which pins `Mixed` to
+    /// exactly `1.0` while preserving the *relative* spread between the three
+    /// (Efficient/Mixed and CarbonArc/Mixed ratios unchanged, just rebased off
+    /// `1.0` instead of `1.02`) — rounded to the same two decimal places the
+    /// old TS table used.
+    pub fn happiness_multiplier(self) -> f32 {
+        match self {
+            LightingPolicy::Mixed => 1.0,
+            LightingPolicy::Efficient => 0.94,
+            LightingPolicy::CarbonArc => 1.10,
+        }
+    }
+}
+
+/// Default for `Policies::pending_penalty_enabled` — both the field's plain
+/// [`Default`] (via the manual `impl Default for Policies` below, since
+/// `#[derive(Default)]` cannot spell a non-`false` bool default) and its
+/// `#[serde(default = ...)]` fallback for a payload written before this field
+/// existed. Named so both sites read the same source of truth.
+fn default_pending_penalty_enabled() -> bool {
+    true
 }
 
 /// Every player-adjustable policy, grouped under one roof.
@@ -117,8 +232,9 @@ pub struct WildernessPolicy {
 /// `#[serde(default)]` so older payloads decode cleanly after a policy is
 /// added. Policies are deliberately *not* undoable — undo applies to tools;
 /// the live `Policies` value is carried across every history restore.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "Policies.ts")]
 pub struct Policies {
     /// Tax rates and department funding levels (budget screen).
     #[serde(default)]
@@ -126,6 +242,26 @@ pub struct Policies {
     /// Wilderness programmes (Bylaws screen).
     #[serde(default)]
     pub wilderness: WildernessPolicy,
+    /// City-wide lighting standard (Bylaws screen).
+    #[serde(default)]
+    pub lighting: LightingPolicy,
+    /// Whether an over-zoned class's demand is suppressed by its backlog of
+    /// undeveloped pending lots (`demand.rs`'s `pending_penalty_*` terms).
+    /// Default-on so toggling it off is an opt-out, not an opt-in — matching
+    /// the pre-toggle behaviour the mechanism always had.
+    #[serde(default = "default_pending_penalty_enabled")]
+    pub pending_penalty_enabled: bool,
+}
+
+impl Default for Policies {
+    fn default() -> Self {
+        Self {
+            budget: BudgetPolicy::default(),
+            wilderness: WildernessPolicy::default(),
+            lighting: LightingPolicy::default(),
+            pending_penalty_enabled: default_pending_penalty_enabled(),
+        }
+    }
 }
 
 impl Policies {
@@ -134,6 +270,8 @@ impl Policies {
         Self {
             budget: self.budget.clamped(),
             wilderness: self.wilderness,
+            lighting: self.lighting,
+            pending_penalty_enabled: self.pending_penalty_enabled,
         }
     }
 }
@@ -158,7 +296,7 @@ impl From<u8> for ViewStratum {
     /// Decodes the `stratum_idx` byte the WASM and Tauri bridges pass across
     /// their FFI/IPC boundary (mirroring `Tool`'s discriminant convention).
     /// Infallible rather than `TryFrom` — any value but `1` is `Surface`,
-    /// same as a missing/legacy field decoding through `#[serde(default)]`.
+    /// so an absent or unrecognised stratum always acts on the surface.
     fn from(v: u8) -> Self {
         if v == ViewStratum::Underground as u8 {
             ViewStratum::Underground
@@ -168,30 +306,25 @@ impl From<u8> for ViewStratum {
     }
 }
 
-/// A command sent from the UI/bridge into the simulation.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[non_exhaustive]
-pub enum SimCommand {
-    /// Apply a tool at tile coordinates (x, y), scoped to `stratum` for
-    /// tools that honour it (currently just `Tool::Bulldoze`).
-    ApplyTool {
-        tool: Tool,
-        x: u16,
-        y: u16,
-        #[serde(default)]
-        stratum: ViewStratum,
-    },
-    /// Adjust simulation speed (multiplier relative to base tick rate).
-    SetSpeed { multiplier: f32 },
-    /// Replace the full set of player policies (budget, wilderness, ...).
-    SetPolicies { policies: Policies },
-}
-
 /// Result returned synchronously for `ApplyTool` commands.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+///
+/// `stroke_id` correlates this result back to the `ApplyTool` send that
+/// produced it — the drag-paint stroke id the caller already supplied. Both
+/// transports stamp it on at their command boundary (`SimHost::apply_tool`'s
+/// caller in the WASM worker; the Tauri `apply_tool` command) rather than
+/// inside `city_sim_core::commands::apply_tool` itself, which has no
+/// `stroke_id` parameter — every internal `CommandResult::ok()`/`fail()`
+/// call site is unaffected. Replaces `mcpBridge.ts`'s blind FIFO result
+/// queue, which mismatched results under Tauri's unordered IPC arrival and
+/// any interleaving with a human player's own `ApplyTool` sends.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "CommandResult.ts")]
 pub struct CommandResult {
     pub success: bool,
     pub message: Option<String>,
+    #[serde(default)]
+    pub stroke_id: u32,
 }
 
 impl CommandResult {
@@ -199,13 +332,21 @@ impl CommandResult {
         Self {
             success: true,
             message: None,
+            stroke_id: 0,
         }
     }
     pub fn fail(msg: impl Into<String>) -> Self {
         Self {
             success: false,
             message: Some(msg.into()),
+            stroke_id: 0,
         }
+    }
+    /// Stamp the correlation id on at the transport boundary — see the
+    /// struct doc comment.
+    pub fn with_stroke_id(mut self, stroke_id: u32) -> Self {
+        self.stroke_id = stroke_id;
+        self
     }
 }
 
@@ -218,33 +359,6 @@ impl TryFrom<u8> for Tool {
         } else {
             Err(())
         }
-    }
-}
-
-/// Mapping from `Tool` to the `TileKind` it places, where applicable.
-/// Returns `None` for tools that don't directly place a tile kind.
-pub fn tool_to_tile_kind(tool: Tool) -> Option<TileKind> {
-    match tool {
-        Tool::Water => Some(TileKind::Water),
-        Tool::Tree => Some(TileKind::Tree),
-        Tool::Road => Some(TileKind::Road),
-        Tool::Rail => Some(TileKind::Rail),
-        Tool::PowerLine => Some(TileKind::PowerLine),
-        Tool::HydroPlant => Some(TileKind::HydroPlant),
-        Tool::CoalPlant => Some(TileKind::CoalPlant),
-        Tool::WindTurbine => Some(TileKind::WindTurbine),
-        Tool::SolarFarm => Some(TileKind::SolarFarm),
-        Tool::WaterPump => Some(TileKind::WaterPump),
-        Tool::WaterTower => Some(TileKind::WaterTower),
-        Tool::WaterPipe => Some(TileKind::WaterPipe),
-        Tool::ElementarySchool => Some(TileKind::ElementarySchool),
-        Tool::HighSchool => Some(TileKind::HighSchool),
-        Tool::Residential => Some(TileKind::Residential),
-        Tool::Commercial => Some(TileKind::Commercial),
-        Tool::Industrial => Some(TileKind::Industrial),
-        Tool::Park => Some(TileKind::Park),
-        Tool::ParkLarge => Some(TileKind::ParkLarge),
-        Tool::Inspect | Tool::TerraformRaise | Tool::TerraformLower | Tool::Bulldoze => None,
     }
 }
 
@@ -264,31 +378,10 @@ mod tests {
     }
 
     #[test]
-    fn command_round_trips_postcard() {
-        let cmd = SimCommand::ApplyTool {
-            tool: Tool::Road,
-            x: 5,
-            y: 10,
-            stratum: ViewStratum::Underground,
-        };
-        let bytes = to_allocvec(&cmd).unwrap();
-        let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(
-            back,
-            SimCommand::ApplyTool {
-                tool: Tool::Road,
-                x: 5,
-                y: 10,
-                stratum: ViewStratum::Underground,
-            }
-        ));
-    }
-
-    #[test]
     fn view_stratum_defaults_to_surface() {
-        // `#[serde(default)]` on `ApplyTool::stratum` falls back to
-        // `ViewStratum::default()` when decoding a command log recorded before
-        // this field existed, so the default must stay `Surface`.
+        // `From<u8>` treats every byte but `1` as `Surface`, and
+        // `ViewStratum::default()` must agree — a tool applied without an
+        // explicit stratum acts on the surface, never underground.
         assert_eq!(ViewStratum::default(), ViewStratum::Surface);
     }
 
@@ -318,10 +411,12 @@ mod tests {
                 nature_reserve: true,
                 green_industry: false,
             },
+            lighting: LightingPolicy::CarbonArc,
+            pending_penalty_enabled: false,
         };
-        let bytes = to_allocvec(&SimCommand::SetPolicies { policies }).unwrap();
-        let back: SimCommand = from_bytes(&bytes).unwrap();
-        assert!(matches!(back, SimCommand::SetPolicies { policies: p } if p == policies));
+        let bytes = to_allocvec(&policies).unwrap();
+        let back: Policies = from_bytes(&bytes).unwrap();
+        assert_eq!(back, policies);
     }
 
     #[test]
@@ -329,6 +424,29 @@ mod tests {
         let p = Policies::default();
         assert_eq!(p.budget, BudgetPolicy::default());
         assert_eq!(p.wilderness, WildernessPolicy::default());
+        assert_eq!(p.lighting, LightingPolicy::Mixed);
+        assert!(
+            p.pending_penalty_enabled,
+            "default-on: the toggle must reproduce the pre-toggle behaviour"
+        );
+    }
+
+    /// A `Policies` payload written before this field existed decodes with
+    /// the over-zoning penalty still on — the same default-on contract
+    /// `#[serde(default = "default_pending_penalty_enabled")]` promises.
+    /// JSON stands in for "a decoder that tolerates a missing field": postcard
+    /// is positional and cannot skip one, which is exactly why adding this
+    /// field bumped the CSIM snapshot `VERSION` instead of relying on this
+    /// attribute for the binary wire.
+    #[test]
+    fn a_policies_payload_missing_the_penalty_toggle_defaults_it_on() {
+        let json = serde_json::json!({
+            "budget": BudgetPolicy::default(),
+            "wilderness": WildernessPolicy::default(),
+            "lighting": "mixed",
+        });
+        let p: Policies = serde_json::from_value(json).unwrap();
+        assert!(p.pending_penalty_enabled);
     }
 
     #[test]
@@ -339,9 +457,56 @@ mod tests {
                 ..BudgetPolicy::default()
             },
             wilderness: WildernessPolicy::default(),
+            lighting: LightingPolicy::Efficient,
+            pending_penalty_enabled: false,
         }
         .clamped();
         assert_eq!(p.budget.tax_residential, MAX_TAX_RATE);
+        // `lighting` has no illegal range to clamp — `clamped()` must still
+        // carry it through untouched rather than silently resetting it.
+        assert_eq!(p.lighting, LightingPolicy::Efficient);
+        // Same for the penalty toggle: clamping is about numeric ranges, not
+        // about resetting booleans to their default.
+        assert!(!p.pending_penalty_enabled);
+    }
+
+    #[test]
+    fn default_lighting_policy_is_mixed_and_neutral() {
+        let p = LightingPolicy::default();
+        assert_eq!(p, LightingPolicy::Mixed);
+        assert_eq!(p.power_use_multiplier(), 1.0);
+        assert_eq!(p.maintenance_multiplier(), 1.0);
+        assert_eq!(p.happiness_multiplier(), 1.0);
+    }
+
+    #[test]
+    fn non_default_lighting_policies_are_not_neutral() {
+        // Pins the exact multipliers against `app/src/game/bylaws.ts`'s
+        // `LIGHTING_POLICIES` display table — the two must agree, since the
+        // TS table exists only to preview what these values will do.
+        assert_eq!(LightingPolicy::Efficient.power_use_multiplier(), 0.82);
+        assert_eq!(LightingPolicy::Efficient.maintenance_multiplier(), 0.9);
+        assert_eq!(LightingPolicy::CarbonArc.power_use_multiplier(), 1.18);
+        assert_eq!(LightingPolicy::CarbonArc.maintenance_multiplier(), 1.05);
+        // `happiness_multiplier` — normalized off the old TS-only preview
+        // trio (1.02 / 0.96 / 1.12) so `Mixed` lands on exactly `1.0`; see
+        // the method's own doc comment for the derivation.
+        assert_eq!(LightingPolicy::Mixed.happiness_multiplier(), 1.0);
+        assert_eq!(LightingPolicy::Efficient.happiness_multiplier(), 0.94);
+        assert_eq!(LightingPolicy::CarbonArc.happiness_multiplier(), 1.10);
+    }
+
+    #[test]
+    fn lighting_policy_round_trips_postcard() {
+        for policy in [
+            LightingPolicy::Mixed,
+            LightingPolicy::Efficient,
+            LightingPolicy::CarbonArc,
+        ] {
+            let bytes = to_allocvec(&policy).unwrap();
+            let back: LightingPolicy = from_bytes(&bytes).unwrap();
+            assert_eq!(back, policy);
+        }
     }
 
     #[test]

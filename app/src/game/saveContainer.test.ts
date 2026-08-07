@@ -7,21 +7,36 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
 import {
   SaveFormatError,
-  buildLegacyEngineImport,
   buildSaveMeta,
   decodeSave,
   encodeSave,
   isLegacyJsonSave,
-  serialize,
+  transcodeLegacySave,
   type SaveContainer
 } from './persistence';
-import { createInitialState, setTile, TileKind } from './gameState';
+import { createInitialState, TileKind } from './gameState';
 import { extractClientState } from './clientState';
 import { deleteSave, getSave, listSaveMetas, putSave, setIdbFactory } from './saveStore';
 import { LEGACY_BYTES_PER_TILE, LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
-import { tileKindToU8 } from './protocol/tileKind';
-import { Occupant, setTileOccupant } from './protocol/occupants';
-import { legacyKind } from './protocol/legacyProjection';
+
+/** A minimal hand-spelled raw legacy JSON save — the shape `transcodeLegacySave` reads. */
+function rawLegacySave(overrides: Record<string, unknown> = {}) {
+  const width = 8;
+  const height = 8;
+  const tiles = Array.from({ length: width * height }, () => ({ kind: TileKind.Land }));
+  return JSON.stringify({
+    width,
+    height,
+    seed: 5,
+    tiles,
+    money: 100000,
+    day: 1,
+    tick: 0,
+    population: 12,
+    jobs: 4,
+    ...overrides
+  });
+}
 
 function makeContainer(name?: string): SaveContainer {
   const state = createInitialState(8, 8, 5);
@@ -66,54 +81,58 @@ describe('CSAV container codec', () => {
   });
 
   it('sniffs legacy JSON saves apart from CSAV blobs', () => {
-    const legacy = new TextEncoder().encode(`  \n${serialize(createInitialState(4, 4, 1))}`);
+    const legacy = new TextEncoder().encode(`  \n${rawLegacySave()}`);
     expect(isLegacyJsonSave(legacy)).toBe(true);
     expect(isLegacyJsonSave(encodeSave(makeContainer()))).toBe(false);
   });
 });
 
-describe('buildLegacyEngineImport', () => {
-  it('re-encodes tiles into the wire SoA layout with packed flags', () => {
-    const state = createInitialState(8, 8, 3);
-    setTile(state, 3, 3, TileKind.Road);
-    // (4,4) — the only other land tile `createInitialState`'s border carves
-    // out of an 8×8 map — for the flags-packing tile, so it doesn't collide
-    // with the road tile above.
-    const flagsIdx = 4 * 8 + 4;
-    state.tiles[flagsIdx].powered = true;
-    state.tiles[flagsIdx].watered = true;
-    // A road that isn't `kind` — pairing it with rail pushes `legacyKind` to
-    // resolve `Rail` instead (it outranks `Road`), so the road only survives
-    // as the `ROAD_UNDERLAY` flag this test is packing, with nothing else set.
-    setTileOccupant(state.tiles[flagsIdx], Occupant.Road, true);
-    setTileOccupant(state.tiles[flagsIdx], Occupant.Rail, true);
-    const imp = buildLegacyEngineImport(state);
+describe('transcodeLegacySave', () => {
+  it('re-encodes raw tile fields into the wire SoA layout with packed flags', () => {
     const n = 64;
+    const tiles = Array.from({ length: n }, () => ({ kind: TileKind.Land }));
+    tiles[3 * 8 + 3] = { kind: TileKind.Road } as any;
+    // A road-underlay flag on a tile whose `kind` is something else entirely
+    // — the raw flags/kind are transcoded verbatim, with no re-derivation.
+    const flagsIdx = 4 * 8 + 4;
+    tiles[flagsIdx] = {
+      kind: TileKind.Rail,
+      powered: true,
+      watered: true,
+      roadUnderlay: true
+    } as any;
+    const raw = rawLegacySave({ seed: 3, tiles });
+    const imp = transcodeLegacySave(raw).engine;
     const o = legacyTileBufferOffsets(n);
-    const roadTile = state.tiles[3 * 8 + 3];
-    const roadTileKind = legacyKind({
-      terrain: roadTile.terrain,
-      surface: roadTile.surface,
-      overhead: roadTile.overhead,
-      buildingId: roadTile.buildingId,
-      structureKindOf: () => undefined
-    });
+
     expect(imp.tiles).toHaveLength(n * LEGACY_BYTES_PER_TILE);
-    expect(imp.tiles[o.kind + 3 * 8 + 3]).toBe(tileKindToU8(roadTileKind));
+    expect(imp.tiles[o.kind + 3 * 8 + 3]).toBe(3); // TileKind.Road's u8
+    expect(imp.tiles[o.kind + flagsIdx]).toBe(4); // TileKind.Rail's u8
     expect(imp.tiles[o.flags + flagsIdx]).toBe(LEGACY_FLAGS.POWERED | LEGACY_FLAGS.WATERED | LEGACY_FLAGS.ROAD_UNDERLAY);
-    expect(imp.rngState).toEqual(state.rngState);
     expect(imp.seed).toBe(3);
-    expect(imp.policies).toEqual(state.policies);
   });
 
   it('writes building ids little-endian and 0xFF for no underground', () => {
-    const state = createInitialState(8, 8, 3);
-    state.tiles[5].buildingId = 0x1234;
-    const imp = buildLegacyEngineImport(state);
-    const o = legacyTileBufferOffsets(64);
+    const n = 64;
+    const tiles = Array.from({ length: n }, () => ({ kind: TileKind.Land }));
+    tiles[5] = { kind: TileKind.HydroPlant, buildingId: 0x1234 } as any;
+    const raw = rawLegacySave({ seed: 3, tiles });
+    const imp = transcodeLegacySave(raw).engine;
+    const o = legacyTileBufferOffsets(n);
     expect(imp.tiles[o.buildingId + 5 * 2]).toBe(0x34);
     expect(imp.tiles[o.buildingId + 5 * 2 + 1]).toBe(0x12);
     expect(imp.tiles[o.undergroundKind + 7]).toBe(0xff);
+  });
+
+  it('writes the WaterPipe kind byte for a buried pipe, and 0xFF otherwise', () => {
+    const n = 64;
+    const tiles = Array.from({ length: n }, () => ({ kind: TileKind.Land }));
+    tiles[9] = { kind: TileKind.Land, underground: TileKind.WaterPipe } as any;
+    const raw = rawLegacySave({ seed: 3, tiles });
+    const imp = transcodeLegacySave(raw).engine;
+    const o = legacyTileBufferOffsets(n);
+    expect(imp.tiles[o.undergroundKind + 9]).toBe(12); // TileKind.WaterPipe's u8
+    expect(imp.tiles[o.undergroundKind + 0]).toBe(0xff);
   });
 });
 

@@ -307,18 +307,6 @@
           "markdownDescription": "Denies the apply_tool command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_command_log command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-command-log",
-          "markdownDescription": "Enables the get_command_log command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_command_log command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-command-log",
-          "markdownDescription": "Denies the get_command_log command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_map_seed command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-map-seed",
@@ -355,18 +343,6 @@
           "markdownDescription": "Denies the import_legacy command without any pre-configured scope."
         },
         {
-          "description": "Enables the load_command_log command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-load-command-log",
-          "markdownDescription": "Enables the load_command_log command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the load_command_log command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-load-command-log",
-          "markdownDescription": "Denies the load_command_log command without any pre-configured scope."
-        },
-        {
           "description": "Enables the load_snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-load-snapshot",
@@ -389,18 +365,6 @@
           "type": "string",
           "const": "deny-redo",
           "markdownDescription": "Denies the redo command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the set_budget_policy command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-budget-policy",
-          "markdownDescription": "Enables the set_budget_policy command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_budget_policy command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-budget-policy",
-          "markdownDescription": "Denies the set_budget_policy command without any pre-configured scope."
         },
         {
           "description": "Enables the set_natural_terrain command without any pre-configured scope.",
@@ -439,18 +403,6 @@
           "markdownDescription": "Denies the set_speed command without any pre-configured scope."
         },
         {
-          "description": "Enables the set_wilderness_policy command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-set-wilderness-policy",
-          "markdownDescription": "Enables the set_wilderness_policy command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the set_wilderness_policy command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-set-wilderness-policy",
-          "markdownDescription": "Denies the set_wilderness_policy command without any pre-configured scope."
-        },
-        {
           "description": "Enables the start command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start",
@@ -485,18 +437,6 @@
           "type": "string",
           "const": "deny-undo",
           "markdownDescription": "Denies the undo command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the undo_last_command command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-undo-last-command",
-          "markdownDescription": "Enables the undo_last_command command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the undo_last_command command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-undo-last-command",
-          "markdownDescription": "Denies the undo_last_command command without any pre-configured scope."
         },
         {
           "description": "Grants access to all city-sim simulation commands.\n#### This default permission set includes:\n\n- `allow-start`\n- `allow-apply-tool`\n- `allow-set-speed`\n- `allow-set-policies`\n- `allow-set-natural-terrain`\n- `allow-stop`",

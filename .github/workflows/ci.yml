@@ -122,6 +122,27 @@ jobs:
         id: rust_tests
         run: cargo nextest run --workspace --exclude city-sim-wasm --profile ci
 
+      # `crates/city-sim-protocol/tests/export_bindings.rs` and
+      # `crates/tauri-plugin-city-sim/tests/export_bindings.rs` (run above, as
+      # part of the workspace test run) regenerate
+      # `app/src/game/protocol/generated/` and
+      # `crates/tauri-plugin-city-sim/guest-js/generated/` deterministically —
+      # see those files' doc comments. If either directory is dirty here, a
+      # `#[derive(TS)]` type changed without the checked-in TS mirror being
+      # regenerated alongside it.
+      - name: Check generated TS bindings are up to date
+        id: ts_bindings_fresh
+        # `git add -N` (intent-to-add) before the diff so a brand new file
+        # under either directory (a new `#[derive(TS)]` type whose output was
+        # never committed) shows up as a diff too — a plain `git diff
+        # --exit-code` only compares tracked files and would silently miss it.
+        run: |
+          git add -N -- app/src/game/protocol/generated/ crates/tauri-plugin-city-sim/guest-js/generated/
+          if ! git diff --exit-code -- app/src/game/protocol/generated/ crates/tauri-plugin-city-sim/guest-js/generated/; then
+            echo "::error::Generated TS bindings are out of date. Run 'cargo test -p city-sim-protocol -p tauri-plugin-city-sim' locally and commit the diff under app/src/game/protocol/generated/ and crates/tauri-plugin-city-sim/guest-js/generated/."
+            exit 1
+          fi
+
       - name: Upload Rust test artefacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -148,6 +169,7 @@ jobs:
             echo "- Command: \`cargo nextest run --workspace --exclude city-sim-wasm --profile ci\`"
             echo "- Includes the golden city (\`tests/golden_city.rs\`) and the default-size soak (\`tests/soak.rs\`)"
             echo "- Golden dump: \`crates/city-sim-core/tests/fixtures/golden_city.expected\` — regenerate deliberately with \`GOLDEN=regen\`, see \`docs/testing.md\`"
+            echo "- Generated TS bindings freshness: \`${{ steps.ts_bindings_fresh.outcome }}\` (\`app/src/game/protocol/generated/\`, \`crates/tauri-plugin-city-sim/guest-js/generated/\`)"
             echo "- Test artefact: \`target/nextest/ci/junit.xml\`"
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
@@ -361,6 +383,24 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      # `wasmSim.worker.ts` imports the wasm-pack output directly (no
+      # `@ts-ignore`), so `tsc --noEmit` needs `app/src/wasm/` on disk the
+      # same way a fresh clone/worktree does — see the comment above that
+      # import.
+      - name: Build WASM target
+        run: bun run build:wasm
 
       - name: Run TypeScript typecheck
         id: ts_typecheck
@@ -590,6 +630,20 @@ jobs:
         id: tauri_plugin_build
         run: cargo build -p tauri-plugin-city-sim
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # `guest-js/index.test.ts` pins `TOOL_ID`/`VIEW_STRATUM_ID` — the last
+      # unpinned hand-copies in `guest-js/` — against `app/src/game/protocol/
+      # wireParity.json`'s Rust source of truth, via the relative path from
+      # `crates/tauri-plugin-city-sim/guest-js/`.
+      - name: Run guest-js tests
+        id: guest_js_test
+        run: bun run --cwd crates/tauri-plugin-city-sim test
+
       - name: Write summary
         if: always()
         run: |
@@ -599,6 +653,7 @@ jobs:
             echo "- Runner: \`ubuntu-24.04\`"
             echo "- Result: \`${{ steps.tauri_plugin_build.outcome }}\`"
             echo "- Command: \`cargo build -p tauri-plugin-city-sim\`"
+            echo "- guest-js tests: \`${{ steps.guest_js_test.outcome }}\` (\`bun run --cwd crates/tauri-plugin-city-sim test\`)"
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
 

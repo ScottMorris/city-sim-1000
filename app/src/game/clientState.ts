@@ -1,12 +1,16 @@
-// clientState.ts — the TS-owned slice of a save: settings and bylaws.
+// clientState.ts — the TS-owned slice of a save: settings.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
 // Everything else in the TS `GameState` is either engine-owned (tiles, stats,
-// budget, policies — all inside the CSAV engine snapshot) or derived display
-// state that refills within a few ticks of load. This module owns the
-// extraction/merge of the client slice for the CSAV container's client JSON.
+// budget, policies — including the lighting bylaw, `#9` follow-up — all
+// inside the CSAV engine snapshot) or derived display state that refills
+// within a few ticks of load. This module owns the extraction/merge of the
+// client slice for the CSAV container's client JSON. The lighting bylaw used
+// to live here too (`BylawState`) — see `bylaws.ts`'s
+// `extractLegacyLightingPolicy` for how an older save's stray `bylaws` field
+// is migrated into engine `Policies` instead.
 
 import {
   createDefaultAccessibilitySettings,
@@ -22,14 +26,12 @@ import {
   type MinimapOverlay,
   type MinimapSettings
 } from './gameState';
-import { DEFAULT_BYLAWS, type BylawState } from './bylaws';
 import { defaultHotkeys } from '../ui/hotkeys';
 import { createDefaultSfxOverrides } from './sfxOverrides';
 
 /** The TS-owned surface of a save — serialised as the CSAV client JSON. */
 export interface ClientState {
   settings: GameSettings;
-  bylaws: BylawState;
 }
 
 /**
@@ -63,7 +65,6 @@ export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSetti
     uiSettings.mode = 'auto';
   }
   return {
-    pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
     minimap: minimapSettings,
     input: { ...inputDefaults, ...(settings?.input ?? {}) },
     accessibility: { ...accessibilityDefaults, ...(settings?.accessibility ?? {}) },
@@ -78,14 +79,16 @@ export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSetti
 
 /** Extract the client slice of `state` for saving. */
 export function extractClientState(state: GameState): ClientState {
-  return { settings: state.settings, bylaws: state.bylaws };
+  return { settings: state.settings };
 }
 
-/** Merge a loaded client slice onto the live display mirror. */
-export function applyClientState(state: GameState, client?: Partial<ClientState>): void {
+/**
+ * Merge a loaded client slice onto the live display mirror. `client.settings`
+ * may itself be partial (a legacy JSON save's raw `settings` field,
+ * transcoded verbatim by `persistence.ts`'s `transcodeLegacySave` with no
+ * back-fill of its own) — `ensureSettingsShape` back-fills defaults for
+ * whatever is missing, at any nesting level.
+ */
+export function applyClientState(state: GameState, client?: { settings?: Partial<GameSettings> }): void {
   state.settings = ensureSettingsShape(client?.settings);
-  state.bylaws = { ...DEFAULT_BYLAWS, ...(client?.bylaws ?? {}) };
-  if (!state.bylaws.lighting) {
-    state.bylaws.lighting = DEFAULT_BYLAWS.lighting;
-  }
 }

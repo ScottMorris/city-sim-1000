@@ -5,9 +5,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { WasmSimBridge } from './wasmSimBridge';
-import { createInitialState, TileKind } from './gameState';
+import { createDefaultBudgetStats, createInitialState } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
-import { tileKindToU8 } from './protocol/tileKind';
+import { buildingKindToU8 } from './protocol/buildingKind';
+import { BuildingKind } from './buildings/templates';
 import { ServiceId } from './services';
 import type { FromSim } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
@@ -39,30 +40,23 @@ const flags = (canUndo: boolean, canRedo: boolean) => ({ canUndo, canRedo });
 
 /** All-zero stats object — the bridge only assigns these onto the mirror. */
 function zeroStats(): SimStats {
-  const stats: Record<string, number> = {};
-  for (const key of [
-    'tick', 'day', 'money', 'population', 'jobs',
-    'powerBalance', 'powerProduced', 'powerUsed',
-    'waterBalance', 'waterProduced', 'waterUsed',
-    'demandResidential', 'demandCommercial', 'demandIndustrial',
-    'budgetNetPerDay', 'budgetNetPerMonth', 'budgetRevenue', 'budgetExpenses',
-    'budgetRevenueBase', 'budgetRevenuePop', 'budgetRevenueCommercial',
-    'budgetRevenueIndustrial', 'budgetExpensesTransport', 'budgetExpensesBuildings',
-    'budgetMaintPower', 'budgetMaintCivic', 'budgetMaintZones', 'budgetMaintRoads',
-    'budgetMaintRail', 'budgetMaintPowerLines', 'budgetMaintPipes',
-    'budgetMaintPowerHydro', 'budgetMaintPowerCoal', 'budgetMaintPowerWind',
-    'budgetMaintPowerSolar', 'budgetMaintCivicPark', 'budgetMaintCivicPump',
-    'budgetMaintCivicTower', 'budgetMaintCivicSchool', 'budgetMaintZonesRes',
-    'budgetMaintZonesCom', 'budgetMaintZonesInd', 'budgetRevenueTourism',
-    'budgetExpensesPolicies', 'wildernessScore', 'wildernessTrend',
-    'wildernessForests', 'wildernessParks', 'wildernessOpenLand',
-    'wildernessWaterEdge', 'wildernessPatch', 'wildernessFragmentation',
-    'wildernessZones', 'wildernessIndustry', 'wildernessTransport',
-    'wildernessPower', 'wildernessCivic'
-  ]) {
-    stats[key] = 0;
-  }
-  return stats as unknown as SimStats;
+  return {
+    tick: 0, day: 0, money: 0, population: 0, jobs: 0,
+    powerBalance: 0, powerProduced: 0, powerUsed: 0,
+    waterBalance: 0, waterProduced: 0, waterUsed: 0,
+    demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
+    budget: createDefaultBudgetStats(),
+    wilderness: {
+      score: 0,
+      trend: 0,
+      breakdown: {
+        forests: 0, parks: 0, openLand: 0, waterEdge: 0, patch: 0,
+        fragmentation: 0, zones: 0, industry: 0, transport: 0, power: 0, civic: 0
+      }
+    },
+    abandonedCount: 0,
+    avgHappiness: 0
+  };
 }
 
 function makeBridge() {
@@ -208,7 +202,7 @@ describe('WasmSimBridge undo/redo', () => {
     await pending;
     // step() would normally apply the pending buffers — the stale pre-undo
     // step_result must be gone, leaving the undone stats in place.
-    bridge.step(1 / 20);
+    bridge.step();
     expect(state.money).toBe(1111);
   });
 
@@ -232,7 +226,7 @@ describe('WasmSimBridge undo/redo', () => {
     // be able to discard a stale one before it ever reaches the player).
     expect(events.find(e => e.type === 'Alert')).toBeUndefined();
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     const alert = events.find(e => e.type === 'Alert');
     expect(alert).toMatchObject({
@@ -256,7 +250,7 @@ describe('WasmSimBridge undo/redo', () => {
       waterComponentsJson: '[]',
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.utilities.powerComponents).toEqual([
       { id: 1, produced: 60, used: 30, sourceCount: 1, utilisation: 0.5 },
@@ -273,13 +267,16 @@ describe('WasmSimBridge undo/redo', () => {
     };
     worker.emit({
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
-      buildingsJson: JSON.stringify([{ id: 7, kind: tileKindToU8(TileKind.ElementarySchool), originX: 0, originY: 0 }]),
+      buildingsJson: JSON.stringify([{
+        id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0,
+        status: 0,
+      }]),
       powerComponentsJson: '[]', waterComponentsJson: '[]',
       educationJson: JSON.stringify(educationStats),
       educationSeatsUsedJson: JSON.stringify([{ buildingId: 7, used: 12 }]),
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.education).toEqual(educationStats);
     expect(state.buildings[0].state.serviceLoad.slotsUsed[ServiceId.EducationElementary]).toBe(12);
@@ -292,9 +289,56 @@ describe('WasmSimBridge undo/redo', () => {
       budgetHistoryJson: JSON.stringify([{ day: 3, revenue: 100, expenses: 40, net: 60 }]),
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.budgetHistory).toEqual([{ day: 3, revenue: 100, expenses: 40, net: 60 }]);
+  });
+
+  it('decodes demandBreakdownJson into state.demand.breakdown and state.labour on step() flush', () => {
+    const { worker, bridge, state } = makeBridge();
+    const zeroClass = {
+      base: 0, fillFraction: 0, fillTerm: 0, workforceTerm: 0, labourTerm: 0,
+      pendingZones: 0, pendingPenaltyRaw: 0, pendingPenaltyCapped: 0, pendingPenaltyApplied: 0,
+      pressureRelief: 0, utilityPenalty: 0, demandBeforeUtilities: 0, floorApplied: false, seeded: true, value: 0,
+    };
+    const demand = { residential: { ...zeroClass, value: 60 }, commercial: zeroClass, industrial: zeroClass };
+    const labour = {
+      population: 100, resCapacity: 140, jobCapacity: 40,
+      workers: 55, employed: 40, unemployed: 15, unemploymentRate: 0.27, vacancyRate: 0,
+    };
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      demandBreakdownJson: JSON.stringify({ demand, labour }),
+    });
+
+    bridge.step();
+
+    expect(state.demand.breakdown).toEqual(demand);
+    expect(state.labour).toEqual(labour);
+  });
+
+  // `#200`'s wire-adoption follow-up: building status used to be
+  // reconstructed client-side from tile power/water flags. `buildings_json`
+  // now carries the engine's own real status directly.
+  it.each([
+    [0, 'active'],
+    [1, 'inactive_no_power'],
+    [2, 'inactive_no_water'],
+    [3, 'inactive_no_source'],
+  ] as const)('decodes WireBuilding.status byte %i as %s, verbatim off the wire', (statusByte, expected) => {
+    const { worker, bridge, state } = makeBridge();
+    worker.emit({
+      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
+      buildingsJson: JSON.stringify([{
+        id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0,
+        status: statusByte,
+      }]),
+      powerComponentsJson: '[]', waterComponentsJson: '[]',
+    });
+
+    bridge.step();
+
+    expect(state.buildings[0].state.status).toBe(expected);
   });
 
   it('discards a pending alert when an undo lands before step() flushes it', () => {
@@ -311,7 +355,7 @@ describe('WasmSimBridge undo/redo', () => {
     });
 
     return pending.then(() => {
-      bridge.step(1 / 20);
+      bridge.step();
       // The undo happened before the deficit-carrying step_result was ever
       // flushed — since the Rust engine resyncs its latch silently on
       // restore, no alert (deficit or restore) should surface for it.

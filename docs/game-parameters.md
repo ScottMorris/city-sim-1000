@@ -68,11 +68,11 @@
 
 ## Bylaws & District Planning
 - **Purpose**: Bylaws let players set city-wide or district-specific rules that tweak upkeep, utility demand, or happiness without adding new buildings. Early focus: lighting standards that change power draw and ambience.
-- **Baseline toggles**: City-wide lighting bylaws are live. Mixed corridors keep a neutral baseline; energy-efficient lighting trims civic/zone power use (~18%) and upkeep (~10%) with a small mood dip; heritage/carbon-arc lamps add a modest mood boost but raise power draw (~18%) and upkeep (~5%). The modal shows projected monthly upkeep and power deltas before applying.
+- **Baseline toggles**: City-wide lighting bylaws are live and engine-simulated (`LightingPolicy` in `crates/city-sim-protocol/src/commands.rs`, part of `Policies`). Mixed corridors keep a neutral baseline (all three multipliers exactly `1.0`); energy-efficient lighting trims civic/zone power use (18%) and upkeep (10%) and softens the happiness-drift target (0.94×); heritage/carbon-arc lamps raise power draw (18%) and upkeep (5%) and lift the happiness-drift target (1.10×). Each option's "Mood" pill in the modal is the real delta this multiplier applies, not a preview. The modal reads the engine's real, already-applied power/upkeep figures off the wire and shows what each option would change them to.
 - **District hooks**: Introduce optional districts as map overlays. Players can paint districts similar to zoning; bylaws can override the city default within those boundaries (e.g., a downtown heritage district using carbon arc lamps while suburbs favour LEDs). Keep district limits modest to avoid pathing bloat.
-- **Simulation impacts**: Lighting bylaws adjust civic/zone `powerUse` and maintenance and trend tile happiness toward each policy’s target. Districts provide a hook for future policies (noise, pollution, density caps) by storing per-district modifiers alongside zoning data.
+- **Simulation impacts**: Lighting bylaws scale civic + zone power draw (`Simulation::compute_utility_use`) and civic + zone maintenance (`economy::compute_daily_budget`) — never transport/pipes/power-line upkeep, power plant maintenance, or power *production*. The "Mood" multiplier scales the target `wilderness::apply_happiness_drift` drifts zone-tile happiness toward — that target is still primarily driven by the wilderness score, but the lighting bylaw now shifts it up or down around that base. Districts provide a hook for future policies (noise, pollution, density caps) by storing per-district modifiers alongside zoning data.
 - **UI/UX**: The Bylaws modal opens from the status ribbon (next to Budget/Settings) with policy copy, projections, and immediate application. The district paint tool should surface the active bylaw theme and allow quick reassignment. Overlays highlight districts with their active policy and show warnings if a district lacks a bylaw (falls back to city default).
-- **Persistence**: Save city-wide bylaw states and a list of districts with polygon/paint masks plus their assigned bylaw bundle. Ensure saves remain backwards-compatible by defaulting to a neutral baseline when absent.
+- **Persistence**: The lighting bylaw is engine state — part of `Policies` inside the CSIM snapshot, alongside budget and wilderness policy — not a client-JSON field, so it survives undo/redo and time travel like any other simulated value. A save from before this move still decodes: a stray `bylaws.lighting` in its client JSON is folded into a one-time `SetPolicies` on load (`bylaws.ts`'s `extractLegacyLightingPolicy`). District data, once it exists, would still need its own polygon/paint-mask persistence with a neutral-baseline default when absent.
 - **Tech debt avoidance**: Reuse existing overlay/minimap tinting infrastructure for district visualization, and keep district data near zoning/utility state so power/water overlays can respect bylaw modifiers without separate graphs.
 
 ## Next Steps (Suggested)
@@ -90,8 +90,8 @@
 
 ## Fiscal Policy (Tax Rates & Department Funding)
 
-Adjustable from the City Ledger (budget screen) sliders; stored in `GameState.budgetPolicy`
-and mirrored into the Rust sim via `SimCommand::SetBudgetPolicy`.
+Adjustable from the City Ledger (budget screen) sliders; stored in `GameState.policies.budget`
+and sent to the sim via the TS `SimCommand`'s `SetPolicies` variant (`app/src/game/protocol/commands.ts`).
 
 - **Tax rates** per zone class (residential/commercial/industrial): whole percentages, 0–20%,
   neutral default **9%**. Revenue for a class scales by `rate / 9`, so 9% reproduces the
@@ -163,8 +163,8 @@ live in `WildernessTunables`. Full design: `docs/features/wilderness-score.md`.
   own City Ledger revenue line.
 - **HUD**: 🌲 ribbon chip with trend arrow (fast vs slow EMA of the score); tooltip lists
   the six biggest breakdown contributors.
-- **Programmes** (Bylaws screen, `GameState.wildernessPolicy`,
-  `SimCommand::SetWildernessPolicy`):
+- **Programmes** (Bylaws screen, `GameState.policies.wilderness`, sent to the sim via the
+  TS `SimCommand`'s `SetPolicies` variant):
   - *Nature Reserve* — unlocks at score 60 (UI-gated; stays available once enabled).
     Patch bonus cap 2 → 3, fragmentation penalty 2 → 1. Costs **$100/day** flat.
   - *Green Industry* — always available. Industrial base eco −5 → −2. Costs

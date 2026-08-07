@@ -29,20 +29,15 @@
  * that could disagree with the engine's own.
  */
 
-import type { GameState, Tile, ViewStratum } from './gameState';
-import { TileKind } from './gameState';
-import { BuildingStatus, createBuildingState } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
+import { createBlankTile, type GameState, type ViewStratum } from './gameState';
+import { buildBuildingMirror } from './buildings/wireMirror';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
-import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
+import { Terrain } from './protocol/occupants';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
-import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
-import { footprintTouchesWater } from './adjacency';
 import {
   start as pluginStart,
   applyTool as pluginApplyTool,
@@ -172,7 +167,7 @@ export class TauriSimBridge implements SimBridge {
   // asynchronously (onTick, below) — this per-frame call just reports
   // whether the mirror changed since the last call, via the `dirty` flag
   // onTick sets.
-  step(_dt: number): boolean {
+  step(): boolean {
     const changed = this.dirty;
     this.dirty = false;
     return changed;
@@ -184,21 +179,22 @@ export class TauriSimBridge implements SimBridge {
         const id = TOOL_TO_ID[cmd.tool];
         // Optimistic return: `send()` must answer synchronously (SimBridge's
         // interface contract), but the real result comes back from the sim
-        // thread over IPC. Forward it once it lands, correlated to this exact
-        // call by promise identity ("keyed by stroke" in practice, since each
-        // call already carries its own strokeId).
+        // thread over IPC. `result.strokeId` is the Rust-stamped id (see
+        // `commands.rs`'s `apply_tool` command) — forwarded as-is rather than
+        // re-reading `cmd.strokeId` from this closure, so there is exactly
+        // one source of truth for which send a result belongs to.
         void this.plugin.applyTool(id, cmd.x, cmd.y, cmd.strokeId, STRATUM_TO_ID[cmd.stratum]).then((result) => {
-          this.handler?.({ type: 'CommandResult', success: result.success, message: result.message ?? undefined });
+          this.handler?.({ type: 'CommandResult', success: result.success, message: result.message ?? undefined, strokeId: result.strokeId });
         });
-        return { success: true };
+        return { success: true, message: null, strokeId: cmd.strokeId };
       }
       case 'SetSpeed':
         void this.plugin.setSpeed(cmd.multiplier);
-        return { success: true };
+        return { success: true, message: null, strokeId: 0 };
       case 'SetPolicies':
         this.state.policies = cmd.policies;
         void this.plugin.setPolicies(cmd.policies);
-        return { success: true };
+        return { success: true, message: null, strokeId: 0 };
     }
   }
 
@@ -251,9 +247,6 @@ export class TauriSimBridge implements SimBridge {
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  // Returns null until Option B (Rust building_metadata() export) is implemented.
-  getMetadata() { return null; }
-
   private async startPlugin(state: GameState): Promise<void> {
     await this.plugin.start(state.width, state.height, state.seed, (event) =>
       this.onTick(event),
@@ -271,7 +264,7 @@ export class TauriSimBridge implements SimBridge {
   private async seedEngine(state: GameState): Promise<void> {
     const terrain = new Uint8Array(state.tiles.length);
     for (let i = 0; i < terrain.length; i++) {
-      terrain[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
+      terrain[i] = state.tiles[i].terrain === Terrain.Water ? Terrain.Water : Terrain.Land;
     }
     await this.plugin.setNaturalTerrain(terrain);
     await this.plugin.setPolicies(state.policies);
@@ -293,26 +286,45 @@ export class TauriSimBridge implements SimBridge {
     s.utilities.water         = event.water;
     s.utilities.powerProduced = event.powerProduced;
     s.utilities.waterProduced = event.waterProduced;
-    // Derived consumed = produced - balance
-    s.utilities.powerUsed = event.powerProduced - event.power;
-    s.utilities.waterUsed = event.waterProduced - event.water;
+    // `power_used`/`water_used` now ride the wire directly — no longer
+    // re-derived here by subtraction (`produced - balance`).
+    s.utilities.powerUsed = event.powerUsed;
+    s.utilities.waterUsed = event.waterUsed;
     s.utilities.powerComponents = event.powerComponents;
     s.utilities.waterComponents = event.waterComponents;
     // `#229` — Rust-computed, replaces the old client-side reconstruction;
     // this bridge never had one (no `recordDailyBudget` call existed here).
     s.budgetHistory = event.budgetHistory;
 
-    // Demand
+    // Budget — the wire mirror carries `WireBudgetStats` verbatim, so
+    // `event.budget` (already that exact shape — see `TickEvent`) is adopted
+    // wholesale rather than copied field-by-field into a hand-nested
+    // breakdown. Grouped display maps (`powerByType`/`civicByType`/
+    // `zonesByType`) are derived from these flat fields at display time —
+    // see `budgetModal.ts`'s `deriveBudgetBreakdown`. Previously never
+    // populated on this transport at all (the desktop budget modal/advisor
+    // showed zeros).
+    s.budget = event.budget;
+
+    // Demand — headline percentages plus the full per-class derivation
+    // (`#200`'s wire-adoption follow-up; replaces the TS `demand.ts` shadow).
     s.demand.residential = event.demandResidential;
     s.demand.commercial  = event.demandCommercial;
     s.demand.industrial  = event.demandIndustrial;
+    s.demand.breakdown = event.demandBreakdown;
+    s.labour = event.labour;
+    s.abandonedCount = event.abandonedCount;
+    s.avgHappiness   = event.avgHappiness;
 
-    // Aggregate wilderness — the per-category breakdown still stays zeroed
-    // on desktop; TickEvent doesn't carry it (matching the loadState()
-    // limitation above). Per-tile wilderness is decoded below with the rest
-    // of the tile buffer.
+    // Wilderness — score, trend, AND the per-category breakdown (previously
+    // stayed zeroed on desktop forever; TickEvent didn't carry it). Per-tile
+    // wilderness is decoded below with the rest of the tile buffer.
     s.wilderness.score = event.wildernessScore;
     s.wilderness.trend = event.wildernessTrend;
+    s.wilderness.breakdown = event.wildernessBreakdown;
+    // A tick's stats confirm the lighting policy as applied — see
+    // `GameState.appliedLighting` and the matching line in `WasmSimBridge`.
+    s.appliedLighting = s.policies.lighting;
 
     // Undo/redo availability — emit HistoryChanged on transitions only.
     if (event.canUndo !== this.canUndoFlag || event.canRedo !== this.canRedoFlag) {
@@ -329,7 +341,7 @@ export class TauriSimBridge implements SimBridge {
     if (s.tiles.length !== n) {
       s.width  = event.width;
       s.height = event.height;
-      s.tiles = Array.from({ length: n }, () => makeBlankTile());
+      s.tiles = Array.from({ length: n }, () => createBlankTile());
     }
 
     // Tile strata, status, happiness, elevation, buildingId and wilderness —
@@ -340,53 +352,13 @@ export class TauriSimBridge implements SimBridge {
 
     // Buildings — rebuild the display mirror from the wire list, mirroring
     // `applyTileBuffer` in `wasmSimBridge.ts`. Tile coverage came from the
-    // wire buffer above; `event.buildings` only resolves each `building_id`
-    // to its template kind (status gating, the HUD inspector's name).
-    // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
-    // until a pump, tower, or pipe exists, buildings don't require water.
-    let hasWaterSystem = event.buildings.some((b) => {
-      const kind = tileKindFromU8(b.kind);
-      return kind === TileKind.WaterPump || kind === TileKind.WaterTower;
-    });
-    for (let i = 0; i < n && !hasWaterSystem; i++) {
-      if (hasOccupant(s.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
-    }
-    const seatsUsedByBuildingId = new Map(event.educationSeatsUsed.map((e) => [e.buildingId, e.used]));
-    s.buildings = event.buildings.map((b) => {
-      const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
-      // Derive status from the tile flags the status byte already set —
-      // same derivation as the WASM path, for the same reason.
-      const originTile = s.tiles[b.originY * s.width + b.originX];
-      const template = getBuildingTemplate(kind as string);
-      const bstate = createBuildingState();
-      const needsPower = template ? template.requiresPower !== false : false;
-      const needsWater =
-        hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
-      // A pump only produces when its footprint touches water terrain (#200)
-      // — distinct from needsWater above, which gates a *consumer* on
-      // network coverage; a pump doesn't consume water.
-      const needsSource = kind === TileKind.WaterPump;
-      const origin = { x: b.originX, y: b.originY };
-      if (needsPower && !originTile?.powered) {
-        bstate.status = BuildingStatus.InactiveNoPower;
-      } else if (needsSource && template && !footprintTouchesWater(s, origin, template.footprint)) {
-        bstate.status = BuildingStatus.InactiveNoSource;
-      } else if (needsWater && !originTile?.watered) {
-        bstate.status = BuildingStatus.InactiveNoWater;
-      }
-      // `#228` — seats consumed, from the wire; only schools currently have
-      // an entry (Rust's `ServiceKind` has no other service ported yet).
-      const used = template?.service ? seatsUsedByBuildingId.get(b.id) : undefined;
-      if (template?.service && used !== undefined) {
-        bstate.serviceLoad.slotsUsed[template.service.id] = used;
-      }
-      return {
-        id: b.id,
-        templateId: kind as string,
-        origin,
-        state: bstate
-      };
-    });
+    // wire buffer above; `event.buildings` resolves each `building_id` to
+    // its template kind (the HUD inspector's name) and, via `status`
+    // (`#200`'s wire-adoption follow-up), its real runtime status — no
+    // client-side power/water-flag reconstruction needed. Shared with
+    // `wasmSimBridge.ts` via `buildBuildingMirror` so the two bridges can't
+    // independently drift on unrecognised-byte handling.
+    s.buildings = buildBuildingMirror(event.buildings, event.educationSeatsUsed);
 
     // `#228` — Rust-computed, replaces the old client-side recompute.
     s.education = event.education;
@@ -416,20 +388,4 @@ export class TauriSimBridge implements SimBridge {
       },
     });
   }
-}
-
-/** A bare land tile, for growing the mirror array when dimensions change — immediately overwritten by the decode loop. */
-function makeBlankTile(): Tile {
-  return {
-    elevation: 0,
-    happiness: 1,
-    powered: false,
-    watered: false,
-    services: createTileServiceState(),
-    terrain: Terrain.Land,
-    underground: 0,
-    surface: 0,
-    overhead: 0,
-    density: ZoneDensity.Low
-  };
 }

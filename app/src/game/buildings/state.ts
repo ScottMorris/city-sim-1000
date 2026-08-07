@@ -1,3 +1,8 @@
+// state.ts — runtime building mirror: status/service-load, wire-populated per building instance.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { createEmptyServiceLoad, ServiceLoad } from '../services';
 
 export enum BuildingStatus {
@@ -5,16 +10,12 @@ export enum BuildingStatus {
   InactiveNoPower = 'inactive_no_power',
   InactiveNoWater = 'inactive_no_water',
   /** A water source (pump) whose footprint doesn't touch water terrain (#200). */
-  InactiveNoSource = 'inactive_no_source',
-  InactiveDamaged = 'inactive_damaged'
+  InactiveNoSource = 'inactive_no_source'
 }
 
 export interface BuildingState {
   status: BuildingStatus;
-  health: number; // 0-100, v1 stub
   serviceLoad: ServiceLoad;
-  troubleTicks: number;
-  abandoned: boolean;
 }
 
 export interface BuildingInstance {
@@ -27,9 +28,6 @@ export interface BuildingInstance {
 export function createBuildingState(): BuildingState {
   return {
     status: BuildingStatus.Active,
-    health: 100,
-    serviceLoad: createEmptyServiceLoad(),
-    troubleTicks: 0,
-    abandoned: false
+    serviceLoad: createEmptyServiceLoad()
   };
 }

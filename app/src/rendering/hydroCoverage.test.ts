@@ -24,7 +24,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Texture } from 'pixi.js';
 import { createInitialState, getTile, setTile, TileKind, type GameState } from '../game/gameState';
-import { Occupant, hasOccupant, setTileOccupant } from '../game/protocol/occupants';
+import { Occupant, Terrain, hasOccupant, setTileOccupant } from '../game/protocol/occupants';
 import { resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
 import { CARRIAGEWAY_CLASSES, isSquareCrossing } from './tileAtlas';
 import type { TileTextures, RoadVariant, CarriagewayClass, HydroVariant } from './tileAtlas';
@@ -85,7 +85,7 @@ const full = (prefix: string) =>
  *  test fixture. */
 function makeTextures(): TileTextures {
   return {
-    tiles: { [TileKind.Land]: tex('land') },
+    terrain: { [Terrain.Land]: tex('land') },
     road: full('road'),
     rail: full('rail'),
     railCrossing: { ns: tex('rail-road-xing-ns'), ew: tex('rail-road-xing-ew') },

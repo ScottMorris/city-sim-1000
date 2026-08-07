@@ -128,19 +128,21 @@ With those defaults the exception list is calculable. Enumerating every pair fro
 - Zone + Structure — conflict; a park placed on a zone replaces it.
 - Structure + Structure — conflict; footprint placement already refuses overlap.
 
-**Overhead** — PowerLine, Trees → 1 pair, conflicting by default, **0 exceptions**.
+**Overhead** — PowerLine, Trees → 1 pair.
+
+- PowerLine + Trees — **coexist.** Canopy grown through a live line; utilities trim trees away from lines in the real world, but the model doesn't referee that, so the pair stands. *Exception.*
 
 **Underground** — Pipe, Subway, Fibre → 3 pairs, all coexisting by default, **0 exceptions**.
 
-**Total: 19 pairs, exactly one exception — road + rail.** Derivation carries the entire table and the exception list is one line long.
+**Total: 19 same-stratum pairs, two same-stratum exceptions — road + rail, and powerline + trees.** Derivation carries the entire table and the same-stratum exception list is two lines long. `COMPAT_EXCEPTIONS` (`crates/city-sim-core/src/occupants.rs`) carries a third, cross-stratum entry this count doesn't reach: `Structure` + `PowerLine` conflicts despite the cross-stratum coexist-by-default rule above, because a building already refuses a tile carrying a live line and vice versa — a school or plant with a wire strung through it is not a tile the model admits.
 
 ### Trees belong overhead, and this is why
 
 Trees were originally sketched as a surface occupant that "yields to everything". Putting them **overhead** instead is strictly better and costs nothing:
 
-- The exception count is unchanged — still one.
+- The move itself adds no exception — `Trees + PowerLine`'s later coexistence carve-out is a separate, independent decision (see below), not a consequence of putting trees overhead.
 - `Trees + Road` becomes a *cross-stratum* pair, so it coexists by default. **Street trees come out free**, with no rule written for them.
-- `Trees + PowerLine` becomes a *same-stratum* pair, so it conflicts by default — physically correct, and again no rule.
+- `Trees + PowerLine` becomes a *same-stratum* pair, so it conflicts by default — and is then named the overhead stratum's one exception: canopy coexists with a live line rather than either being refused.
 - A bare forest is simply terrain `Land` with `overhead: {Trees}`. Nothing special-cased.
 
 It also settles open question 2 below: overhead gets a second occupant, so it is a real stratum rather than a boolean wearing a costume.
@@ -280,7 +282,7 @@ Strangler, not big bang. Feature work continued throughout, on both sides of the
 8. Delete the shim fields from `Tile` and let `tsc --noEmit` prove every consumer had actually converted.
 9. This doc.
 
-`kind` narrows to what `legacyKind`/`legacyFlags` in `protocol/legacyProjection.ts` still need it for: importing old `.citysim` saves, and exporting the current strata back into the byte-exact-forever legacy format the frozen importer expects. Nothing else reads it — there is no field left to read.
+`kind` narrowed further still, from step 9 onward: `protocol/legacyProjection.ts`'s `legacyKind`/`legacyFlags` — a TS port of the same precedence ladder, kept alive purely as a *display* need for the renderer, the minimap, and `mcpBridge.ts` — was itself deleted once those three surfaces converted to reading occupant bits natively (`rendering/tileRenderUtils.ts`'s `dominantColour`/`baseGroundTexture`, `ui/minimap.ts`'s `minimapBaseColour`). No `kind`-shaped precedence exists in TS at all any more. The only place the ladder still lives is Rust's `tile_from_v4` (`city_sim_core::migrate`), decoding an old `.citysim` JSON save's flattened `kind`+flags spelling into strata on import — the one direction that format is still read.
 
 Two originally-anticipated bugs came bundled with the TS-side conversion, both fixed as part of the rendering-layer phase: an undeveloped zoned lot crossed by a power line drew a debug "P" glyph instead of the wire (the renderer bailed out of compositing an overlay before a base sprite existed), and a power pole rendered straight through an already-built house instead of severing at the tile edge.
 
@@ -293,5 +295,5 @@ The same re-read cut the other way once, and it is worth recording honestly. `to
 All three raised in the first revision are now resolved. Kept with their answers, because the reasoning is the useful part.
 
 1. ~~**Do occupants need per-tile state?**~~ **Resolved:** no. Flow is derived rather than authored, so it lives in per-network arrays beside the grid and occupants stay bare tags. See *Not yet designed: flow*.
-2. ~~**Is `overhead` real, or is it just hydro?**~~ **Resolved: real.** Tree canopy is the second occupant, and putting it overhead rather than on the surface gives street trees for free while making trees-versus-conductors conflict by default. Both fall out of the stratum defaults with no rule written.
-3. ~~**How many same-stratum exceptions are there really?**~~ **Resolved: exactly one** — road + rail, out of 19 pairs — provided the default is set per stratum rather than globally. See *Compatibility is mostly derivable*.
+2. ~~**Is `overhead` real, or is it just hydro?**~~ **Resolved: real.** Tree canopy is the second occupant, and putting it overhead rather than on the surface gives street trees for free while making trees-versus-conductors conflict by default — with that default then named the stratum's one exception (canopy officially coexists with a live line). Both fall out of the stratum defaults with no rule written.
+3. ~~**How many same-stratum exceptions are there really?**~~ **Resolved: two** — road + rail, and powerline + trees — out of 19 pairs — provided the default is set per stratum rather than globally. See *Compatibility is mostly derivable*.

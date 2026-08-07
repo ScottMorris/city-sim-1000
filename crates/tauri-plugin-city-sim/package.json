@@ -15,7 +15,9 @@
     "default": "./dist-js/index.js"
   },
   "scripts": {
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "postinstall": "rollup -c",
+    "test": "bun test"
   },
   "files": [
     "dist-js",

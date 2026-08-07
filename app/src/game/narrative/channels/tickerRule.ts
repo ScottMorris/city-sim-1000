@@ -1,9 +1,13 @@
+// tickerRule.ts — scores and picks the news-ticker items for one month-end tick.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import type { NarrativeInput, TickerItem } from '../types';
+import { ABANDONMENT_WAVE_THRESHOLD, RUNWAY_WARN_THRESHOLD_MONTHS } from '../thresholds';
 
 const MAX_ITEMS = 3;
 const POWER_ALERT_THRESHOLD = 0;
-const RUNWAY_WARN_THRESHOLD = 3;
-const ABANDONMENT_WAVE_THRESHOLD = 5;
 
 type ScoredItem = { score: number; item: TickerItem };
 
@@ -23,7 +27,7 @@ export function generateTickerItems(input: NarrativeInput): TickerItem[] {
     });
   }
 
-  if (snapshot.economy.runwayMonths <= RUNWAY_WARN_THRESHOLD) {
+  if (snapshot.economy.runwayMonths <= RUNWAY_WARN_THRESHOLD_MONTHS) {
     candidates.push({
       score: 80,
       item: {

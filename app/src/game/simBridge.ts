@@ -10,24 +10,18 @@
 import type { GameState } from './gameState';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import type { BuildingTemplate } from './buildings/templates';
 import type { LegacyEngineImport } from '../workers/wasmSim.worker';
 
 export type { LegacyEngineImport };
 
 export type { SimCommand, CommandResult, FromSim };
 
-// BuildingTemplate re-exported so callers of getMetadata() don't need a
-// separate import from buildings/templates.
-export type { BuildingTemplate };
-
 export interface SimBridge {
   /**
    * Flush pending engine updates into the display mirror. Engines drive
    * their own clocks (the WASM worker via a 20 Hz interval that keeps
    * running in hidden tabs; the Tauri plugin via its native thread), so
-   * this is a render-loop hook, not a simulation tick — `dt` is unused by
-   * current bridges and kept for interface stability.
+   * this is a render-loop hook, not a simulation tick.
    *
    * Returns true if the display mirror (`getState()`'s object) was actually
    * mutated since the last call to `step` — either during this call, or
@@ -36,7 +30,7 @@ export interface SimBridge {
    * `false` return means literally nothing happened, only that it's safe to
    * skip a redraw that only depends on the mirror's contents.
    */
-  step(dt: number): boolean;
+  step(): boolean;
 
   /**
    * Submit a player command. Returns optimistically — the CommandResult
@@ -73,7 +67,7 @@ export interface SimBridge {
 
   /**
    * One-time import of a legacy JSON save (pre-CSAV) into exact engine
-   * state — see `buildLegacyEngineImport` in `persistence.ts`.
+   * state — see `transcodeLegacySave` in `persistence.ts`.
    */
   importLegacy(imp: LegacyEngineImport): Promise<void>;
 
@@ -112,14 +106,6 @@ export interface SimBridge {
    */
   canUndo(): boolean;
   canRedo(): boolean;
-
-  /**
-   * Return all building templates known to this bridge, or null if the bridge
-   * has not yet exported metadata. WASM and Tauri bridges return null until
-   * Option B (Rust metadata export) is implemented; UI callers fall back to
-   * the TS `templates.ts` table.
-   */
-  getMetadata(): BuildingTemplate[] | null;
 
   /**
    * Tear down the bridge (terminate Worker, release SharedArrayBuffer, etc.).

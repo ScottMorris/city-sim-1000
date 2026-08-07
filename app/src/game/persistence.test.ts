@@ -1,311 +1,294 @@
-// persistence.test.ts — save/load: serialize/deserialize round trips and legacy back-fill.
+// persistence.test.ts — legacy JSON save transcode into the frozen v4 wire buffer.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { serialize, deserialize, copyState } from './persistence';
-import {
-  TileKind,
-  createDefaultSettings,
-  createInitialState
-} from './gameState';
-import { DEFAULT_BYLAWS } from './bylaws';
+import { transcodeLegacySave } from './persistence';
+import { TileKind } from './gameState';
 import { SeededRng } from './rng';
-import { DEFAULT_SERVICE_DEFINITIONS } from './services';
-import { createEmptyEducationStats } from './education';
 import { createDefaultBudgetPolicy } from './protocol/commands';
+import { LEGACY_FLAGS, legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 
-// Serialize a fresh state, strip or mutate fields the way an old save would
-// lack them, and hand the result to deserialize. Working on the parsed object
-// keeps each test focused on the single field it degrades.
-function degrade(mutate: (parsed: any) => void, seed = 42) {
-  const parsed = JSON.parse(serialize(createInitialState(8, 8, seed)));
-  mutate(parsed);
-  return deserialize(JSON.stringify(parsed));
+const WIDTH = 8;
+const HEIGHT = 8;
+const N = WIDTH * HEIGHT;
+
+/** A raw legacy JSON save payload — the shape `transcodeLegacySave` reads directly, no back-fill. */
+function rawSave(overrides: Record<string, unknown> = {}) {
+  const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+  return {
+    width: WIDTH,
+    height: HEIGHT,
+    seed: 42,
+    tiles,
+    money: 100000,
+    day: 1,
+    tick: 0,
+    population: 12,
+    jobs: 4,
+    ...overrides
+  };
 }
 
-describe('serialize/deserialize round-trip', () => {
-  it('copyState reproduces a fresh state exactly', () => {
-    const state = createInitialState(8, 8, 42);
-    expect(copyState(state)).toEqual(state);
-  });
+function transcode(overrides: Record<string, unknown> = {}) {
+  return transcodeLegacySave(JSON.stringify(rawSave(overrides)));
+}
 
-  it('deserialize is idempotent', () => {
-    const once = copyState(createInitialState(8, 8, 42));
-    expect(copyState(once)).toEqual(once);
-  });
-});
+const o = legacyTileBufferOffsets(N);
 
-describe('settings back-fill', () => {
-  it('applies full defaults when settings are absent', () => {
-    const state = degrade((parsed) => {
-      delete parsed.settings;
+describe('client passthrough', () => {
+  it('passes settings through untouched — ensureSettingsShape/applyClientState do the back-fill', () => {
+    const result = transcode({ settings: { narrative: { tickerEnabled: false } } });
+    expect(result.client).toEqual({
+      settings: { narrative: { tickerEnabled: false } }
     });
-    expect(state.settings).toEqual(createDefaultSettings());
   });
 
-  it('back-fills a missing settings section without touching the others', () => {
-    const state = degrade((parsed) => {
-      delete parsed.settings.narrative;
-      parsed.settings.audio.radioVolume = 0.25;
-    });
-    expect(state.settings.narrative).toEqual(createDefaultSettings().narrative);
-    expect(state.settings.audio.radioVolume).toBe(0.25);
+  it('carries absent settings through as undefined', () => {
+    const raw = rawSave();
+    delete (raw as any).settings;
+    const result = transcodeLegacySave(JSON.stringify(raw));
+    expect(result.client.settings).toBeUndefined();
   });
 
-  it('merges defaults into a partially-populated section', () => {
-    const state = degrade((parsed) => {
-      parsed.settings.input = { panSpeed: 'fast' };
-    });
-    expect(state.settings.input.panSpeed).toBe('fast');
-    // Fields the old save never had arrive with their defaults.
-    const defaults = createDefaultSettings().input;
-    expect(state.settings.input.zoomSensitivity).toBe(defaults.zoomSensitivity);
-    expect(state.settings.input.ctrlScrollsToPan).toBe(defaults.ctrlScrollsToPan);
-  });
-
-  it('back-fills each nested section independently', () => {
-    const state = degrade((parsed) => {
-      parsed.settings = {
-        minimap: { open: false },
-        accessibility: { reducedMotion: true },
-        audio: {},
-        hotkeys: {},
-        cosmetics: {},
-        narrative: { enabled: false }
-      };
-    });
-    const defaults = createDefaultSettings();
-    expect(state.settings.minimap.open).toBe(false);
-    expect(state.settings.minimap.size).toBe(defaults.minimap.size);
-    expect(state.settings.accessibility.reducedMotion).toBe(true);
-    expect(state.settings.accessibility.highContrastOverlays).toBe(
-      defaults.accessibility.highContrastOverlays
-    );
-    expect(state.settings.audio).toEqual(defaults.audio);
-    expect(state.settings.hotkeys).toEqual(defaults.hotkeys);
-    expect(state.settings.narrative.enabled).toBe(false);
-    expect(state.settings.narrative.tickerEnabled).toBe(defaults.narrative.tickerEnabled);
-    expect(state.settings.pendingPenaltyEnabled).toBe(defaults.pendingPenaltyEnabled);
-  });
-
-  it('defaults ui.mode to auto on a save that predates the setting', () => {
-    const state = degrade((parsed) => {
-      delete parsed.settings.ui;
-    });
-    expect(state.settings.ui).toEqual(createDefaultSettings().ui);
-  });
-
-  it('preserves an explicit ui.mode choice', () => {
-    const state = degrade((parsed) => {
-      parsed.settings.ui = { mode: 'mobile' };
-    });
-    expect(state.settings.ui.mode).toBe('mobile');
+  it('no longer carries a bylaws field — the lighting bylaw is folded into policies instead', () => {
+    const result = transcode({ bylaws: { lighting: 'carbonArc' } });
+    expect(result.client).not.toHaveProperty('bylaws');
   });
 });
 
-describe('seed and RNG back-fill', () => {
-  it('assigns seed 0 to saves that predate seeding', () => {
-    const state = degrade((parsed) => {
-      delete parsed.seed;
-      delete parsed.rngState;
-    });
-    expect(state.seed).toBe(0);
-    expect(state.rngState).toEqual(new SeededRng(0).toJSON());
+describe('seed and RNG', () => {
+  it('assigns seed 0 and a fresh rngState when both are absent', () => {
+    const raw = rawSave();
+    delete (raw as any).seed;
+    const result = transcodeLegacySave(JSON.stringify(raw));
+    expect(result.engine.seed).toBe(0);
+    expect(result.engine.rngState).toEqual(new SeededRng(0).toJSON());
   });
 
-  it('re-derives an invalid rngState from the seed', () => {
-    const state = degrade((parsed) => {
-      parsed.rngState = [1, 2];
-    });
-    expect(state.rngState).toEqual(new SeededRng(state.seed).toJSON());
+  it('re-derives rngState from the seed when the saved array is malformed', () => {
+    const result = transcode({ seed: 9, rngState: [1, 2] });
+    expect(result.engine.rngState).toEqual(new SeededRng(9).toJSON());
   });
 
-  it('preserves a valid rngState untouched', () => {
-    const original = createInitialState(8, 8, 42);
-    const state = deserialize(serialize(original));
-    expect(state.rngState).toEqual(original.rngState);
+  it('preserves a valid 4-word rngState untouched', () => {
+    const rngState = new SeededRng(9).toJSON();
+    const result = transcode({ seed: 9, rngState });
+    expect(result.engine.rngState).toEqual(rngState);
   });
 });
 
-describe('utilities back-fill', () => {
-  it('builds utilities from legacy top-level power/water fields', () => {
-    const state = degrade((parsed) => {
-      delete parsed.utilities;
-      parsed.power = 5;
-      parsed.water = 3;
-    });
-    expect(state.utilities).toEqual({
-      power: 5,
-      water: 3,
-      powerProduced: 0,
-      powerUsed: 0,
-      waterProduced: 0,
-      waterUsed: 0,
-      powerComponents: [],
-      waterComponents: []
-    });
+describe('scalars', () => {
+  it('floors day/population/jobs and passes tick/money/width/height through', () => {
+    const result = transcode({ money: 555, day: 3.7, tick: 40, population: 12.9, jobs: 4.2 });
+    expect(result.engine.money).toBe(555);
+    expect(result.engine.day).toBe(3);
+    expect(result.engine.tick).toBe(40);
+    expect(result.engine.population).toBe(12);
+    expect(result.engine.jobs).toBe(4);
+    expect(result.engine.width).toBe(WIDTH);
+    expect(result.engine.height).toBe(HEIGHT);
   });
 
-  it('back-fills produced/used on a partial utilities object', () => {
-    const state = degrade((parsed) => {
-      parsed.utilities = { power: 2, water: 1 };
-    });
-    expect(state.utilities.powerProduced).toBe(0);
-    expect(state.utilities.waterUsed).toBe(0);
-    expect(state.utilities.power).toBe(2);
-    expect(state.utilities.powerComponents).toEqual([]);
-    expect(state.utilities.waterComponents).toEqual([]);
+  it('defaults day/tick/population/jobs to 0 when absent', () => {
+    const raw = rawSave();
+    delete (raw as any).day;
+    delete (raw as any).tick;
+    delete (raw as any).population;
+    delete (raw as any).jobs;
+    const result = transcodeLegacySave(JSON.stringify(raw));
+    expect(result.engine.day).toBe(0);
+    expect(result.engine.tick).toBe(0);
+    expect(result.engine.population).toBe(0);
+    expect(result.engine.jobs).toBe(0);
   });
 });
 
-describe('scalar and structural back-fill', () => {
-  it('defaults tick and tileRevision to 0', () => {
-    const state = degrade((parsed) => {
-      delete parsed.tick;
-      delete parsed.tileRevision;
-    });
-    expect(state.tick).toBe(0);
-    expect(state.tileRevision).toBe(0);
-  });
-
-  it('creates a default budget when absent', () => {
-    const state = degrade((parsed) => {
-      delete parsed.budget;
-    });
-    expect(state.budget.net).toBe(0);
-    expect(state.budget.breakdown.revenue).toEqual({
-      base: 0,
-      residents: 0,
-      commercial: 0,
-      industrial: 0
-    });
-    expect(state.budget.breakdown.details.transport.rail).toBe(0);
-  });
-
-  it('migrates the legacy revenue.population field to residents', () => {
-    const state = degrade((parsed) => {
-      parsed.budget.breakdown.revenue = { base: 10, population: 7 };
-    });
-    expect(state.budget.breakdown.revenue.residents).toBe(7);
-    expect(state.budget.breakdown.revenue.base).toBe(10);
-  });
-
-  it('back-fills the *ByType breakdown maps', () => {
-    const state = degrade((parsed) => {
-      parsed.budget.breakdown.details.buildings = { power: 1, civic: 2, zones: 3 };
-    });
-    expect(state.budget.breakdown.details.buildings.powerByType).toEqual({});
-    expect(state.budget.breakdown.details.buildings.civicByType).toEqual({});
-    expect(state.budget.breakdown.details.buildings.zonesByType).toEqual({});
-    expect(state.budget.breakdown.details.buildings.zones).toBe(3);
-  });
-
-  it('defaults budgetHistory, education, and bylaws', () => {
-    const state = degrade((parsed) => {
-      delete parsed.budgetHistory;
-      delete parsed.education;
-      delete parsed.bylaws;
-    });
-    expect(state.budgetHistory).toEqual([]);
-    expect(state.education).toEqual(createEmptyEducationStats());
-    expect(state.bylaws).toEqual(DEFAULT_BYLAWS);
-  });
-
-  it('reads a legacy {daily, lastRecordedDay}-shaped budgetHistory as its bare daily array', () => {
-    const state = degrade((parsed) => {
-      parsed.budgetHistory = { daily: [{ day: 3, revenue: 10, expenses: 5, net: 5 }], lastRecordedDay: 3 };
-    });
-    expect(state.budgetHistory).toEqual([{ day: 3, revenue: 10, expenses: 5, net: 5 }]);
-  });
-
-  it('back-fills a missing bylaws section without clobbering the rest', () => {
-    const state = degrade((parsed) => {
-      delete parsed.bylaws.lighting;
-    });
-    expect(state.bylaws.lighting).toEqual(DEFAULT_BYLAWS.lighting);
-  });
-
-  it('back-fills missing service definitions individually', () => {
-    const firstId = Object.keys(
-      DEFAULT_SERVICE_DEFINITIONS
-    )[0] as keyof typeof DEFAULT_SERVICE_DEFINITIONS;
-    const state = degrade((parsed) => {
-      delete parsed.services.definitions[firstId];
-    });
-    expect(state.services.definitions[firstId]).toEqual(DEFAULT_SERVICE_DEFINITIONS[firstId]);
-  });
-});
-
-describe('policy back-fill', () => {
-  it('back-fills the neutral policy on old saves', () => {
-    const state = degrade((parsed) => {
-      delete parsed.policies;
-    });
-    expect(state.policies.budget).toEqual(createDefaultBudgetPolicy());
+describe('policy fold and clamp', () => {
+  it('back-fills the neutral policy when absent', () => {
+    const result = transcode();
+    expect(result.policies.budget).toEqual(createDefaultBudgetPolicy());
+    expect(result.engine.policies).toEqual(result.policies);
   });
 
   it('folds legacy flat budgetPolicy/wildernessPolicy keys into policies', () => {
-    const state = degrade((parsed) => {
-      delete parsed.policies;
-      parsed.budgetPolicy = { ...createDefaultBudgetPolicy(), taxResidential: 14 };
-      parsed.wildernessPolicy = { natureReserve: true, greenIndustry: false };
+    const result = transcode({
+      budgetPolicy: { ...createDefaultBudgetPolicy(), taxResidential: 14 },
+      wildernessPolicy: { natureReserve: true, greenIndustry: false }
     });
-    expect(state.policies.budget.taxResidential).toBe(14);
-    expect(state.policies.wilderness.natureReserve).toBe(true);
+    expect(result.policies.budget.taxResidential).toBe(14);
+    expect(result.policies.wilderness.natureReserve).toBe(true);
   });
 
   it('clamps out-of-range policy values on load', () => {
-    const state = degrade((parsed) => {
-      parsed.policies.budget = { ...parsed.policies.budget, taxResidential: 99, fundPower: 900 };
+    const result = transcode({
+      policies: { budget: { ...createDefaultBudgetPolicy(), taxResidential: 99, fundPower: 900 }, wilderness: {} }
     });
-    expect(state.policies.budget.taxResidential).toBe(20);
-    expect(state.policies.budget.fundPower).toBe(100);
+    expect(result.policies.budget.taxResidential).toBe(20);
+    expect(result.policies.budget.fundPower).toBe(100);
+  });
+
+  it('back-fills the neutral lighting policy when absent', () => {
+    const result = transcode();
+    expect(result.policies.lighting).toBe('mixed');
+    expect(result.engine.policies.lighting).toBe('mixed');
+  });
+
+  it('folds a legacy bylaws.lighting field into policies.lighting', () => {
+    const result = transcode({ bylaws: { lighting: 'carbonArc' } });
+    expect(result.policies.lighting).toBe('carbonArc');
+    expect(result.engine.policies.lighting).toBe('carbonArc');
+  });
+
+  it('ignores an illegal legacy bylaws.lighting value and falls back to neutral', () => {
+    const result = transcode({ bylaws: { lighting: 'neon' } });
+    expect(result.policies.lighting).toBe('mixed');
+  });
+
+  it('prefers a legacy policies.lighting field over bylaws.lighting when both are present', () => {
+    const result = transcode({
+      policies: { lighting: 'efficient' },
+      bylaws: { lighting: 'carbonArc' }
+    });
+    expect(result.policies.lighting).toBe('efficient');
+  });
+
+  it('back-fills the default-on penalty toggle when absent', () => {
+    const result = transcode();
+    expect(result.policies.pendingPenaltyEnabled).toBe(true);
+    expect(result.engine.policies.pendingPenaltyEnabled).toBe(true);
+  });
+
+  it('folds a legacy settings.pendingPenaltyEnabled field into policies.pendingPenaltyEnabled', () => {
+    const result = transcode({ settings: { pendingPenaltyEnabled: false } });
+    expect(result.policies.pendingPenaltyEnabled).toBe(false);
+    expect(result.engine.policies.pendingPenaltyEnabled).toBe(false);
+  });
+
+  it('prefers a legacy policies.pendingPenaltyEnabled field over settings.pendingPenaltyEnabled when both are present', () => {
+    const result = transcode({
+      policies: { pendingPenaltyEnabled: false },
+      settings: { pendingPenaltyEnabled: true }
+    });
+    expect(result.policies.pendingPenaltyEnabled).toBe(false);
   });
 });
 
-describe('tile back-fill', () => {
-  it('defaults powered/watered/services on old tiles', () => {
-    const state = degrade((parsed) => {
-      delete parsed.tiles[0].powered;
-      delete parsed.tiles[0].watered;
-      delete parsed.tiles[0].services;
-    });
-    expect(state.tiles[0].powered).toBe(false);
-    expect(state.tiles[0].watered).toBe(false);
-    expect(state.tiles[0].services).toBeDefined();
+describe('tile flags byte', () => {
+  it('packs powered/watered/abandoned/underlay/overlay bits verbatim, with no normalisation', () => {
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[0] = {
+      kind: TileKind.Land,
+      powered: true,
+      watered: true,
+      abandoned: true,
+      roadUnderlay: true,
+      railUnderlay: true,
+      powerOverlay: true
+    } as any;
+    const result = transcode({ tiles });
+    expect(result.engine.tiles[o.flags + 0]).toBe(
+      LEGACY_FLAGS.POWERED |
+        LEGACY_FLAGS.WATERED |
+        LEGACY_FLAGS.ABANDONED |
+        LEGACY_FLAGS.ROAD_UNDERLAY |
+        LEGACY_FLAGS.RAIL_UNDERLAY |
+        LEGACY_FLAGS.POWER_OVERLAY
+    );
+  });
+
+  it('defaults every flag bit to 0 on a tile with no flag fields at all', () => {
+    const result = transcode();
+    expect(result.engine.tiles[o.flags + 0]).toBe(0);
+  });
+
+  it('an unrecognised kind string encodes as Land (0), matching the old fall-through', () => {
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[0] = { kind: 'not_a_real_kind' } as any;
+    const result = transcode({ tiles });
+    expect(result.engine.tiles[o.kind + 0]).toBe(0);
   });
 });
 
-describe('building back-fill and legacy civic migration', () => {
-  it('repairs missing building state fields', () => {
-    const state = degrade((parsed) => {
-      parsed.tiles[0].kind = TileKind.Park;
-      parsed.tiles[0].buildingId = 1;
-      parsed.buildings = [
-        { id: 1, templateId: 'park', origin: { x: 0, y: 0 }, state: { status: undefined } }
-      ];
-    });
-    const building = state.buildings[0];
-    expect(building.state.health).toBe(100);
-    expect(building.state.status).toBeDefined();
-    expect(building.state.serviceLoad).toBeDefined();
+describe('civic back-fill: minted building ids', () => {
+  it('mints an id for a pump/water_tower/park tile with no buildingId, and writes it little-endian', () => {
+    const idx = 3 * WIDTH + 4;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.WaterPump } as any;
+    const result = transcode({ tiles, buildings: [], nextBuildingId: 0 });
+    const lo = result.engine.tiles[o.buildingId + idx * 2];
+    const hi = result.engine.tiles[o.buildingId + idx * 2 + 1];
+    const mintedId = lo | (hi << 8);
+    expect(mintedId).toBeGreaterThan(0);
+    expect(result.engine.tiles[o.kind + idx]).toBe(10); // TileKind.WaterPump's u8
   });
 
-  it('creates building instances for legacy civic tiles without buildingId', () => {
-    const idx = 3 * 8 + 4; // (4, 3) on the 8x8 map
-    const state = degrade((parsed) => {
-      parsed.tiles[idx].kind = TileKind.Park;
-      delete parsed.tiles[idx].buildingId;
-      parsed.buildings = [];
-      delete parsed.nextBuildingId;
+  it('does not touch a pump/water_tower/park tile that already has a buildingId', () => {
+    const idx = 5;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.Park, buildingId: 7 } as any;
+    const result = transcode({ tiles });
+    const lo = result.engine.tiles[o.buildingId + idx * 2];
+    const hi = result.engine.tiles[o.buildingId + idx * 2 + 1];
+    expect(lo | (hi << 8)).toBe(7);
+  });
+
+  it('mints ids in row-major tile order, continuing from the highest existing id', () => {
+    const idxA = 1;
+    const idxB = 2;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idxA] = { kind: TileKind.WaterPump } as any;
+    tiles[idxB] = { kind: TileKind.Park } as any;
+    const result = transcode({
+      tiles,
+      buildings: [{ id: 10, templateId: 'hydro', origin: { x: 0, y: 0 } }],
+      nextPowerPlantId: 3
     });
-    const tile = state.tiles[idx];
-    expect(tile.buildingId).toBeDefined();
-    const created = state.buildings.find((b) => b.id === tile.buildingId);
-    expect(created).toBeDefined();
-    expect(created!.origin).toEqual({ x: 4, y: 3 });
-    expect(state.nextBuildingId).toBeGreaterThan(tile.buildingId!);
+    const readId = (idx: number) =>
+      result.engine.tiles[o.buildingId + idx * 2] | (result.engine.tiles[o.buildingId + idx * 2 + 1] << 8);
+    expect(readId(idxA)).toBe(11);
+    expect(readId(idxB)).toBe(12);
+  });
+
+  it('a non-civic structure kind (e.g. hydro) with no buildingId is left unminted (id byte stays 0)', () => {
+    const idx = 6;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.HydroPlant } as any;
+    const result = transcode({ tiles });
+    expect(result.engine.tiles[o.buildingId + idx * 2]).toBe(0);
+    expect(result.engine.tiles[o.buildingId + idx * 2 + 1]).toBe(0);
+  });
+});
+
+describe('underground byte', () => {
+  it('encodes a buried water pipe as the WaterPipe kind byte', () => {
+    const idx = 9;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.Land, underground: TileKind.WaterPipe } as any;
+    const result = transcode({ tiles });
+    expect(result.engine.tiles[o.undergroundKind + idx]).toBe(12); // TileKind.WaterPipe's u8
+  });
+
+  it('encodes 0xFF for no underground, including an unrecognised underground string', () => {
+    const idx = 9;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.Land, underground: 'coal' } as any;
+    const result = transcode({ tiles });
+    expect(result.engine.tiles[o.undergroundKind + idx]).toBe(0xff);
+    expect(result.engine.tiles[o.undergroundKind + 0]).toBe(0xff);
+  });
+});
+
+describe('happiness and elevation', () => {
+  it('encodes happiness/elevation, defaulting both to 0 when absent', () => {
+    const idx = 2;
+    const tiles = Array.from({ length: N }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.Land, happiness: 2, elevation: 200 } as any;
+    const result = transcode({ tiles });
+    expect(result.engine.tiles[o.happiness + idx]).toBe(255); // encodeHappiness(2) = floor(2*127.5)
+    expect(result.engine.tiles[o.elevation + idx]).toBe(200);
+    expect(result.engine.tiles[o.happiness + 0]).toBe(0);
+    expect(result.engine.tiles[o.elevation + 0]).toBe(0);
   });
 });

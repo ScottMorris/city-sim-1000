@@ -5,22 +5,19 @@
 
 import { GameState } from './gameState';
 import { getCalendarPosition, DAYS_PER_MONTH } from './time';
+import type { WireBudgetHistoryEntry } from './protocol/generated/WireBudgetHistoryEntry';
 
 export const MONTHS_PER_QUARTER = 3;
 
 /**
- * `#229`: mirrors `city_sim_core::state::BudgetHistoryEntry` exactly. Rust
- * is the sole source now — the ring buffer, its 200-day cap, and the
- * day-boundary dedup this used to need client-side all live in
- * `economy::record_daily_budget`; the wire's `budgetHistory` array is
- * adopted verbatim by both bridges, see `wasmSimBridge.ts`/`tauriSimBridge.ts`.
+ * `#229`: the generated wire shape verbatim — see `WireBudgetHistoryEntry`,
+ * which mirrors `city_sim_core::state::BudgetHistoryEntry`. Rust is the sole
+ * source now — the ring buffer, its 200-day cap, and the day-boundary dedup
+ * this used to need client-side all live in `economy::record_daily_budget`;
+ * the wire's `budgetHistory` array is adopted verbatim by both bridges, see
+ * `wasmSimBridge.ts`/`tauriSimBridge.ts`.
  */
-export interface BudgetHistoryEntry {
-  day: number;
-  revenue: number;
-  expenses: number;
-  net: number;
-}
+export type BudgetHistoryEntry = WireBudgetHistoryEntry;
 
 export interface BudgetBucket {
   label: string;
@@ -62,6 +59,7 @@ export function getQuarterSummary(state: GameState): BudgetBucket {
   return { ...bucket, label: `Last ${MONTHS_PER_QUARTER} months` };
 }
 
+/** Days of runway at the current burn — uncapped (an idle city with a tiny deficit can run for years). `narrative/snapshot.ts`'s `computeRunwayMonths` derives its capped, month-scale figure from this one formula rather than recomputing its own. */
 export function computeRunwayDays(money: number, netPerDay: number): number {
   if (netPerDay >= 0) return Number.POSITIVE_INFINITY;
   if (money <= 0) return 0;

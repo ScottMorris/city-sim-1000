@@ -20,19 +20,23 @@
 //! [`Overhead`] — hold everything standing on, over or under it, one bit per
 //! [`Occupant`]. There is one
 //! spelling, no precedence, and nothing to reconcile. `TileKind` no longer
-//! describes a tile at all, and it survives as exactly two other things: the
-//! *wire vocabulary* (the `kind` byte of the SoA tile buffer — see
-//! `display.rs`), and the *building template key* (`BuildingInstance::kind`),
-//! which is still canonical — for the structure, not for the tile.
+//! describes a tile at all, and it survives as exactly one other thing today:
+//! the *legacy wire vocabulary* (the `kind` byte of the frozen v4 tile buffer
+//! `import.rs`/`migrate.rs` decode — see `display.rs`). It is no longer the
+//! building template key either — that job moved to
+//! [`BuildingKind`] (`BuildingInstance::kind`), a dedicated
+//! alphabet free of `TileKind`'s frozen-save constraint, since a building is
+//! an entity occupying a tile, not a kind of tile.
 //!
 //! It was three until the wilderness eco tunables were split by concept. One
 //! dense `base_eco[TileKind]` array held terrain credits, occupant values and
 //! per-structure values side by side, and `EcoSource::Kind` pointed each
 //! occupant at its row — which is what kept `TileKind` alive as an
 //! engine-internal lookup key. There are three tables now, keyed by
-//! [`Terrain`], [`Occupant`] and `TileKind` respectively, and the surviving
-//! `TileKind` key is the building template key doing its own job: saying
-//! *which structure* stands there.
+//! [`Terrain`], [`Occupant`] and [`BuildingKind`]
+//! respectively (via [`BuildingKind::dense_index`]), and
+//! the surviving structure-eco key does its own job: saying *which
+//! structure* stands there.
 //!
 //! Three strata, stacked the way the world is:
 //!
@@ -77,8 +81,12 @@
 use crate::economy::{MAINT_POWER_LINE, MAINT_RAIL, MAINT_ROAD, MAINT_WATER_PIPE};
 use crate::state::{GameState, Tile};
 use crate::wilderness::WildernessTunables;
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::BudgetPolicy;
-use city_sim_protocol::tile_kind::TileKind;
+// `TileKind` is not imported here: production code in this file never reads
+// it (see `is_structure_kind` in `migrate.rs`, the sanctioned boundary). The
+// test module below imports it directly — the old `kind`-and-flags vocabulary
+// is how it poses its questions, on purpose (see the module doc).
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -336,9 +344,10 @@ pub const ALL_LEDGER_LINES: [LedgerLine; LEDGER_LINE_COUNT] = [
 /// (terrain credit, occupant value, structure value), so `Occupant::Road` did
 /// not own its −2.0; it owned a *pointer* to the row of a `TileKind`-indexed
 /// array that happened to hold it. The array is now three tables keyed by the
-/// three concepts, `Occupant::Road` reads its own row, and only the structure
-/// table is still keyed by `TileKind` — where the key is the building template
-/// key, which is canonical for structure identity.
+/// three concepts, `Occupant::Road` reads its own row, and the structure
+/// table is keyed by [`crate::buildings::get_building_template`]'s own key —
+/// [`BuildingKind`] — which is canonical for structure identity and, unlike
+/// `TileKind`, was never the frozen-save alphabet to begin with.
 ///
 /// What is **not** on this enum is a number. Eco values are tunable at
 /// runtime: the Green Industry programme rewrites the industrial row while the
@@ -564,8 +573,9 @@ mod strata {
     }
 
     /// The layer over the tile: [`Occupant::PowerLine`] and
-    /// [`Occupant::Trees`]. Conductors and canopy fight, so conflict is the
-    /// default here too.
+    /// [`Occupant::Trees`]. Conflict is the default here too, and Trees +
+    /// PowerLine is the single exception — canopy grown through a live line
+    /// coexists with it rather than being refused or clearing it.
     ///
     /// A marker; see [`Underground`].
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -946,7 +956,9 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
         // Power only. A road carrying a line still carries water, but that is
         // the road's doing, not the line's.
         conducts: NET_POWER,
-        conflicts: B_TREES | B_STRUCTURE,
+        // Trees no longer conflict here — see `COMPAT_EXCEPTIONS` for the
+        // Trees + PowerLine coexistence exception.
+        conflicts: B_STRUCTURE,
         category: Some(EcoCategory::Power),
         strong_nature: Some(false),
     },
@@ -958,7 +970,9 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
         conducts: NET_NONE,
-        conflicts: B_POWER_LINE,
+        // PowerLine no longer conflicts here — see `COMPAT_EXCEPTIONS` for the
+        // Trees + PowerLine coexistence exception.
+        conflicts: 0,
         category: Some(EcoCategory::Forests),
         strong_nature: Some(true),
     },
@@ -975,10 +989,11 @@ pub struct CompatException {
     pub why: &'static str,
 }
 
-/// The complete exception list. Two entries, one in each direction — the
-/// design note's "exactly one exception" counted same-stratum pairs only and
-/// missed Structure + PowerLine.
-pub static COMPAT_EXCEPTIONS: [CompatException; 2] = [
+/// The complete exception list. Three entries — the design note's "exactly
+/// one exception" counted same-stratum pairs only and missed Structure +
+/// PowerLine, and Trees + PowerLine was carved out as an official exception
+/// once the model settled on canopy over conductors being fine.
+pub static COMPAT_EXCEPTIONS: [CompatException; 3] = [
     CompatException {
         a: Occupant::Road,
         b: Occupant::Rail,
@@ -990,6 +1005,12 @@ pub static COMPAT_EXCEPTIONS: [CompatException; 2] = [
         b: Occupant::PowerLine,
         coexist: false,
         why: "cross-stratum, but a line strung through a school or a power plant is not a tile the model admits: Tool::PowerLine refuses a tile that already carries a building, and place_footprint_building refuses a tile that already carries a line. The second half of that was missing until step 2 of #177 — the guard enumerated kind Road/Rail/PowerLine and the two underlay flags but never asked has_power_overlay(), so any tile whose line lived in the flag rather than in kind (zone, then string a line; or string a line, then TerraformRaise) took a structure on top of live, still-billed conductors. It asks the occupant set now, which answers the same for both spellings; see a_structure_is_refused_over_a_live_hydro_line",
+    },
+    CompatException {
+        a: Occupant::Trees,
+        b: Occupant::PowerLine,
+        coexist: true,
+        why: "canopy under a live line is officially allowed — a tree planted through a strung hydro line keeps both occupants rather than being refused or clearing one; placement already permitted this, and the overhead default now agrees",
     },
 ];
 
@@ -1046,26 +1067,17 @@ pub fn pair_conflicts(a: Occupant, b: Occupant) -> bool {
 
 /// Check a set against the compatibility table.
 ///
-/// **This describes the TARGET model, and today's game can still build one
-/// tile it rejects.** Step 2 of #177 converted the placement guards in
-/// `commands.rs` to ask the occupant set, which closed the structure route —
-/// `Residential` → `PowerLine` → `Park` is refused now, in either spelling.
-/// One producible violation survives:
-///
-/// - `PowerLine` → `Tree` plants a canopy through the conductors, because
-///   `Tool::Tree` rewrites `kind` and clears only the *surface*, leaving
-///   `FLAG_POWER_OVERLAY` set —
-///   `known_defect_trees_are_planted_through_a_live_hydro_line`. This one is
-///   not a guard that reads the wrong field, so converting the guards did not
-///   reach it. Nor is it the two-spellings asymmetry: a line always sets the
-///   overlay flag, so both its recordings survive a canopy alike. Refusing it
-///   would also have to answer for `Tool::Water`, which flows through the same
-///   overlay flag on purpose — a line over water is a pylon span — so it stays
-///   a gameplay decision of its own.
+/// Step 2 of #177 converted the placement guards in `commands.rs` to ask the
+/// occupant set, which closed the structure route — `Residential` →
+/// `PowerLine` → `Park` is refused now, in either spelling. `Tool::Tree`
+/// planting a canopy through a live line (`PowerLine` → `Tree`) is not a
+/// violation to close: `COMPAT_EXCEPTIONS` names Trees + PowerLine an
+/// official coexistence, and `trees_coexist_with_a_live_hydro_line` pins it as
+/// a regression test rather than a known defect.
 ///
 /// `producible_conflicts_are_inventoried` closes the single-tile state space
-/// under `apply_tool` and pins that list at exactly that one, so neither a
-/// regression of the structure route nor a third defect can appear unnoticed.
+/// under `apply_tool` and pins that list empty, so neither a regression of the
+/// structure route nor a new producible violation can appear unnoticed.
 ///
 /// **Advisory only.** Never panic on this result — log it, count it, or
 /// `debug_assert` it, but let the save load. Saves in the wild already contain
@@ -1167,73 +1179,52 @@ pub fn occupant_is_strong_nature(o: Occupant) -> Option<bool> {
 
 /// Eco value of a specific structure kind — a 12.0 spread from +4.0 (park) to
 /// −8.0 (coal plant). It is the *spread* that matters, not the count: only four
-/// distinct values exist across the ten kinds, but collapsing them into one
-/// `Structure` constant would flatten a park and a coal plant into each other.
-pub fn structure_eco(kind: TileKind, t: &WildernessTunables) -> f32 {
-    debug_assert!(
-        is_structure_kind(kind),
-        "structure_eco called with a non-structure kind"
-    );
-    t.structure_eco[kind as usize]
+/// distinct values exist across the thirteen kinds, but collapsing them into
+/// one `Structure` constant would flatten a park and a coal plant into each
+/// other.
+pub fn structure_eco(kind: BuildingKind, t: &WildernessTunables) -> f32 {
+    t.structure_eco[kind.dense_index()]
 }
 
 /// Wilderness breakdown line for a specific structure kind.
-pub fn structure_category(kind: TileKind) -> EcoCategory {
+pub fn structure_category(kind: BuildingKind) -> EcoCategory {
     match kind {
-        TileKind::HydroPlant
-        | TileKind::CoalPlant
-        | TileKind::WindTurbine
-        | TileKind::SolarFarm => EcoCategory::Power,
-        TileKind::WaterPump
-        | TileKind::WaterTower
-        | TileKind::ElementarySchool
-        | TileKind::HighSchool => EcoCategory::Civic,
-        TileKind::Park | TileKind::ParkLarge => EcoCategory::Parks,
-        _ => EcoCategory::Neutral,
+        BuildingKind::HydroPlant
+        | BuildingKind::CoalPlant
+        | BuildingKind::WindTurbine
+        | BuildingKind::SolarFarm => EcoCategory::Power,
+        BuildingKind::WaterPump
+        | BuildingKind::WaterTower
+        | BuildingKind::ElementarySchool
+        | BuildingKind::HighSchool => EcoCategory::Civic,
+        BuildingKind::Park | BuildingKind::ParkLarge => EcoCategory::Parks,
+        BuildingKind::Residential | BuildingKind::Commercial | BuildingKind::Industrial => {
+            EcoCategory::Neutral
+        }
     }
 }
 
 /// Parks are strong nature; every other structure is not.
-pub fn structure_is_strong_nature(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Park | TileKind::ParkLarge)
-}
-
-/// The ten `TileKind`s that derive to the single `Structure` occupant. They
-/// behave identically under every compatibility rule — `place_footprint_building`
-/// applies one guard to all of them — so one tag suffices, and the per-kind
-/// data (eco, upkeep, category) is looked up rather than duplicated.
-pub const fn is_structure_kind(kind: TileKind) -> bool {
-    matches!(
-        kind,
-        TileKind::HydroPlant
-            | TileKind::CoalPlant
-            | TileKind::WindTurbine
-            | TileKind::SolarFarm
-            | TileKind::WaterPump
-            | TileKind::WaterTower
-            | TileKind::ElementarySchool
-            | TileKind::HighSchool
-            | TileKind::Park
-            | TileKind::ParkLarge
-    )
+pub fn structure_is_strong_nature(kind: BuildingKind) -> bool {
+    matches!(kind, BuildingKind::Park | BuildingKind::ParkLarge)
 }
 
 // ---------------------------------------------------------------------------
 // Structure identity
 // ---------------------------------------------------------------------------
 
-/// The `TileKind` a zone occupant's `BuildingInstance` is templated from.
+/// The `BuildingKind` a zone occupant's `BuildingInstance` is templated from.
 ///
-/// The inverse of the three `ZoneX => TileKind::X` arms that used to live in
-/// `Tile::zone_occupant`. `get_building_template` is indexed by `TileKind`, so
-/// growing a lot needs the tag turned back into a template key; the tag itself
-/// is what the *land use* question is asked of.
+/// The inverse of the three `ZoneX => BuildingKind::X` arms that used to live
+/// in `Tile::zone_occupant`. `get_building_template` is indexed by
+/// `BuildingKind`, so growing a lot needs the tag turned back into a template
+/// key; the tag itself is what the *land use* question is asked of.
 #[inline]
-pub fn zone_template_kind(o: Occupant) -> Option<TileKind> {
+pub fn zone_template_kind(o: Occupant) -> Option<BuildingKind> {
     match o {
-        Occupant::ZoneResidential => Some(TileKind::Residential),
-        Occupant::ZoneCommercial => Some(TileKind::Commercial),
-        Occupant::ZoneIndustrial => Some(TileKind::Industrial),
+        Occupant::ZoneResidential => Some(BuildingKind::Residential),
+        Occupant::ZoneCommercial => Some(BuildingKind::Commercial),
+        Occupant::ZoneIndustrial => Some(BuildingKind::Industrial),
         _ => None,
     }
 }
@@ -1249,7 +1240,7 @@ pub fn zone_template_kind(o: Occupant) -> Option<TileKind> {
 /// recompute.
 pub struct StructureLookup {
     /// Indexed by building id; `None` for ids that are not live buildings.
-    kinds: Vec<Option<TileKind>>,
+    kinds: Vec<Option<BuildingKind>>,
 }
 
 impl StructureLookup {
@@ -1271,7 +1262,7 @@ impl StructureLookup {
 
     /// The template kind of the building with this id, if it is live.
     #[inline]
-    pub fn kind_of(&self, id: u16) -> Option<TileKind> {
+    pub fn kind_of(&self, id: u16) -> Option<BuildingKind> {
         self.kinds.get(id as usize).copied().flatten()
     }
 
@@ -1281,7 +1272,7 @@ impl StructureLookup {
     /// `BuildingInstance` whose kind is `Residential`, but its occupant is a
     /// zone tag, not [`Occupant::Structure`].
     #[inline]
-    pub fn structure_kind(&self, tile: &Tile) -> Option<TileKind> {
+    pub fn structure_kind(&self, tile: &Tile) -> Option<BuildingKind> {
         if !tile.has_occupant(Occupant::Structure) {
             return None;
         }
@@ -1530,13 +1521,14 @@ mod tests {
     use super::*;
     use crate::adjacency::has_road_access;
     use crate::commands::apply_tool;
-    use crate::migrate::{set_v4_kind, tile_from_v4};
+    use crate::migrate::{is_structure_kind, set_v4_kind, tile_from_v4};
     use crate::state::{FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
     use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags::{
         POWER_OVERLAY as FLAG_POWER_OVERLAY, RAIL_UNDERLAY as FLAG_RAIL_UNDERLAY,
         ROAD_UNDERLAY as FLAG_ROAD_UNDERLAY,
     };
+    use city_sim_protocol::tile_kind::TileKind;
 
     // --- helpers ---------------------------------------------------------
 
@@ -1554,10 +1546,18 @@ mod tests {
 
     /// The [`StructureLookup`] that goes with [`tile`]: building id 1 is a
     /// `kind`, which is the development `tile` hands every structure kind.
+    /// Mirrors `tile`'s own `is_structure_kind` gate — a non-structure `kind`
+    /// gets no `BuildingInstance` here either, matching the ghost `tile`
+    /// leaves it with no `building_id` for.
     fn lookup(kind: TileKind) -> StructureLookup {
         let mut s = GameState::new(1, 1, 0);
-        s.buildings
-            .push(crate::buildings::BuildingInstance::new(1, kind, (0, 0)));
+        if let Some(building_kind) = crate::migrate::building_kind_of(kind) {
+            s.buildings.push(crate::buildings::BuildingInstance::new(
+                1,
+                building_kind,
+                (0, 0),
+            ));
+        }
         s.next_building_id = 2;
         StructureLookup::new(&s)
     }
@@ -1613,7 +1613,7 @@ mod tests {
         WildernessTunables {
             terrain_eco: [0.0; TERRAIN_COUNT],
             occupant_eco: [0.0; OCCUPANT_COUNT],
-            structure_eco: [0.0; TileKind::COUNT],
+            structure_eco: [0.0; BuildingKind::COUNT],
             patch_bonus_cap: 0.0,
             edge_bonus: 0.0,
             fragmentation_penalty: 0.0,
@@ -1692,14 +1692,19 @@ mod tests {
     /// A structure's eco comes from its development, so the probe tile needs a
     /// `BuildingInstance` behind it or it is scored as bare ground.
     fn breakdown_line_for_structure(kind: TileKind) -> EcoCategory {
+        let building_kind = crate::migrate::building_kind_of(kind)
+            .expect("breakdown_line_for_structure called with a non-structure TileKind");
         let mut t = zeroed_eco_tunables();
-        t.structure_eco[kind as usize] = 1.0;
+        t.structure_eco[building_kind.dense_index()] = 1.0;
         measure_breakdown_line(&t, |s| {
             s.tiles[4] = crate::state::Tile::land();
             s.tiles[4].set_occupant(Occupant::Structure, true);
             s.tiles[4].building_id = Some(1);
-            s.buildings
-                .push(crate::buildings::BuildingInstance::new(1, kind, (1, 1)));
+            s.buildings.push(crate::buildings::BuildingInstance::new(
+                1,
+                building_kind,
+                (1, 1),
+            ));
             s.next_building_id = 2;
         })
     }
@@ -2077,13 +2082,13 @@ mod tests {
         assert_eq!(per_stratum[Stratum::Surface as usize], 15);
         assert_eq!(per_stratum[Stratum::Overhead as usize], 1);
         assert_eq!(cross_stratum, 36);
-        assert_eq!(conflicting, 16);
-        assert_eq!(coexisting, 39);
+        assert_eq!(conflicting, 15);
+        assert_eq!(coexisting, 40);
         assert_eq!(conflicting + coexisting, unordered_distinct);
         assert_eq!(
             COMPAT_EXCEPTIONS.len(),
-            2,
-            "Road+Rail and Structure+PowerLine"
+            3,
+            "Road+Rail, Structure+PowerLine and Trees+PowerLine"
         );
     }
 
@@ -2160,25 +2165,24 @@ mod tests {
         );
         assert_eq!(
             validate_set(B_POWER_LINE | B_TREES),
-            Err((Occupant::PowerLine, Occupant::Trees))
+            Ok(()),
+            "canopy over a live line — official coexistence, see COMPAT_EXCEPTIONS"
         );
 
         // Producible today: Tool::Tree over a hydro line leaves the overlay
-        // flag set. Validation must report it, not panic on it. Built through
-        // the real tools in `known_defect_trees_are_planted_through_a_live_hydro_line`.
+        // flag set, and validation is fine with it now. Built through the real
+        // tools in `trees_coexist_with_a_live_hydro_line`.
         let t = tile(TileKind::Tree, FLAG_POWER_OVERLAY, None);
         assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
-        assert!(validate_set(t.occupants()).is_err());
+        assert!(validate_set(t.occupants()).is_ok());
     }
 
-    // --- placement: the table enforced, and what still escapes it -----------
+    // --- placement: the table enforced, and both of its exceptions ----------
     //
     // The first test here was a known defect until step 2 of #177 and is now a
-    // regression test; the second is still a known defect and asserts what the
-    // game does **today**, not what it should do. A known-defect test is
-    // written to go RED the moment its fix lands, which is the point — the fix
-    // must not be able to slip in without someone coming back here and moving
-    // the assertion to the correct side.
+    // regression test for the Structure+PowerLine exception; the second pins
+    // the Trees+PowerLine exception, now official coexistence rather than a
+    // gap the table missed.
 
     /// **Regression, step 2 of #177.** Three ordinary tool clicks used to stamp
     /// a structure over a live hydro line, producing `{Structure, PowerLine}` —
@@ -2317,7 +2321,7 @@ mod tests {
         s.tiles[idx].building_id = Some(9);
         s.buildings.push(crate::buildings::BuildingInstance::new(
             9,
-            TileKind::Residential,
+            BuildingKind::Residential,
             (1, 1),
         ));
         crate::commands::remove_building(&mut s, 9);
@@ -2328,45 +2332,27 @@ mod tests {
         );
     }
 
-    /// **Known defect.** Two tool clicks plant a canopy through live
-    /// conductors, producing `{Trees, PowerLine}` — a straight overhead-stratum
-    /// conflict, no exception needed.
+    /// **Official coexistence.** Two tool clicks plant a canopy through live
+    /// conductors, producing `{Trees, PowerLine}` — an overhead-stratum pair
+    /// `COMPAT_EXCEPTIONS` now carves out, same as Road+Rail's level crossing.
     ///
     /// `Tool::Tree` regrades the ground and plants on it, which clears the
     /// surface stratum but leaves the span overhead — so the line outlives the
-    /// canopy that grew through it, still conducting and still billed.
+    /// canopy that grew through it, still conducting and still billed, and the
+    /// tile keeps both occupants rather than either being refused or cleared.
     ///
-    /// **Step 2 of #177 did not reach this one, deliberately.** It looks like
-    /// the structure defect above and is not: that one was a *guard* reading
-    /// one of a line's two spellings, so converting the guard to the occupant
-    /// set closed it. Nor is it the build-order asymmetry that
-    /// the regrade closes, because a line is overhead in either build order —
-    /// it survives a canopy whichever way you clicked.
-    ///
-    /// What is left is a straight gameplay decision, and `Tool::Water` is the
-    /// same code path producing a tile the model *wants* (a line over water is
-    /// the pylon span `docs/tile-model.md` names as a variant), so "clear the
-    /// overlay too" would be wrong. Plant refused under a line, versus canopy
-    /// silently destroying a span the player paid for, belongs with its own
-    /// message and a manual update rather than inside a guard conversion.
-    /// Whoever takes it: this test goes red then, by design.
-    ///
-    /// Note what step 2 *did* reach: `Tool::Tree` now refuses a tile carrying a
-    /// live `building_id`, because a canopy planted over a coal plant erased
-    /// the `Structure` occupant while the plant kept producing and billing —
-    /// state corruption rather than a gameplay call. See
-    /// `planting_refuses_a_tile_carrying_a_live_building`. A hydro line has no
-    /// `building_id`, so this route is untouched.
+    /// Note what step 2 of #177 tightened on a different route: `Tool::Tree`
+    /// refuses a tile carrying a live `building_id`, because a canopy planted
+    /// over a coal plant erased the `Structure` occupant while the plant kept
+    /// producing and billing — state corruption rather than a gameplay call.
+    /// See `planting_refuses_a_tile_carrying_a_live_building`. A hydro line has
+    /// no `building_id`, so this route is untouched by that guard.
     #[test]
-    fn known_defect_trees_are_planted_through_a_live_hydro_line() {
+    fn trees_coexist_with_a_live_hydro_line() {
         let mut s = GameState::new(4, 4, 0);
         assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success);
         let r = apply_tool(&mut s, Tool::Tree, 1, 1, ViewStratum::Surface);
-        assert!(
-            r.success,
-            "step 2 has tightened Tool::Tree — good. Delete this known defect \
-             and assert the rejection instead."
-        );
+        assert!(r.success, "canopy over a live line is allowed");
 
         let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
         assert!(t.has_occupant(Occupant::Trees));
@@ -2375,17 +2361,15 @@ mod tests {
             "planting regrades the ground, never the span above it"
         );
         assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
-        assert_eq!(
-            validate_set(t.occupants()),
-            Err((Occupant::PowerLine, Occupant::Trees))
-        );
+        assert_eq!(validate_set(t.occupants()), Ok(()));
         assert!(t.conducts(Network::Power));
         assert!((t.tile_upkeep_unfunded() - MAINT_POWER_LINE).abs() < 1e-6);
     }
 
     /// Exhaustive search for tiles the game can build that the compatibility
-    /// table calls impossible — so the known defect above is a complete
-    /// inventory rather than the one somebody happened to notice.
+    /// table calls impossible — so that if placement can still produce a pair
+    /// the table forbids, it shows up here rather than waiting for someone to
+    /// notice it by hand.
     ///
     /// Closes the single-tile state space under `apply_tool`: every tool,
     /// applied at one spot, from every distinct grid state reached so far, to a
@@ -2493,13 +2477,11 @@ mod tests {
         pairs.sort_by_key(|(a, b)| (*a as u8, *b as u8));
         assert_eq!(
             pairs,
-            vec![(Occupant::PowerLine, Occupant::Trees)],
-            "the producible-conflict inventory changed. A new pair means a new \
-             defect of the same class — in particular (Structure, PowerLine) \
-             coming back means a placement guard has gone back to reading \
-             `kind`. A missing pair means a defect was fixed, in which case \
-             rewrite its known-defect test above as a regression test and drop \
-             this entry."
+            Vec::<(Occupant, Occupant)>::new(),
+            "the producible-conflict inventory changed — placement can now \
+             build a tile the compatibility table calls impossible. In \
+             particular (Structure, PowerLine) reappearing means a placement \
+             guard has gone back to reading `kind`."
         );
     }
 
@@ -3337,7 +3319,7 @@ mod tests {
         s.tiles[0] = lot;
         s.buildings.push(crate::buildings::BuildingInstance::new(
             3,
-            TileKind::Residential,
+            BuildingKind::Residential,
             (0, 0),
         ));
         s.next_building_id = 4;
@@ -3558,8 +3540,9 @@ mod tests {
             "a structure kind was added without an eco entry"
         );
         for (kind, eco, category) in table {
-            assert_eq!(structure_eco(kind, &t), eco, "{kind:?}");
-            assert_eq!(structure_category(kind), category, "{kind:?}");
+            let building_kind = crate::migrate::building_kind_of(kind).unwrap();
+            assert_eq!(structure_eco(building_kind, &t), eco, "{kind:?}");
+            assert_eq!(structure_category(building_kind), category, "{kind:?}");
             assert_eq!(eco_of(kind, 0, None, &t), eco, "{kind:?}");
         }
         // The `Structure` tag cannot answer, and says so rather than handing
@@ -3589,7 +3572,8 @@ mod tests {
         assert_eq!(occupant_eco(Occupant::Fibre, &t), Some(0.0));
 
         // The park/coal spread is the thing a flattened constant would destroy.
-        let spread = structure_eco(TileKind::Park, &t) - structure_eco(TileKind::CoalPlant, &t);
+        let spread =
+            structure_eco(BuildingKind::Park, &t) - structure_eco(BuildingKind::CoalPlant, &t);
         assert_eq!(spread, 12.0);
         // …and it survives every route into the score, not just `structure_eco`.
         let park = tile(TileKind::Park, 0, None);
@@ -3651,7 +3635,10 @@ mod tests {
         }
         for &kind in TileKind::ALL {
             if is_structure_kind(kind) {
-                note(structure_category(kind), &mut produced);
+                note(
+                    structure_category(crate::migrate::building_kind_of(kind).unwrap()),
+                    &mut produced,
+                );
             }
             if let Some(c) = tile(kind, 0, None).terrain_category() {
                 note(c, &mut produced);
@@ -3735,17 +3722,17 @@ mod tests {
             );
         }
 
-        let structures: [(TileKind, EcoCategory); 10] = [
-            (TileKind::HydroPlant, EcoCategory::Power),
-            (TileKind::CoalPlant, EcoCategory::Power),
-            (TileKind::WindTurbine, EcoCategory::Power),
-            (TileKind::SolarFarm, EcoCategory::Power),
-            (TileKind::WaterPump, EcoCategory::Civic),
-            (TileKind::WaterTower, EcoCategory::Civic),
-            (TileKind::ElementarySchool, EcoCategory::Civic),
-            (TileKind::HighSchool, EcoCategory::Civic),
-            (TileKind::Park, EcoCategory::Parks),
-            (TileKind::ParkLarge, EcoCategory::Parks),
+        let structures: [(BuildingKind, EcoCategory); 10] = [
+            (BuildingKind::HydroPlant, EcoCategory::Power),
+            (BuildingKind::CoalPlant, EcoCategory::Power),
+            (BuildingKind::WindTurbine, EcoCategory::Power),
+            (BuildingKind::SolarFarm, EcoCategory::Power),
+            (BuildingKind::WaterPump, EcoCategory::Civic),
+            (BuildingKind::WaterTower, EcoCategory::Civic),
+            (BuildingKind::ElementarySchool, EcoCategory::Civic),
+            (BuildingKind::HighSchool, EcoCategory::Civic),
+            (BuildingKind::Park, EcoCategory::Parks),
+            (BuildingKind::ParkLarge, EcoCategory::Parks),
         ];
         assert_eq!(
             structures.len(),
@@ -3761,13 +3748,14 @@ mod tests {
             if !is_structure_kind(kind) {
                 continue;
             }
+            let building_kind = crate::migrate::building_kind_of(kind).unwrap();
             let want = structures
                 .iter()
-                .find(|(k, _)| *k == kind)
+                .find(|(k, _)| *k == building_kind)
                 .unwrap_or_else(|| panic!("{kind:?} has no pinned breakdown category"))
                 .1;
             println!("  {:<18} {want:?}", kind.ts_string());
-            assert_eq!(structure_category(kind), want, "{kind:?}");
+            assert_eq!(structure_category(building_kind), want, "{kind:?}");
             assert_eq!(
                 want,
                 breakdown_line_for_structure(kind),
@@ -3782,7 +3770,7 @@ mod tests {
         for &kind in TileKind::ALL {
             let tl = tile(kind, 0, None);
             let derived = if is_structure_kind(kind) {
-                structure_category(kind)
+                structure_category(crate::migrate::building_kind_of(kind).unwrap())
             } else {
                 let mut present = iter_set(tl.occupants());
                 let first = present.next();
@@ -3929,5 +3917,124 @@ mod tests {
         assert_eq!(Tile::water().terrain(), Terrain::Water);
         assert_eq!(Tile::land().occupants(), 0);
         assert_eq!(Tile::water().occupants(), 0, "terrain is not an occupant");
+    }
+
+    /// Every zone occupant maps to its own `BuildingKind`, not just "some
+    /// `Some(_)`" — `place_zone_building` (`zones.rs`) trusts this to pick the
+    /// right template when a lot develops, and a mutation-testing pass found
+    /// nothing exercised the `Commercial`/`Industrial` arms in isolation
+    /// (only end-to-end zone-growth tests touch them, and not tightly enough
+    /// to pin the mapping).
+    #[test]
+    fn zone_template_kind_maps_each_zone_tag_to_its_own_building_kind() {
+        assert_eq!(
+            zone_template_kind(Occupant::ZoneResidential),
+            Some(BuildingKind::Residential)
+        );
+        assert_eq!(
+            zone_template_kind(Occupant::ZoneCommercial),
+            Some(BuildingKind::Commercial)
+        );
+        assert_eq!(
+            zone_template_kind(Occupant::ZoneIndustrial),
+            Some(BuildingKind::Industrial)
+        );
+    }
+
+    /// Every non-zone occupant answers `None` — a zone lot's template lookup
+    /// only ever fires off a zone tag.
+    #[test]
+    fn zone_template_kind_is_none_for_every_non_zone_occupant() {
+        for &o in ALL_OCCUPANTS.iter() {
+            if matches!(
+                o,
+                Occupant::ZoneResidential | Occupant::ZoneCommercial | Occupant::ZoneIndustrial
+            ) {
+                continue;
+            }
+            assert_eq!(zone_template_kind(o), None, "{o:?}");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Occupant-table TS parity fixture
+    // -----------------------------------------------------------------------
+    //
+    // `OCCUPANT_DEFS` (bit positions/strata, the conflict matrix, the
+    // conductance masks) is byte-layout knowledge, not a JSON-shaped type —
+    // `ts-rs` cannot generate it (see `crates/city-sim-protocol/tests/export_bindings.rs`
+    // for what codegen *does* cover). This is a parity fixture instead, the
+    // same pattern `parity_fixture_matches_tile_kinds`
+    // (`crates/city-sim-protocol/src/tile_kind.rs`) uses for `TileKind`: a
+    // committed JSON fixture, asserted here against the real table, printing
+    // the regenerated JSON on mismatch so fixing drift is a paste, not a
+    // rederivation. `app/src/game/protocol/protocol.test.ts` asserts the same
+    // fixture against `occupants.ts`'s mirrors.
+
+    /// One row of `app/src/game/protocol/occupantParity.json`.
+    #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+    struct OccupantParityEntry {
+        name: String,
+        bit: u8,
+        stratum: String,
+        /// Networks this occupant conducts by its own nature — `OccupantDef::conducts`,
+        /// as sorted `Network` names (`Network::ALL` order).
+        conducts: Vec<String>,
+        /// Occupants this one cannot share a tile with — `OccupantDef::conflicts`,
+        /// as `Occupant` names in bit order (`ALL_OCCUPANTS` order).
+        conflicts: Vec<String>,
+    }
+
+    fn expected_occupant_parity() -> Vec<OccupantParityEntry> {
+        ALL_OCCUPANTS
+            .iter()
+            .map(|&o| {
+                let def = occupant_def(o);
+                OccupantParityEntry {
+                    name: format!("{o:?}"),
+                    bit: o as u8,
+                    stratum: format!("{:?}", def.stratum),
+                    conducts: Network::ALL
+                        .iter()
+                        .filter(|&&n| def.conducts & (1 << n as u8) != 0)
+                        .map(|n| format!("{n:?}"))
+                        .collect(),
+                    conflicts: iter_set(def.conflicts).map(|c| format!("{c:?}")).collect(),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn occupant_parity_fixture_matches_occupant_defs() {
+        const FIXTURE: &str = include_str!("../../../app/src/game/protocol/occupantParity.json");
+
+        let expected = expected_occupant_parity();
+        let expected_json = serde_json::to_string_pretty(&expected).unwrap();
+
+        let fixture: Vec<OccupantParityEntry> = serde_json::from_str(FIXTURE).unwrap_or_else(|e| {
+            panic!(
+                "app/src/game/protocol/occupantParity.json failed to parse: {e}\n\n\
+                 Regenerate it with this content:\n{expected_json}"
+            )
+        });
+
+        let regen_msg = || {
+            format!(
+                "app/src/game/protocol/occupantParity.json is out of sync with \
+                 OCCUPANT_DEFS. Regenerate it with this content:\n{expected_json}"
+            )
+        };
+
+        assert_eq!(fixture.len(), expected.len(), "{}", regen_msg());
+        for (i, (want, got)) in expected.iter().zip(fixture.iter()).enumerate() {
+            assert_eq!(
+                want,
+                got,
+                "fixture entry {i} ({}): {}",
+                want.name,
+                regen_msg()
+            );
+        }
     }
 }

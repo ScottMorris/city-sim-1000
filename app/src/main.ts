@@ -28,12 +28,12 @@ import type { SimBridge } from './game/simBridge';
 import { applyToolCmd, nextStrokeId, setPoliciesCmd } from './game/protocol/commands';
 import type { FromSim } from './game/protocol/events';
 import {
-  buildLegacyEngineImport,
   buildSaveMeta,
   clearLegacyBrowserSave,
   decodeSave,
   encodeSave,
   loadLegacyBrowserSave,
+  type LegacySaveTranscode,
   type SaveContainer
 } from './game/persistence';
 import { applyClientState, ensureSettingsShape, extractClientState } from './game/clientState';
@@ -42,7 +42,7 @@ import { initAutosave } from './game/autosave';
 import { initMcpBridge } from './game/mcpBridge';
 import { createCamera, centerCamera, screenToTile, zoomAt } from './rendering/camera';
 import { MapRenderer, Position } from './rendering/renderer';
-import { palette, TILE_SIZE } from './rendering/sprites';
+import { TILE_SIZE } from './rendering/sprites';
 import { loadPaletteTexture, loadTileTextures } from './rendering/tileAtlas';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import { createHud } from './ui/hud';
@@ -62,7 +62,6 @@ import { loadGlobalSfxOverrides, saveGlobalSfxOverrides } from './game/globalSfx
 import { initNewsTicker } from './ui/newsTicker';
 import type { RadioWidget } from './ui/radio';
 import { initLoadingScreen } from './ui/loadingScreen';
-import { DEFAULT_BYLAWS } from './game/bylaws';
 import { buildCitySnapshot } from './game/narrative/snapshot';
 import { NarrativeManager } from './game/narrative/narrativeManager';
 import { getCalendarPosition } from './game/time';
@@ -440,8 +439,16 @@ function stopBootErrorWatch(): void {
   window.removeEventListener('unhandledrejection', onBootRejection);
 }
 
+// `SimBridge.onMessage` is single-subscriber (see its doc comment) — this
+// tap lets `initMcpBridge` observe every `FromSim` message (e.g.
+// `CommandResult`) without stealing the one slot `wireBridge` already holds
+// for alerts/toasts/narrative/history. Set once, below, before any message
+// can actually arrive (both calls happen synchronously during boot).
+let mcpMessageTap: ((msg: FromSim) => void) | null = null;
+
 function wireBridge(b: SimBridge): void {
   b.onMessage((msg: FromSim) => {
+    mcpMessageTap?.(msg);
     if (msg.type === 'Ready') {
       stopBootErrorWatch();
       loadingScreen.complete();
@@ -528,16 +535,22 @@ function performRedo(): void {
 
 /** Restore a decoded CSAV container into the engine and display mirror. */
 async function loadCityContainer(container: SaveContainer): Promise<void> {
+  // No client-JSON lighting migration here: any CSAV old enough to carry
+  // `bylaws.lighting` in its client slice also carries a pre-v7 CSIM engine
+  // snapshot, which the version-exact `loadSnapshot` above refuses outright
+  // (the deliberate pre-release compatibility break) — so such a save never
+  // reaches this line. The pre-CSAV legacy JSON path keeps its migration in
+  // `persistence.ts`'s `transcodeLegacySave`, which is genuinely reachable.
   await bridge.loadSnapshot(container.engineSnapshot);
   applyClientState(state, container.client);
   afterCityLoaded();
 }
 
 /** One-time import of a legacy JSON save, then upgrade it to CSAV. */
-async function importLegacyCity(legacy: GameState): Promise<void> {
-  await bridge.importLegacy(buildLegacyEngineImport(legacy));
-  applyClientState(state, { settings: legacy.settings, bylaws: legacy.bylaws });
-  bridge.send(setPoliciesCmd(legacy.policies));
+async function importLegacyCity(imp: LegacySaveTranscode): Promise<void> {
+  await bridge.importLegacy(imp.engine);
+  applyClientState(state, imp.client);
+  bridge.send(setPoliciesCmd(imp.policies));
   afterCityLoaded();
   try {
     // Upgrade in place; only drop the old localStorage save once the CSAV
@@ -625,7 +638,7 @@ function startAutosave(): void {
 }
 
 wireBridge(bridge);
-initMcpBridge(bridge, state);
+initMcpBridge(bridge, state, tap => { mcpMessageTap = tap; });
 void bootLoadSave().finally(startAutosave);
 
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
@@ -1078,7 +1091,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       camera.x -= movement.x * panSpeed * direction * deltaSeconds;
       camera.y -= movement.y * panSpeed * direction * deltaSeconds;
     }
-    const mirrorChanged = bridge.step(deltaSeconds);
+    const mirrorChanged = bridge.step();
     const calendar = getCalendarPosition(state.day);
     while (calendar.month > lastNarrativeMonth) {
       narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
@@ -1158,7 +1171,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     viewport.style.setProperty('--toolbar-visible-height', '0px');
   }
 
-  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, palette, tileTextures);
+  const renderer = new MapRenderer(wrapper, camera, TILE_SIZE, tileTextures);
   await renderer.init(wrapper);
   centerCamera(state, wrapper, TILE_SIZE, camera);
 
@@ -1208,8 +1221,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const bylawsModal = initBylawsModal({
     getState: () => state,
     onSelectLighting: (lighting) => {
-      state.bylaws = state.bylaws ?? { ...DEFAULT_BYLAWS };
-      state.bylaws.lighting = lighting;
+      state.policies = { ...state.policies, lighting };
+      bridge.send(setPoliciesCmd(state.policies));
     },
     onWildernessPolicyChange: (policy) => {
       state.policies = { ...state.policies, wilderness: policy };
@@ -1263,8 +1276,14 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     showToast(isPaused ? 'Paused' : 'Resumed');
   };
 
+  // Reads `state.policies`, not `state.settings` — the toggle is
+  // engine-owned, simulated state now (`SetPolicies`), same as budget tax
+  // rates and the wilderness/lighting bylaws. Still called from within
+  // `applySettings` (see there) so `afterCityLoaded`'s `applySettingsRef`
+  // indirection keeps resyncing it after every load, the same path those
+  // sibling policies rely on.
   const updatePendingPenaltyBtn = () => {
-    const enabled = state.settings?.pendingPenaltyEnabled ?? true;
+    const enabled = state.policies.pendingPenaltyEnabled;
     pendingPenaltyBtn.textContent = `Penalties: ${enabled ? 'On' : 'Off'}`;
     pendingPenaltyBtn.classList.toggle('active', enabled);
   };
@@ -1433,14 +1452,20 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     },
     onJumpToTile: ({ x, y }) => centerCameraOnTile(x, y),
     getViewportSize: minimapViewport,
-    onStratumToggle: toggleViewStratum,
-    palette
+    onStratumToggle: toggleViewStratum
   });
   syncMinimapSettings(state.settings.minimap);
 
   settingsModal = initSettingsModal({
     getSettings: () => state.settings,
     onApply: (next) => applySettings(next),
+    getPendingPenaltyEnabled: () => state.policies.pendingPenaltyEnabled,
+    onPendingPenaltyChange: (enabled) => {
+      state.policies = { ...state.policies, pendingPenaltyEnabled: enabled };
+      bridge.send(setPoliciesCmd(state.policies));
+      updatePendingPenaltyBtn();
+      showToast(`Over-zoning penalty ${enabled ? 'enabled' : 'disabled'}`);
+    },
     onOpenSfxEditor: () => sfxEditorModal.open()
   });
 
@@ -1532,9 +1557,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   });
 
   pendingPenaltyBtn.addEventListener('click', () => {
-    const current = state.settings?.pendingPenaltyEnabled ?? true;
-    applySettings({ ...state.settings, pendingPenaltyEnabled: !current }, { skipHotkeyReload: true });
-    showToast(`Over-zoning penalty ${state.settings.pendingPenaltyEnabled ? 'enabled' : 'disabled'}`);
+    const next = !state.policies.pendingPenaltyEnabled;
+    state.policies = { ...state.policies, pendingPenaltyEnabled: next };
+    bridge.send(setPoliciesCmd(state.policies));
+    updatePendingPenaltyBtn();
+    showToast(`Over-zoning penalty ${next ? 'enabled' : 'disabled'}`);
   });
 
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));

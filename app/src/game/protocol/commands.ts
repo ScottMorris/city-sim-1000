@@ -1,32 +1,44 @@
+// commands.ts — SimCommand, policy clamp/default helpers, and re-exports of the generated BudgetPolicy/WildernessPolicy/Policies/CommandResult.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
- * SimCommand — TS mirror of crates/sim_protocol/src/commands.rs.
- *
- * Commands flow from the UI into the SimBridge:
+ * SimCommand — commands flow from the UI into the SimBridge:
  *   WasmSimBridge  — posts them to the Worker
  *   TauriSimBridge — invokes the native plugin
+ *
+ * Not a mirror of any Rust type: `crates/city-sim-protocol`'s own
+ * `SimCommand` drifted from what both bridges actually send (its `ApplyTool`
+ * never gained `strokeId`) and was deleted as dead code. `BudgetPolicy`,
+ * `WildernessPolicy`, `LightingPolicy`, `Policies`, and `CommandResult` below
+ * are re-exports of the `ts-rs`-generated mirrors of the same names in
+ * `crates/city-sim-protocol/src/commands.rs` (`./generated/`) — see
+ * `crates/city-sim-protocol/tests/export_bindings.rs`. Hand-mirrored copies
+ * of these shapes drifted three times in this repo's history before codegen
+ * replaced them; do not reintroduce a hand-written copy.
  */
 
 import { Tool } from '../toolTypes';
 import type { ViewStratum } from '../gameState';
 
-/**
- * SimCity-style fiscal policy — TS mirror of `BudgetPolicy` in
- * `crates/city-sim-protocol/src/commands.rs`.
- *
- * Tax rates are whole percentages (0–20, neutral default 9 — revenue scales
- * by `rate / 9`). Funding levels are whole percentages (0–100, default 100);
- * underfunding trims upkeep but causes brownouts, crowded schools, and
- * commuter frustration.
- */
-export interface BudgetPolicy {
-  taxResidential: number;
-  taxCommercial: number;
-  taxIndustrial: number;
-  fundTransport: number;
-  fundPower: number;
-  fundCivic: number;
-}
+export type { BudgetPolicy } from './generated/BudgetPolicy';
+export type { WildernessPolicy } from './generated/WildernessPolicy';
+export type { LightingPolicy } from './generated/LightingPolicy';
+export type { Policies } from './generated/Policies';
+export type { CommandResult } from './generated/CommandResult';
 
+import type { BudgetPolicy } from './generated/BudgetPolicy';
+import type { WildernessPolicy } from './generated/WildernessPolicy';
+import type { LightingPolicy } from './generated/LightingPolicy';
+import type { Policies } from './generated/Policies';
+
+/**
+ * Neutral tax rate and legal ranges for `BudgetPolicy` fields — not
+ * `#[ts(export)]`-able (`ts-rs` mirrors types, not `const` values), so these
+ * stay hand-mirrored against `crates/city-sim-protocol/src/commands.rs`'s
+ * `NEUTRAL_TAX_RATE`/`MAX_TAX_RATE`/`MAX_FUNDING`.
+ */
 export const NEUTRAL_TAX_RATE = 9;
 export const MAX_TAX_RATE = 20;
 export const MAX_FUNDING = 100;
@@ -55,25 +67,6 @@ export function clampBudgetPolicy(policy: BudgetPolicy): BudgetPolicy {
   };
 }
 
-/** Revenue multiplier for a tax rate (`rate / 9`, so 9% → 1.0). */
-export function taxMultiplier(rate: number): number {
-  return rate / NEUTRAL_TAX_RATE;
-}
-
-/** Cost/effect multiplier for a funding level (`level / 100`). */
-export function fundingMultiplier(level: number): number {
-  return level / MAX_FUNDING;
-}
-
-/**
- * Wilderness programmes — TS mirror of `WildernessPolicy` in
- * `crates/city-sim-protocol/src/commands.rs`. Toggled from the Bylaws screen.
- */
-export interface WildernessPolicy {
-  natureReserve: boolean;
-  greenIndustry: boolean;
-}
-
 /** Wilderness score required before Nature Reserve can be enabled. */
 export const NATURE_RESERVE_UNLOCK_SCORE = 60;
 
@@ -82,20 +75,25 @@ export function createDefaultWildernessPolicy(): WildernessPolicy {
 }
 
 /**
- * Every player-adjustable policy family, grouped under one roof — TS mirror
- * of `Policies` in `crates/city-sim-protocol/src/commands.rs` (camelCase
- * serialisation). New policy families are added here as fields rather than as
- * new top-level state or new wire commands.
+ * Neutral lighting bylaw — mirrors `LightingPolicy::default()` (Rust). Kept
+ * as a bare literal here (rather than importing `bylaws.ts`'s display table)
+ * the same way `createDefaultWildernessPolicy` doesn't reach into a domain
+ * file for its defaults.
  */
-export interface Policies {
-  budget: BudgetPolicy;
-  wilderness: WildernessPolicy;
-}
+export const DEFAULT_LIGHTING_POLICY: LightingPolicy = 'mixed';
+
+/**
+ * Default-on so toggling it off is an opt-out, not an opt-in — mirrors
+ * `default_pending_penalty_enabled()` in `crates/city-sim-protocol/src/commands.rs`.
+ */
+export const DEFAULT_PENDING_PENALTY_ENABLED = true;
 
 export function createDefaultPolicies(): Policies {
   return {
     budget: createDefaultBudgetPolicy(),
-    wilderness: createDefaultWildernessPolicy()
+    wilderness: createDefaultWildernessPolicy(),
+    lighting: DEFAULT_LIGHTING_POLICY,
+    pendingPenaltyEnabled: DEFAULT_PENDING_PENALTY_ENABLED
   };
 }
 
@@ -103,7 +101,9 @@ export function createDefaultPolicies(): Policies {
 export function clampPolicies(policies: Policies): Policies {
   return {
     budget: clampBudgetPolicy(policies.budget),
-    wilderness: policies.wilderness
+    wilderness: policies.wilderness,
+    lighting: policies.lighting,
+    pendingPenaltyEnabled: policies.pendingPenaltyEnabled
   };
 }
 
@@ -111,11 +111,6 @@ export type SimCommand =
   | { type: 'ApplyTool'; tool: Tool; x: number; y: number; strokeId: number; stratum: ViewStratum }
   | { type: 'SetSpeed'; multiplier: number }
   | { type: 'SetPolicies'; policies: Policies };
-
-export interface CommandResult {
-  success: boolean;
-  message?: string;
-}
 
 /**
  * `strokeId` groups the many `ApplyTool` commands of one drag-paint gesture

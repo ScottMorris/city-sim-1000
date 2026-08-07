@@ -1,3 +1,8 @@
+// dialogs.ts — save/load persistence controls, toasts, and the manual modal.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import {
   SaveFormatError,
   buildSaveFile,
@@ -7,6 +12,7 @@ import {
   downloadSave,
   encodeSave,
   isLegacyJsonSave,
+  type LegacySaveTranscode,
   type SaveContainer
 } from '../game/persistence';
 import { extractClientState } from '../game/clientState';
@@ -17,7 +23,12 @@ import type { InputMode } from './deviceMode';
 let toastRoot: HTMLDivElement | null = null;
 const toastsById = new Map<string, HTMLDivElement>();
 
-type ToastSeverity = 'info' | 'warning' | 'success';
+// Also `NotificationSeverity` in `notifications.ts` — that module imports
+// this one rather than re-declaring the same three-string union, since the
+// two vocabularies are the same concept (a toast's severity) reached through
+// two call paths (`showToast` directly, or `createNotificationCenter`'s
+// `publish`), not two different things that happen to share a shape.
+export type ToastSeverity = 'info' | 'warning' | 'success';
 
 export interface ToastOptions {
   severity?: ToastSeverity;
@@ -127,7 +138,7 @@ interface PersistenceOptions {
   /** Restore a decoded CSAV container into the engine + display mirror. */
   onContainerLoaded: (container: SaveContainer) => Promise<void>;
   /** One-time import of a legacy JSON save (pre-CSAV upload). */
-  onLegacyLoaded: (state: GameState) => Promise<void>;
+  onLegacyLoaded: (imp: LegacySaveTranscode) => Promise<void>;
   /** Current touch/mouse input mode — gates the Web Share export path to touch devices; desktop always downloads. */
   getInputMode: () => InputMode;
 }

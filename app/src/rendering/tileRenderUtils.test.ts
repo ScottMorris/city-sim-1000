@@ -8,8 +8,17 @@ import type { Texture } from 'pixi.js';
 import { createInitialState, getTile, setTile, TileKind } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
 import { createBuildingState } from '../game/buildings/state';
+import { getBuildingTemplate } from '../game/buildings/templates';
 import { Occupant, Terrain, setTileOccupant } from '../game/protocol/occupants';
-import { createBuildingLookup, getTileColour, resolveIndicatorKey, resolveTileSprite, type BuildingLookup } from './tileRenderUtils';
+import {
+  createBuildingLookup,
+  dominantColour,
+  getTileColour,
+  resolveIndicatorKey,
+  resolveTileSprite,
+  type BuildingLookup
+} from './tileRenderUtils';
+import { OCCUPANT_COLOURS, TERRAIN_COLOURS } from './sprites';
 import { BuildingStatus } from '../game/buildings/state';
 import type { TileTextures } from './tileAtlas';
 
@@ -19,7 +28,7 @@ const tex = (name: string) => ({ name } as unknown as Texture);
 
 function makeTextures(): TileTextures {
   return {
-    tiles: {},
+    terrain: {},
     road: { ns: tex('road-ns'), ew: tex('road-ew'), 'end-e': tex('road-end-e'), cross: tex('road-cross') },
     rail: {
       ns: tex('rail-ns'), ew: tex('rail-ew'), 'corner-se': tex('rail-corner-se'),
@@ -176,14 +185,18 @@ describe('hydro line sprite picking', () => {
     expect(spriteName(state, 2, 2, textures)).toBe('power-ns');
   });
 
-  it('still connects to a power plant it runs into', () => {
+  it('does not reach into an adjacent power plant tile (no PowerLine occupant there to connect to)', () => {
+    // A power plant's own footprint tiles carry `Occupant.Structure`, which
+    // conflicts with `Occupant.PowerLine` (`occupants.ts`'s `CONFLICTS`
+    // table) — a line can never actually be drawn onto one, so `carriesWires`
+    // has no wire-carrying signal to find there. Only the north neighbour
+    // (an explicit `PowerLine` tile) should count.
     const state = createInitialState(8, 8);
     const textures = makeTextures();
     setTile(state, 2, 2, TileKind.PowerLine);
     setTile(state, 2, 1, TileKind.PowerLine);   // north
-    const plant = getTile(state, 3, 2)!;        // east
-    plant.powerPlantType = PowerPlantType.Coal;
-    expect(spriteName(state, 2, 2, textures)).toBe('power-corner-ne');
+    setTileOccupant(getTile(state, 3, 2)!, Occupant.Structure, true); // east: a plant's footprint, no line
+    expect(spriteName(state, 2, 2, textures)).toBe('power-end-n');
   });
 
   it('gives an isolated pole a dead-end sprite when it has one neighbour', () => {
@@ -367,32 +380,14 @@ describe('crossing selection by axis', () => {
 });
 
 describe('getTileColour agrees with the sprite/connectivity derivation on what counts as a plant', () => {
-  it('tints a tile with powerPlantType set, differently powered vs unpowered', () => {
-    const state = createInitialState(3, 3);
-    const tile = getTile(state, 1, 1)!;
-    tile.terrain = Terrain.Land; // pin the palette key regardless of createInitialState's terrain pattern
-    tile.powerPlantType = PowerPlantType.Coal;
-    const palette = { [TileKind.Land]: 0x804020 } as Record<TileKind, number>;
-
-    tile.powered = false;
-    const unpowered = getTileColour(tile, palette, emptyLookup);
-    tile.powered = true;
-    const powered = getTileColour(tile, palette, emptyLookup);
-
-    expect(unpowered).not.toBe(palette[TileKind.Land]);
-    expect(powered).not.toBe(palette[TileKind.Land]);
-    expect(unpowered).not.toBe(powered);
-  });
-
-  it('does not treat a live structure as power infrastructure without powerPlantType', () => {
-    // Regression: `getTileColour` and the wire-connectivity predicate used to
-    // fall back to a derived-kind plant-type lookup, diverging from
-    // `resolveBaseTileSprite`'s buildingLookup-only derivation for the same
-    // question. This tile carries a `Structure` occupant and a `buildingId`
-    // resolving to `TileKind.CoalPlant` via the lookup — matching a real
-    // placed plant only ever getting `powerPlantType` through
-    // `placeBuilding`'s `decorateTile` callback — but `powerPlantType` itself
-    // is left unset, so this tile must read as plain ground, not a plant.
+  it('does not treat a live structure as power infrastructure', () => {
+    // `getTileColour`'s power tint and the wire-connectivity predicate both
+    // key off `Occupant.PowerLine` alone (no per-tile plant-type field
+    // exists on the wire). This tile carries a `Structure` occupant and a
+    // `buildingId` resolving to the coal plant template via the lookup —
+    // matching a real placed plant's footprint — but no `PowerLine`
+    // occupant, so it must read as the template's own colour, unscaled, not
+    // power-tinted.
     const state = createInitialState(3, 3);
     const tile = getTile(state, 1, 1)!;
     tile.terrain = Terrain.Land;
@@ -404,11 +399,130 @@ describe('getTileColour agrees with the sprite/connectivity derivation on what c
       origin: { x: 1, y: 1 },
       state: createBuildingState()
     });
-    expect(tile.powerPlantType).toBeUndefined();
     const { buildingLookup } = createBuildingLookup(state);
-    const palette = { [TileKind.CoalPlant]: 0x804020 } as Record<TileKind, number>;
+    const coalColour = getBuildingTemplate(PowerPlantType.Coal)!.colour!;
 
-    expect(getTileColour(tile, palette, buildingLookup)).toBe(palette[TileKind.CoalPlant]);
+    expect(getTileColour(tile, buildingLookup)).toBe(coalColour);
+  });
+});
+
+describe('dominantColour', () => {
+  it('ranks water above every occupant, including a road surviving on the same tile', () => {
+    const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.Road);
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Water; // override, pinning that terrain outranks the road occupant
+    expect(dominantColour(tile, emptyLookup)).toBe(TERRAIN_COLOURS[Terrain.Water]);
+  });
+
+  it('resolves a live structure through the building template colour', () => {
+    const state = createInitialState(3, 3);
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Land;
+    tile.buildingId = 1;
+    setTileOccupant(tile, Occupant.Structure, true);
+    state.buildings.push({
+      id: 1, templateId: PowerPlantType.Coal, origin: { x: 1, y: 1 }, state: createBuildingState()
+    });
+    const { buildingLookup } = createBuildingLookup(state);
+    expect(dominantColour(tile, buildingLookup)).toBe(getBuildingTemplate(PowerPlantType.Coal)!.colour!);
+  });
+
+  it('falls through past a failed structure lookup to the next present rung (stale buildingId)', () => {
+    // `Occupant.Structure` doesn't conflict with `Occupant.Trees` (unlike
+    // road/rail/zone tags, see `occupants.ts`'s `CONFLICTS`), so this is a
+    // reachable combination: a stale `buildingId` a save/undo left behind on
+    // a tile that also has tree canopy.
+    const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.Tree);
+    const tile = getTile(state, 1, 1)!;
+    setTileOccupant(tile, Occupant.Structure, true);
+    tile.buildingId = 404; // no matching entry in state.buildings
+    const { buildingLookup } = createBuildingLookup(state);
+    expect(dominantColour(tile, buildingLookup)).toBe(OCCUPANT_COLOURS[Occupant.Trees]);
+  });
+
+  it('ranks trees above a power line, and a power line above rail/road/land', () => {
+    const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.Tree);
+    const treeTile = getTile(state, 1, 1)!;
+    expect(dominantColour(treeTile, emptyLookup)).toBe(OCCUPANT_COLOURS[Occupant.Trees]);
+
+    setTile(state, 1, 1, TileKind.PowerLine);
+    const lineTile = getTile(state, 1, 1)!;
+    expect(dominantColour(lineTile, emptyLookup)).toBe(OCCUPANT_COLOURS[Occupant.PowerLine]);
+
+    setTile(state, 1, 1, TileKind.Rail);
+    const railTile = getTile(state, 1, 1)!;
+    expect(dominantColour(railTile, emptyLookup)).toBe(OCCUPANT_COLOURS[Occupant.Rail]);
+
+    setTile(state, 1, 1, TileKind.Road);
+    const roadTile = getTile(state, 1, 1)!;
+    expect(dominantColour(roadTile, emptyLookup)).toBe(OCCUPANT_COLOURS[Occupant.Road]);
+  });
+
+  it('is plain land colour with no occupants at all', () => {
+    const state = createInitialState(3, 3);
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Land;
+    expect(dominantColour(tile, emptyLookup)).toBe(TERRAIN_COLOURS[Terrain.Land]);
+  });
+});
+
+describe('baseGroundTexture (via resolveTileSprite)', () => {
+  function withTerrain(textures: TileTextures) {
+    return {
+      ...textures,
+      terrain: { [Terrain.Land]: tex('grass'), [Terrain.Water]: tex('water') },
+      treeCanopy: tex('tree')
+    };
+  }
+
+  it('resolves the grass texture for plain land', () => {
+    const state = createInitialState(3, 3);
+    const textures = withTerrain(makeTextures());
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Land;
+    expect(spriteName(state, 1, 1, textures)).toBe('grass');
+  });
+
+  it('resolves the water texture for water terrain', () => {
+    const state = createInitialState(3, 3);
+    const textures = withTerrain(makeTextures());
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Water;
+    expect(spriteName(state, 1, 1, textures)).toBe('water');
+  });
+
+  it('resolves the tree canopy texture for tree canopy', () => {
+    const state = createInitialState(3, 3);
+    const textures = withTerrain(makeTextures());
+    setTile(state, 1, 1, TileKind.Tree);
+    expect(spriteName(state, 1, 1, textures)).toBe('tree');
+  });
+
+  it('has no terrain fallback for a resolved structure (e.g. a water pump, with no dedicated sprite branch of its own)', () => {
+    const state = createInitialState(3, 3);
+    const textures = withTerrain(makeTextures());
+    const tile = getTile(state, 1, 1)!;
+    tile.terrain = Terrain.Land;
+    tile.buildingId = 1;
+    setTileOccupant(tile, Occupant.Structure, true);
+    state.buildings.push({
+      id: 1, templateId: TileKind.WaterPump, origin: { x: 1, y: 1 }, state: createBuildingState()
+    });
+    const { buildingLookup } = createBuildingLookup(state);
+    // No `powerPlant`/`schools`/`parks` branch claims a water pump, so this
+    // reaches `baseGroundTexture` — which must return `undefined` (not
+    // `grass`) once the structure lookup resolves a template colour.
+    expect(resolveTileSprite(state, tile, 1, 1, textures, buildingLookup)).toBeUndefined();
+  });
+
+  it('has no terrain fallback for an undeveloped zoned lot', () => {
+    const state = createInitialState(3, 3);
+    const textures = withTerrain(makeTextures());
+    setTile(state, 1, 1, TileKind.Residential); // no buildingId — undeveloped
+    expect(spriteName(state, 1, 1, textures)).toBeUndefined();
   });
 });
 
@@ -417,6 +531,5 @@ describe('resolveIndicatorKey', () => {
     expect(resolveIndicatorKey(BuildingStatus.InactiveNoPower)).toBe('noPower');
     expect(resolveIndicatorKey(BuildingStatus.InactiveNoWater)).toBe('noWater');
     expect(resolveIndicatorKey(BuildingStatus.Active)).toBeNull();
-    expect(resolveIndicatorKey(BuildingStatus.InactiveDamaged)).toBeNull();
   });
 });

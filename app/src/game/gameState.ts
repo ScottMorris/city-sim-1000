@@ -3,18 +3,22 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { PowerPlantType } from './constants';
-import { BylawState, DEFAULT_BYLAWS } from './bylaws';
-import { createDefaultPolicies, type Policies } from './protocol/commands';
+import { createDefaultPolicies, DEFAULT_LIGHTING_POLICY, type LightingPolicy, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
 import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupants';
 import type { BudgetHistoryEntry } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
-import type { ServiceSystemState, TileServiceState } from './services';
-import { createServiceSystemState, createTileServiceState } from './services';
+import type { TileServiceState } from './services';
+import { createTileServiceState } from './services';
 import { SeededRng } from './rng';
+import type { WireBudgetStats } from './protocol/generated/WireBudgetStats';
+import type { WireLabourStats } from './protocol/generated/WireLabourStats';
+import type { WireWildernessBreakdown } from './protocol/generated/WireWildernessBreakdown';
+import type { WireDemandBreakdown } from './protocol/generated/WireDemandBreakdown';
+import type { WireDemandClassBreakdown } from './protocol/generated/WireDemandClassBreakdown';
+import type { WireUtilityComponent } from './protocol/generated/WireUtilityComponent';
 
 export enum TileKind {
   Land = 'land',
@@ -45,10 +49,8 @@ export interface Tile {
   powered: boolean;
   watered: boolean;
   abandoned?: boolean;
-  powerPlantType?: PowerPlantType;
-  powerPlantId?: number;
   buildingId?: number;
-  /** Per-tile wilderness intensity, 0–1 (0.5 = neutral). From the sim's eco field. */
+  /** Per-tile eco value, −10..+10 (0 = neutral). From the sim's eco field (see `protocol/tileBuffer.ts`'s `decodeEco`). */
   wilderness?: number;
   services: TileServiceState;
 
@@ -95,7 +97,6 @@ export interface InputSettings {
   invertPan: boolean;
   panSpeed: PanSpeedPreset;
   edgeScrollEnabled: boolean;
-  edgeScrollSpeed: PanSpeedPreset;
   shiftScrollsToPan: boolean;
   ctrlScrollsToPan: boolean;
   zoomSensitivity: ZoomSensitivityPreset;
@@ -128,7 +129,6 @@ export interface UiSettings {
 }
 
 export interface GameSettings {
-  pendingPenaltyEnabled: boolean;
   minimap: MinimapSettings;
   input: InputSettings;
   accessibility: AccessibilitySettings;
@@ -142,20 +142,13 @@ export interface GameSettings {
 }
 
 /**
- * One physically-connected segment of a power or water network. Mirrors
- * Rust's `UtilityComponent` (`crates/city-sim-core/src/utilities.rs`) —
- * `produced`/`used` are left unrounded on the wire; round for display here,
- * not in the engine. `id` is stable only within one tick's recompute — a
- * grid edit can renumber every component on the next one.
+ * One physically-connected segment of a power or water network — the
+ * generated wire shape verbatim (`crates/city-sim-core/src/utilities.rs`'s
+ * `UtilityComponent`). `produced`/`used` are left unrounded on the wire;
+ * round for display, not here. `id` is stable only within one tick's
+ * recompute — a grid edit can renumber every component on the next one.
  */
-export interface UtilityComponentStats {
-  id: number;
-  produced: number;
-  used: number;
-  sourceCount: number;
-  /** `used / produced`, clamped to `[0, 1]`. */
-  utilisation: number;
-}
+export type UtilityComponentStats = WireUtilityComponent;
 
 export interface UtilityStats {
   power: number;
@@ -170,29 +163,45 @@ export interface UtilityStats {
   waterComponents: UtilityComponentStats[];
 }
 
+/**
+ * Every intermediate value the engine's demand formula derives for one zone
+ * class on the way to its final clamped percentage — the generated wire
+ * shape verbatim (`crates/city-sim-core/src/demand.rs`'s
+ * `DemandComputation`, wired as `WireDemandClassBreakdown`). Replaces the TS
+ * shadow model that used to recompute these locally (`app/src/game/
+ * demand.ts`, deleted).
+ */
+export type DemandClassBreakdown = WireDemandClassBreakdown;
+
 export interface DemandStats {
   residential: number;
   commercial: number;
   industrial: number;
+  /** Per-class derivation, one entry per zone class — the generated wire
+   *  shape verbatim; see `DemandClassBreakdown`. */
+  breakdown: WireDemandBreakdown;
 }
 
-/** Per-category eco totals for the wilderness tooltip — mirrors
- *  `WildernessBreakdown` in `crates/city-sim-core/src/wilderness.rs`. */
-export interface WildernessBreakdown {
-  forests: number;
-  parks: number;
-  openLand: number;
-  waterEdge: number;
-  patch: number;
-  fragmentation: number;
-  zones: number;
-  industry: number;
-  transport: number;
-  power: number;
-  civic: number;
-}
+/**
+ * City-wide labour aggregates — the generated wire shape verbatim (Rust's
+ * `LabourStats`, `crates/city-sim-core/src/demand.rs`). Replaces the
+ * TS-side `computeLabourStats.ts` recompute (including its hard-coded 0.55
+ * worker-share constant).
+ */
+export type LabourStats = WireLabourStats;
 
-/** Wilderness score display state — mirrors the Rust `WildernessStats`. */
+/** Per-category eco totals for the wilderness tooltip — the generated wire
+ *  shape verbatim (Rust's `WildernessBreakdown`,
+ *  `crates/city-sim-core/src/wilderness.rs`). */
+export type WildernessBreakdown = WireWildernessBreakdown;
+
+/**
+ * Wilderness score display state — `score`/`trend` and `breakdown` arrive
+ * as three separately-wired values (see `wasmSim.worker.ts`'s `gatherStats`/
+ * `tauriSimBridge.ts`'s `onTick`), assembled into one mirror object here
+ * rather than reshaped from a single wire struct, so this stays a small
+ * composition rather than a hand-duplicated parallel of one.
+ */
 export interface WildernessStats {
   /** Global score, 0–100. */
   score: number;
@@ -201,50 +210,19 @@ export interface WildernessStats {
   breakdown: WildernessBreakdown;
 }
 
-export interface BudgetStats {
-  revenue: number;
-  expenses: number;
-  net: number;
-  netPerDay: number;
-  netPerMonth: number;
-  breakdown: {
-    revenue: {
-      base: number;
-      residents: number;
-      commercial: number;
-      industrial: number;
-      tourism: number;
-    };
-    expenses: {
-      transport: number;
-      buildings: number;
-      /** Daily cost of active wilderness programmes. */
-      policies: number;
-    };
-    details: {
-      transport: {
-        roads: number;
-        rail: number;
-        powerLines: number;
-        waterPipes: number;
-      };
-      buildings: {
-        power: number;
-        civic: number;
-        zones: number;
-        powerByType: Record<string, number>;
-        civicByType: Record<string, number>;
-        zonesByType: Record<string, number>;
-      };
-    };
-  };
-}
+/**
+ * Full headline + breakdown budget snapshot — the generated wire shape
+ * verbatim (`WireBudgetStats`), flat fields and all. The grouped display
+ * maps (`powerByType`/`civicByType`/`zonesByType`) that used to live nested
+ * under `breakdown.details.buildings` here are derived at display time from
+ * these flat fields instead — see `budgetModal.ts`'s `deriveBudgetBreakdown`.
+ */
+export type BudgetStats = WireBudgetStats;
 
 export interface GameState {
   width: number;
   height: number;
   tiles: Tile[];
-  tileRevision: number;
   /** Original seed used to initialise the PRNG for this city. */
   seed: number;
   /** Live xoshiro128** state — persisted so saves resume mid-stream. */
@@ -256,16 +234,35 @@ export interface GameState {
   jobs: number;
   utilities: UtilityStats;
   demand: DemandStats;
+  /** City-wide labour aggregates — see `LabourStats`. */
+  labour: LabourStats;
+  /** Number of tiles flagged abandoned — see `GameState::abandoned_count` (Rust). */
+  abandonedCount: number;
+  /** Mean tile happiness across the grid — see `GameState::avg_happiness` (Rust). */
+  avgHappiness: number;
   budget: BudgetStats;
   /** `#229` — Rust-computed, wire-sourced; see `economy.ts`'s doc comment. */
   budgetHistory: BudgetHistoryEntry[];
   buildings: BuildingInstance[];
-  nextBuildingId: number;
-  services: ServiceSystemState;
   education: EducationStats;
-  bylaws: BylawState;
-  /** Every player-adjustable policy family (budget, wilderness, ...). */
+  /**
+   * Every player-adjustable policy family (budget, wilderness, lighting —
+   * the Bylaws screen's lighting standard included). Fully engine-owned and
+   * persisted in the CSIM snapshot; `ClientState` carries no bylaws slice
+   * any more. Written optimistically by the UI the moment a policy is
+   * selected, so it can lead the engine by up to one tick.
+   */
   policies: Policies;
+  /**
+   * The lighting policy the engine's wire figures were computed under —
+   * refreshed to `policies.lighting` each time a tick's stats land, unlike
+   * the optimistic `policies` write itself. The Bylaws/ledger previews
+   * rescale wire figures by THIS policy's multipliers: while the game is
+   * paused after a switch, the wire still carries the old policy's numbers,
+   * and dividing them by the new policy's multiplier would inflate the
+   * recovered baseline.
+   */
+  appliedLighting: LightingPolicy;
   /** Wilderness score, trend, and breakdown — computed by the Rust sim. */
   wilderness: WildernessStats;
   settings: GameSettings;
@@ -280,7 +277,6 @@ export function createDefaultInputSettings(): InputSettings {
     invertPan: false,
     panSpeed: 'normal',
     edgeScrollEnabled: false,
-    edgeScrollSpeed: 'normal',
     shiftScrollsToPan: false,
     ctrlScrollsToPan: true,
     zoomSensitivity: 'normal'
@@ -321,6 +317,41 @@ export function createDefaultUiSettings(): UiSettings {
   };
 }
 
+/** A starter-seed breakdown row — matches what the engine reports before the
+ *  first real demand tick runs (`seeded: true`, no derivation yet). */
+export function createDefaultDemandClassBreakdown(value: number): DemandClassBreakdown {
+  return {
+    base: 0,
+    fillFraction: 0,
+    fillTerm: 0,
+    workforceTerm: 0,
+    labourTerm: 0,
+    pendingZones: 0,
+    pendingPenaltyRaw: 0,
+    pendingPenaltyCapped: 0,
+    pendingPenaltyApplied: 0,
+    pressureRelief: 0,
+    utilityPenalty: 0,
+    demandBeforeUtilities: value,
+    floorApplied: false,
+    seeded: true,
+    value
+  };
+}
+
+export function createDefaultLabourStats(): LabourStats {
+  return {
+    population: 0,
+    resCapacity: 0,
+    jobCapacity: 0,
+    workers: 0,
+    employed: 0,
+    unemployed: 0,
+    unemploymentRate: 0,
+    vacancyRate: 0
+  };
+}
+
 export function createDefaultWildernessStats(): WildernessStats {
   return {
     score: 0,
@@ -341,9 +372,44 @@ export function createDefaultWildernessStats(): WildernessStats {
   };
 }
 
+export function createDefaultBudgetStats(): BudgetStats {
+  return {
+    revenue: 0,
+    expenses: 0,
+    net: 0,
+    netPerDay: 0,
+    netPerMonth: 0,
+    revenueBase: 0,
+    revenuePop: 0,
+    revenueCommercial: 0,
+    revenueIndustrial: 0,
+    revenueTourism: 0,
+    expensesTransport: 0,
+    expensesBuildings: 0,
+    expensesPolicies: 0,
+    maintPower: 0,
+    maintCivic: 0,
+    maintZones: 0,
+    maintRoads: 0,
+    maintRail: 0,
+    maintPowerLines: 0,
+    maintPipes: 0,
+    maintPowerHydro: 0,
+    maintPowerCoal: 0,
+    maintPowerWind: 0,
+    maintPowerSolar: 0,
+    maintCivicPark: 0,
+    maintCivicPump: 0,
+    maintCivicTower: 0,
+    maintCivicSchool: 0,
+    maintZonesRes: 0,
+    maintZonesCom: 0,
+    maintZonesInd: 0
+  };
+}
+
 export function createDefaultSettings(): GameSettings {
   return {
-    pendingPenaltyEnabled: true,
     minimap: createDefaultMinimapSettings(),
     input: createDefaultInputSettings(),
     accessibility: createDefaultAccessibilitySettings(),
@@ -356,6 +422,22 @@ export function createDefaultSettings(): GameSettings {
   };
 }
 
+/** A bare land tile — the shared shape for growing/seeding the mirror's tile array, immediately overwritten by a decode loop or (for `createInitialState`) a procedural terrain pass. */
+export function createBlankTile(): Tile {
+  return {
+    elevation: 0,
+    happiness: 1,
+    powered: false,
+    watered: false,
+    services: createTileServiceState(),
+    terrain: Terrain.Land,
+    underground: 0,
+    surface: 0,
+    overhead: 0,
+    density: ZoneDensity.Low
+  };
+}
+
 export function createInitialState(width = 64, height = 64, seed?: number): GameState {
   const resolvedSeed = (seed ?? Date.now()) >>> 0;
   const tiles: Tile[] = [];
@@ -364,25 +446,13 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       const edge = x < 3 || y < 3 || x > width - 4 || y > height - 4;
       const isWater = (x - width / 2) ** 2 + (y - height / 2) ** 2 < 180 && (x + y) % 5 === 0;
       const water = edge || isWater;
-      tiles.push({
-        elevation: 0,
-        happiness: 1,
-        powered: false,
-        watered: false,
-        services: createTileServiceState(),
-        terrain: water ? Terrain.Water : Terrain.Land,
-        underground: 0,
-        surface: 0,
-        overhead: 0,
-        density: ZoneDensity.Low
-      });
+      tiles.push({ ...createBlankTile(), terrain: water ? Terrain.Water : Terrain.Land });
     }
   }
   return {
     width,
     height,
     tiles,
-    tileRevision: 0,
     seed: resolvedSeed,
     rngState: new SeededRng(resolvedSeed).toJSON(),
     money: 100000,
@@ -400,26 +470,22 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       powerComponents: [],
       waterComponents: []
     },
-    budget: {
-      revenue: 0,
-      expenses: 0,
-      net: 0,
-      netPerDay: 0,
-      netPerMonth: 0,
+    budget: createDefaultBudgetStats(),
+    budgetHistory: [],
+    demand: {
+      residential: 30,
+      commercial: 30,
+      industrial: 30,
       breakdown: {
-        revenue: { base: 0, residents: 0, commercial: 0, industrial: 0, tourism: 0 },
-        expenses: { transport: 0, buildings: 0, policies: 0 },
-        details: {
-          transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
-          buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
-        }
+        residential: createDefaultDemandClassBreakdown(30),
+        commercial: createDefaultDemandClassBreakdown(30),
+        industrial: createDefaultDemandClassBreakdown(30)
       }
     },
-    budgetHistory: [],
-    demand: { residential: 30, commercial: 30, industrial: 30 },
+    labour: createDefaultLabourStats(),
+    abandonedCount: 0,
+    avgHappiness: 1,
     buildings: [],
-    nextBuildingId: 1,
-    services: createServiceSystemState(),
     // No schools yet → no load anywhere → full coverage, matching
     // `city_sim_core::state::EducationStats::default()`.
     education: {
@@ -433,8 +499,8 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       elementaryCoverage: 1,
       highCoverage: 1
     },
-    bylaws: { ...DEFAULT_BYLAWS },
     policies: createDefaultPolicies(),
+    appliedLighting: DEFAULT_LIGHTING_POLICY,
     wilderness: createDefaultWildernessStats(),
     settings: createDefaultSettings()
   };
@@ -442,10 +508,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
 
 function getIndex(state: GameState, x: number, y: number): number {
   return y * state.width + x;
-}
-
-export function bumpTileRevision(state: GameState) {
-  state.tileRevision = (state.tileRevision ?? 0) + 1;
 }
 
 export function getTile(state: GameState, x: number, y: number): Tile | undefined {
@@ -463,13 +525,13 @@ export function getTile(state: GameState, x: number, y: number): Tile | undefine
  *
  * Replaces the whole surface and overhead stratum (a bare `TileKind` can
  * only ever mean one thing at a time) but leaves `underground` standing —
- * mirrors `tileFromV4`'s treatment of a v4 tile's buried pipe, which this
- * function cannot call directly: `protocol/legacyProjection.ts` imports
- * `TileKind` from this module at its own top level, so importing back from
- * it here would form a cycle whose evaluation order left `TileKind`
- * `undefined` the one time this was tried (see git history). Duplicated
- * instead of shared; the mapping is small and `Occupant`'s bit positions
- * are pinned "never reorder".
+ * a buried pipe is orthogonal to whatever sits on the surface, so stamping
+ * a new `kind` here shouldn't clear it. This is now the only TS-side
+ * `TileKind` → occupant-bits mapping left (Rust's `tile_from_v4`, via
+ * `city_sim_core::migrate`, is the sole place a v4 spelling gets decoded for
+ * real saves) — kept small and inline rather than imported from anywhere,
+ * since `Occupant`'s bit positions are pinned "never reorder" and there is
+ * no longer a TS module doing the equivalent decode to share this with.
  */
 export function setTile(state: GameState, x: number, y: number, kind: TileKind) {
   const tile = getTile(state, x, y);
@@ -488,9 +550,6 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
   const isPowerPlant = kind === TileKind.HydroPlant || kind === TileKind.CoalPlant
     || kind === TileKind.WindTurbine || kind === TileKind.SolarFarm;
   if (!isPowerPlant) {
-    tile.powerPlantType = undefined;
-    tile.powerPlantId = undefined;
     tile.buildingId = undefined;
   }
-  bumpTileRevision(state);
 }

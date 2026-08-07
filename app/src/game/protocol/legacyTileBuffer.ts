@@ -1,10 +1,15 @@
+// legacyTileBuffer.ts — frozen v4 wire tile-buffer layout, TS mirror of legacy_tile_buffer.rs.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 /**
  * Frozen v4 tile-buffer layout — TS mirror of
  * crates/city-sim-protocol/src/legacy_tile_buffer.rs.
  *
  * The wire layout every `.citysim` JSON save was ever encoded against,
  * before the live wire moved to the occupant-strata representation. Used
- * only by `persistence.ts`'s `buildLegacyEngineImport` (encoding *to* this
+ * only by `persistence.ts`'s `transcodeLegacySave` (encoding *to* this
  * shape for `SimHost.import_legacy`) and by `wasmSimBridge.ts`'s legacy
  * import decode path, if either needs to read/write it directly.
  *

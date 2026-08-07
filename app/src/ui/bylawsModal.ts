@@ -1,21 +1,30 @@
-import { projectLightingPolicy } from '../game/bylawAnalytics';
-import { DEFAULT_BYLAWS, LIGHTING_POLICIES, type LightingBylaw } from '../game/bylaws';
+// bylawsModal.ts — the Bylaws modal: lighting standards and wilderness programme controls.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
+import {
+  GREEN_INDUSTRY_SUBSIDY_PER_ZONE,
+  LIGHTING_POLICIES,
+  NATURE_RESERVE_COST_PER_DAY,
+  previewLightingPolicy,
+  type LightingPolicy
+} from '../game/bylaws';
 import type { GameState } from '../game/gameState';
 import { Occupant, zoneOccupant } from '../game/protocol/occupants';
 import {
   NATURE_RESERVE_UNLOCK_SCORE,
   type WildernessPolicy
 } from '../game/protocol/commands';
+import { DAYS_PER_MONTH } from '../game/time';
 import { showToast } from './dialogs';
 
 type BylawsModalOptions = {
   getState: () => GameState;
-  onSelectLighting: (lighting: LightingBylaw) => void;
+  onSelectLighting: (lighting: LightingPolicy) => void;
   onWildernessPolicyChange?: (policy: WildernessPolicy) => void;
   onClose?: () => void;
 };
-
-const MONTHLY_EXPENSE_FACTOR = 9; // Mirror the sim's net-per-day/month conversion.
 
 function formatDelta(
   value: number,
@@ -171,7 +180,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           label: '🌿 Nature Reserve',
           lede: 'Rangers connect and protect green space: bigger patch bonuses, gentler fragmentation penalties.',
           costLabel: 'Programme cost',
-          cost: 100 * MONTHLY_EXPENSE_FACTOR,
+          cost: NATURE_RESERVE_COST_PER_DAY * DAYS_PER_MONTH,
           enabled: policy.natureReserve,
           locked: !reserveUnlocked,
           lockHint: `Unlocks at Wilderness ${NATURE_RESERVE_UNLOCK_SCORE} (currently ${Math.round(score)}).`
@@ -181,7 +190,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           label: '♻️ Green Industry',
           lede: 'Subsidize scrubbers and clean processes so industrial tiles weigh far less on the wilderness score.',
           costLabel: 'Subsidy',
-          cost: industrialZones * 2 * MONTHLY_EXPENSE_FACTOR,
+          cost: industrialZones * GREEN_INDUSTRY_SUBSIDY_PER_ZONE * DAYS_PER_MONTH,
           enabled: policy.greenIndustry,
           locked: false
         }
@@ -242,13 +251,25 @@ export function initBylawsModal(options: BylawsModalOptions) {
 
     const renderLightingOptions = () => {
       const state = getState();
-      const currentLighting = state.bylaws?.lighting ?? DEFAULT_BYLAWS.lighting;
+      const currentLighting = state.policies.lighting;
       const currentPolicy = LIGHTING_POLICIES[currentLighting];
+      const appliedPowerUse = state.utilities.powerUsed;
+      const appliedMaintenance = state.budget.maintCivic + state.budget.maintZones;
       lightingOptions.innerHTML = '';
       Object.values(LIGHTING_POLICIES).forEach((policy) => {
-        const projection = projectLightingPolicy(state, policy.id);
-        const monthlyDelta = projection.deltaMaintenance * MONTHLY_EXPENSE_FACTOR;
-        const moodDelta = policy.happinessTarget - currentPolicy.happinessTarget;
+        // Rescale from `appliedLighting` — the policy the wire figures were
+        // actually computed under — not the optimistic `currentLighting`:
+        // after a switch while paused, no tick has re-priced the city yet,
+        // and dividing old figures by the new multiplier would inflate the
+        // recovered baseline (~22% for Efficient). `currentLighting` still
+        // drives which option renders as active.
+        const projection = previewLightingPolicy(state.appliedLighting, policy.id, appliedPowerUse, appliedMaintenance);
+        const monthlyDelta = projection.maintenanceDelta * DAYS_PER_MONTH;
+        // A real effect now, not a preview: `LightingPolicy::happiness_multiplier`
+        // (Rust) scales the wilderness-driven happiness-drift target in
+        // `wilderness::apply_happiness_drift`, so this delta is the actual mood
+        // shift a switch would apply, not decoration.
+        const moodDelta = policy.happinessMultiplier - currentPolicy.happinessMultiplier;
 
         const option = document.createElement('label');
         option.className = 'bylaws-option';
@@ -263,7 +284,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           if (policy.id === currentLighting) return;
           onSelectLighting(policy.id);
           renderLightingOptions();
-          const toastPower = formatDelta(projection.deltaPowerUse, { unit: 'MW' });
+          const toastPower = formatDelta(projection.powerUseDelta, { unit: 'MW' });
           const toastUpkeep = formatDelta(monthlyDelta, { currency: true, unit: '/mo', precision: 0 });
           showToast(`Lighting bylaw set to ${policy.label} (${toastPower}, ${toastUpkeep}).`, {
             severity: 'info',
@@ -283,9 +304,9 @@ export function initBylawsModal(options: BylawsModalOptions) {
         const deltas = document.createElement('div');
         deltas.className = 'bylaws-option-deltas';
         deltas.append(
-          createDeltaPill('Power demand', projection.deltaPowerUse, { unit: 'MW' }),
+          createDeltaPill('Power demand', projection.powerUseDelta, { unit: 'MW' }),
           createDeltaPill('Upkeep', monthlyDelta, { currency: true, unit: '/mo', precision: 0 }),
-          createDeltaPill('Mood target', moodDelta, { precision: 2 })
+          createDeltaPill('Mood', moodDelta, { precision: 2 })
         );
 
         optionBody.append(title, optionLede, deltas);

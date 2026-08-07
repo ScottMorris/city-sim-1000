@@ -32,9 +32,9 @@
 //! [`terrain_eco`](WildernessTunables::terrain_eco) keyed by [`Terrain`],
 //! [`occupant_eco`](WildernessTunables::occupant_eco) keyed by [`Occupant`],
 //! and [`structure_eco`](WildernessTunables::structure_eco) keyed by
-//! `TileKind` — the last legitimately so, because that is the building
-//! template key and it is what identifies *which* structure. Every value stayed
-//! exactly where it was on the number line; only its address changed.
+//! [`BuildingKind::dense_index`] — the building template key, and it is what
+//! identifies *which* structure. Every value stayed exactly where it was on
+//! the number line; only its address changed.
 //!
 //! All three are **tables, not constants**, and that is a requirement rather
 //! than a habit: the Green Industry programme rewrites the industrial row at
@@ -49,7 +49,9 @@ use crate::occupants::{
     tile_eco, EcoCategory, Occupant, StructureLookup, Terrain, OCCUPANT_COUNT, TERRAIN_COUNT,
 };
 use crate::state::GameState;
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::WildernessPolicy;
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
@@ -73,12 +75,12 @@ pub struct WildernessTunables {
     /// sends that one occupant to [`Self::structure_eco`] instead. See
     /// `the_structure_row_of_the_occupant_table_is_never_read`.
     pub occupant_eco: [f32; OCCUPANT_COUNT],
-    /// Eco value of a structure, indexed by `TileKind as usize` — the building
-    /// template key, which is what identifies *which* structure. Read by
-    /// [`structure_eco`]; only the
-    /// [`is_structure_kind`](crate::occupants::is_structure_kind) rows are ever
-    /// live, and the rest stay `0.0`.
-    pub structure_eco: [f32; TileKind::COUNT],
+    /// Eco value of a structure, indexed by
+    /// [`BuildingKind::dense_index`] — the building template key, which is
+    /// what identifies *which* structure. Read by [`structure_eco`]. Dense
+    /// rather than indexed by the raw (sparse) discriminant, because
+    /// `BuildingKind`'s thirteen members span `0x10..=0x51`.
+    pub structure_eco: [f32; BuildingKind::COUNT],
     /// Patch bonus ceiling per strong-nature tile (saturating curve).
     pub patch_bonus_cap: f32,
     /// Cluster size at which the patch bonus reaches ~63% of its cap.
@@ -164,17 +166,17 @@ impl Default for WildernessTunables {
         // is decides, and that is the table below.
 
         // --- one row per structure, keyed by its building template ---
-        let mut structure_eco = [0.0_f32; TileKind::COUNT];
-        structure_eco[TileKind::HydroPlant as usize] = -2.0;
-        structure_eco[TileKind::WaterPump as usize] = -1.0;
-        structure_eco[TileKind::WaterTower as usize] = -1.0;
-        structure_eco[TileKind::ElementarySchool as usize] = -1.0;
-        structure_eco[TileKind::HighSchool as usize] = -1.0;
-        structure_eco[TileKind::Park as usize] = 4.0;
-        structure_eco[TileKind::ParkLarge as usize] = 4.0;
-        structure_eco[TileKind::CoalPlant as usize] = -8.0;
-        structure_eco[TileKind::WindTurbine as usize] = -1.0;
-        structure_eco[TileKind::SolarFarm as usize] = -1.0;
+        let mut structure_eco = [0.0_f32; BuildingKind::COUNT];
+        structure_eco[BuildingKind::HydroPlant.dense_index()] = -2.0;
+        structure_eco[BuildingKind::WaterPump.dense_index()] = -1.0;
+        structure_eco[BuildingKind::WaterTower.dense_index()] = -1.0;
+        structure_eco[BuildingKind::ElementarySchool.dense_index()] = -1.0;
+        structure_eco[BuildingKind::HighSchool.dense_index()] = -1.0;
+        structure_eco[BuildingKind::Park.dense_index()] = 4.0;
+        structure_eco[BuildingKind::ParkLarge.dense_index()] = 4.0;
+        structure_eco[BuildingKind::CoalPlant.dense_index()] = -8.0;
+        structure_eco[BuildingKind::WindTurbine.dense_index()] = -1.0;
+        structure_eco[BuildingKind::SolarFarm.dense_index()] = -1.0;
 
         Self {
             terrain_eco,
@@ -506,8 +508,18 @@ pub fn tourism_dividend(score: f32, population: u32, t: &WildernessTunables) -> 
 
 /// Drift zone-tile happiness toward the wilderness-driven target.
 /// Called once per recompute, not per tick, so the rate stays gentle.
+///
+/// The target is scaled by the lighting bylaw's
+/// [`LightingPolicy::happiness_multiplier`](city_sim_protocol::commands::LightingPolicy::happiness_multiplier)
+/// — a real effect now, not the TS-only preview it used to be. `Mixed`'s
+/// multiplier is exactly `1.0`, so an unset bylaw reproduces this function's
+/// pre-multiplier numbers bit-for-bit. Clamped the same as the drift result
+/// itself: happiness is bounded `[0.0, 1.5]` regardless of how far a
+/// non-neutral multiplier pushes the target.
 pub fn apply_happiness_drift(state: &mut GameState, score: f32, t: &WildernessTunables) {
-    let target = 1.0 + (score - 50.0) / 50.0 * t.happiness_target_span;
+    let target = (1.0 + (score - 50.0) / 50.0 * t.happiness_target_span)
+        * state.policies.lighting.happiness_multiplier();
+    let target = target.clamp(0.0, 1.5);
     for tile in &mut state.tiles {
         // Only zoned land has residents to be happy or unhappy. Asked through
         // the accessor rather than off `kind` so step 3 of #177 can narrow
@@ -529,7 +541,7 @@ mod tests {
     use crate::commands::{apply_tool, tool_cost};
     use crate::migrate::set_v4_kind;
     use crate::occupants::{Occupant, ALL_OCCUPANTS};
-    use city_sim_protocol::commands::{Tool, ViewStratum};
+    use city_sim_protocol::commands::{LightingPolicy, Tool, ViewStratum};
 
     fn grid(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -539,12 +551,21 @@ mod tests {
     /// development they need to be scored — `Occupant::Structure` is a flat
     /// tag, so a park with no `BuildingInstance` behind it is bare ground.
     fn set(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
-        if crate::occupants::is_structure_kind(kind) {
+        if crate::migrate::is_structure_kind(kind) {
+            // `is_structure_kind` is a subset of `building_kind_of`'s domain
+            // (it excludes the three zone kinds, which take the `else`
+            // branch below), so this is always `Some`.
+            let building_kind = crate::migrate::building_kind_of(kind)
+                .expect("is_structure_kind implies building_kind_of");
             let id = state.next_building_id;
             state.next_building_id += 1;
             state
                 .buildings
-                .push(crate::buildings::BuildingInstance::new(id, kind, (x, y)));
+                .push(crate::buildings::BuildingInstance::new(
+                    id,
+                    building_kind,
+                    (x, y),
+                ));
             let tile = state.tile_at_mut(x, y).unwrap();
             tile.set_occupant(Occupant::Structure, true);
             tile.building_id = Some(id as u16);
@@ -806,30 +827,37 @@ mod tests {
         let t = WildernessTunables::default();
         assert_eq!(t.terrain_eco.len(), Terrain::ALL.len());
         assert_eq!(t.occupant_eco.len(), ALL_OCCUPANTS.len());
-        assert_eq!(t.structure_eco.len(), TileKind::ALL.len());
+        assert_eq!(t.structure_eco.len(), BuildingKind::COUNT);
         for terrain in Terrain::ALL {
             let _ = t.terrain_eco[terrain as usize];
         }
         for o in ALL_OCCUPANTS {
             let _ = t.occupant_eco[o as usize];
         }
-        for &kind in TileKind::ALL {
-            let _ = t.structure_eco[kind as usize];
+        for &kind in BuildingKind::ALL {
+            let _ = t.structure_eco[kind.dense_index()];
         }
     }
 
-    /// The structure table's live rows are exactly the structure kinds. Every
-    /// other `TileKind` row is `0.0` and stays that way: a road's −2.0 moved
-    /// *out* of the `TileKind`-keyed table when the split happened, rather
-    /// than being copied into a second home where the two could drift.
+    /// The structure table's live rows are exactly the ten non-zone structure
+    /// kinds. The three zone kinds' rows are `0.0` and stay that way: a
+    /// developed lot's occupant is a zone tag, not `Structure`, so
+    /// `structure_eco` is never asked about `Residential`/`Commercial`/
+    /// `Industrial` in real scoring — a road's −2.0 (an *occupant* value)
+    /// moved *out* of this table when the split happened, rather than being
+    /// copied into a second home where the two could drift.
     #[test]
-    fn only_structure_kinds_carry_a_structure_eco() {
+    fn only_non_zone_structure_kinds_carry_a_structure_eco() {
         let t = WildernessTunables::default();
-        for &kind in TileKind::ALL {
+        for &kind in BuildingKind::ALL {
+            let is_zone = matches!(
+                kind,
+                BuildingKind::Residential | BuildingKind::Commercial | BuildingKind::Industrial
+            );
             assert_eq!(
-                t.structure_eco[kind as usize] != 0.0,
-                crate::occupants::is_structure_kind(kind),
-                "{kind:?}: only structures belong in the structure eco table"
+                t.structure_eco[kind.dense_index()] != 0.0,
+                !is_zone,
+                "{kind:?}: only non-zone structures belong in the structure eco table"
             );
         }
     }
@@ -845,7 +873,7 @@ mod tests {
         // Poison the row: nothing may notice.
         t.occupant_eco[Occupant::Structure as usize] = 999.0;
         assert_eq!(occupant_eco(Occupant::Structure, &t), None);
-        assert_eq!(structure_eco(TileKind::CoalPlant, &t), -8.0);
+        assert_eq!(structure_eco(BuildingKind::CoalPlant, &t), -8.0);
 
         // …and no route into the score may notice either.
         let mut s = grid(8, 8);
@@ -910,16 +938,16 @@ mod tests {
     fn coal_is_worse_than_wind_and_solar() {
         let t = WildernessTunables::default();
         assert!(
-            t.structure_eco[TileKind::CoalPlant as usize]
-                < t.structure_eco[TileKind::HydroPlant as usize]
+            t.structure_eco[BuildingKind::CoalPlant.dense_index()]
+                < t.structure_eco[BuildingKind::HydroPlant.dense_index()]
         );
         assert!(
-            t.structure_eco[TileKind::HydroPlant as usize]
-                < t.structure_eco[TileKind::WindTurbine as usize]
+            t.structure_eco[BuildingKind::HydroPlant.dense_index()]
+                < t.structure_eco[BuildingKind::WindTurbine.dense_index()]
         );
         assert_eq!(
-            t.structure_eco[TileKind::WindTurbine as usize],
-            t.structure_eco[TileKind::SolarFarm as usize]
+            t.structure_eco[BuildingKind::WindTurbine.dense_index()],
+            t.structure_eco[BuildingKind::SolarFarm.dense_index()]
         );
     }
 
@@ -1209,6 +1237,37 @@ mod tests {
         // Now drifting toward 0.8 — must move down and stay in range.
         let h = s.tile_at(0, 0).unwrap().happiness;
         assert!((0.0..=1.5).contains(&h));
+    }
+
+    /// **A real mechanism, not a display-only preview.** The lighting bylaw
+    /// used to be a TS-only table (`bylaws.ts`'s old `happinessTarget`) that
+    /// nothing simulated; `LightingPolicy::happiness_multiplier` scaling the
+    /// drift target here is what makes it one. `CarbonArc` (multiplier > 1.0)
+    /// must drift a zone tile further above 1.0 than `Mixed` does from the
+    /// same starting point and the same wilderness score; `Efficient`
+    /// (multiplier < 1.0) must drift it less far.
+    #[test]
+    fn lighting_policy_shifts_happiness_drift() {
+        let t = WildernessTunables::default();
+        let start = |policy: LightingPolicy| -> f32 {
+            let mut s = grid(4, 4);
+            set(&mut s, 0, 0, TileKind::Residential);
+            s.tile_at_mut(0, 0).unwrap().happiness = 1.0;
+            s.policies.lighting = policy;
+            apply_happiness_drift(&mut s, 100.0, &t);
+            s.tile_at(0, 0).unwrap().happiness
+        };
+        let mixed = start(LightingPolicy::Mixed);
+        let carbon_arc = start(LightingPolicy::CarbonArc);
+        let efficient = start(LightingPolicy::Efficient);
+        assert!(
+            carbon_arc > mixed,
+            "CarbonArc's >1.0 multiplier should drift happiness higher than Mixed's neutral one"
+        );
+        assert!(
+            efficient < mixed,
+            "Efficient's <1.0 multiplier should drift happiness lower than Mixed's neutral one"
+        );
     }
 
     // --- one contribution per occupant (#173) ---

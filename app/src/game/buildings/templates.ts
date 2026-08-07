@@ -4,24 +4,68 @@
 // SPDX-License-Identifier: MIT
 
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from '../constants';
-import { TileKind } from '../gameState';
 import { Tool } from '../toolTypes';
 import { ServiceId } from '../services';
+import { engineBuildingData } from './templateData';
 
-export enum BuildingCategory {
+/**
+ * The coarse power/civic/zone bucket a template's upkeep lands in — the same
+ * trio the engine's budget ledger reports (`economy.rs`'s maintenance
+ * breakdown) and the debug/bylaw UI groups by. Distinct from Rust's
+ * `BuildingCategory` (`city-sim-protocol`'s `building_kind.rs`), the precise
+ * seven-member domain taxonomy carried in a `BuildingKind`'s high nibble —
+ * `Water`/`Education`/`Recreation` all land in `Civic` here.
+ */
+export enum LedgerGroup {
   Power = 'power',
   Civic = 'civic',
   Zone = 'zone'
 }
 
+/**
+ * Which static building this template is — the live, renderer/gameplay-facing
+ * identity a `BuildingTemplate` carries, as opposed to `id` (the save/MCP/
+ * `Tool`-compatible lookup key; identical in value to the corresponding
+ * member here for every template except the three zone lots, whose `id`
+ * carries a `zone-` prefix `BuildingKind` never did). Deliberately its own
+ * enum rather than a reuse of `TileKind`: `TileKind` is frozen legacy-save
+ * vocabulary now (`docs/tile-model.md`), and every member's string value is
+ * copied from it once, on purpose, so today's save/MCP spelling doesn't move.
+ */
+export enum BuildingKind {
+  HydroPlant = 'hydro',
+  CoalPlant = 'coal',
+  WindTurbine = 'wind',
+  SolarFarm = 'solar',
+  WaterPump = 'pump',
+  WaterTower = 'water_tower',
+  Park = 'park',
+  ParkLarge = 'park_large',
+  ElementarySchool = 'elementary_school',
+  HighSchool = 'high_school',
+  Residential = 'residential',
+  Commercial = 'commercial',
+  Industrial = 'industrial'
+}
+
+/**
+ * A static building's display + numeric spec. `footprint`, `cost`,
+ * `maintenance`, `powerUse`, `waterUse`, `waterOutput`,
+ * `populationCapacity`, `jobsCapacity`, and `service.{coverageRadius,
+ * capacity}` all come from `templateData.json` (`engineBuildingData`/
+ * `BUILD_COST`) — Rust's own numbers, not a second hand-typed copy of them.
+ * What's left hand-authored below is display-only: `name`, `colour`,
+ * `spriteKey`, `category` (`LedgerGroup`), and the `requiresPower`/
+ * `requiresWater` capability flags.
+ */
 export interface BuildingTemplate {
   id: string;
   name: string;
-  category: BuildingCategory;
+  category: LedgerGroup;
   footprint: { width: number; height: number };
   cost: number;
   maintenance: number;
-  tileKind: TileKind;
+  kind: BuildingKind;
   spriteKey?: string;
   requiresPower?: boolean;
   requiresWater?: boolean;
@@ -36,163 +80,205 @@ export interface BuildingTemplate {
     coverageRadius: number;
     capacity: number;
   };
+  /** Flat-colour fallback for the renderer's structure ladder rung
+   *  (`dominantColour`/`minimapBaseColour` in `rendering/tileRenderUtils.ts`/
+   *  `ui/minimap.ts`) — the display colour a live instance of this template
+   *  paints when no sprite has resolved for its tile. Zone templates leave
+   *  this unset: a developed lot's occupant is a zone tag, not `Structure`
+   *  (see `isDevelopedZone`), so the structure rung never looks at their
+   *  colour — the zone rung reads `OCCUPANT_COLOURS` instead. */
+  colour?: number;
 }
+
+const hydroData = engineBuildingData('HydroPlant');
+const coalData = engineBuildingData('CoalPlant');
+const windData = engineBuildingData('WindTurbine');
+const solarData = engineBuildingData('SolarFarm');
 
 export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   [PowerPlantType.Hydro]: {
     id: PowerPlantType.Hydro,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].name,
-    category: BuildingCategory.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].maintenancePerDay,
-    tileKind: TileKind.HydroPlant,
+    category: LedgerGroup.Power,
+    footprint: hydroData.footprint,
+    cost: BUILD_COST[Tool.HydroPlant],
+    maintenance: hydroData.maintenance,
+    kind: BuildingKind.HydroPlant,
+    colour: 0x50d1ff,
     requiresPower: false,
     power: { type: PowerPlantType.Hydro, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].outputMw }
   },
   [PowerPlantType.Coal]: {
     id: PowerPlantType.Coal,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Coal].name,
-    category: BuildingCategory.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Coal].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Coal].maintenancePerDay,
-    tileKind: TileKind.CoalPlant,
+    category: LedgerGroup.Power,
+    footprint: coalData.footprint,
+    cost: BUILD_COST[Tool.CoalPlant],
+    maintenance: coalData.maintenance,
+    kind: BuildingKind.CoalPlant,
+    colour: 0x888888,
     requiresPower: false,
     power: { type: PowerPlantType.Coal, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Coal].outputMw }
   },
   [PowerPlantType.Wind]: {
     id: PowerPlantType.Wind,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Wind].name,
-    category: BuildingCategory.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Wind].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Wind].maintenancePerDay,
-    tileKind: TileKind.WindTurbine,
+    category: LedgerGroup.Power,
+    footprint: windData.footprint,
+    cost: BUILD_COST[Tool.WindTurbine],
+    maintenance: windData.maintenance,
+    kind: BuildingKind.WindTurbine,
+    colour: 0xddeeff,
     requiresPower: false,
     power: { type: PowerPlantType.Wind, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Wind].outputMw }
   },
   [PowerPlantType.Solar]: {
     id: PowerPlantType.Solar,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Solar].name,
-    category: BuildingCategory.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Solar].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Solar].maintenancePerDay,
-    tileKind: TileKind.SolarFarm,
+    category: LedgerGroup.Power,
+    footprint: solarData.footprint,
+    cost: BUILD_COST[Tool.SolarFarm],
+    maintenance: solarData.maintenance,
+    kind: BuildingKind.SolarFarm,
+    colour: 0xffdd44,
     requiresPower: false,
     power: { type: PowerPlantType.Solar, outputMw: POWER_PLANT_CONFIGS[PowerPlantType.Solar].outputMw }
   }
 };
 
+const waterPumpData = engineBuildingData('WaterPump');
+const waterTowerData = engineBuildingData('WaterTower');
+const parkData = engineBuildingData('Park');
+const parkLargeData = engineBuildingData('ParkLarge');
+const elemSchoolData = engineBuildingData('ElementarySchool');
+const highSchoolData = engineBuildingData('HighSchool');
+
 export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
-  [TileKind.WaterPump]: {
-    id: TileKind.WaterPump,
+  [BuildingKind.WaterPump]: {
+    id: BuildingKind.WaterPump,
     name: 'Water Pump',
-    category: BuildingCategory.Civic,
-    footprint: { width: 1, height: 1 },
+    category: LedgerGroup.Civic,
+    footprint: waterPumpData.footprint,
     cost: BUILD_COST[Tool.WaterPump],
-    maintenance: 5,
-    tileKind: TileKind.WaterPump,
+    maintenance: waterPumpData.maintenance,
+    kind: BuildingKind.WaterPump,
+    colour: 0x4ac6b7,
     requiresPower: true,
-    waterOutput: 50
+    waterOutput: waterPumpData.waterOutput
   },
-  [TileKind.WaterTower]: {
-    id: TileKind.WaterTower,
+  [BuildingKind.WaterTower]: {
+    id: BuildingKind.WaterTower,
     name: 'Water Tower',
-    category: BuildingCategory.Civic,
-    footprint: { width: 2, height: 2 },
+    category: LedgerGroup.Civic,
+    footprint: waterTowerData.footprint,
     cost: BUILD_COST[Tool.WaterTower],
-    maintenance: 12,
-    tileKind: TileKind.WaterTower,
+    maintenance: waterTowerData.maintenance,
+    kind: BuildingKind.WaterTower,
+    colour: 0x94d1ff,
     requiresPower: true,
-    waterOutput: 120
+    waterOutput: waterTowerData.waterOutput
   },
-  [TileKind.Park]: {
-    id: TileKind.Park,
+  [BuildingKind.Park]: {
+    id: BuildingKind.Park,
     name: 'Small Park',
-    category: BuildingCategory.Civic,
-    footprint: { width: 1, height: 1 },
-    cost: 10,
-    maintenance: 0.05,
-    tileKind: TileKind.Park,
+    category: LedgerGroup.Civic,
+    footprint: parkData.footprint,
+    cost: BUILD_COST[Tool.Park],
+    maintenance: parkData.maintenance,
+    kind: BuildingKind.Park,
+    colour: 0x2fa05a,
     requiresPower: false
   },
-  [TileKind.ParkLarge]: {
-    id: TileKind.ParkLarge,
+  [BuildingKind.ParkLarge]: {
+    id: BuildingKind.ParkLarge,
     name: 'Large Park',
-    category: BuildingCategory.Civic,
-    footprint: { width: 2, height: 2 },
-    cost: 32,
-    maintenance: 0.16,
-    tileKind: TileKind.ParkLarge,
+    category: LedgerGroup.Civic,
+    footprint: parkLargeData.footprint,
+    cost: BUILD_COST[Tool.ParkLarge],
+    maintenance: parkLargeData.maintenance,
+    kind: BuildingKind.ParkLarge,
+    colour: 0x2fa05a,
     requiresPower: false
   },
-  [TileKind.ElementarySchool]: {
-    id: TileKind.ElementarySchool,
+  [BuildingKind.ElementarySchool]: {
+    id: BuildingKind.ElementarySchool,
     name: 'Elementary School',
-    category: BuildingCategory.Civic,
-    footprint: { width: 2, height: 2 },
+    category: LedgerGroup.Civic,
+    footprint: elemSchoolData.footprint,
     cost: BUILD_COST[Tool.ElementarySchool],
-    maintenance: 40,
-    tileKind: TileKind.ElementarySchool,
+    maintenance: elemSchoolData.maintenance,
+    kind: BuildingKind.ElementarySchool,
+    colour: 0x6aa7ff,
     requiresPower: true,
-    powerUse: 4,
-    service: { id: ServiceId.EducationElementary, coverageRadius: 8, capacity: 180 }
+    powerUse: elemSchoolData.powerUse,
+    service: {
+      id: ServiceId.EducationElementary,
+      coverageRadius: elemSchoolData.service!.radius,
+      capacity: elemSchoolData.service!.capacity
+    }
   },
-  [TileKind.HighSchool]: {
-    id: TileKind.HighSchool,
+  [BuildingKind.HighSchool]: {
+    id: BuildingKind.HighSchool,
     name: 'High School',
-    category: BuildingCategory.Civic,
-    footprint: { width: 2, height: 2 },
+    category: LedgerGroup.Civic,
+    footprint: highSchoolData.footprint,
     cost: BUILD_COST[Tool.HighSchool],
-    maintenance: 55,
-    tileKind: TileKind.HighSchool,
+    maintenance: highSchoolData.maintenance,
+    kind: BuildingKind.HighSchool,
+    colour: 0x8f7bff,
     requiresPower: true,
-    powerUse: 5,
-    service: { id: ServiceId.EducationHigh, coverageRadius: 9, capacity: 160 }
+    powerUse: highSchoolData.powerUse,
+    service: {
+      id: ServiceId.EducationHigh,
+      coverageRadius: highSchoolData.service!.radius,
+      capacity: highSchoolData.service!.capacity
+    }
   }
 };
 
+const residentialData = engineBuildingData('Residential');
+const commercialData = engineBuildingData('Commercial');
+const industrialData = engineBuildingData('Industrial');
+
 export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
-  [TileKind.Residential]: {
+  [BuildingKind.Residential]: {
     id: 'zone-residential',
     name: 'Residential Lot',
-    category: BuildingCategory.Zone,
-    footprint: { width: 1, height: 1 },
+    category: LedgerGroup.Zone,
+    footprint: residentialData.footprint,
     cost: BUILD_COST[Tool.Residential],
-    maintenance: 1,
-    tileKind: TileKind.Residential,
+    maintenance: residentialData.maintenance,
+    kind: BuildingKind.Residential,
     requiresPower: true,
-    powerUse: 1.5,
-    waterUse: 1,
-    populationCapacity: 14
+    powerUse: residentialData.powerUse,
+    waterUse: residentialData.waterUse,
+    populationCapacity: residentialData.populationCapacity
   },
-  [TileKind.Commercial]: {
+  [BuildingKind.Commercial]: {
     id: 'zone-commercial',
     name: 'Commercial Lot',
-    category: BuildingCategory.Zone,
-    footprint: { width: 1, height: 1 },
+    category: LedgerGroup.Zone,
+    footprint: commercialData.footprint,
     cost: BUILD_COST[Tool.Commercial],
-    maintenance: 1.2,
-    tileKind: TileKind.Commercial,
+    maintenance: commercialData.maintenance,
+    kind: BuildingKind.Commercial,
     requiresPower: true,
-    powerUse: 2.5,
-    waterUse: 1.5,
-    jobsCapacity: 8
+    powerUse: commercialData.powerUse,
+    waterUse: commercialData.waterUse,
+    jobsCapacity: commercialData.jobsCapacity
   },
-  [TileKind.Industrial]: {
+  [BuildingKind.Industrial]: {
     id: 'zone-industrial',
     name: 'Industrial Lot',
-    category: BuildingCategory.Zone,
-    footprint: { width: 1, height: 1 },
+    category: LedgerGroup.Zone,
+    footprint: industrialData.footprint,
     cost: BUILD_COST[Tool.Industrial],
-    maintenance: 1.4,
-    tileKind: TileKind.Industrial,
+    maintenance: industrialData.maintenance,
+    kind: BuildingKind.Industrial,
     requiresPower: true,
-    powerUse: 3,
-    waterUse: 2,
-    jobsCapacity: 12
+    powerUse: industrialData.powerUse,
+    waterUse: industrialData.waterUse,
+    jobsCapacity: industrialData.jobsCapacity
   }
 };
 
@@ -211,21 +297,8 @@ const STATIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   ...ZONE_TEMPLATES_BY_ID
 };
 
-const CUSTOM_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {};
-
 export function getBuildingTemplate(templateId: string): BuildingTemplate | undefined {
-  if (CUSTOM_BUILDING_TEMPLATES[templateId]) return CUSTOM_BUILDING_TEMPLATES[templateId];
-  const staticTemplate = STATIC_BUILDING_TEMPLATES[templateId];
-  if (staticTemplate) return staticTemplate;
-  return undefined;
-}
-
-export function registerBuildingTemplate(template: BuildingTemplate) {
-  CUSTOM_BUILDING_TEMPLATES[template.id] = template;
-}
-
-export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
-  return POWER_PLANT_TEMPLATES[type];
+  return STATIC_BUILDING_TEMPLATES[templateId];
 }
 
 /**

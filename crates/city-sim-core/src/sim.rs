@@ -273,6 +273,12 @@ impl Simulation {
         // Mirrors the building-state gate above: no water system yet means
         // water use is stubbed to zero, not accumulated into a deficit.
         let water_active = self.water_enabled && self.state.has_water_system();
+        // Lighting bylaw (#9 follow-up): scales civic + zone power draw only
+        // — never a power plant's own draw (`is_power_plant` templates carry
+        // `power_use: 0.0` today, but the gate is explicit rather than
+        // relying on that). `LightingPolicy::Mixed` (default) multiplies by
+        // 1.0, so an unset bylaw reproduces the pre-bylaw numbers exactly.
+        let light_power = self.state.policies.lighting.power_use_multiplier();
         let mut power_used: f32 = 0.0;
         let mut water_used: f32 = 0.0;
         for b in &self.state.buildings {
@@ -282,7 +288,12 @@ impl Simulation {
             let Some(tmpl) = get_building_template(b.kind) else {
                 continue;
             };
-            power_used += tmpl.power_use;
+            let scaled_power_use = if tmpl.is_civic || tmpl.is_zone {
+                tmpl.power_use * light_power
+            } else {
+                tmpl.power_use
+            };
+            power_used += scaled_power_use;
             let wu = if water_active { tmpl.water_use } else { 0.0 };
             water_used += wu;
 
@@ -300,16 +311,16 @@ impl Simulation {
             if let Some(idx) = self.state.tile_index(b.origin.0, b.origin.1) {
                 if let Some(&label) = self.state.utility_networks.power_labels.get(idx) {
                     debug_assert!(
-                        label != 0 || tmpl.power_use <= 0.0,
+                        label != 0 || scaled_power_use <= 0.0,
                         "Active building {:?} draws {} MW but its origin tile is unlabelled \
                          (unpowered) — the requires_power invariant this attribution relies on \
                          may be broken",
                         b.kind,
-                        tmpl.power_use
+                        scaled_power_use
                     );
                     if label != 0 {
                         self.state.utility_networks.power_components[(label - 1) as usize].used +=
-                            tmpl.power_use;
+                            scaled_power_use;
                     }
                 }
                 if water_active {
@@ -663,20 +674,20 @@ mod tests {
     #[test]
     fn a_buildings_kind_changes_the_hash_even_behind_a_stable_id() {
         use crate::buildings::BuildingInstance;
-        use city_sim_protocol::tile_kind::TileKind;
+        use city_sim_protocol::building_kind::BuildingKind;
 
         let mut park = Simulation::new(4, 4, 1);
         park.state.tiles[5].building_id = Some(7);
         park.state
             .buildings
-            .push(BuildingInstance::new(7, TileKind::Park, (1, 1)));
+            .push(BuildingInstance::new(7, BuildingKind::Park, (1, 1)));
 
         let mut plant = Simulation::new(4, 4, 1);
         plant.state.tiles[5].building_id = Some(7);
         plant
             .state
             .buildings
-            .push(BuildingInstance::new(7, TileKind::CoalPlant, (1, 1)));
+            .push(BuildingInstance::new(7, BuildingKind::CoalPlant, (1, 1)));
 
         assert_ne!(
             state_hash(&park.state),
@@ -721,8 +732,8 @@ mod tests {
     fn water_requirement_is_opt_in_until_infrastructure_exists() {
         use crate::buildings::BuildingStatus;
         use crate::commands::apply_tool;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::commands::{Tool, ViewStratum};
-        use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(16, 16, 42);
         for x in 0..12 {
@@ -754,7 +765,7 @@ mod tests {
             .state
             .buildings
             .iter()
-            .filter(|b| b.kind == TileKind::Residential)
+            .filter(|b| b.kind == BuildingKind::Residential)
             .map(|b| b.status)
             .collect();
         assert!(!zone_statuses.is_empty(), "zones should have grown");
@@ -784,7 +795,7 @@ mod tests {
             sim.state
                 .buildings
                 .iter()
-                .any(|b| b.kind == TileKind::Residential
+                .any(|b| b.kind == BuildingKind::Residential
                     && b.status == BuildingStatus::InactiveNoWater),
             "with a water system present, unwatered zones require water again"
         );
@@ -798,6 +809,7 @@ mod tests {
     fn a_starved_segment_is_invisible_to_the_pooled_city_balance() {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::migrate::set_v4_kind;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(14, 2, 1);
@@ -813,7 +825,7 @@ mod tests {
                 }
             }
             s.buildings.push({
-                let mut b = BuildingInstance::new(1, TileKind::CoalPlant, (0, 0));
+                let mut b = BuildingInstance::new(1, BuildingKind::CoalPlant, (0, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -830,7 +842,7 @@ mod tests {
                 }
             }
             s.buildings.push({
-                let mut b = BuildingInstance::new(2, TileKind::WindTurbine, (5, 0));
+                let mut b = BuildingInstance::new(2, BuildingKind::WindTurbine, (5, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -840,7 +852,7 @@ mod tests {
                 let id = 10 + i as u32;
                 s.tile_at_mut(x, 0).unwrap().building_id = Some(id as u16);
                 s.buildings.push({
-                    let mut b = BuildingInstance::new(id, TileKind::Residential, (x, 0));
+                    let mut b = BuildingInstance::new(id, BuildingKind::Residential, (x, 0));
                     b.status = BuildingStatus::Active;
                     b
                 });
@@ -887,6 +899,7 @@ mod tests {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::migrate::set_v4_kind;
         use crate::occupants::Occupant;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(3, 1, 1);
@@ -896,7 +909,7 @@ mod tests {
             set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
             s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
             s.buildings.push({
-                let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+                let mut b = BuildingInstance::new(1, BuildingKind::WaterPump, (0, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -906,7 +919,7 @@ mod tests {
             set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Residential);
             s.tile_at_mut(2, 0).unwrap().building_id = Some(2);
             s.buildings.push({
-                let mut b = BuildingInstance::new(2, TileKind::Residential, (2, 0));
+                let mut b = BuildingInstance::new(2, BuildingKind::Residential, (2, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -1114,6 +1127,7 @@ mod tests {
     fn load_state_repopulates_utility_networks_without_clobbering_used() {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::migrate::set_v4_kind;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(3, 1, 1);
@@ -1122,7 +1136,7 @@ mod tests {
             s.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
             s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
             s.buildings.push({
-                let mut b = BuildingInstance::new(1, TileKind::CoalPlant, (0, 0));
+                let mut b = BuildingInstance::new(1, BuildingKind::CoalPlant, (0, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -1134,14 +1148,14 @@ mod tests {
             set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Residential);
             s.tile_at_mut(1, 0).unwrap().building_id = Some(2);
             s.buildings.push({
-                let mut b = BuildingInstance::new(2, TileKind::Residential, (1, 0));
+                let mut b = BuildingInstance::new(2, BuildingKind::Residential, (1, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
             s.tile_at_mut(2, 0).unwrap().water_output = 50;
             s.tile_at_mut(2, 0).unwrap().building_id = Some(3);
             s.buildings.push({
-                let mut b = BuildingInstance::new(3, TileKind::WaterPump, (2, 0));
+                let mut b = BuildingInstance::new(3, BuildingKind::WaterPump, (2, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -1187,6 +1201,57 @@ mod tests {
                 .components(UtilityKind::Water)
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn lighting_bylaw_scales_civic_and_zone_power_use_only() {
+        use crate::buildings::BuildingInstance;
+        use crate::migrate::set_v4_kind;
+        use city_sim_protocol::building_kind::BuildingKind;
+        use city_sim_protocol::commands::LightingPolicy;
+        use city_sim_protocol::tile_kind::TileKind;
+
+        let mut sim = Simulation::new(2, 1, 1);
+        {
+            let s = &mut sim.state;
+            s.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
+            s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(1, BuildingKind::CoalPlant, (0, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+            set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Residential);
+            s.tile_at_mut(1, 0).unwrap().building_id = Some(2);
+            s.buildings.push({
+                let mut b = BuildingInstance::new(2, BuildingKind::Residential, (1, 0));
+                b.status = BuildingStatus::Active;
+                b
+            });
+        }
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        let neutral_used = sim.state.utilities.power_used;
+        assert_eq!(neutral_used, 2, "Residential draws 1.5 MW, rounds to 2");
+
+        sim.state.policies.lighting = LightingPolicy::Efficient;
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        assert_eq!(
+            sim.state.utilities.power_used, 1,
+            "1.5 MW * 0.82 efficient multiplier rounds to 1"
+        );
+
+        // The coal plant's own maintenance/output are power-plant concerns,
+        // not power *use* — this only pins that the plant's presence didn't
+        // itself contribute a scaled draw (it has none to scale).
+        sim.state.policies.lighting = LightingPolicy::CarbonArc;
+        recompute_utility_network(&mut sim.state, UtilityKind::Power);
+        sim.compute_utility_use();
+        assert_eq!(
+            sim.state.utilities.power_used, 2,
+            "1.5 MW * 1.18 carbon-arc multiplier rounds to 2"
         );
     }
 

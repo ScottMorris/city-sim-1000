@@ -49,32 +49,6 @@ Denies the apply_tool command without any pre-configured scope.
 <tr>
 <td>
 
-`city-sim:allow-get-command-log`
-
-</td>
-<td>
-
-Enables the get_command_log command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:deny-get-command-log`
-
-</td>
-<td>
-
-Denies the get_command_log command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `city-sim:allow-get-map-seed`
 
 </td>
@@ -153,32 +127,6 @@ Denies the import_legacy command without any pre-configured scope.
 <tr>
 <td>
 
-`city-sim:allow-load-command-log`
-
-</td>
-<td>
-
-Enables the load_command_log command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:deny-load-command-log`
-
-</td>
-<td>
-
-Denies the load_command_log command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `city-sim:allow-load-snapshot`
 
 </td>
@@ -224,32 +172,6 @@ Enables the redo command without any pre-configured scope.
 <td>
 
 Denies the redo command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:allow-set-budget-policy`
-
-</td>
-<td>
-
-Enables the set_budget_policy command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:deny-set-budget-policy`
-
-</td>
-<td>
-
-Denies the set_budget_policy command without any pre-configured scope.
 
 </td>
 </tr>
@@ -335,32 +257,6 @@ Denies the set_speed command without any pre-configured scope.
 <tr>
 <td>
 
-`city-sim:allow-set-wilderness-policy`
-
-</td>
-<td>
-
-Enables the set_wilderness_policy command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:deny-set-wilderness-policy`
-
-</td>
-<td>
-
-Denies the set_wilderness_policy command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `city-sim:allow-start`
 
 </td>
@@ -432,32 +328,6 @@ Enables the undo command without any pre-configured scope.
 <td>
 
 Denies the undo command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:allow-undo-last-command`
-
-</td>
-<td>
-
-Enables the undo_last_command command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`city-sim:deny-undo-last-command`
-
-</td>
-<td>
-
-Denies the undo_last_command command without any pre-configured scope.
 
 </td>
 </tr>

@@ -127,7 +127,7 @@ Tiles include:
 ### 5.3 Power Network (v1)
 
 * Tiles carry a `powered` flag.
-* Power sources: any building/tile with `powerPlantType` set (Hydro, Coal, Wind, Solar).
+* Power sources: any building whose `BuildingKind` is a power plant (`HydroPlant`, `CoalPlant`, `WindTurbine`, `SolarFarm`) — the tile carries only the `Structure` occupant plus the `buildingId` pointing at it.
 * Network edges: any tile carrying a hydro line — whether the line owns the tile or rides it as an overlay (over a road or rail, or beneath trees or water painted on afterwards) — plus Road and Rail. If the wires are drawn, the tile conducts.
 * Connectivity: 4-directional BFS flood-fill from sources through power lines/roads/rail; reachable lines/plants are marked `powered: true`.
 * Production: `powerProduced` sums plant outputs from `BUILDING_TEMPLATES`.
@@ -137,7 +137,7 @@ Tiles include:
 
 * Tiles carry a `watered` flag.
 * Water sources: Pumps and Water Towers, both gated on power. Pumps are also gated on a source connection (`#200`): a pump's footprint must be orthogonally adjacent to a water tile to seed the network at all — a dry pump is `InactiveNoSource` and produces nothing. Towers are deliberately terrain-independent and carry no such gate.
-* Network edges: `TileKind.WaterPipe` (underground layer), Road, Rail, and Zones.
+* Network edges: `Occupant.Pipe` (underground layer), Road, Rail, and Zones.
 * Connectivity: BFS flood-fill from sources through pipes and surface transport/zones.
 * Production: `waterProduced` sums powered pump/tower outputs, and for pumps, source-connected ones only — the same predicate the BFS seeding uses, so the two can't disagree.
 * Maintenance: per-pipe upkeep plus per-building maintenance.
@@ -157,7 +157,7 @@ Tiles include:
 
 * `MapRenderer` encapsulates Pixi rendering and draws tiles using existing palette colors; called each frame from `main.ts`.
 * Camera logic (`centerCamera`, `screenToTile`) lives in `rendering/camera.ts`; rendering is decoupled from UI/event handling.
-* Building centre markers are tinted by power status (green when powered, red when unpowered); these markers will later surface missing services (water, fire, waste, etc.).
+* An inactive building draws a small status icon — no-power or no-water/no-source (`tileAtlas.ts`'s `indicators`, chosen by `tileRenderUtils.ts`'s `resolveIndicatorKey`); an active building draws no marker of its own.
 * Power lines
 * Hydro plant
 * Water pump
@@ -208,7 +208,7 @@ interface Tile {
 }
 ```
 
-`TileKind` still exists (`gameState.ts`) but only as a building-template key (`Residential`, `WaterPump`, `HydroPlant`, ...) and in the frozen legacy `.citysim` save format — never as a per-tile field. A level crossing (road + rail on the same tile), a hydro line strung over a road, or a zoned lot developed under a power line are all just multiple bits in the relevant stratum, not special cases.
+`TileKind` still exists (`gameState.ts`) but only in the frozen legacy `.citysim` save format — never as a per-tile field, and no longer as the building-template key either: `buildings/templates.ts`'s `BuildingTemplate.kind` is a separate `BuildingKind` enum (`Residential`, `WaterPump`, `HydroPlant`, ...) with the same string values, so save/MCP spelling didn't move. A level crossing (road + rail on the same tile), a hydro line strung over a road, or a zoned lot developed under a power line are all just multiple bits in the relevant stratum, not special cases.
 
 ### Tile Rendering Requirements
 
@@ -311,7 +311,7 @@ Bulldoze
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
 * Water Tower: 2×2 footprint that boosts city water reserves, requires power and a network connection
-* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing. Enforced engine-side too (`#198`): `Tool::WaterPipe` refuses with "Water pipes must be laid from the Underground view." unless the command's `stratum` is `Underground`, so a client with no view state (`mcpBridge.ts`/the MCP server) can't lay a pipe from the surface either.
+* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing. Enforced engine-side too, as one case of the general rule every tool now follows: each `Tool`'s required `ViewStratum` is derived from the occupant it places (`commands::required_stratum`, `Occupant::Pipe` is `Underground`), and `apply_tool` refuses a mismatched stratum outright with "This tool needs the Underground view." — no `Tool::WaterPipe`-specific check left — so a client with no view state (`mcpBridge.ts`/the MCP server) can't lay a pipe from the surface either.
 * Power lines: graph-based connectivity
 
 #### Sound Effects
@@ -374,7 +374,7 @@ Expenses:
 ### IndexedDB
 
 * Database `city-sim-1000`, store `saves`, one record per slot: `manual` (explicit Save) and `autosave` (periodic, see below)
-* Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard) + client JSON (settings/bylaws)
+* Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard, includes `Policies` — budget, wilderness, and the lighting bylaw) + client JSON (settings)
 * Legacy LocalStorage key `city-sim-1000-save` (plain JSON) is imported once and cleared after a successful CSAV write
 * One deliberate exception: globally-scoped sound effect customizations (§6.4) live in `localStorage`, not IndexedDB — small, cross-save, non-critical if lost
 

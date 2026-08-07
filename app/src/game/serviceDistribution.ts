@@ -1,102 +1,24 @@
+// serviceDistribution.ts — reachable-zone search for service allocators (the education ghost preview).
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+//
+// Used to also carry `computeZoneLoads`/`estimateZoneLoad`, a TS estimate of
+// per-zone population/job load shares — dead code with no caller once the
+// education overlay's placed-school case moved to the wire's own per-tile
+// `services.served`/`scores` (`servedZoneTiles` in `education.ts`, `#200`'s
+// wire-adoption follow-up); deleted rather than kept as an unused estimator.
+// `getReachableZoneCandidates` remains: the ghost preview for a
+// not-yet-placed school still has no engine equivalent to call.
+
 import { getOrthogonalNeighbourCoords, isZone } from './adjacency';
-import { BuildingStatus } from './buildings/state';
-import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
 import type { GameState, Tile } from './gameState';
-import { getTile, TileKind } from './gameState';
+import { getTile } from './gameState';
 import { Occupant, hasOccupant } from './protocol/occupants';
-import { ServiceId } from './services';
-
-export const DEFAULT_WORKER_SHARE = 0.55;
-
-export type ZoneLoadMap = {
-  population: Map<number, number>;
-  jobs: Map<number, number>;
-};
 
 function isRoadish(tile: Tile | undefined): boolean {
   if (!tile) return false;
   return hasOccupant(tile.surface, Occupant.Road);
-}
-
-/**
- * Precompute per-zone population and job load shares so service allocators
- * can consume them without re-walking buildings.
- */
-export function computeZoneLoads(state: GameState, workerShare = DEFAULT_WORKER_SHARE): ZoneLoadMap {
-  const population = new Map<number, number>();
-  const jobs = new Map<number, number>();
-
-  let totalPopCap = 0;
-  let totalComCap = 0;
-  let totalIndCap = 0;
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    if (building.state.status !== BuildingStatus.Active) continue;
-    if (template.category !== BuildingCategory.Zone) continue;
-    if (template.populationCapacity) totalPopCap += template.populationCapacity;
-    if (template.jobsCapacity) {
-      if (template.tileKind === TileKind.Commercial) totalComCap += template.jobsCapacity;
-      if (template.tileKind === TileKind.Industrial) totalIndCap += template.jobsCapacity;
-    }
-  }
-
-  const totalJobCap = totalComCap + totalIndCap;
-  const jobsInCommercial = totalJobCap > 0 ? (totalComCap / totalJobCap) * state.jobs : 0;
-  const jobsInIndustrial = totalJobCap > 0 ? (totalIndCap / totalJobCap) * state.jobs : 0;
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    if (building.state.status !== BuildingStatus.Active) continue;
-    if (template.category !== BuildingCategory.Zone) continue;
-    const idx = building.origin.y * state.width + building.origin.x;
-
-    if (template.populationCapacity) {
-      const share =
-        totalPopCap > 0 ? (template.populationCapacity / totalPopCap) * state.population : 0;
-      population.set(idx, share);
-    }
-
-    if (template.jobsCapacity) {
-      if (template.tileKind === TileKind.Commercial) {
-        const share = totalComCap > 0 ? (template.jobsCapacity / totalComCap) * jobsInCommercial : 0;
-        jobs.set(idx, share);
-      } else if (template.tileKind === TileKind.Industrial) {
-        const share = totalIndCap > 0 ? (template.jobsCapacity / totalIndCap) * jobsInIndustrial : 0;
-        jobs.set(idx, share);
-      } else if (template.populationCapacity) {
-        // Jobs not yet placed; fall back to workers from this population slice.
-        const popShare = population.get(idx) ?? 0;
-        jobs.set(idx, popShare * workerShare);
-      }
-    } else if (template.populationCapacity) {
-      const popShare = population.get(idx) ?? 0;
-      jobs.set(idx, popShare * workerShare);
-    }
-  }
-
-  return { population, jobs };
-}
-
-export function estimateZoneLoad(
-  idx: number,
-  tile: Tile | undefined,
-  serviceId: ServiceId,
-  loads: ZoneLoadMap
-): number {
-  if (!tile || !isZone(tile)) return 0;
-  if (serviceId === ServiceId.EducationElementary) {
-    return loads.population.get(idx) ?? 0;
-  }
-  if (serviceId === ServiceId.EducationHigh) {
-    const jobLoad = loads.jobs.get(idx);
-    if (jobLoad !== undefined) return jobLoad;
-    const popLoad = loads.population.get(idx);
-    return popLoad !== undefined ? popLoad * DEFAULT_WORKER_SHARE : 0;
-  }
-  return 0;
 }
 
 export type ReachableZoneCandidates = Array<[index: number, distance: number]>;

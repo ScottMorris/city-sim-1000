@@ -17,34 +17,41 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// Terrain` + `underground: StratumSet<Underground>` + `surface:
 /// StratumSet<Surface>` + `overhead: StratumSet<Overhead>` + `density:
 /// ZoneDensity`.
+/// v6: `BuildingInstance::kind` moved from the frozen `TileKind` alphabet to
+/// the new `BuildingKind` (`crates/city-sim-protocol/src/building_kind.rs`)
+/// — a building is an entity occupying a tile, not a kind of tile.
+/// v7: `Policies` gained `lighting: LightingPolicy` — the lighting bylaw
+/// moved from the TS-only `ClientState.bylaws` into engine-owned, simulated
+/// state (see `city_sim_protocol::commands::LightingPolicy`).
+/// v8: `Policies` gained `pending_penalty_enabled: bool` — the over-zoning
+/// penalty toggle moved from the TS-only `GameSettings.pendingPenaltyEnabled`
+/// into engine-owned, simulated state (`demand.rs` reads it instead of a
+/// hardcoded `true`), the same move v7 made for the lighting bylaw.
+/// v9: `BuildingInstance` lost `health: u8` and `BuildingStatus` lost
+/// `InactiveDamaged` — the damage/health layer was a `#[serde]`d stub no
+/// tool, tick, or command ever wrote a non-default value into (see the issue
+/// filed alongside this PR for what a real damage feature needs). Removed
+/// rather than left dead, the same call v7/v8 made for policy fields moving
+/// the other direction — a struct field with a value nothing ever changes is
+/// exactly the kind of doc-vs-code drift `docs/features/docs-truth-sweep.md`
+/// exists to catch, and postcard has no way to skip a field it once wrote.
 ///
-/// **The three stratum fields landed inside v5, not in a v6.** v5 has never
-/// been released — `origin/main` and `main` both read `VERSION = 4` — so it was
-/// introduced and reshaped on the same unpushed branch, and a v6 would exist
-/// solely to describe a shape that was never published. What a version number
-/// buys is a migration path for bytes that exist; there are none to speak of,
-/// so it would buy nothing and cost a permanent dead arm in [`from_bytes`].
-/// The moment this branch is pushed that reasoning expires — the next change to
-/// the tile's shape is a v6.
-///
-/// Be precise about what that costs, because it is not nothing. The restructure
-/// changed no *simulated* behaviour, but it did move the persisted bytes:
-/// `Tile` went from one varint `occupants` field to three, so a snapshot
-/// written by an earlier commit *on this branch* no longer loads. The exposure
-/// is a `.citysim` download or an IndexedDB save made while dev-running the
-/// branch between the first stratum commit and this one, and nothing else. The
-/// failure is loud rather than silent — the hand-written `Deserialize` on
-/// `StratumSet` rejects a foreign bit pattern outright, which is what
-/// `tests::a_snapshot_with_a_cross_stratum_bit_is_refused` covers — so such a
-/// save errors instead of decoding into a wrong city.
-///
-/// v4 is still **readable**: [`from_bytes`] dispatches it through
-/// [`crate::migrate::v4_to_v5`], which describes the old `GameState` field for
-/// field and converts each tile with [`crate::migrate::tile_from_v4`] — the
-/// same function `import.rs` uses for the legacy buffer path. Loading a v4 save
-/// and saving it again upgrades it in place; there is no downgrade path and
-/// none is wanted.
-const VERSION: u32 = 5;
+/// **v4 and v5 are both refused outright now — a deliberate pre-release
+/// compatibility break, not an oversight.** A real `.citysim` download or
+/// IndexedDB engine snapshot saved against an older released build genuinely
+/// was v4 bytes, and v5 never left this branch (see the superseded doc this
+/// replaces, in git history, for how that one stayed live). Both are dropped
+/// in the same change: `docs/tile-model.md` states the project's pre-release stance
+/// plainly — the CSIM snapshot format, wire bytes, and u8 alphabets may
+/// change freely before 1.0; only the legacy JSON save vocabulary and the
+/// frozen `legacy_tile_buffer` layout are fixed. A pre-1.0 CSAV file
+/// containing an old CSIM engine snapshot fails to load after this change,
+/// loudly (`SnapshotError::UnsupportedVersion`) rather than silently
+/// decoding a `BuildingInstance::kind` byte against the wrong alphabet. The
+/// legacy JSON save path (`import.rs`'s `from_tile_buffer`, driven by
+/// `persistence.ts`'s `transcodeLegacySave`) is untouched — it was never a
+/// *snapshot* — so an old save is still recoverable through that door.
+const VERSION: u32 = 9;
 
 /// Serialise `state` to a compact postcard byte vector prefixed by a 8-byte
 /// header: magic `CSIM` (4 bytes) + version u32 (4 bytes, little-endian).
@@ -71,11 +78,6 @@ pub fn from_bytes(bytes: &[u8]) -> Result<GameState, SnapshotError> {
     let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
     let payload = &bytes[8..];
     match version {
-        // The pre-strata tile shape — decoded against a shim that spells the
-        // old `GameState` out positionally, then converted.
-        4 => postcard::from_bytes::<crate::migrate::v4::GameState>(payload)
-            .map(crate::migrate::v4_to_v5)
-            .map_err(SnapshotError::Postcard),
         VERSION => postcard::from_bytes(payload).map_err(SnapshotError::Postcard),
         v => Err(SnapshotError::UnsupportedVersion(v)),
     }
@@ -136,6 +138,26 @@ mod tests {
             from_bytes(&bytes),
             Err(SnapshotError::UnsupportedVersion(99))
         ));
+    }
+
+    /// The deliberate pre-release compatibility break this `VERSION` bump
+    /// makes: a real `origin/main`-shipped v4 CSIM snapshot, and the v5 shape
+    /// that only ever lived on the stratification branch, are both refused
+    /// outright now — no silent decode against the wrong `BuildingInstance::kind`
+    /// alphabet, and no dead conversion arm kept alive for either.
+    #[test]
+    fn old_snapshot_versions_are_refused_not_silently_migrated() {
+        for old_version in [4u32, 5u32] {
+            let mut bytes = to_bytes(&GameState::new(4, 4, 0)).unwrap();
+            bytes[4..8].copy_from_slice(&old_version.to_le_bytes());
+            assert!(
+                matches!(
+                    from_bytes(&bytes),
+                    Err(SnapshotError::UnsupportedVersion(v)) if v == old_version
+                ),
+                "v{old_version} should be refused, not migrated"
+            );
+        }
     }
 
     /// A snapshot whose `surface` field carries an overhead bit is **refused**,
@@ -233,15 +255,14 @@ mod tests {
     fn round_trip_city_with_buildings_and_history() {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::state::BudgetHistoryEntry;
-        use city_sim_protocol::tile_kind::TileKind;
+        use city_sim_protocol::building_kind::BuildingKind;
 
         let mut state = GameState::new(4, 4, 7);
         state.buildings.push(BuildingInstance {
             id: 1,
-            kind: TileKind::Residential,
+            kind: BuildingKind::Residential,
             origin: (0, 0),
             status: BuildingStatus::Active,
-            health: 80,
             trouble_ticks: 2.5,
             maintenance_per_day: 0.0,
         });
@@ -263,7 +284,6 @@ mod tests {
 
         assert_eq!(restored.buildings.len(), 1);
         assert_eq!(restored.buildings[0].id, 1);
-        assert_eq!(restored.buildings[0].health, 80);
         assert_eq!(restored.buildings[0].trouble_ticks, 2.5);
         assert_eq!(restored.buildings[0].status, BuildingStatus::Active);
         assert_eq!(restored.budget_history.len(), 2);

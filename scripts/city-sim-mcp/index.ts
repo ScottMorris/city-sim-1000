@@ -206,6 +206,56 @@ function textResult(value: unknown) {
 // MCP server
 // ---------------------------------------------------------------------------
 
+// The vocabularies below mirror `app/src/game/toolTypes.ts`'s `Tool` enum and
+// `app/src/game/gameState.ts`'s `TileKind`/`ViewStratum` spellings by hand —
+// this package (`scripts/city-sim-mcp`) is a separate entry point from
+// `app/`, and a cross-package import from a standalone script into the game
+// bundle isn't clean, so these stay a maintained duplicate rather than a
+// shared import. Each was previously copy-pasted inline per tool below;
+// hoisted here once per vocabulary so `apply_tool`/`apply_tool_line`/
+// `apply_tool_rect`/`get_tiles_where` can't drift onto different spellings
+// of the same list.
+
+/** Every `Tool` — the full set `apply_tool` accepts. */
+const ALL_TOOLS = [
+  'inspect',
+  'terraform_raise', 'terraform_lower',
+  'water', 'tree',
+  'road', 'rail', 'powerline',
+  'hydro', 'coal', 'wind', 'solar',
+  'pump', 'water_tower', 'water_pipe',
+  'elementary_school', 'high_school',
+  'residential', 'commercial', 'industrial',
+  'park', 'park_large', 'bulldoze',
+] as const;
+
+/** Tools that make sense drawn along a line — `apply_tool_line`'s subset. */
+const LINE_TOOLS = ['road', 'rail', 'powerline', 'pump', 'water_pipe', 'bulldoze'] as const;
+
+/** Tools that make sense filled across a rectangle — `apply_tool_rect`'s subset. */
+const RECT_TOOLS = [
+  'residential', 'commercial', 'industrial', 'park', 'park_large',
+  'road', 'water_pipe', 'powerline', 'bulldoze',
+] as const;
+
+/** `ViewStratum` — which layer a tool/query acts on. */
+const STRATA = ['surface', 'underground'] as const;
+
+const STRATUM_DESCRIPTION =
+  'Which layer to act on. `bulldoze` clears only this stratum. Every other tool has its own required stratum derived from what it places — `water_pipe` requires "underground", most tools (anything that builds) require "surface" — and the engine refuses outright if this doesn\'t match; if omitted, it defaults to the tool\'s own required stratum (falling back to "surface" for a stratum-neutral tool like `inspect`/`terraform_raise`/`terraform_lower`/`water`/`bulldoze`).';
+
+/** Every `get_tiles_where`/`get_tile` "kind" spelling — terrain, occupants, zones, and building kinds, all in one flat vocabulary. */
+const TILE_KINDS = [
+  'land', 'water', 'tree',
+  'road', 'rail',
+  'residential', 'commercial', 'industrial',
+  'powerline',
+  'hydro', 'coal', 'wind', 'solar',
+  'pump', 'water_tower', 'water_pipe',
+  'elementary_school', 'high_school',
+  'park', 'park_large',
+] as const;
+
 const server = new McpServer({ name: 'city-sim-1000', version: '0.1.0' });
 
 server.tool(
@@ -217,7 +267,7 @@ server.tool(
 
 server.tool(
   'get_tile',
-  'Get the state of a single tile: kind, powered, watered, abandoned, happiness, elevation, buildingId.',
+  'Get the state of a single tile: terrain, occupants, powered, watered, abandoned, happiness, elevation, buildingId. `terrain` is `"land"` or `"water"` — the ground itself, independent of anything built on it. `occupants` gives everything actually on the tile as `{ underground: string[], surface: string[], overhead: string[] }` — a tile can carry a road on the surface, a power line overhead, and a pipe underground all at once, so e.g. checking a `water_pipe` placement landed underneath a road means looking at `occupants.underground` and `occupants.surface` together, not a single collapsed label.',
   {
     x: z.number().int().describe('Tile column (0 = left edge)'),
     y: z.number().int().describe('Tile row (0 = top edge)'),
@@ -227,40 +277,21 @@ server.tool(
 
 server.tool(
   'get_tiles_where',
-  'Return all (x, y) positions matching a given tile kind. Useful for finding existing roads, zones, utilities, etc.',
+  'Return all (x, y) positions matching a given tile kind. Useful for finding existing roads, zones, utilities, etc. `kind: "land"` or `"water"` matches the tile\'s *terrain* — independent of what\'s built on it, so a road built on land still matches `"land"`. Every other `kind` matches if it appears in ANY of the tile\'s strata (underground/surface/overhead) — e.g. a road hidden under a power line still matches `kind: "road"` — see `get_tile`\'s `occupants` field for the same per-tile breakdown.',
   {
-    kind: z.enum([
-      'land', 'water', 'tree',
-      'road', 'rail',
-      'residential', 'commercial', 'industrial',
-      'powerline', 'hydro',
-      'pump', 'water_tower', 'water_pipe',
-      'elementary_school', 'high_school',
-      'park', 'park_large',
-    ]).describe('Tile kind string. Note: all power plant types (coal/wind/solar/hydro) share the kind "hydro"'),
+    kind: z.enum(TILE_KINDS).describe('Tile kind string. Each power plant type has its own distinct kind (hydro/coal/wind/solar), not a shared one. `land`/`water` match terrain; every other value matches an occupant in any stratum.'),
   },
   async ({ kind }) => textResult(await callGame('get_tiles_where', { kind })),
 );
 
 server.tool(
   'apply_tool',
-  'Apply a build or demolish action at tile (x, y). Returns money before/after, the resulting tile state, and a sim state snapshot.',
+  'Apply a build or demolish action at tile (x, y). Returns money before/after, the resulting tile state, a sim state snapshot, and `success`/`message` reporting whether the engine actually accepted the command (e.g. wrong stratum, insufficient funds, no road access) — check `success` rather than assuming the placement landed.',
   {
-    tool: z.enum([
-      'inspect',
-      'terraform_raise', 'terraform_lower',
-      'water', 'tree',
-      'road', 'rail', 'powerline',
-      'hydro', 'coal', 'wind', 'solar',
-      'pump', 'water_tower', 'water_pipe',
-      'elementary_school', 'high_school',
-      'residential', 'commercial', 'industrial',
-      'park', 'park_large', 'bulldoze',
-    ]).describe('Tool to apply'),
+    tool: z.enum(ALL_TOOLS).describe('Tool to apply'),
     x: z.number().int().describe('Tile column'),
     y: z.number().int().describe('Tile row'),
-    stratum: z.enum(['surface', 'underground']).optional()
-      .describe('Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.'),
+    stratum: z.enum(STRATA).optional().describe(STRATUM_DESCRIPTION),
   },
   async ({ tool, x, y, stratum }) => textResult(await callGame('apply_tool', { tool, x, y, stratum })),
 );
@@ -285,19 +316,14 @@ server.tool(
 
 server.tool(
   'apply_tool_line',
-  'Apply a build tool along a straight line from (x1,y1) to (x2,y2) using Bresenham\'s algorithm. Ideal for roads, power lines, or pipes. Returns number of tiles placed and money delta.',
+  'Apply a build tool along a straight line from (x1,y1) to (x2,y2) using Bresenham\'s algorithm. Ideal for roads, power lines, or pipes. Returns `placed` (tiles the engine actually accepted), `attempted` (total tiles on the line), and `firstFailureMessage` (the engine\'s reason for the first rejected tile, if `placed` < `attempted`) alongside the money delta.',
   {
-    tool: z.enum([
-      'road', 'rail', 'powerline',
-      'pump', 'water_pipe',
-      'bulldoze',
-    ]).describe('Tool to apply along the line'),
+    tool: z.enum(LINE_TOOLS).describe('Tool to apply along the line'),
     x1: z.number().int().describe('Start tile column'),
     y1: z.number().int().describe('Start tile row'),
     x2: z.number().int().describe('End tile column'),
     y2: z.number().int().describe('End tile row'),
-    stratum: z.enum(['surface', 'underground']).optional()
-      .describe('Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.'),
+    stratum: z.enum(STRATA).optional().describe(STRATUM_DESCRIPTION),
   },
   async ({ tool, x1, y1, x2, y2, stratum }) =>
     textResult(await callGame('apply_tool_line', { tool, x1, y1, x2, y2, stratum })),
@@ -305,18 +331,14 @@ server.tool(
 
 server.tool(
   'apply_tool_rect',
-  'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns number of tiles placed and money delta.',
+  'Fill a rectangular region with a tool — useful for zoning large areas in one call. Returns `placed` (tiles the engine actually accepted), `attempted` (total tiles in the rectangle), and `firstFailureMessage` (the engine\'s reason for the first rejected tile, if `placed` < `attempted`) alongside the money delta.',
   {
-    tool: z.enum([
-      'residential', 'commercial', 'industrial', 'park', 'park_large',
-      'road', 'water_pipe', 'powerline', 'bulldoze',
-    ]).describe('Tool to apply across the rectangle'),
+    tool: z.enum(RECT_TOOLS).describe('Tool to apply across the rectangle'),
     x1: z.number().int().describe('Left column (inclusive)'),
     y1: z.number().int().describe('Top row (inclusive)'),
     x2: z.number().int().describe('Right column (inclusive)'),
     y2: z.number().int().describe('Bottom row (inclusive)'),
-    stratum: z.enum(['surface', 'underground']).optional()
-      .describe('Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.'),
+    stratum: z.enum(STRATA).optional().describe(STRATUM_DESCRIPTION),
   },
   async ({ tool, x1, y1, x2, y2, stratum }) =>
     textResult(await callGame('apply_tool_rect', { tool, x1, y1, x2, y2, stratum })),

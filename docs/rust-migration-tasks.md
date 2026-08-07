@@ -1,5 +1,7 @@
 # Rust Migration — Execution Map (Task Breakdown)
 
+**Historical** — describes the plan as of its writing; most phases below have since landed. See `docs/tile-model.md` for the current tile model and `CLAUDE.md`'s Architecture section for the current system shape. Checkboxes below are left as a record of what shipped and in what order, not as a live task tracker.
+
 **Companion to** [`rust-migration-plan.md`](./rust-migration-plan.md) (the strategy / north star).
 This doc is the **steady map you follow**: granular tasks, ordered, with acceptance
 criteria and dependencies. Update the checkboxes as you go.
