@@ -19,7 +19,7 @@ The TS→Rust simulation migration and the tile-model PR stack (#186–#196) sil
 - [Water Source Gating](water-source-gating.md) — pumps need a water source; production accounting must respect building status.
 - [Shore-Adjacency Placement](shore-adjacency-placement.md) — hydro/pump water-edge placement rules.
 - [Population Decline](population-decline.md) — bounded decline instead of snap-to-capacity.
-- [Lighting Bylaws](lighting-bylaws.md) — reconnect the bylaws UI to the engine.
+- [Lighting Bylaws](lighting-bylaws.md) — fixed; the bylaw is engine-owned `Policies::lighting`, simulated every tick and set over the wire like `budget`/`wilderness`.
 - [Happiness and Abandonment](happiness-and-abandonment.md) — make the third decay input reachable, tunable, visible.
 - [Growth Gating](growth-gating.md) — hard-gate promises vs soft-multiplier reality; pick one and document it.
 - [Rail Benefit](rail-benefit.md) — give rail a reason to exist.

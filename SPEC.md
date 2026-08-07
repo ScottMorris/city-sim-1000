@@ -157,7 +157,7 @@ Tiles include:
 
 * `MapRenderer` encapsulates Pixi rendering and draws tiles using existing palette colors; called each frame from `main.ts`.
 * Camera logic (`centerCamera`, `screenToTile`) lives in `rendering/camera.ts`; rendering is decoupled from UI/event handling.
-* Building centre markers are tinted by power status (green when powered, red when unpowered); these markers will later surface missing services (water, fire, waste, etc.).
+* An inactive building draws a small status icon — no-power or no-water/no-source (`tileAtlas.ts`'s `indicators`, chosen by `tileRenderUtils.ts`'s `resolveIndicatorKey`); an active building draws no marker of its own.
 * Power lines
 * Hydro plant
 * Water pump

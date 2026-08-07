@@ -1,5 +1,7 @@
 # Rust Simulation Engine — Migration Plan
 
+**Historical** — describes the plan as of its writing; the migration it planned has since landed (Rust is the sole engine, the tile model is stratified, `TileKind` is protocol-only). See `docs/tile-model.md` for the current tile model and `CLAUDE.md`'s Architecture section for the current system shape.
+
 **Status**: Planning · **Owner**: Scott · **Supersedes**: the brainstorm suite in
 `~/Documents/Liminal HQ/City Sim 1000/Rust Migration/city-sim-migration-docs-here/`
 

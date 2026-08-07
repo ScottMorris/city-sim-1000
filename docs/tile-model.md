@@ -132,7 +132,7 @@ With those defaults the exception list is calculable. Enumerating every pair fro
 
 **Underground** — Pipe, Subway, Fibre → 3 pairs, all coexisting by default, **0 exceptions**.
 
-**Total: 19 pairs, exactly one exception — road + rail.** Derivation carries the entire table and the exception list is one line long.
+**Total: 19 same-stratum pairs, exactly one same-stratum exception — road + rail.** Derivation carries the entire table and the same-stratum exception list is one line long. `COMPAT_EXCEPTIONS` (`crates/city-sim-core/src/occupants.rs`) carries a second, cross-stratum entry this count doesn't reach: `Structure` + `PowerLine` conflicts despite the cross-stratum coexist-by-default rule above, because a building already refuses a tile carrying a live line and vice versa — a school or plant with a wire strung through it is not a tile the model admits.
 
 ### Trees belong overhead, and this is why
 

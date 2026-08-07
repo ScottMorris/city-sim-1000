@@ -290,13 +290,10 @@ fn count_city(state: &GameState) -> CityCounters {
     c
 }
 
-/// Compute `DemandStats` from the current `GameState` — matches the demand
-/// assembly block in `simulation.ts:tick()`. A thin wrapper over
+/// Compute `DemandStats` from the current `GameState`. A thin wrapper over
 /// `compute_city_demand_breakdown` that drops everything but the final
 /// clamped percentages; call that instead if the derivation itself (or the
 /// labour aggregates) is wanted too, e.g. for the wire.
-///
-/// Education is stubbed to 0 until P3-8 (score=0, high_coverage=0).
 pub fn compute_city_demand(state: &GameState) -> DemandStats {
     let b = compute_city_demand_breakdown(state);
     DemandStats {

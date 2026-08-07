@@ -20,21 +20,21 @@
 //! **The v4 *snapshot* migration this module also carried is gone — a
 //! deliberate compatibility break, not an oversight.** It read the same
 //! `(kind, flags, underground)` triple out of a postcard payload for
-//! `snapshot::from_bytes`'s v4 arm. `origin/main` does currently ship
-//! `VERSION = 4` as its one readable CSIM shape — a real `.citysim` download
-//! or IndexedDB engine snapshot saved against a released build is v4 bytes —
-//! so this is not "nothing ever shipped." It is the project's stated
-//! pre-release stance applied on purpose: the CSIM snapshot format, unlike
-//! the legacy JSON save vocabulary and the frozen `legacy_tile_buffer`
-//! layout, carries no compatibility guarantee before 1.0 (`docs/tile-model.md`).
-//! `snapshot.rs`'s `VERSION` moves straight to 6 (v5 itself never left this
-//! branch) and `from_bytes` refuses everything else outright — an old CSIM
-//! save fails loudly with `UnsupportedVersion` rather than loading into a
-//! wrong city. The legacy JSON save import (`import.rs`'s
-//! `from_tile_buffer`, driven by `persistence.ts`'s `deserialize`) is a
-//! separate mechanism — it was never a *snapshot* and this change doesn't
-//! touch it — so an old save is still recoverable through that door; a CSAV
-//! binary save containing a CSIM engine snapshot is not.
+//! `snapshot::from_bytes`'s v4 arm. A real `.citysim` download or IndexedDB
+//! engine snapshot saved against an old build genuinely was v4 bytes at the
+//! time this module's snapshot-migration half was deleted, so that was not
+//! "nothing ever shipped." It is the project's stated pre-release stance
+//! applied on purpose: the CSIM snapshot format, unlike the legacy JSON save
+//! vocabulary and the frozen `legacy_tile_buffer` layout, carries no
+//! compatibility guarantee before 1.0 (`docs/tile-model.md`). `snapshot.rs`'s
+//! `VERSION` (see its own doc comment for the full bump history) refuses
+//! every value below the current one outright — an old CSIM save fails
+//! loudly with `UnsupportedVersion` rather than loading into a wrong city.
+//! The legacy JSON save import (`import.rs`'s `from_tile_buffer`, driven by
+//! `persistence.ts`'s `transcodeLegacySave`) is a separate mechanism — it was
+//! never a *snapshot* and this change doesn't touch it — so an old save is
+//! still recoverable through that door; a CSAV binary save containing a CSIM
+//! engine snapshot is not.
 //!
 //! `set_v4`/`set_v4_kind` below stay: they are how ~150 test call sites
 //! spell a tile in the old `kind`-and-flags vocabulary, which exercises
