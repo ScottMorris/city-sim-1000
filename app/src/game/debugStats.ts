@@ -1,4 +1,4 @@
-// debugStats.ts — derived debug-overlay figures (zone tile counts, utility use by building).
+// debugStats.ts — derived debug-overlay figures: zone tile counts, plus wire-sourced demand/labour/utility totals reshaped for display.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -6,15 +6,15 @@
 // Demand and labour/capacity figures used to be recomputed here from a TS
 // shadow of the engine's formula (`demand.ts`, `computeLabourStats.ts`, both
 // deleted) — they now come straight off the wire (`state.demand`,
-// `state.labour`; `#200`'s wire-adoption follow-up). What remains is display
-// aggregation that cannot drift from the engine because it only counts bits
-// the wire already decoded (zoned tiles) or reads static template data
-// (per-building power/water use) — not a parallel copy of simulation math.
+// `state.labour`; `#200`'s wire-adoption follow-up). Utility totals
+// (power/water produced/used) are wire-sourced too (`state.utilities`) —
+// summing static template `powerUse`/`waterUse`/`waterOutput` figures
+// disagreed with the engine whenever a non-default lighting bylaw was
+// active. The only aggregation left here is zone tile counts, which cannot
+// drift from the engine because it only counts bits the wire already
+// decoded.
 
-import { BuildingStatus } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
 import { DemandClassBreakdown, GameState, LabourStats } from './gameState';
-import { hasWaterSourceConnection } from './utilities/water';
 import { Occupant, hasOccupant } from './protocol/occupants';
 
 export interface SimulationDebugStats {
@@ -59,17 +59,14 @@ export interface SimulationDebugStats {
 
 /**
  * Computes a read-only snapshot of the debug-overlay's display figures
- * without mutating state. Demand, labour, and capacity figures are read
- * straight off `state` (wire-sourced); only zone tile counts and per-building
- * utility totals are aggregated here.
+ * without mutating state. Demand, labour, capacity, and utility totals are
+ * read straight off `state` (wire-sourced); only zone tile counts are
+ * aggregated here.
  */
 export function getSimulationDebugStats(state: GameState): SimulationDebugStats {
   let residentialZones = 0;
   let commercialZones = 0;
   let industrialZones = 0;
-  let buildingPowerUse = 0;
-  let buildingWaterUse = 0;
-  let buildingWaterOutput = 0;
   const educationScore = state.education?.score ?? 0;
   const elementaryCoverage = state.education?.elementaryCoverage ?? 0;
   const highCoverage = state.education?.highCoverage ?? 0;
@@ -78,20 +75,6 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     if (hasOccupant(tile.surface, Occupant.ZoneResidential)) residentialZones++;
     if (hasOccupant(tile.surface, Occupant.ZoneCommercial)) commercialZones++;
     if (hasOccupant(tile.surface, Occupant.ZoneIndustrial)) industrialZones++;
-  }
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    if (building.state.status !== BuildingStatus.Active) continue;
-    if (
-      template.waterOutput &&
-      hasWaterSourceConnection(state, building.origin, template.footprint, building.id)
-    ) {
-      buildingWaterOutput += template.waterOutput;
-    }
-    if (template.powerUse) buildingPowerUse += template.powerUse;
-    if (template.waterUse) buildingWaterUse += template.waterUse;
   }
 
   return {
@@ -104,10 +87,10 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
     capacities: { population: state.labour.resCapacity, jobs: state.labour.jobCapacity },
     utilities: {
       powerProduced: state.utilities.powerProduced,
-      powerUsed: buildingPowerUse,
+      powerUsed: state.utilities.powerUsed,
       powerBalance: state.utilities.power,
-      waterOutput: buildingWaterOutput,
-      waterUse: buildingWaterUse,
+      waterOutput: state.utilities.waterProduced,
+      waterUse: state.utilities.waterUsed,
       waterBalance: state.utilities.water
     },
     education: {

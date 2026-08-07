@@ -88,9 +88,9 @@ The base value is the **sum over everything on the tile** — the terrain's own 
 | `Subway`, `Fibre`  |        0 | Reserved; nothing can build them yet. |
 | `Structure`        |        — | One flat tag over ten kinds spanning +4 to −8 — see the structure table. |
 
-*Structures* — keyed by `TileKind`, which is the building template key and says *which* structure stands there:
+*Structures* — keyed by `BuildingKind`, which is the building template key and says *which* structure stands there:
 
-| `TileKind`         | Base Eco | Rationale |
+| `BuildingKind`      | Base Eco | Rationale |
 | ------------------ | -------: | --------- |
 | `Park`             |       +4 | Managed green space (Small, 1x1). |
 | `ParkLarge`        |       +4 | Managed green space (Large, 2x2 footprint — same per-tile weight as Small, so it contributes ~4x in total). |
@@ -243,7 +243,7 @@ Production simulation is Rust (`crates/city-sim-core`) — the compute lives the
 pub struct WildernessTunables {
     pub terrain_eco: [f32; TERRAIN_COUNT],       // keyed by Terrain
     pub occupant_eco: [f32; OCCUPANT_COUNT],     // keyed by Occupant
-    pub structure_eco: [f32; TileKind::COUNT],   // keyed by the building template key
+    pub structure_eco: [f32; BuildingKind::COUNT], // keyed by the building template key
     pub patch_bonus_cap: f32,
     pub patch_reference_size: f32,
     pub edge_bonus: f32,

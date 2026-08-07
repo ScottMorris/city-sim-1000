@@ -3,7 +3,13 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { LIGHTING_POLICIES, previewLightingPolicy, type LightingPolicy } from '../game/bylaws';
+import {
+  GREEN_INDUSTRY_SUBSIDY_PER_ZONE,
+  LIGHTING_POLICIES,
+  NATURE_RESERVE_COST_PER_DAY,
+  previewLightingPolicy,
+  type LightingPolicy
+} from '../game/bylaws';
 import type { GameState } from '../game/gameState';
 import { Occupant, zoneOccupant } from '../game/protocol/occupants';
 import {
@@ -174,7 +180,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           label: '🌿 Nature Reserve',
           lede: 'Rangers connect and protect green space: bigger patch bonuses, gentler fragmentation penalties.',
           costLabel: 'Programme cost',
-          cost: 100 * DAYS_PER_MONTH,
+          cost: NATURE_RESERVE_COST_PER_DAY * DAYS_PER_MONTH,
           enabled: policy.natureReserve,
           locked: !reserveUnlocked,
           lockHint: `Unlocks at Wilderness ${NATURE_RESERVE_UNLOCK_SCORE} (currently ${Math.round(score)}).`
@@ -184,7 +190,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
           label: '♻️ Green Industry',
           lede: 'Subsidize scrubbers and clean processes so industrial tiles weigh far less on the wilderness score.',
           costLabel: 'Subsidy',
-          cost: industrialZones * 2 * DAYS_PER_MONTH,
+          cost: industrialZones * GREEN_INDUSTRY_SUBSIDY_PER_ZONE * DAYS_PER_MONTH,
           enabled: policy.greenIndustry,
           locked: false
         }
@@ -260,7 +266,11 @@ export function initBylawsModal(options: BylawsModalOptions) {
         // drives which option renders as active.
         const projection = previewLightingPolicy(state.appliedLighting, policy.id, appliedPowerUse, appliedMaintenance);
         const monthlyDelta = projection.maintenanceDelta * DAYS_PER_MONTH;
-        const moodDelta = policy.happinessTarget - currentPolicy.happinessTarget;
+        // A real effect now, not a preview: `LightingPolicy::happiness_multiplier`
+        // (Rust) scales the wilderness-driven happiness-drift target in
+        // `wilderness::apply_happiness_drift`, so this delta is the actual mood
+        // shift a switch would apply, not decoration.
+        const moodDelta = policy.happinessMultiplier - currentPolicy.happinessMultiplier;
 
         const option = document.createElement('label');
         option.className = 'bylaws-option';
@@ -297,7 +307,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
         deltas.append(
           createDeltaPill('Power demand', projection.powerUseDelta, { unit: 'MW' }),
           createDeltaPill('Upkeep', monthlyDelta, { currency: true, unit: '/mo', precision: 0 }),
-          createDeltaPill('Mood target', moodDelta, { precision: 2 })
+          createDeltaPill('Mood', moodDelta, { precision: 2 })
         );
 
         optionBody.append(title, optionLede, deltas);

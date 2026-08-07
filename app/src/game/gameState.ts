@@ -11,9 +11,19 @@ import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupan
 import type { BudgetHistoryEntry } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
+import { BuildingKind } from './buildings/templates';
 import type { TileServiceState } from './services';
 import { createTileServiceState } from './services';
 import { SeededRng } from './rng';
+
+/**
+ * Civic-building maintenance categories in `BudgetStats.breakdown.details.
+ * buildings.civicByType`. Matches `BuildingKind` values except `'school'`,
+ * which is not a `BuildingKind` — the Rust side combines Elementary + High
+ * School maintenance into one bucket (`maint_civic_school`, `economy.rs`)
+ * rather than splitting per building kind.
+ */
+export type CivicBudgetCategory = BuildingKind.Park | BuildingKind.WaterPump | BuildingKind.WaterTower | 'school';
 
 export enum TileKind {
   Land = 'land',
@@ -44,8 +54,6 @@ export interface Tile {
   powered: boolean;
   watered: boolean;
   abandoned?: boolean;
-  powerPlantType?: PowerPlantType;
-  powerPlantId?: number;
   buildingId?: number;
   /** Per-tile eco value, −10..+10 (0 = neutral). From the sim's eco field (see `protocol/tileBuffer.ts`'s `decodeEco`). */
   wilderness?: number;
@@ -94,7 +102,6 @@ export interface InputSettings {
   invertPan: boolean;
   panSpeed: PanSpeedPreset;
   edgeScrollEnabled: boolean;
-  edgeScrollSpeed: PanSpeedPreset;
   shiftScrollsToPan: boolean;
   ctrlScrollsToPan: boolean;
   zoomSensitivity: ZoomSensitivityPreset;
@@ -127,7 +134,6 @@ export interface UiSettings {
 }
 
 export interface GameSettings {
-  pendingPenaltyEnabled: boolean;
   minimap: MinimapSettings;
   input: InputSettings;
   accessibility: AccessibilitySettings;
@@ -278,9 +284,9 @@ export interface BudgetStats {
         power: number;
         civic: number;
         zones: number;
-        powerByType: Record<string, number>;
-        civicByType: Record<string, number>;
-        zonesByType: Record<string, number>;
+        powerByType: Partial<Record<PowerPlantType, number>>;
+        civicByType: Partial<Record<CivicBudgetCategory, number>>;
+        zonesByType: Partial<Record<BuildingKind, number>>;
       };
     };
   };
@@ -311,7 +317,6 @@ export interface GameState {
   /** `#229` — Rust-computed, wire-sourced; see `economy.ts`'s doc comment. */
   budgetHistory: BudgetHistoryEntry[];
   buildings: BuildingInstance[];
-  nextBuildingId: number;
   education: EducationStats;
   /**
    * Every player-adjustable policy family (budget, wilderness, lighting —
@@ -345,7 +350,6 @@ export function createDefaultInputSettings(): InputSettings {
     invertPan: false,
     panSpeed: 'normal',
     edgeScrollEnabled: false,
-    edgeScrollSpeed: 'normal',
     shiftScrollsToPan: false,
     ctrlScrollsToPan: true,
     zoomSensitivity: 'normal'
@@ -443,7 +447,6 @@ export function createDefaultWildernessStats(): WildernessStats {
 
 export function createDefaultSettings(): GameSettings {
   return {
-    pendingPenaltyEnabled: true,
     minimap: createDefaultMinimapSettings(),
     input: createDefaultInputSettings(),
     accessibility: createDefaultAccessibilitySettings(),
@@ -456,6 +459,22 @@ export function createDefaultSettings(): GameSettings {
   };
 }
 
+/** A bare land tile — the shared shape for growing/seeding the mirror's tile array, immediately overwritten by a decode loop or (for `createInitialState`) a procedural terrain pass. */
+export function createBlankTile(): Tile {
+  return {
+    elevation: 0,
+    happiness: 1,
+    powered: false,
+    watered: false,
+    services: createTileServiceState(),
+    terrain: Terrain.Land,
+    underground: 0,
+    surface: 0,
+    overhead: 0,
+    density: ZoneDensity.Low
+  };
+}
+
 export function createInitialState(width = 64, height = 64, seed?: number): GameState {
   const resolvedSeed = (seed ?? Date.now()) >>> 0;
   const tiles: Tile[] = [];
@@ -464,18 +483,7 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       const edge = x < 3 || y < 3 || x > width - 4 || y > height - 4;
       const isWater = (x - width / 2) ** 2 + (y - height / 2) ** 2 < 180 && (x + y) % 5 === 0;
       const water = edge || isWater;
-      tiles.push({
-        elevation: 0,
-        happiness: 1,
-        powered: false,
-        watered: false,
-        services: createTileServiceState(),
-        terrain: water ? Terrain.Water : Terrain.Land,
-        underground: 0,
-        surface: 0,
-        overhead: 0,
-        density: ZoneDensity.Low
-      });
+      tiles.push({ ...createBlankTile(), terrain: water ? Terrain.Water : Terrain.Land });
     }
   }
   return {
@@ -529,7 +537,6 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
     abandonedCount: 0,
     avgHappiness: 1,
     buildings: [],
-    nextBuildingId: 1,
     // No schools yet → no load anywhere → full coverage, matching
     // `city_sim_core::state::EducationStats::default()`.
     education: {
@@ -594,8 +601,6 @@ export function setTile(state: GameState, x: number, y: number, kind: TileKind) 
   const isPowerPlant = kind === TileKind.HydroPlant || kind === TileKind.CoalPlant
     || kind === TileKind.WindTurbine || kind === TileKind.SolarFarm;
   if (!isPowerPlant) {
-    tile.powerPlantType = undefined;
-    tile.powerPlantId = undefined;
     tile.buildingId = undefined;
   }
 }

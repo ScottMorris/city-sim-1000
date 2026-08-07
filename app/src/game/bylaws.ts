@@ -6,16 +6,18 @@
 // The lighting bylaw itself is engine-owned: `state.policies.lighting`
 // (`LightingPolicy`, part of `Policies` — see `protocol/commands.ts`) is
 // sent to the Rust sim via `SetPolicies`, and the sim is what actually
-// applies `powerUseMultiplier`/`maintenanceMultiplier` to civic + zone
-// power draw and maintenance (`LightingPolicy::power_use_multiplier`/
-// `maintenance_multiplier` in `crates/city-sim-protocol/src/commands.rs`).
-// This file only carries the numbers back out for display — labels, ledes,
-// and `previewLightingPolicy`'s display-time arithmetic for a policy that
-// ISN'T active yet. The multipliers below must stay numerically identical
-// to the Rust source of truth; nothing enforces that automatically (`ts-rs`
-// mirrors types, not `const` values), so a change to one must be mirrored
-// by hand in the other — `commands::tests::non_default_lighting_policies_are_not_neutral`
-// pins the Rust side against these exact numbers.
+// applies `powerUseMultiplier`/`maintenanceMultiplier` to civic + zone power
+// draw and maintenance, and `happinessMultiplier` to the wilderness-driven
+// happiness-drift target (`LightingPolicy::power_use_multiplier`/
+// `maintenance_multiplier`/`happiness_multiplier` in
+// `crates/city-sim-protocol/src/commands.rs`). This file only carries the
+// numbers back out for display — labels, ledes, and `previewLightingPolicy`'s
+// display-time arithmetic for a policy that ISN'T active yet. The multipliers
+// below must stay numerically identical to the Rust source of truth; nothing
+// enforces that automatically (`ts-rs` mirrors types, not `const` values), so
+// a change to one must be mirrored by hand in the other —
+// `commands::tests::non_default_lighting_policies_are_not_neutral` pins the
+// Rust side against these exact numbers.
 
 import { DEFAULT_LIGHTING_POLICY, type LightingPolicy } from './protocol/commands';
 
@@ -53,15 +55,15 @@ export interface LightingPolicyDefinition {
   /** Mirrors `LightingPolicy::maintenance_multiplier` (Rust) — display only. */
   maintenanceMultiplier: number;
   /**
-   * A "mood target" preview number shown as a delta between policies in the
-   * Bylaws modal. Purely decorative: no engine mechanism consumes it (the
-   * real happiness-target mechanism, `wilderness::apply_happiness_drift`,
-   * drifts zone happiness toward a value derived from the wilderness score,
-   * not the lighting bylaw) and it never fed any simulation figure in the
-   * pre-#9-follow-up TS engine either. Do not wire this into gameplay
-   * without a maintainer decision — see the PR that added this comment.
+   * Mirrors `LightingPolicy::happiness_multiplier` (Rust) — display only.
+   * A real mechanism now: `wilderness::apply_happiness_drift` scales the
+   * wilderness-driven happiness-drift target by this multiplier before
+   * zone tiles drift toward it, so a non-`Mixed` bylaw shifts mood, not
+   * just power draw and maintenance. These three numbers must stay
+   * numerically identical to the Rust source of truth — see the module
+   * doc comment at the top of this file.
    */
-  happinessTarget: number;
+  happinessMultiplier: number;
 }
 
 export const LIGHTING_POLICIES: Record<LightingPolicy, LightingPolicyDefinition> = {
@@ -71,7 +73,7 @@ export const LIGHTING_POLICIES: Record<LightingPolicy, LightingPolicyDefinition>
     lede: 'Blend LED retrofits with heritage lamps to preview demand before carving districts.',
     powerUseMultiplier: 1,
     maintenanceMultiplier: 1,
-    happinessTarget: 1.02
+    happinessMultiplier: 1
   },
   efficient: {
     id: 'efficient',
@@ -79,7 +81,7 @@ export const LIGHTING_POLICIES: Record<LightingPolicy, LightingPolicyDefinition>
     lede: 'LED-first rollout trims upkeep and power draw for civic and zoned lots.',
     powerUseMultiplier: 0.82,
     maintenanceMultiplier: 0.9,
-    happinessTarget: 0.96
+    happinessMultiplier: 0.94
   },
   carbonArc: {
     id: 'carbonArc',
@@ -87,13 +89,9 @@ export const LIGHTING_POLICIES: Record<LightingPolicy, LightingPolicyDefinition>
     lede: 'Nostalgic lamps pull more power but add ambience in busy corridors.',
     powerUseMultiplier: 1.18,
     maintenanceMultiplier: 1.05,
-    happinessTarget: 1.12
+    happinessMultiplier: 1.10
   }
 };
-
-export function getLightingPolicy(id: LightingPolicy): LightingPolicyDefinition {
-  return LIGHTING_POLICIES[id];
-}
 
 export interface LightingPreview {
   powerUse: number;
@@ -137,3 +135,14 @@ export function previewLightingPolicy(
     maintenanceDelta: maintenance - appliedMaintenance
   };
 }
+
+/**
+ * Wilderness programme pricing shown in the Bylaws modal — mirrors
+ * `WildernessTunables::default()`'s `reserve_cost_per_day` and
+ * `green_industry_subsidy_per_zone` (`crates/city-sim-core/src/wilderness.rs`).
+ * Pinned against the Rust values via `wireParity.json` (`wireParity.test.ts`).
+ * Named here, not left as bare literals in `bylawsModal.ts`, for the same
+ * reason `NATURE_RESERVE_UNLOCK_SCORE` isn't either.
+ */
+export const NATURE_RESERVE_COST_PER_DAY = 100;
+export const GREEN_INDUSTRY_SUBSIDY_PER_ZONE = 2;

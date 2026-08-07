@@ -62,6 +62,7 @@ export function getQuarterSummary(state: GameState): BudgetBucket {
   return { ...bucket, label: `Last ${MONTHS_PER_QUARTER} months` };
 }
 
+/** Days of runway at the current burn — uncapped (an idle city with a tiny deficit can run for years). `narrative/snapshot.ts`'s `computeRunwayMonths` derives its capped, month-scale figure from this one formula rather than recomputing its own. */
 export function computeRunwayDays(money: number, netPerDay: number): number {
   if (netPerDay >= 0) return Number.POSITIVE_INFINITY;
   if (money <= 0) return 0;

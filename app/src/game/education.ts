@@ -5,11 +5,11 @@
 //
 // `#228`: education coverage is computed by `city-sim-core`'s
 // `recompute_education` and reaches the client over the wire — see
-// `wasmSimBridge.ts`/`tauriSimBridge.ts`. What remains here: small readers
-// over `state.education`, `servedZoneTiles` (reads the wire's per-tile
-// answer for an already-placed school), and `computeEducationReach`, a
-// build-preview BFS kept only for the not-yet-placed ghost case, which has
-// no engine equivalent to call (`#200`'s wire-adoption follow-up).
+// `wasmSimBridge.ts`/`tauriSimBridge.ts`. What remains here: `servedZoneTiles`
+// (reads the wire's per-tile answer for an already-placed school), and
+// `computeEducationReach`, a build-preview BFS kept only for the
+// not-yet-placed ghost case, which has no engine equivalent to call (`#200`'s
+// wire-adoption follow-up).
 
 import { getBuildingTemplate } from './buildings/templates';
 import type { GameState } from './gameState';
@@ -26,29 +26,6 @@ export interface EducationStats {
   score: number;
   elementaryCoverage: number;
   highCoverage: number;
-}
-
-export function getEducationScore(state: GameState): number {
-  return state.education?.score ?? 1;
-}
-
-/**
- * Defaults for a city with no schools: no load anywhere means full coverage,
- * not zero — matches `city_sim_core::state::EducationStats::default()`. Used
- * before the first wire update lands (initial state, legacy-save back-fill).
- */
-export function createEmptyEducationStats(): EducationStats {
-  return {
-    elementaryServed: 0,
-    elementaryCapacity: 0,
-    elementaryLoad: 0,
-    highServed: 0,
-    highCapacity: 0,
-    highLoad: 0,
-    score: 1,
-    elementaryCoverage: 1,
-    highCoverage: 1
-  };
 }
 
 /**

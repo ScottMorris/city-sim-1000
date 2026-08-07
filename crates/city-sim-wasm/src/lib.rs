@@ -137,6 +137,9 @@ impl SimHost {
     pub fn demand_industrial(&self) -> f32 {
         self.sim.state.demand.industrial
     }
+    pub fn budget_net(&self) -> f32 {
+        self.sim.state.budget.net
+    }
     pub fn budget_net_per_day(&self) -> f32 {
         self.sim.state.budget.net_per_day
     }

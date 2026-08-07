@@ -508,8 +508,18 @@ pub fn tourism_dividend(score: f32, population: u32, t: &WildernessTunables) -> 
 
 /// Drift zone-tile happiness toward the wilderness-driven target.
 /// Called once per recompute, not per tick, so the rate stays gentle.
+///
+/// The target is scaled by the lighting bylaw's
+/// [`LightingPolicy::happiness_multiplier`](city_sim_protocol::commands::LightingPolicy::happiness_multiplier)
+/// — a real effect now, not the TS-only preview it used to be. `Mixed`'s
+/// multiplier is exactly `1.0`, so an unset bylaw reproduces this function's
+/// pre-multiplier numbers bit-for-bit. Clamped the same as the drift result
+/// itself: happiness is bounded `[0.0, 1.5]` regardless of how far a
+/// non-neutral multiplier pushes the target.
 pub fn apply_happiness_drift(state: &mut GameState, score: f32, t: &WildernessTunables) {
-    let target = 1.0 + (score - 50.0) / 50.0 * t.happiness_target_span;
+    let target = (1.0 + (score - 50.0) / 50.0 * t.happiness_target_span)
+        * state.policies.lighting.happiness_multiplier();
+    let target = target.clamp(0.0, 1.5);
     for tile in &mut state.tiles {
         // Only zoned land has residents to be happy or unhappy. Asked through
         // the accessor rather than off `kind` so step 3 of #177 can narrow
@@ -531,7 +541,7 @@ mod tests {
     use crate::commands::{apply_tool, tool_cost};
     use crate::migrate::set_v4_kind;
     use crate::occupants::{Occupant, ALL_OCCUPANTS};
-    use city_sim_protocol::commands::{Tool, ViewStratum};
+    use city_sim_protocol::commands::{LightingPolicy, Tool, ViewStratum};
 
     fn grid(w: u32, h: u32) -> GameState {
         GameState::new(w, h, 0)
@@ -541,7 +551,7 @@ mod tests {
     /// development they need to be scored — `Occupant::Structure` is a flat
     /// tag, so a park with no `BuildingInstance` behind it is bare ground.
     fn set(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
-        if crate::occupants::is_structure_kind(kind) {
+        if crate::migrate::is_structure_kind(kind) {
             // `is_structure_kind` is a subset of `building_kind_of`'s domain
             // (it excludes the three zone kinds, which take the `else`
             // branch below), so this is always `Some`.
@@ -1227,6 +1237,37 @@ mod tests {
         // Now drifting toward 0.8 — must move down and stay in range.
         let h = s.tile_at(0, 0).unwrap().happiness;
         assert!((0.0..=1.5).contains(&h));
+    }
+
+    /// **A real mechanism, not a display-only preview.** The lighting bylaw
+    /// used to be a TS-only table (`bylaws.ts`'s old `happinessTarget`) that
+    /// nothing simulated; `LightingPolicy::happiness_multiplier` scaling the
+    /// drift target here is what makes it one. `CarbonArc` (multiplier > 1.0)
+    /// must drift a zone tile further above 1.0 than `Mixed` does from the
+    /// same starting point and the same wilderness score; `Efficient`
+    /// (multiplier < 1.0) must drift it less far.
+    #[test]
+    fn lighting_policy_shifts_happiness_drift() {
+        let t = WildernessTunables::default();
+        let start = |policy: LightingPolicy| -> f32 {
+            let mut s = grid(4, 4);
+            set(&mut s, 0, 0, TileKind::Residential);
+            s.tile_at_mut(0, 0).unwrap().happiness = 1.0;
+            s.policies.lighting = policy;
+            apply_happiness_drift(&mut s, 100.0, &t);
+            s.tile_at(0, 0).unwrap().happiness
+        };
+        let mixed = start(LightingPolicy::Mixed);
+        let carbon_arc = start(LightingPolicy::CarbonArc);
+        let efficient = start(LightingPolicy::Efficient);
+        assert!(
+            carbon_arc > mixed,
+            "CarbonArc's >1.0 multiplier should drift happiness higher than Mixed's neutral one"
+        );
+        assert!(
+            efficient < mixed,
+            "Efficient's <1.0 multiplier should drift happiness lower than Mixed's neutral one"
+        );
     }
 
     // --- one contribution per occupant (#173) ---

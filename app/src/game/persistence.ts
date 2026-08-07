@@ -11,6 +11,7 @@ import {
   clampBudgetPolicy,
   createDefaultBudgetPolicy,
   createDefaultWildernessPolicy,
+  DEFAULT_PENDING_PENALTY_ENABLED,
   type Policies
 } from './protocol/commands';
 import type { ClientState } from './clientState';
@@ -194,7 +195,10 @@ export interface LegacySaveTranscode {
  * — mirrors `importLegacyCity`'s two separate uses of it). A legacy save's
  * `bylaws.lighting` (present in a save from before the lighting bylaw moved
  * into engine `Policies`) is folded into `policies.lighting` here too, via
- * `extractLegacyLightingPolicy` — see `bylaws.ts`.
+ * `extractLegacyLightingPolicy` — see `bylaws.ts`. A legacy save's
+ * `settings.pendingPenaltyEnabled` is folded into `policies.pendingPenaltyEnabled`
+ * the same way, inline, for the same reason: the over-zoning penalty toggle
+ * moved from `GameSettings` into engine `Policies` too.
  */
 export function transcodeLegacySave(json: string): LegacySaveTranscode {
   const raw = JSON.parse(json) as Record<string, any>;
@@ -265,12 +269,23 @@ export function transcodeLegacySave(json: string): LegacySaveTranscode {
   const legacyLighting = isLightingPolicy(raw.policies?.lighting)
     ? raw.policies.lighting
     : extractLegacyLightingPolicy(raw);
+  // A save from before the over-zoning penalty toggle moved into engine
+  // `Policies` carried it as `settings.pendingPenaltyEnabled` (`GameSettings`,
+  // deleted) — fold it in the same way `legacyLighting` above folds a save's
+  // stray `bylaws.lighting`.
+  const legacyPendingPenaltyEnabled =
+    typeof raw.policies?.pendingPenaltyEnabled === 'boolean'
+      ? raw.policies.pendingPenaltyEnabled
+      : typeof raw.settings?.pendingPenaltyEnabled === 'boolean'
+        ? raw.settings.pendingPenaltyEnabled
+        : undefined;
   const policies: Policies = {
     budget: legacyBudget
       ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...legacyBudget })
       : createDefaultBudgetPolicy(),
     wilderness: { ...createDefaultWildernessPolicy(), ...(legacyWilderness ?? {}) },
-    lighting: legacyLighting ?? DEFAULT_LIGHTING_POLICY
+    lighting: legacyLighting ?? DEFAULT_LIGHTING_POLICY,
+    pendingPenaltyEnabled: legacyPendingPenaltyEnabled ?? DEFAULT_PENDING_PENALTY_ENABLED
   };
 
   return {

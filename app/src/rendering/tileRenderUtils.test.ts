@@ -185,14 +185,18 @@ describe('hydro line sprite picking', () => {
     expect(spriteName(state, 2, 2, textures)).toBe('power-ns');
   });
 
-  it('still connects to a power plant it runs into', () => {
+  it('does not reach into an adjacent power plant tile (no PowerLine occupant there to connect to)', () => {
+    // A power plant's own footprint tiles carry `Occupant.Structure`, which
+    // conflicts with `Occupant.PowerLine` (`occupants.ts`'s `CONFLICTS`
+    // table) — a line can never actually be drawn onto one, so `carriesWires`
+    // has no wire-carrying signal to find there. Only the north neighbour
+    // (an explicit `PowerLine` tile) should count.
     const state = createInitialState(8, 8);
     const textures = makeTextures();
     setTile(state, 2, 2, TileKind.PowerLine);
     setTile(state, 2, 1, TileKind.PowerLine);   // north
-    const plant = getTile(state, 3, 2)!;        // east
-    plant.powerPlantType = PowerPlantType.Coal;
-    expect(spriteName(state, 2, 2, textures)).toBe('power-corner-ne');
+    setTileOccupant(getTile(state, 3, 2)!, Occupant.Structure, true); // east: a plant's footprint, no line
+    expect(spriteName(state, 2, 2, textures)).toBe('power-end-n');
   });
 
   it('gives an isolated pole a dead-end sprite when it has one neighbour', () => {
@@ -376,33 +380,14 @@ describe('crossing selection by axis', () => {
 });
 
 describe('getTileColour agrees with the sprite/connectivity derivation on what counts as a plant', () => {
-  it('tints a tile with powerPlantType set, differently powered vs unpowered', () => {
-    const state = createInitialState(3, 3);
-    const tile = getTile(state, 1, 1)!;
-    tile.terrain = Terrain.Land; // pin the base colour regardless of createInitialState's terrain pattern
-    tile.powerPlantType = PowerPlantType.Coal;
-    const landColour = TERRAIN_COLOURS[Terrain.Land];
-
-    tile.powered = false;
-    const unpowered = getTileColour(tile, emptyLookup);
-    tile.powered = true;
-    const powered = getTileColour(tile, emptyLookup);
-
-    expect(unpowered).not.toBe(landColour);
-    expect(powered).not.toBe(landColour);
-    expect(unpowered).not.toBe(powered);
-  });
-
-  it('does not treat a live structure as power infrastructure without powerPlantType', () => {
-    // Regression: `getTileColour` and the wire-connectivity predicate used to
-    // fall back to a derived-kind plant-type lookup, diverging from
-    // `resolveBaseTileSprite`'s buildingLookup-only derivation for the same
-    // question. This tile carries a `Structure` occupant and a `buildingId`
-    // resolving to the coal plant template via the lookup — matching a real
-    // placed plant only ever getting `powerPlantType` through
-    // `placeBuilding`'s `decorateTile` callback — but `powerPlantType` itself
-    // is left unset, so this tile must read as the template's own colour,
-    // unscaled, not power-tinted.
+  it('does not treat a live structure as power infrastructure', () => {
+    // `getTileColour`'s power tint and the wire-connectivity predicate both
+    // key off `Occupant.PowerLine` alone (no per-tile plant-type field
+    // exists on the wire). This tile carries a `Structure` occupant and a
+    // `buildingId` resolving to the coal plant template via the lookup —
+    // matching a real placed plant's footprint — but no `PowerLine`
+    // occupant, so it must read as the template's own colour, unscaled, not
+    // power-tinted.
     const state = createInitialState(3, 3);
     const tile = getTile(state, 1, 1)!;
     tile.terrain = Terrain.Land;
@@ -414,7 +399,6 @@ describe('getTileColour agrees with the sprite/connectivity derivation on what c
       origin: { x: 1, y: 1 },
       state: createBuildingState()
     });
-    expect(tile.powerPlantType).toBeUndefined();
     const { buildingLookup } = createBuildingLookup(state);
     const coalColour = getBuildingTemplate(PowerPlantType.Coal)!.colour!;
 

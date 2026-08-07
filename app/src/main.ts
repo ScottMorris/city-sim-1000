@@ -1091,7 +1091,7 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
       camera.x -= movement.x * panSpeed * direction * deltaSeconds;
       camera.y -= movement.y * panSpeed * direction * deltaSeconds;
     }
-    const mirrorChanged = bridge.step(deltaSeconds);
+    const mirrorChanged = bridge.step();
     const calendar = getCalendarPosition(state.day);
     while (calendar.month > lastNarrativeMonth) {
       narrativeManager.onMonthEnd(() => buildCitySnapshot(state), Date.now(), simSpeeds[simSpeed]);
@@ -1276,8 +1276,14 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
     showToast(isPaused ? 'Paused' : 'Resumed');
   };
 
+  // Reads `state.policies`, not `state.settings` — the toggle is
+  // engine-owned, simulated state now (`SetPolicies`), same as budget tax
+  // rates and the wilderness/lighting bylaws. Still called from within
+  // `applySettings` (see there) so `afterCityLoaded`'s `applySettingsRef`
+  // indirection keeps resyncing it after every load, the same path those
+  // sibling policies rely on.
   const updatePendingPenaltyBtn = () => {
-    const enabled = state.settings?.pendingPenaltyEnabled ?? true;
+    const enabled = state.policies.pendingPenaltyEnabled;
     pendingPenaltyBtn.textContent = `Penalties: ${enabled ? 'On' : 'Off'}`;
     pendingPenaltyBtn.classList.toggle('active', enabled);
   };
@@ -1453,6 +1459,13 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   settingsModal = initSettingsModal({
     getSettings: () => state.settings,
     onApply: (next) => applySettings(next),
+    getPendingPenaltyEnabled: () => state.policies.pendingPenaltyEnabled,
+    onPendingPenaltyChange: (enabled) => {
+      state.policies = { ...state.policies, pendingPenaltyEnabled: enabled };
+      bridge.send(setPoliciesCmd(state.policies));
+      updatePendingPenaltyBtn();
+      showToast(`Over-zoning penalty ${enabled ? 'enabled' : 'disabled'}`);
+    },
     onOpenSfxEditor: () => sfxEditorModal.open()
   });
 
@@ -1544,9 +1557,11 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   });
 
   pendingPenaltyBtn.addEventListener('click', () => {
-    const current = state.settings?.pendingPenaltyEnabled ?? true;
-    applySettings({ ...state.settings, pendingPenaltyEnabled: !current }, { skipHotkeyReload: true });
-    showToast(`Over-zoning penalty ${state.settings.pendingPenaltyEnabled ? 'enabled' : 'disabled'}`);
+    const next = !state.policies.pendingPenaltyEnabled;
+    state.policies = { ...state.policies, pendingPenaltyEnabled: next };
+    bridge.send(setPoliciesCmd(state.policies));
+    updatePendingPenaltyBtn();
+    showToast(`Over-zoning penalty ${next ? 'enabled' : 'disabled'}`);
   });
 
   speedSlowBtn.addEventListener('click', () => setSimSpeed('slow'));

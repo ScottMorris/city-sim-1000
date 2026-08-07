@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: MIT
 
 import { GameState } from '../game/gameState';
+import { PowerPlantType } from '../game/constants';
+import { BuildingKind } from '../game/buildings/templates';
 import { formatCurrency } from '../utils/currency';
 import { showToast } from './dialogs';
 import { computeRunwayDays, getQuarterSummary, getRecentMonths } from '../game/economy';
@@ -102,10 +104,10 @@ function expenseRows(state: GameState): LedgerRow[] {
       colour: '#ffcc70',
       subrows: [
         { label: 'Power lines', value: lines },
-        { label: 'Hydro plants', value: toNumber(powerBy.hydro) },
-        { label: 'Coal plants', value: toNumber(powerBy.coal) },
-        { label: 'Wind turbines', value: toNumber(powerBy.wind) },
-        { label: 'Solar farms', value: toNumber(powerBy.solar) }
+        { label: 'Hydro plants', value: toNumber(powerBy[PowerPlantType.Hydro]) },
+        { label: 'Coal plants', value: toNumber(powerBy[PowerPlantType.Coal]) },
+        { label: 'Wind turbines', value: toNumber(powerBy[PowerPlantType.Wind]) },
+        { label: 'Solar farms', value: toNumber(powerBy[PowerPlantType.Solar]) }
       ]
     },
     {
@@ -113,9 +115,9 @@ function expenseRows(state: GameState): LedgerRow[] {
       value: civic + pipes,
       colour: '#9dd9ff',
       subrows: [
-        { label: 'Parks', value: toNumber(civicBy.park) },
-        { label: 'Water pumps', value: toNumber(civicBy.pump) },
-        { label: 'Water towers', value: toNumber(civicBy.water_tower) },
+        { label: 'Parks', value: toNumber(civicBy[BuildingKind.Park]) },
+        { label: 'Water pumps', value: toNumber(civicBy[BuildingKind.WaterPump]) },
+        { label: 'Water towers', value: toNumber(civicBy[BuildingKind.WaterTower]) },
         { label: 'Schools', value: toNumber(civicBy.school) },
         { label: 'Water pipes', value: pipes }
       ]
@@ -125,9 +127,9 @@ function expenseRows(state: GameState): LedgerRow[] {
       value: zones,
       colour: '#c39dff',
       subrows: [
-        { label: 'Residential', value: toNumber(zonesBy.residential) },
-        { label: 'Commercial', value: toNumber(zonesBy.commercial) },
-        { label: 'Industrial', value: toNumber(zonesBy.industrial) }
+        { label: 'Residential', value: toNumber(zonesBy[BuildingKind.Residential]) },
+        { label: 'Commercial', value: toNumber(zonesBy[BuildingKind.Commercial]) },
+        { label: 'Industrial', value: toNumber(zonesBy[BuildingKind.Industrial]) }
       ]
     },
     // Only present while a wilderness programme is active (Bylaws screen).
@@ -455,8 +457,11 @@ export function initBudgetModal(options: BudgetModalOptions) {
 
       const revenue = revenueRows(state);
       const expenses = expenseRows(state);
-      const revenueTotal = revenue.reduce((sum, row) => sum + row.value, 0);
-      const expensesTotal = expenses.reduce((sum, row) => sum + row.value, 0);
+      // Headline totals read the wire (`state.budget.revenue`/`expenses`)
+      // rather than re-summing the display rows below, so they can't drift
+      // from the engine if a breakdown category is added on one side only.
+      const revenueTotal = state.budget.revenue;
+      const expensesTotal = state.budget.expenses;
       const flowScale = Math.max(revenueTotal, expensesTotal, 1);
       const rowScale = Math.max(...revenue.map((r) => r.value), ...expenses.map((r) => r.value), 1);
 

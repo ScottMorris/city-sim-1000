@@ -195,8 +195,9 @@ pub fn apply_tool(
             // exactly: `regrade_at` takes the surface stratum with it.
             //
             // The hydro span is deliberately left standing: a tree planted over
-            // a live line still produces `{Trees, PowerLine}`, which is
-            // `known_defect_trees_are_planted_through_a_live_hydro_line`.
+            // a live line still produces `{Trees, PowerLine}`, which
+            // `COMPAT_EXCEPTIONS` names an official coexistence — see
+            // `trees_coexist_with_a_live_hydro_line`.
             //
             // The one refusal here is against stranding a live building,
             // because a tree planted over a coal plant erased the `Structure`
@@ -1790,12 +1791,11 @@ mod tests {
         }
     }
 
-    /// Planting shares the tile with a road or a zone in the target model, so
-    /// `Tool::Tree` keeps displacing them — that blindness is
-    /// `known_defect_trees_are_planted_through_a_live_hydro_line`, a gameplay
-    /// decision of its own. The half that is *not* a gameplay decision is a
-    /// canopy stranding a live plant, which erased the `Structure` occupant
-    /// and its penalty exactly as the regrade did.
+    /// Planting through a live hydro line is official coexistence (see
+    /// `trees_coexist_with_a_live_hydro_line`), not a gap this guard needs to
+    /// close. What this guard *does* close is a canopy stranding a live
+    /// plant, which erased the `Structure` occupant and its penalty exactly as
+    /// the regrade did.
     #[test]
     fn planting_refuses_a_tile_carrying_a_live_building() {
         let mut s = gs(8, 8);

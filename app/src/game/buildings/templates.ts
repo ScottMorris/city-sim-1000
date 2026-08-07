@@ -262,21 +262,8 @@ const STATIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   ...ZONE_TEMPLATES_BY_ID
 };
 
-const CUSTOM_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {};
-
 export function getBuildingTemplate(templateId: string): BuildingTemplate | undefined {
-  if (CUSTOM_BUILDING_TEMPLATES[templateId]) return CUSTOM_BUILDING_TEMPLATES[templateId];
-  const staticTemplate = STATIC_BUILDING_TEMPLATES[templateId];
-  if (staticTemplate) return staticTemplate;
-  return undefined;
-}
-
-export function registerBuildingTemplate(template: BuildingTemplate) {
-  CUSTOM_BUILDING_TEMPLATES[template.id] = template;
-}
-
-export function getPowerPlantTemplate(type: PowerPlantType): BuildingTemplate {
-  return POWER_PLANT_TEMPLATES[type];
+  return STATIC_BUILDING_TEMPLATES[templateId];
 }
 
 /**

@@ -128,19 +128,21 @@ With those defaults the exception list is calculable. Enumerating every pair fro
 - Zone + Structure — conflict; a park placed on a zone replaces it.
 - Structure + Structure — conflict; footprint placement already refuses overlap.
 
-**Overhead** — PowerLine, Trees → 1 pair, conflicting by default, **0 exceptions**.
+**Overhead** — PowerLine, Trees → 1 pair.
+
+- PowerLine + Trees — **coexist.** Canopy grown through a live line; utilities trim trees away from lines in the real world, but the model doesn't referee that, so the pair stands. *Exception.*
 
 **Underground** — Pipe, Subway, Fibre → 3 pairs, all coexisting by default, **0 exceptions**.
 
-**Total: 19 same-stratum pairs, exactly one same-stratum exception — road + rail.** Derivation carries the entire table and the same-stratum exception list is one line long. `COMPAT_EXCEPTIONS` (`crates/city-sim-core/src/occupants.rs`) carries a second, cross-stratum entry this count doesn't reach: `Structure` + `PowerLine` conflicts despite the cross-stratum coexist-by-default rule above, because a building already refuses a tile carrying a live line and vice versa — a school or plant with a wire strung through it is not a tile the model admits.
+**Total: 19 same-stratum pairs, two same-stratum exceptions — road + rail, and powerline + trees.** Derivation carries the entire table and the same-stratum exception list is two lines long. `COMPAT_EXCEPTIONS` (`crates/city-sim-core/src/occupants.rs`) carries a third, cross-stratum entry this count doesn't reach: `Structure` + `PowerLine` conflicts despite the cross-stratum coexist-by-default rule above, because a building already refuses a tile carrying a live line and vice versa — a school or plant with a wire strung through it is not a tile the model admits.
 
 ### Trees belong overhead, and this is why
 
 Trees were originally sketched as a surface occupant that "yields to everything". Putting them **overhead** instead is strictly better and costs nothing:
 
-- The exception count is unchanged — still one.
+- The move itself adds no exception — `Trees + PowerLine`'s later coexistence carve-out is a separate, independent decision (see below), not a consequence of putting trees overhead.
 - `Trees + Road` becomes a *cross-stratum* pair, so it coexists by default. **Street trees come out free**, with no rule written for them.
-- `Trees + PowerLine` becomes a *same-stratum* pair, so it conflicts by default — physically correct, and again no rule.
+- `Trees + PowerLine` becomes a *same-stratum* pair, so it conflicts by default — and is then named the overhead stratum's one exception: canopy coexists with a live line rather than either being refused.
 - A bare forest is simply terrain `Land` with `overhead: {Trees}`. Nothing special-cased.
 
 It also settles open question 2 below: overhead gets a second occupant, so it is a real stratum rather than a boolean wearing a costume.
@@ -293,5 +295,5 @@ The same re-read cut the other way once, and it is worth recording honestly. `to
 All three raised in the first revision are now resolved. Kept with their answers, because the reasoning is the useful part.
 
 1. ~~**Do occupants need per-tile state?**~~ **Resolved:** no. Flow is derived rather than authored, so it lives in per-network arrays beside the grid and occupants stay bare tags. See *Not yet designed: flow*.
-2. ~~**Is `overhead` real, or is it just hydro?**~~ **Resolved: real.** Tree canopy is the second occupant, and putting it overhead rather than on the surface gives street trees for free while making trees-versus-conductors conflict by default. Both fall out of the stratum defaults with no rule written.
-3. ~~**How many same-stratum exceptions are there really?**~~ **Resolved: exactly one** — road + rail, out of 19 pairs — provided the default is set per stratum rather than globally. See *Compatibility is mostly derivable*.
+2. ~~**Is `overhead` real, or is it just hydro?**~~ **Resolved: real.** Tree canopy is the second occupant, and putting it overhead rather than on the surface gives street trees for free while making trees-versus-conductors conflict by default — with that default then named the stratum's one exception (canopy officially coexists with a live line). Both fall out of the stratum defaults with no rule written.
+3. ~~**How many same-stratum exceptions are there really?**~~ **Resolved: two** — road + rail, and powerline + trees — out of 19 pairs — provided the default is set per stratum rather than globally. See *Compatibility is mostly derivable*.

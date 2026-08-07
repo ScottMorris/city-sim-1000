@@ -24,4 +24,11 @@ wilderness: WildernessPolicy,
 /**
  * City-wide lighting standard (Bylaws screen).
  */
-lighting: LightingPolicy, };
+lighting: LightingPolicy, 
+/**
+ * Whether an over-zoned class's demand is suppressed by its backlog of
+ * undeveloped pending lots (`demand.rs`'s `pending_penalty_*` terms).
+ * Default-on so toggling it off is an opt-out, not an opt-in — matching
+ * the pre-toggle behaviour the mechanism always had.
+ */
+pendingPenaltyEnabled: boolean, };

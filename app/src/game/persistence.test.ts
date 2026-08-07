@@ -39,9 +39,9 @@ const o = legacyTileBufferOffsets(N);
 
 describe('client passthrough', () => {
   it('passes settings through untouched — ensureSettingsShape/applyClientState do the back-fill', () => {
-    const result = transcode({ settings: { pendingPenaltyEnabled: false } });
+    const result = transcode({ settings: { narrative: { tickerEnabled: false } } });
     expect(result.client).toEqual({
-      settings: { pendingPenaltyEnabled: false }
+      settings: { narrative: { tickerEnabled: false } }
     });
   });
 
@@ -152,6 +152,26 @@ describe('policy fold and clamp', () => {
       bylaws: { lighting: 'carbonArc' }
     });
     expect(result.policies.lighting).toBe('efficient');
+  });
+
+  it('back-fills the default-on penalty toggle when absent', () => {
+    const result = transcode();
+    expect(result.policies.pendingPenaltyEnabled).toBe(true);
+    expect(result.engine.policies.pendingPenaltyEnabled).toBe(true);
+  });
+
+  it('folds a legacy settings.pendingPenaltyEnabled field into policies.pendingPenaltyEnabled', () => {
+    const result = transcode({ settings: { pendingPenaltyEnabled: false } });
+    expect(result.policies.pendingPenaltyEnabled).toBe(false);
+    expect(result.engine.policies.pendingPenaltyEnabled).toBe(false);
+  });
+
+  it('prefers a legacy policies.pendingPenaltyEnabled field over settings.pendingPenaltyEnabled when both are present', () => {
+    const result = transcode({
+      policies: { pendingPenaltyEnabled: false },
+      settings: { pendingPenaltyEnabled: true }
+    });
+    expect(result.policies.pendingPenaltyEnabled).toBe(false);
   });
 });
 

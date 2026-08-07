@@ -110,10 +110,10 @@ export function structureColour(tile: NonNullable<ReturnType<typeof getTile>>, b
  *  sprite already includes the wires, and compositing again would
  *  double-draw them — which is exactly the case where nothing else occupies
  *  the tile: no road/rail/zone on the surface, no tree canopy overhead
- *  (`Occupant::Trees` conflicts with `Occupant::PowerLine` in principle, but
- *  the tree tool's documented defect can still leave both set), and the
- *  ground itself isn't water (a line spanning water is a pylon span, always
- *  drawn over the water sprite).
+ *  (`Occupant::Trees` and `Occupant::PowerLine` officially coexist — planting
+ *  through a live line is allowed, not a defect — so a tile can carry both),
+ *  and the ground itself isn't water (a line spanning water is a pylon span,
+ *  always drawn over the water sprite).
  *
  *  A developed zone lot severs the overlay entirely, regardless of what else
  *  is on the tile — this is the fix for the pole rendered through a built
@@ -316,7 +316,7 @@ function resolveBaseTileSprite(
     }
   }
   const buildingEntry = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId) : undefined;
-  const plantType = tile.powerPlantType ?? buildingEntry?.template?.power?.type;
+  const plantType = buildingEntry?.template?.power?.type;
   if (plantType) {
     const footprint = buildingEntry?.template?.footprint ?? POWER_PLANT_CONFIGS[plantType]?.footprint;
     const origin = buildingEntry?.origin ?? (footprint ? { x, y } : undefined);
@@ -473,14 +473,7 @@ export function dominantColour(tile: NonNullable<ReturnType<typeof getTile>>, bu
 export function getTileColour(tile: ReturnType<typeof getTile>, buildingLookup: BuildingLookup) {
   if (!tile) return 0x000000;
   const base = dominantColour(tile, buildingLookup);
-  // `tile.powerPlantType` alone, matching `resolveBaseTileSprite`'s plant-type
-  // derivation below — `placeBuilding`'s `decorateTile` callback sets it on
-  // every tile of a plant's footprint, not just the origin, so there is no
-  // live plant tile this can miss. A `kind`-based fallback here used to let
-  // this function call a tile "power infrastructure" that
-  // `resolveBaseTileSprite` didn't recognise as a plant, tinting a tile
-  // whose own sprite never resolved as one.
-  const isPowerTile = hasOccupant(tile.overhead, Occupant.PowerLine) || !!tile.powerPlantType;
+  const isPowerTile = hasOccupant(tile.overhead, Occupant.PowerLine);
   if (!isPowerTile) return base;
   const factor = tile.powered ? 1.35 : 0.7;
   return scaleColor(base, factor);
@@ -568,7 +561,11 @@ function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTex
  *  using it to choose a sprite made every hydro tile grow a leg toward any
  *  adjacent road, so a line running beside a road reached out and touched it
  *  on every tile. Wires should only be drawn between things that actually
- *  string wires: other hydro tiles, zones with a line over them, and plants.
+ *  string wires: other hydro tiles, and zones with a line over them. A power
+ *  plant's own footprint tiles are NOT included — placing a plant doesn't
+ *  set the `PowerLine` occupant on its footprint (only `Tool::PowerLine`
+ *  does), so a plant only grows a visible wire where a player has actually
+ *  drawn a line up to it.
  *
  *  A developed zone lot is excluded even though the line survives there in
  *  the simulation (the lot's `PowerLine` occupant is unaffected) — visually
@@ -578,8 +575,7 @@ function pickRailCrossingTexture(state: GameState, x: number, y: number, tileTex
 function carriesWires(tile: ReturnType<typeof getTile>): boolean {
   if (!tile) return false;
   if (isDevelopedZone(tile)) return false;
-  if (hasOccupant(tile.overhead, Occupant.PowerLine)) return true;
-  return tile.powerPlantType !== undefined;
+  return hasOccupant(tile.overhead, Occupant.PowerLine);
 }
 
 function hasAnyWireNeighbour(state: GameState, x: number, y: number): boolean {

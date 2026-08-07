@@ -1,24 +1,21 @@
+// services.ts — service vocabulary (ServiceId) and the per-tile/per-building service mirrors the wire populates.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+//
+// Service coverage/capacity/upkeep definitions used to live here too
+// (`DEFAULT_SERVICE_DEFINITIONS`, `ServiceSystemState`) as input to a TS
+// shadow of the engine's service system — deleted as dead once nothing
+// called them; service placement/coverage math runs in Rust
+// (`crates/city-sim-core/src/buildings.rs`), and only the display mirrors
+// below (`TileServiceState`, `ServiceLoad`) survive.
+
 export enum ServiceId {
   Police = 'police',
   Fire = 'fire',
   Health = 'health',
   EducationElementary = 'education_elementary',
   EducationHigh = 'education_high'
-}
-
-export interface ServiceDefinition {
-  id: ServiceId;
-  name: string;
-  coverageRadius: number; // tiles, flood-filled along roads
-  capacity: number; // max tiles/people served before quality drops
-  buildCost: number;
-  upkeep: number;
-  servedHappinessDelta: number;
-  unservedHappinessDelta: number;
-}
-
-export interface ServiceSystemState {
-  definitions: Record<ServiceId, ServiceDefinition>;
 }
 
 export interface ServiceLoad {
@@ -28,65 +25,6 @@ export interface ServiceLoad {
 export interface TileServiceState {
   scores: Partial<Record<ServiceId, number>>;
   served: Partial<Record<ServiceId, boolean>>;
-}
-
-export const DEFAULT_SERVICE_DEFINITIONS: Record<ServiceId, ServiceDefinition> = {
-  [ServiceId.Police]: {
-    id: ServiceId.Police,
-    name: 'Police Station',
-    coverageRadius: 8,
-    capacity: 140,
-    buildCost: 6000,
-    upkeep: 45,
-    servedHappinessDelta: 0.05,
-    unservedHappinessDelta: -0.05
-  },
-  [ServiceId.Fire]: {
-    id: ServiceId.Fire,
-    name: 'Fire Station',
-    coverageRadius: 8,
-    capacity: 140,
-    buildCost: 5500,
-    upkeep: 40,
-    servedHappinessDelta: 0.06,
-    unservedHappinessDelta: -0.08
-  },
-  [ServiceId.Health]: {
-    id: ServiceId.Health,
-    name: 'Clinic',
-    coverageRadius: 10,
-    capacity: 180,
-    buildCost: 7000,
-    upkeep: 55,
-    servedHappinessDelta: 0.07,
-    unservedHappinessDelta: -0.06
-  },
-  [ServiceId.EducationElementary]: {
-    id: ServiceId.EducationElementary,
-    name: 'Elementary School',
-    coverageRadius: 8,
-    capacity: 180,
-    buildCost: 4500,
-    upkeep: 40,
-    servedHappinessDelta: 0.05,
-    unservedHappinessDelta: -0.05
-  },
-  [ServiceId.EducationHigh]: {
-    id: ServiceId.EducationHigh,
-    name: 'High School',
-    coverageRadius: 9,
-    capacity: 160,
-    buildCost: 7000,
-    upkeep: 55,
-    servedHappinessDelta: 0.05,
-    unservedHappinessDelta: -0.06
-  }
-};
-
-export function createServiceSystemState(): ServiceSystemState {
-  return {
-    definitions: { ...DEFAULT_SERVICE_DEFINITIONS }
-  };
 }
 
 export function createEmptyServiceLoad(): ServiceLoad {

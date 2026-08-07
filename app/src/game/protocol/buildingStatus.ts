@@ -14,8 +14,10 @@
 
 import { BuildingStatus } from '../buildings/state';
 
-/** Dense array, not a `Map` — the Rust discriminants are 0..4 with no gaps. */
-const BUILDING_STATUS_TABLE: readonly BuildingStatus[] = [
+/** Dense array, not a `Map` — the Rust discriminants are 0..4 with no gaps.
+ *  Exported for `wireParity.test.ts`, which pins it against `wireParity.json`;
+ *  every runtime caller goes through `buildingStatusFromU8` below. */
+export const BUILDING_STATUS_TABLE: readonly BuildingStatus[] = [
   BuildingStatus.Active,
   BuildingStatus.InactiveNoPower,
   BuildingStatus.InactiveNoWater,
@@ -23,6 +25,7 @@ const BUILDING_STATUS_TABLE: readonly BuildingStatus[] = [
   BuildingStatus.InactiveDamaged
 ];
 
-export function buildingStatusFromU8(u8: number): BuildingStatus {
-  return BUILDING_STATUS_TABLE[u8] ?? BuildingStatus.Active;
+/** `undefined` on an unrecognised byte (should never happen against a matching engine build) — callers decide the fallback explicitly, and are expected to warn. */
+export function buildingStatusFromU8(u8: number): BuildingStatus | undefined {
+  return BUILDING_STATUS_TABLE[u8];
 }

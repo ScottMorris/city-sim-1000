@@ -8,6 +8,21 @@ import { BuildingKind, getBuildingTemplate } from '../buildings/templates';
 import { Occupant, iterSet } from './occupants';
 
 /**
+ * The three strata a tile's occupants are grouped by. Mirrors Rust's
+ * `Stratum` (`crates/city-sim-core/src/occupants.rs`) — depth order
+ * underground → surface → overhead — but stays a plain lowercase string
+ * union rather than importing that enum, since the JSON shape (the object
+ * keys `occupantsByStratum` returns) must not move.
+ */
+export type StratumKey = 'underground' | 'surface' | 'overhead';
+
+/**
+ * Infrastructure labels (not `BuildingKind`-backed) plus every `BuildingKind`
+ * — the full vocabulary `occupantLabel`/`occupantsByStratum` can return.
+ */
+export type OccupantLabel = 'water_pipe' | 'road' | 'rail' | 'powerline' | 'tree' | BuildingKind;
+
+/**
  * Display/wire labels for the occupants that are infrastructure rather than
  * buildings — nothing behind them carries a `BuildingKind`, so they own
  * their vocabulary here. Values are the spellings `get_tile`/the HUD tile
@@ -15,7 +30,7 @@ import { Occupant, iterSet } from './occupants';
  * strings must not move — MCP scripts filter on them). The two reserved
  * occupants (`Subway`/`Fibre`) have no label yet — see `occupants.ts`.
  */
-const OCCUPANT_LABELS: Partial<Record<Occupant, string>> = {
+const OCCUPANT_LABELS: Partial<Record<Occupant, OccupantLabel>> = {
   [Occupant.Pipe]: 'water_pipe',
   [Occupant.Road]: 'road',
   [Occupant.Rail]: 'rail',
@@ -36,7 +51,7 @@ function structureKindOf(state: GameState, buildingId: number | undefined): Buil
  * `OCCUPANT_LABELS`. `undefined` covers the two reserved occupants
  * (`Subway`/`Fibre`) with no label yet — see `occupants.ts`.
  */
-function occupantLabel(state: GameState, tile: Tile, occupant: Occupant): string | undefined {
+function occupantLabel(state: GameState, tile: Tile, occupant: Occupant): OccupantLabel | undefined {
   switch (occupant) {
     case Occupant.Pipe:
     case Occupant.Road:
@@ -62,7 +77,7 @@ function occupantLabel(state: GameState, tile: Tile, occupant: Occupant): string
  * `get_tile`/`get_tiles_where` (`mcpBridge.ts`) and the HUD tile inspector
  * (`ui/hud.ts`) need it for.
  */
-export function occupantsByStratum(state: GameState, tile: Tile): Record<'underground' | 'surface' | 'overhead', string[]> {
+export function occupantsByStratum(state: GameState, tile: Tile): Record<StratumKey, OccupantLabel[]> {
   // Each field already only ever carries its own stratum's bits — see
   // `Tile.underground`/`.surface`/`.overhead`'s doc comments and
   // `setTileOccupant`, the sole write path, which routes by the occupant's
@@ -70,7 +85,7 @@ export function occupantsByStratum(state: GameState, tile: Tile): Record<'underg
   const labelsIn = (bits: number) =>
     iterSet(bits)
       .map(o => occupantLabel(state, tile, o))
-      .filter((label): label is string => label !== undefined);
+      .filter((label): label is OccupantLabel => label !== undefined);
   return {
     underground: labelsIn(tile.underground),
     surface: labelsIn(tile.surface),

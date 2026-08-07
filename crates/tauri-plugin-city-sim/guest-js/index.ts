@@ -40,7 +40,7 @@ import type { CommandResult } from './generated/CommandResult'
 import type { Policies } from './generated/Policies'
 
 /**
- * Tool u8 discriminant map — mirrors `sim_protocol::commands::Tool as u8`.
+ * Tool u8 discriminant map — mirrors `city_sim_protocol::commands::Tool as u8`.
  *
  * Pass these values as the `tool` argument to `applyTool`. TauriSimBridge maps
  * the game's string `Tool` enum to these IDs.
@@ -118,7 +118,7 @@ export async function start(
  * enqueued it) — the sim thread drains all pending commands before ticking,
  * so this normally resolves within one frame (≤50 ms).
  *
- * @param tool     A `TOOL_ID` value — the u8 discriminant from `sim_protocol::commands::Tool`.
+ * @param tool     A `TOOL_ID` value — the u8 discriminant from `city_sim_protocol::commands::Tool`.
  * @param x        Tile column (0-indexed from left).
  * @param y        Tile row (0-indexed from top).
  * @param strokeId Groups the calls of one drag-paint gesture into a single

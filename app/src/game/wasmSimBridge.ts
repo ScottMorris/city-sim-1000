@@ -12,10 +12,10 @@
 
 import { recordEngineBuild } from '../buildInfo';
 import type { DemandStats, GameState, LabourStats, UtilityComponentStats, ViewStratum } from './gameState';
-import { TileKind } from './gameState';
-import { createBuildingState } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
-import { createTileServiceState } from './services';
+import { createBlankTile } from './gameState';
+import { PowerPlantType } from './constants';
+import { BuildingKind } from './buildings/templates';
+import { buildBuildingMirror } from './buildings/wireMirror';
 import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
 import type { BudgetHistoryEntry } from './economy';
@@ -23,9 +23,7 @@ import type { FromSim, SimAlert } from './protocol/events';
 import type { SimStats } from '../workers/wasmSim.worker';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
-import { buildingKindFromU8 } from './protocol/buildingKind';
-import { buildingStatusFromU8 } from './protocol/buildingStatus';
-import { Terrain, ZoneDensity } from './protocol/occupants';
+import { Terrain } from './protocol/occupants';
 import { Tool } from './toolTypes';
 // `WireBuilding`/`WireEducationSeatsUsed` are decoded from the `buildingsJson`/
 // `educationSeatsUsedJson` payloads (see `SimHost::buildings_json`/
@@ -36,8 +34,10 @@ import type { WireBuilding } from './protocol/generated/WireBuilding';
 import type { WireEducationSeatsUsed } from './protocol/generated/WireEducationSeatsUsed';
 
 // Mapping from TS string-valued Tool enum → Rust #[repr(u8)] discriminant.
-// Must remain in sync with city-sim-protocol/src/commands.rs Tool enum.
-const TOOL_TO_U8: Record<Tool, number> = {
+// Must remain in sync with city-sim-protocol/src/commands.rs Tool enum —
+// pinned against `wireParity.json` by `wireParity.test.ts`. Exported for that
+// test only; every runtime caller goes through the bridge.
+export const TOOL_TO_U8: Record<Tool, number> = {
   [Tool.Inspect]:          0,
   [Tool.TerraformRaise]:   1,
   [Tool.TerraformLower]:   2,
@@ -68,7 +68,7 @@ const TOOL_TO_U8: Record<Tool, number> = {
 // (city-sim-protocol/src/commands.rs). Deliberately a distinct concept from
 // tile-internal Stratum — this one describes which layer the *player* is
 // looking at, not a tile occupant bitset — see that enum's doc comment.
-const STRATUM_TO_U8: Record<ViewStratum, number> = {
+export const STRATUM_TO_U8: Record<ViewStratum, number> = {
   surface: 0,
   underground: 1,
 };
@@ -212,7 +212,7 @@ export class WasmSimBridge implements SimBridge {
     });
   }
 
-  step(_dt: number): boolean {
+  step(): boolean {
     // The worker drives the simulation clock itself (20 Hz interval, alive
     // even in hidden tabs) — this per-frame call only flushes the latest
     // engine update into the display mirror the renderer reads.
@@ -524,19 +524,7 @@ export class WasmSimBridge implements SimBridge {
     if (this.state.width === width && this.state.height === height) return;
     this.state.width = width;
     this.state.height = height;
-    this.state.tiles = Array.from({ length: width * height }, () => ({
-      kind: TileKind.Land,
-      elevation: 0,
-      happiness: 1,
-      powered: false,
-      watered: false,
-      services: createTileServiceState(),
-      terrain: Terrain.Land,
-      underground: 0,
-      surface: 0,
-      overhead: 0,
-      density: ZoneDensity.Low,
-    }));
+    this.state.tiles = Array.from({ length: width * height }, () => createBlankTile());
   }
 
   /** Forward each alert as `FromSim::Alert`, plus its paired narrative event if any. */
@@ -584,7 +572,7 @@ export class WasmSimBridge implements SimBridge {
     b.netPerMonth = stats.budgetNetPerMonth;
     b.revenue     = stats.budgetRevenue;
     b.expenses    = stats.budgetExpenses;
-    b.net         = stats.budgetRevenue - stats.budgetExpenses;
+    b.net         = stats.budgetNet;
     b.breakdown.revenue.base        = stats.budgetRevenueBase;
     b.breakdown.revenue.residents   = stats.budgetRevenuePop;
     b.breakdown.revenue.commercial  = stats.budgetRevenueCommercial;
@@ -601,21 +589,21 @@ export class WasmSimBridge implements SimBridge {
     b.breakdown.details.buildings.civic      = stats.budgetMaintCivic;
     b.breakdown.details.buildings.zones      = stats.budgetMaintZones;
     b.breakdown.details.buildings.powerByType = {
-      hydro: stats.budgetMaintPowerHydro,
-      coal:  stats.budgetMaintPowerCoal,
-      wind:  stats.budgetMaintPowerWind,
-      solar: stats.budgetMaintPowerSolar,
+      [PowerPlantType.Hydro]: stats.budgetMaintPowerHydro,
+      [PowerPlantType.Coal]:  stats.budgetMaintPowerCoal,
+      [PowerPlantType.Wind]:  stats.budgetMaintPowerWind,
+      [PowerPlantType.Solar]: stats.budgetMaintPowerSolar,
     };
     b.breakdown.details.buildings.civicByType = {
-      park:        stats.budgetMaintCivicPark,
-      pump:        stats.budgetMaintCivicPump,
-      water_tower: stats.budgetMaintCivicTower,
-      school:      stats.budgetMaintCivicSchool,
+      [BuildingKind.Park]:      stats.budgetMaintCivicPark,
+      [BuildingKind.WaterPump]: stats.budgetMaintCivicPump,
+      [BuildingKind.WaterTower]: stats.budgetMaintCivicTower,
+      school:                   stats.budgetMaintCivicSchool,
     };
     b.breakdown.details.buildings.zonesByType = {
-      residential: stats.budgetMaintZonesRes,
-      commercial:  stats.budgetMaintZonesCom,
-      industrial:  stats.budgetMaintZonesInd,
+      [BuildingKind.Residential]: stats.budgetMaintZonesRes,
+      [BuildingKind.Commercial]:  stats.budgetMaintZonesCom,
+      [BuildingKind.Industrial]:  stats.budgetMaintZonesInd,
     };
     const wild = this.state.wilderness;
     wild.score = stats.wildernessScore;
@@ -694,32 +682,9 @@ export class WasmSimBridge implements SimBridge {
     // scanning tiles for first-occurrence origins: `buildings_json` already
     // carries id, kind, origin, and (`#200`'s wire-adoption follow-up)
     // status/health — no client-side power/water-flag reconstruction needed.
-    const seatsUsedByBuildingId = new Map(seatsUsed.map((e) => [e.buildingId, e.used]));
-    this.state.buildings = wireBuildings.map((b) => {
-      // `b.kind` decodes via `BUILDING_KIND_BY_U8` — an unrecognised byte
-      // (should never happen against a matching engine build) falls back to
-      // the empty string, which `getBuildingTemplate` returns `undefined`
-      // for, same as the old `TileKind.Land` fallback did (Land has no
-      // building template either).
-      const kind: string = buildingKindFromU8(b.kind) ?? '';
-      const template = getBuildingTemplate(kind);
-      const bstate = createBuildingState();
-      bstate.status = buildingStatusFromU8(b.status);
-      bstate.health = b.health;
-      const origin = { x: b.originX, y: b.originY };
-      // `#228` — seats consumed, from the wire; only schools currently have
-      // an entry (Rust's `ServiceKind` has no other service ported yet).
-      const used = template?.service ? seatsUsedByBuildingId.get(b.id) : undefined;
-      if (template?.service && used !== undefined) {
-        bstate.serviceLoad.slotsUsed[template.service.id] = used;
-      }
-      return {
-        id: b.id,
-        templateId: kind,
-        origin,
-        state: bstate
-      };
-    });
+    // Shared with `tauriSimBridge.ts` via `buildBuildingMirror` so the two
+    // bridges can't independently drift on unrecognised-byte handling.
+    this.state.buildings = buildBuildingMirror(wireBuildings, seatsUsed);
   }
 }
 

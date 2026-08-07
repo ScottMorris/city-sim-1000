@@ -9,6 +9,11 @@ import { defaultHotkeys, HotkeyAction } from './hotkeys';
 interface SettingsModalOptions {
   getSettings: () => GameSettings;
   onApply: (settings: GameSettings) => void;
+  /** Over-zoning penalty toggle — engine-owned `Policies` state now, read/set
+   *  separately from the client-only `GameSettings` draft above (see
+   *  `crates/city-sim-protocol/src/commands.rs`'s `Policies::pending_penalty_enabled`). */
+  getPendingPenaltyEnabled: () => boolean;
+  onPendingPenaltyChange: (enabled: boolean) => void;
   onOpenSfxEditor?: () => void;
 }
 
@@ -106,7 +111,7 @@ function createToggleRow(options: {
 }
 
 export function initSettingsModal(options: SettingsModalOptions) {
-  const { getSettings, onApply, onOpenSfxEditor } = options;
+  const { getSettings, onApply, getPendingPenaltyEnabled, onPendingPenaltyChange, onOpenSfxEditor } = options;
   let backdrop: HTMLDivElement | null = null;
   let escHandler: ((e: KeyboardEvent) => void) | null = null;
   const cleanup = () => {
@@ -182,10 +187,11 @@ export function initSettingsModal(options: SettingsModalOptions) {
     const penaltiesRow = createToggleRow({
       label: 'Over-zoning penalties',
       description: 'Keep the soft pending-zone demand penalty on. Also available in Debug.',
-      checked: draft.pendingPenaltyEnabled,
+      // Engine-owned policy, not part of the `draft`/`onApply` client-settings
+      // round trip above — dispatched immediately as its own `SetPolicies`.
+      checked: getPendingPenaltyEnabled(),
       onChange: (checked) => {
-        draft.pendingPenaltyEnabled = checked;
-        onApply(draft);
+        onPendingPenaltyChange(checked);
       }
     });
     general.append(penaltiesRow);

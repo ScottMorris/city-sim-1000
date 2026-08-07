@@ -83,7 +83,10 @@ use crate::state::{GameState, Tile};
 use crate::wilderness::WildernessTunables;
 use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::BudgetPolicy;
-use city_sim_protocol::tile_kind::TileKind;
+// `TileKind` is not imported here: production code in this file never reads
+// it (see `is_structure_kind` in `migrate.rs`, the sanctioned boundary). The
+// test module below imports it directly — the old `kind`-and-flags vocabulary
+// is how it poses its questions, on purpose (see the module doc).
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -570,8 +573,9 @@ mod strata {
     }
 
     /// The layer over the tile: [`Occupant::PowerLine`] and
-    /// [`Occupant::Trees`]. Conductors and canopy fight, so conflict is the
-    /// default here too.
+    /// [`Occupant::Trees`]. Conflict is the default here too, and Trees +
+    /// PowerLine is the single exception — canopy grown through a live line
+    /// coexists with it rather than being refused or clearing it.
     ///
     /// A marker; see [`Underground`].
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -952,7 +956,9 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
         // Power only. A road carrying a line still carries water, but that is
         // the road's doing, not the line's.
         conducts: NET_POWER,
-        conflicts: B_TREES | B_STRUCTURE,
+        // Trees no longer conflict here — see `COMPAT_EXCEPTIONS` for the
+        // Trees + PowerLine coexistence exception.
+        conflicts: B_STRUCTURE,
         category: Some(EcoCategory::Power),
         strong_nature: Some(false),
     },
@@ -964,7 +970,9 @@ pub static OCCUPANT_DEFS: [OccupantDef; OCCUPANT_COUNT] = [
         funding: FundingDept::Unfunded,
         ledger: LedgerLine::Untracked,
         conducts: NET_NONE,
-        conflicts: B_POWER_LINE,
+        // PowerLine no longer conflicts here — see `COMPAT_EXCEPTIONS` for the
+        // Trees + PowerLine coexistence exception.
+        conflicts: 0,
         category: Some(EcoCategory::Forests),
         strong_nature: Some(true),
     },
@@ -981,10 +989,11 @@ pub struct CompatException {
     pub why: &'static str,
 }
 
-/// The complete exception list. Two entries, one in each direction — the
-/// design note's "exactly one exception" counted same-stratum pairs only and
-/// missed Structure + PowerLine.
-pub static COMPAT_EXCEPTIONS: [CompatException; 2] = [
+/// The complete exception list. Three entries — the design note's "exactly
+/// one exception" counted same-stratum pairs only and missed Structure +
+/// PowerLine, and Trees + PowerLine was carved out as an official exception
+/// once the model settled on canopy over conductors being fine.
+pub static COMPAT_EXCEPTIONS: [CompatException; 3] = [
     CompatException {
         a: Occupant::Road,
         b: Occupant::Rail,
@@ -996,6 +1005,12 @@ pub static COMPAT_EXCEPTIONS: [CompatException; 2] = [
         b: Occupant::PowerLine,
         coexist: false,
         why: "cross-stratum, but a line strung through a school or a power plant is not a tile the model admits: Tool::PowerLine refuses a tile that already carries a building, and place_footprint_building refuses a tile that already carries a line. The second half of that was missing until step 2 of #177 — the guard enumerated kind Road/Rail/PowerLine and the two underlay flags but never asked has_power_overlay(), so any tile whose line lived in the flag rather than in kind (zone, then string a line; or string a line, then TerraformRaise) took a structure on top of live, still-billed conductors. It asks the occupant set now, which answers the same for both spellings; see a_structure_is_refused_over_a_live_hydro_line",
+    },
+    CompatException {
+        a: Occupant::Trees,
+        b: Occupant::PowerLine,
+        coexist: true,
+        why: "canopy under a live line is officially allowed — a tree planted through a strung hydro line keeps both occupants rather than being refused or clearing one; placement already permitted this, and the overhead default now agrees",
     },
 ];
 
@@ -1052,26 +1067,17 @@ pub fn pair_conflicts(a: Occupant, b: Occupant) -> bool {
 
 /// Check a set against the compatibility table.
 ///
-/// **This describes the TARGET model, and today's game can still build one
-/// tile it rejects.** Step 2 of #177 converted the placement guards in
-/// `commands.rs` to ask the occupant set, which closed the structure route —
-/// `Residential` → `PowerLine` → `Park` is refused now, in either spelling.
-/// One producible violation survives:
-///
-/// - `PowerLine` → `Tree` plants a canopy through the conductors, because
-///   `Tool::Tree` rewrites `kind` and clears only the *surface*, leaving
-///   `FLAG_POWER_OVERLAY` set —
-///   `known_defect_trees_are_planted_through_a_live_hydro_line`. This one is
-///   not a guard that reads the wrong field, so converting the guards did not
-///   reach it. Nor is it the two-spellings asymmetry: a line always sets the
-///   overlay flag, so both its recordings survive a canopy alike. Refusing it
-///   would also have to answer for `Tool::Water`, which flows through the same
-///   overlay flag on purpose — a line over water is a pylon span — so it stays
-///   a gameplay decision of its own.
+/// Step 2 of #177 converted the placement guards in `commands.rs` to ask the
+/// occupant set, which closed the structure route — `Residential` →
+/// `PowerLine` → `Park` is refused now, in either spelling. `Tool::Tree`
+/// planting a canopy through a live line (`PowerLine` → `Tree`) is not a
+/// violation to close: `COMPAT_EXCEPTIONS` names Trees + PowerLine an
+/// official coexistence, and `trees_coexist_with_a_live_hydro_line` pins it as
+/// a regression test rather than a known defect.
 ///
 /// `producible_conflicts_are_inventoried` closes the single-tile state space
-/// under `apply_tool` and pins that list at exactly that one, so neither a
-/// regression of the structure route nor a third defect can appear unnoticed.
+/// under `apply_tool` and pins that list empty, so neither a regression of the
+/// structure route nor a new producible violation can appear unnoticed.
 ///
 /// **Advisory only.** Never panic on this result — log it, count it, or
 /// `debug_assert` it, but let the save load. Saves in the wild already contain
@@ -1201,33 +1207,6 @@ pub fn structure_category(kind: BuildingKind) -> EcoCategory {
 /// Parks are strong nature; every other structure is not.
 pub fn structure_is_strong_nature(kind: BuildingKind) -> bool {
     matches!(kind, BuildingKind::Park | BuildingKind::ParkLarge)
-}
-
-/// The ten non-zone `TileKind`s that derive to the single `Structure`
-/// occupant when decoding a legacy v4 byte (`migrate::tile_from_v4`) — the
-/// three zone kinds decode to a zone tag instead, never to `Structure`. They
-/// behave identically under every compatibility rule —
-/// `place_footprint_building` applies one guard to all of them — so one tag
-/// suffices, and the per-kind data (eco, upkeep, category) is looked up
-/// rather than duplicated.
-///
-/// Legacy-decode-only: this asks the question of a v4 wire byte, not of a
-/// live `BuildingInstance` — see `migrate::building_kind_of` for the
-/// analogous question asked of the *current* alphabet.
-pub const fn is_structure_kind(kind: TileKind) -> bool {
-    matches!(
-        kind,
-        TileKind::HydroPlant
-            | TileKind::CoalPlant
-            | TileKind::WindTurbine
-            | TileKind::SolarFarm
-            | TileKind::WaterPump
-            | TileKind::WaterTower
-            | TileKind::ElementarySchool
-            | TileKind::HighSchool
-            | TileKind::Park
-            | TileKind::ParkLarge
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1542,13 +1521,14 @@ mod tests {
     use super::*;
     use crate::adjacency::has_road_access;
     use crate::commands::apply_tool;
-    use crate::migrate::{set_v4_kind, tile_from_v4};
+    use crate::migrate::{is_structure_kind, set_v4_kind, tile_from_v4};
     use crate::state::{FLAG_ABANDONED, FLAG_POWERED, FLAG_WATERED};
     use city_sim_protocol::commands::{Tool, ViewStratum};
     use city_sim_protocol::legacy_tile_buffer::legacy_flags::{
         POWER_OVERLAY as FLAG_POWER_OVERLAY, RAIL_UNDERLAY as FLAG_RAIL_UNDERLAY,
         ROAD_UNDERLAY as FLAG_ROAD_UNDERLAY,
     };
+    use city_sim_protocol::tile_kind::TileKind;
 
     // --- helpers ---------------------------------------------------------
 
@@ -2102,13 +2082,13 @@ mod tests {
         assert_eq!(per_stratum[Stratum::Surface as usize], 15);
         assert_eq!(per_stratum[Stratum::Overhead as usize], 1);
         assert_eq!(cross_stratum, 36);
-        assert_eq!(conflicting, 16);
-        assert_eq!(coexisting, 39);
+        assert_eq!(conflicting, 15);
+        assert_eq!(coexisting, 40);
         assert_eq!(conflicting + coexisting, unordered_distinct);
         assert_eq!(
             COMPAT_EXCEPTIONS.len(),
-            2,
-            "Road+Rail and Structure+PowerLine"
+            3,
+            "Road+Rail, Structure+PowerLine and Trees+PowerLine"
         );
     }
 
@@ -2185,25 +2165,24 @@ mod tests {
         );
         assert_eq!(
             validate_set(B_POWER_LINE | B_TREES),
-            Err((Occupant::PowerLine, Occupant::Trees))
+            Ok(()),
+            "canopy over a live line — official coexistence, see COMPAT_EXCEPTIONS"
         );
 
         // Producible today: Tool::Tree over a hydro line leaves the overlay
-        // flag set. Validation must report it, not panic on it. Built through
-        // the real tools in `known_defect_trees_are_planted_through_a_live_hydro_line`.
+        // flag set, and validation is fine with it now. Built through the real
+        // tools in `trees_coexist_with_a_live_hydro_line`.
         let t = tile(TileKind::Tree, FLAG_POWER_OVERLAY, None);
         assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
-        assert!(validate_set(t.occupants()).is_err());
+        assert!(validate_set(t.occupants()).is_ok());
     }
 
-    // --- placement: the table enforced, and what still escapes it -----------
+    // --- placement: the table enforced, and both of its exceptions ----------
     //
     // The first test here was a known defect until step 2 of #177 and is now a
-    // regression test; the second is still a known defect and asserts what the
-    // game does **today**, not what it should do. A known-defect test is
-    // written to go RED the moment its fix lands, which is the point — the fix
-    // must not be able to slip in without someone coming back here and moving
-    // the assertion to the correct side.
+    // regression test for the Structure+PowerLine exception; the second pins
+    // the Trees+PowerLine exception, now official coexistence rather than a
+    // gap the table missed.
 
     /// **Regression, step 2 of #177.** Three ordinary tool clicks used to stamp
     /// a structure over a live hydro line, producing `{Structure, PowerLine}` —
@@ -2353,45 +2332,27 @@ mod tests {
         );
     }
 
-    /// **Known defect.** Two tool clicks plant a canopy through live
-    /// conductors, producing `{Trees, PowerLine}` — a straight overhead-stratum
-    /// conflict, no exception needed.
+    /// **Official coexistence.** Two tool clicks plant a canopy through live
+    /// conductors, producing `{Trees, PowerLine}` — an overhead-stratum pair
+    /// `COMPAT_EXCEPTIONS` now carves out, same as Road+Rail's level crossing.
     ///
     /// `Tool::Tree` regrades the ground and plants on it, which clears the
     /// surface stratum but leaves the span overhead — so the line outlives the
-    /// canopy that grew through it, still conducting and still billed.
+    /// canopy that grew through it, still conducting and still billed, and the
+    /// tile keeps both occupants rather than either being refused or cleared.
     ///
-    /// **Step 2 of #177 did not reach this one, deliberately.** It looks like
-    /// the structure defect above and is not: that one was a *guard* reading
-    /// one of a line's two spellings, so converting the guard to the occupant
-    /// set closed it. Nor is it the build-order asymmetry that
-    /// the regrade closes, because a line is overhead in either build order —
-    /// it survives a canopy whichever way you clicked.
-    ///
-    /// What is left is a straight gameplay decision, and `Tool::Water` is the
-    /// same code path producing a tile the model *wants* (a line over water is
-    /// the pylon span `docs/tile-model.md` names as a variant), so "clear the
-    /// overlay too" would be wrong. Plant refused under a line, versus canopy
-    /// silently destroying a span the player paid for, belongs with its own
-    /// message and a manual update rather than inside a guard conversion.
-    /// Whoever takes it: this test goes red then, by design.
-    ///
-    /// Note what step 2 *did* reach: `Tool::Tree` now refuses a tile carrying a
-    /// live `building_id`, because a canopy planted over a coal plant erased
-    /// the `Structure` occupant while the plant kept producing and billing —
-    /// state corruption rather than a gameplay call. See
-    /// `planting_refuses_a_tile_carrying_a_live_building`. A hydro line has no
-    /// `building_id`, so this route is untouched.
+    /// Note what step 2 of #177 tightened on a different route: `Tool::Tree`
+    /// refuses a tile carrying a live `building_id`, because a canopy planted
+    /// over a coal plant erased the `Structure` occupant while the plant kept
+    /// producing and billing — state corruption rather than a gameplay call.
+    /// See `planting_refuses_a_tile_carrying_a_live_building`. A hydro line has
+    /// no `building_id`, so this route is untouched by that guard.
     #[test]
-    fn known_defect_trees_are_planted_through_a_live_hydro_line() {
+    fn trees_coexist_with_a_live_hydro_line() {
         let mut s = GameState::new(4, 4, 0);
         assert!(apply_tool(&mut s, Tool::PowerLine, 1, 1, ViewStratum::Surface).success);
         let r = apply_tool(&mut s, Tool::Tree, 1, 1, ViewStratum::Surface);
-        assert!(
-            r.success,
-            "step 2 has tightened Tool::Tree — good. Delete this known defect \
-             and assert the rejection instead."
-        );
+        assert!(r.success, "canopy over a live line is allowed");
 
         let t = s.tiles[s.tile_index(1, 1).unwrap()].clone();
         assert!(t.has_occupant(Occupant::Trees));
@@ -2400,17 +2361,15 @@ mod tests {
             "planting regrades the ground, never the span above it"
         );
         assert_eq!(t.occupants(), B_TREES | B_POWER_LINE);
-        assert_eq!(
-            validate_set(t.occupants()),
-            Err((Occupant::PowerLine, Occupant::Trees))
-        );
+        assert_eq!(validate_set(t.occupants()), Ok(()));
         assert!(t.conducts(Network::Power));
         assert!((t.tile_upkeep_unfunded() - MAINT_POWER_LINE).abs() < 1e-6);
     }
 
     /// Exhaustive search for tiles the game can build that the compatibility
-    /// table calls impossible — so the known defect above is a complete
-    /// inventory rather than the one somebody happened to notice.
+    /// table calls impossible — so that if placement can still produce a pair
+    /// the table forbids, it shows up here rather than waiting for someone to
+    /// notice it by hand.
     ///
     /// Closes the single-tile state space under `apply_tool`: every tool,
     /// applied at one spot, from every distinct grid state reached so far, to a
@@ -2518,13 +2477,11 @@ mod tests {
         pairs.sort_by_key(|(a, b)| (*a as u8, *b as u8));
         assert_eq!(
             pairs,
-            vec![(Occupant::PowerLine, Occupant::Trees)],
-            "the producible-conflict inventory changed. A new pair means a new \
-             defect of the same class — in particular (Structure, PowerLine) \
-             coming back means a placement guard has gone back to reading \
-             `kind`. A missing pair means a defect was fixed, in which case \
-             rewrite its known-defect test above as a regression test and drop \
-             this entry."
+            Vec::<(Occupant, Occupant)>::new(),
+            "the producible-conflict inventory changed — placement can now \
+             build a tile the compatibility table calls impossible. In \
+             particular (Structure, PowerLine) reappearing means a placement \
+             guard has gone back to reading `kind`."
         );
     }
 
