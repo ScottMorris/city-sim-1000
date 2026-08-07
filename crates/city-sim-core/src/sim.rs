@@ -663,20 +663,20 @@ mod tests {
     #[test]
     fn a_buildings_kind_changes_the_hash_even_behind_a_stable_id() {
         use crate::buildings::BuildingInstance;
-        use city_sim_protocol::tile_kind::TileKind;
+        use city_sim_protocol::building_kind::BuildingKind;
 
         let mut park = Simulation::new(4, 4, 1);
         park.state.tiles[5].building_id = Some(7);
         park.state
             .buildings
-            .push(BuildingInstance::new(7, TileKind::Park, (1, 1)));
+            .push(BuildingInstance::new(7, BuildingKind::Park, (1, 1)));
 
         let mut plant = Simulation::new(4, 4, 1);
         plant.state.tiles[5].building_id = Some(7);
         plant
             .state
             .buildings
-            .push(BuildingInstance::new(7, TileKind::CoalPlant, (1, 1)));
+            .push(BuildingInstance::new(7, BuildingKind::CoalPlant, (1, 1)));
 
         assert_ne!(
             state_hash(&park.state),
@@ -721,8 +721,8 @@ mod tests {
     fn water_requirement_is_opt_in_until_infrastructure_exists() {
         use crate::buildings::BuildingStatus;
         use crate::commands::apply_tool;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::commands::{Tool, ViewStratum};
-        use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(16, 16, 42);
         for x in 0..12 {
@@ -754,7 +754,7 @@ mod tests {
             .state
             .buildings
             .iter()
-            .filter(|b| b.kind == TileKind::Residential)
+            .filter(|b| b.kind == BuildingKind::Residential)
             .map(|b| b.status)
             .collect();
         assert!(!zone_statuses.is_empty(), "zones should have grown");
@@ -784,7 +784,7 @@ mod tests {
             sim.state
                 .buildings
                 .iter()
-                .any(|b| b.kind == TileKind::Residential
+                .any(|b| b.kind == BuildingKind::Residential
                     && b.status == BuildingStatus::InactiveNoWater),
             "with a water system present, unwatered zones require water again"
         );
@@ -798,6 +798,7 @@ mod tests {
     fn a_starved_segment_is_invisible_to_the_pooled_city_balance() {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::migrate::set_v4_kind;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(14, 2, 1);
@@ -813,7 +814,7 @@ mod tests {
                 }
             }
             s.buildings.push({
-                let mut b = BuildingInstance::new(1, TileKind::CoalPlant, (0, 0));
+                let mut b = BuildingInstance::new(1, BuildingKind::CoalPlant, (0, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -830,7 +831,7 @@ mod tests {
                 }
             }
             s.buildings.push({
-                let mut b = BuildingInstance::new(2, TileKind::WindTurbine, (5, 0));
+                let mut b = BuildingInstance::new(2, BuildingKind::WindTurbine, (5, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -840,7 +841,7 @@ mod tests {
                 let id = 10 + i as u32;
                 s.tile_at_mut(x, 0).unwrap().building_id = Some(id as u16);
                 s.buildings.push({
-                    let mut b = BuildingInstance::new(id, TileKind::Residential, (x, 0));
+                    let mut b = BuildingInstance::new(id, BuildingKind::Residential, (x, 0));
                     b.status = BuildingStatus::Active;
                     b
                 });
@@ -887,6 +888,7 @@ mod tests {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::migrate::set_v4_kind;
         use crate::occupants::Occupant;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(3, 1, 1);
@@ -896,7 +898,7 @@ mod tests {
             set_v4_kind(s.tile_at_mut(0, 0).unwrap(), TileKind::WaterPump);
             s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
             s.buildings.push({
-                let mut b = BuildingInstance::new(1, TileKind::WaterPump, (0, 0));
+                let mut b = BuildingInstance::new(1, BuildingKind::WaterPump, (0, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -906,7 +908,7 @@ mod tests {
             set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Residential);
             s.tile_at_mut(2, 0).unwrap().building_id = Some(2);
             s.buildings.push({
-                let mut b = BuildingInstance::new(2, TileKind::Residential, (2, 0));
+                let mut b = BuildingInstance::new(2, BuildingKind::Residential, (2, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -1114,6 +1116,7 @@ mod tests {
     fn load_state_repopulates_utility_networks_without_clobbering_used() {
         use crate::buildings::{BuildingInstance, BuildingStatus};
         use crate::migrate::set_v4_kind;
+        use city_sim_protocol::building_kind::BuildingKind;
         use city_sim_protocol::tile_kind::TileKind;
 
         let mut sim = Simulation::new(3, 1, 1);
@@ -1122,7 +1125,7 @@ mod tests {
             s.tile_at_mut(0, 0).unwrap().power_plant_mw = 60;
             s.tile_at_mut(0, 0).unwrap().building_id = Some(1);
             s.buildings.push({
-                let mut b = BuildingInstance::new(1, TileKind::CoalPlant, (0, 0));
+                let mut b = BuildingInstance::new(1, BuildingKind::CoalPlant, (0, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
@@ -1134,14 +1137,14 @@ mod tests {
             set_v4_kind(s.tile_at_mut(1, 0).unwrap(), TileKind::Residential);
             s.tile_at_mut(1, 0).unwrap().building_id = Some(2);
             s.buildings.push({
-                let mut b = BuildingInstance::new(2, TileKind::Residential, (1, 0));
+                let mut b = BuildingInstance::new(2, BuildingKind::Residential, (1, 0));
                 b.status = BuildingStatus::Active;
                 b
             });
             s.tile_at_mut(2, 0).unwrap().water_output = 50;
             s.tile_at_mut(2, 0).unwrap().building_id = Some(3);
             s.buildings.push({
-                let mut b = BuildingInstance::new(3, TileKind::WaterPump, (2, 0));
+                let mut b = BuildingInstance::new(3, BuildingKind::WaterPump, (2, 0));
                 b.status = BuildingStatus::Active;
                 b
             });

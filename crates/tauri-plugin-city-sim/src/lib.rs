@@ -11,7 +11,7 @@
 //   apply_tool(tool: u8, x: u32, y: u32, stroke_id: u32, stratum: u8)
 //   set_speed(multiplier: f32)
 //   set_policies(policies: { budget: {...}, wilderness: {...} })
-//   set_natural_terrain(kinds: Vec<u8>)
+//   set_natural_terrain(terrain_bytes: Vec<u8>)
 //   stop()
 //   get_snapshot() -> Vec<u8>
 //   load_snapshot(bytes: Vec<u8>)

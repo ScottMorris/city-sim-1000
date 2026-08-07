@@ -14,7 +14,7 @@ import { recordEngineBuild } from '../buildInfo';
 import type { GameState, UtilityComponentStats, ViewStratum } from './gameState';
 import { TileKind } from './gameState';
 import { BuildingStatus, createBuildingState } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
+import { BuildingKind, getBuildingTemplate } from './buildings/templates';
 import { createTileServiceState } from './services';
 import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
@@ -23,7 +23,7 @@ import type { FromSim } from './protocol/events';
 import type { SimStats, SimAlertWire } from '../workers/wasmSim.worker';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
-import { tileKindFromU8, tileKindToU8 } from './protocol/tileKind';
+import { buildingKindFromU8 } from './protocol/buildingKind';
 import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
 import { footprintTouchesWater } from './adjacency';
@@ -686,20 +686,25 @@ export class WasmSimBridge implements SimBridge {
     // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
     // until a pump, tower, or pipe exists, buildings don't require water.
     let hasWaterSystem = wireBuildings.some((b) => {
-      const kind = tileKindFromU8(b.kind);
-      return kind === TileKind.WaterPump || kind === TileKind.WaterTower;
+      const kind = buildingKindFromU8(b.kind);
+      return kind === BuildingKind.WaterPump || kind === BuildingKind.WaterTower;
     });
     for (let i = 0; i < n && !hasWaterSystem; i++) {
       if (hasOccupant(this.state.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
     }
     const seatsUsedByBuildingId = new Map(seatsUsed.map((e) => [e.buildingId, e.used]));
     this.state.buildings = wireBuildings.map((b) => {
-      const kind = tileKindFromU8(b.kind) ?? TileKind.Land;
+      // `b.kind` decodes via `BUILDING_KIND_BY_U8` — an unrecognised byte
+      // (should never happen against a matching engine build) falls back to
+      // the empty string, which `getBuildingTemplate` returns `undefined`
+      // for, same as the old `TileKind.Land` fallback did (Land has no
+      // building template either).
+      const kind: string = buildingKindFromU8(b.kind) ?? '';
       // Status is derived from the tile flags the Rust buffer already set —
       // `hasWaterSystem` gates the water check so buildings in cities without
       // water infrastructure aren't misread as unwatered.
       const originTile = this.state.tiles[b.originY * this.state.width + b.originX];
-      const template = getBuildingTemplate(kind as string);
+      const template = getBuildingTemplate(kind);
       const bstate = createBuildingState();
       const needsPower = template ? template.requiresPower !== false : false;
       const needsWater =
@@ -707,7 +712,7 @@ export class WasmSimBridge implements SimBridge {
       // A pump only produces when its footprint touches water terrain (#200)
       // — distinct from needsWater above, which gates a *consumer* on
       // network coverage; a pump doesn't consume water.
-      const needsSource = kind === TileKind.WaterPump;
+      const needsSource = kind === BuildingKind.WaterPump;
       const origin = { x: b.originX, y: b.originY };
       if (needsPower && !originTile?.powered) {
         bstate.status = BuildingStatus.InactiveNoPower;
@@ -724,7 +729,7 @@ export class WasmSimBridge implements SimBridge {
       }
       return {
         id: b.id,
-        templateId: kind as string,
+        templateId: kind,
         origin,
         state: bstate
       };
@@ -732,11 +737,12 @@ export class WasmSimBridge implements SimBridge {
   }
 }
 
-/** A state's tile kinds as `TileKind` u8 bytes, for engine terrain seeding. */
+/** A state's terrain as `Terrain` u8 bytes (`Land` = 0, `Water` = 1), for
+ *  engine natural-terrain seeding. */
 function terrainBytes(state: GameState): Uint8Array {
   const bytes = new Uint8Array(state.tiles.length);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = tileKindToU8(state.tiles[i].terrain === Terrain.Water ? TileKind.Water : TileKind.Land);
+    bytes[i] = state.tiles[i].terrain === Terrain.Water ? Terrain.Water : Terrain.Land;
   }
   return bytes;
 }

@@ -7,7 +7,7 @@ use crate::buildings::{get_building_template, BuildingStatus};
 use crate::occupants::Occupant;
 use crate::state::{DemandStats, GameState};
 use crate::wilderness::{demand_delta, WildernessTunables};
-use city_sim_protocol::tile_kind::TileKind;
+use city_sim_protocol::building_kind::BuildingKind;
 
 /// Population and job capacity totals — extracted from the city count so
 /// the simulation driver can use them for population growth without a second
@@ -206,10 +206,10 @@ fn count_city(state: &GameState) -> CityCounters {
         }
         c.population_capacity += tmpl.population_capacity;
         c.job_capacity += tmpl.jobs_capacity;
-        if building.kind == TileKind::Commercial {
+        if building.kind == BuildingKind::Commercial {
             c.commercial_job_capacity += tmpl.jobs_capacity;
         }
-        if building.kind == TileKind::Industrial {
+        if building.kind == BuildingKind::Industrial {
             c.industrial_job_capacity += tmpl.jobs_capacity;
         }
     }

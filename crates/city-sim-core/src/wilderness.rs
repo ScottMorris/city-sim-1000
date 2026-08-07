@@ -32,9 +32,9 @@
 //! [`terrain_eco`](WildernessTunables::terrain_eco) keyed by [`Terrain`],
 //! [`occupant_eco`](WildernessTunables::occupant_eco) keyed by [`Occupant`],
 //! and [`structure_eco`](WildernessTunables::structure_eco) keyed by
-//! `TileKind` — the last legitimately so, because that is the building
-//! template key and it is what identifies *which* structure. Every value stayed
-//! exactly where it was on the number line; only its address changed.
+//! [`BuildingKind::dense_index`] — the building template key, and it is what
+//! identifies *which* structure. Every value stayed exactly where it was on
+//! the number line; only its address changed.
 //!
 //! All three are **tables, not constants**, and that is a requirement rather
 //! than a habit: the Green Industry programme rewrites the industrial row at
@@ -49,7 +49,9 @@ use crate::occupants::{
     tile_eco, EcoCategory, Occupant, StructureLookup, Terrain, OCCUPANT_COUNT, TERRAIN_COUNT,
 };
 use crate::state::GameState;
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::WildernessPolicy;
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 
 // ---------------------------------------------------------------------------
@@ -73,12 +75,12 @@ pub struct WildernessTunables {
     /// sends that one occupant to [`Self::structure_eco`] instead. See
     /// `the_structure_row_of_the_occupant_table_is_never_read`.
     pub occupant_eco: [f32; OCCUPANT_COUNT],
-    /// Eco value of a structure, indexed by `TileKind as usize` — the building
-    /// template key, which is what identifies *which* structure. Read by
-    /// [`structure_eco`]; only the
-    /// [`is_structure_kind`](crate::occupants::is_structure_kind) rows are ever
-    /// live, and the rest stay `0.0`.
-    pub structure_eco: [f32; TileKind::COUNT],
+    /// Eco value of a structure, indexed by
+    /// [`BuildingKind::dense_index`] — the building template key, which is
+    /// what identifies *which* structure. Read by [`structure_eco`]. Dense
+    /// rather than indexed by the raw (sparse) discriminant, because
+    /// `BuildingKind`'s thirteen members span `0x10..=0x51`.
+    pub structure_eco: [f32; BuildingKind::COUNT],
     /// Patch bonus ceiling per strong-nature tile (saturating curve).
     pub patch_bonus_cap: f32,
     /// Cluster size at which the patch bonus reaches ~63% of its cap.
@@ -164,17 +166,17 @@ impl Default for WildernessTunables {
         // is decides, and that is the table below.
 
         // --- one row per structure, keyed by its building template ---
-        let mut structure_eco = [0.0_f32; TileKind::COUNT];
-        structure_eco[TileKind::HydroPlant as usize] = -2.0;
-        structure_eco[TileKind::WaterPump as usize] = -1.0;
-        structure_eco[TileKind::WaterTower as usize] = -1.0;
-        structure_eco[TileKind::ElementarySchool as usize] = -1.0;
-        structure_eco[TileKind::HighSchool as usize] = -1.0;
-        structure_eco[TileKind::Park as usize] = 4.0;
-        structure_eco[TileKind::ParkLarge as usize] = 4.0;
-        structure_eco[TileKind::CoalPlant as usize] = -8.0;
-        structure_eco[TileKind::WindTurbine as usize] = -1.0;
-        structure_eco[TileKind::SolarFarm as usize] = -1.0;
+        let mut structure_eco = [0.0_f32; BuildingKind::COUNT];
+        structure_eco[BuildingKind::HydroPlant.dense_index()] = -2.0;
+        structure_eco[BuildingKind::WaterPump.dense_index()] = -1.0;
+        structure_eco[BuildingKind::WaterTower.dense_index()] = -1.0;
+        structure_eco[BuildingKind::ElementarySchool.dense_index()] = -1.0;
+        structure_eco[BuildingKind::HighSchool.dense_index()] = -1.0;
+        structure_eco[BuildingKind::Park.dense_index()] = 4.0;
+        structure_eco[BuildingKind::ParkLarge.dense_index()] = 4.0;
+        structure_eco[BuildingKind::CoalPlant.dense_index()] = -8.0;
+        structure_eco[BuildingKind::WindTurbine.dense_index()] = -1.0;
+        structure_eco[BuildingKind::SolarFarm.dense_index()] = -1.0;
 
         Self {
             terrain_eco,
@@ -540,11 +542,20 @@ mod tests {
     /// tag, so a park with no `BuildingInstance` behind it is bare ground.
     fn set(state: &mut GameState, x: u32, y: u32, kind: TileKind) {
         if crate::occupants::is_structure_kind(kind) {
+            // `is_structure_kind` is a subset of `building_kind_of`'s domain
+            // (it excludes the three zone kinds, which take the `else`
+            // branch below), so this is always `Some`.
+            let building_kind = crate::migrate::building_kind_of(kind)
+                .expect("is_structure_kind implies building_kind_of");
             let id = state.next_building_id;
             state.next_building_id += 1;
             state
                 .buildings
-                .push(crate::buildings::BuildingInstance::new(id, kind, (x, y)));
+                .push(crate::buildings::BuildingInstance::new(
+                    id,
+                    building_kind,
+                    (x, y),
+                ));
             let tile = state.tile_at_mut(x, y).unwrap();
             tile.set_occupant(Occupant::Structure, true);
             tile.building_id = Some(id as u16);
@@ -806,30 +817,37 @@ mod tests {
         let t = WildernessTunables::default();
         assert_eq!(t.terrain_eco.len(), Terrain::ALL.len());
         assert_eq!(t.occupant_eco.len(), ALL_OCCUPANTS.len());
-        assert_eq!(t.structure_eco.len(), TileKind::ALL.len());
+        assert_eq!(t.structure_eco.len(), BuildingKind::COUNT);
         for terrain in Terrain::ALL {
             let _ = t.terrain_eco[terrain as usize];
         }
         for o in ALL_OCCUPANTS {
             let _ = t.occupant_eco[o as usize];
         }
-        for &kind in TileKind::ALL {
-            let _ = t.structure_eco[kind as usize];
+        for &kind in BuildingKind::ALL {
+            let _ = t.structure_eco[kind.dense_index()];
         }
     }
 
-    /// The structure table's live rows are exactly the structure kinds. Every
-    /// other `TileKind` row is `0.0` and stays that way: a road's −2.0 moved
-    /// *out* of the `TileKind`-keyed table when the split happened, rather
-    /// than being copied into a second home where the two could drift.
+    /// The structure table's live rows are exactly the ten non-zone structure
+    /// kinds. The three zone kinds' rows are `0.0` and stay that way: a
+    /// developed lot's occupant is a zone tag, not `Structure`, so
+    /// `structure_eco` is never asked about `Residential`/`Commercial`/
+    /// `Industrial` in real scoring — a road's −2.0 (an *occupant* value)
+    /// moved *out* of this table when the split happened, rather than being
+    /// copied into a second home where the two could drift.
     #[test]
-    fn only_structure_kinds_carry_a_structure_eco() {
+    fn only_non_zone_structure_kinds_carry_a_structure_eco() {
         let t = WildernessTunables::default();
-        for &kind in TileKind::ALL {
+        for &kind in BuildingKind::ALL {
+            let is_zone = matches!(
+                kind,
+                BuildingKind::Residential | BuildingKind::Commercial | BuildingKind::Industrial
+            );
             assert_eq!(
-                t.structure_eco[kind as usize] != 0.0,
-                crate::occupants::is_structure_kind(kind),
-                "{kind:?}: only structures belong in the structure eco table"
+                t.structure_eco[kind.dense_index()] != 0.0,
+                !is_zone,
+                "{kind:?}: only non-zone structures belong in the structure eco table"
             );
         }
     }
@@ -845,7 +863,7 @@ mod tests {
         // Poison the row: nothing may notice.
         t.occupant_eco[Occupant::Structure as usize] = 999.0;
         assert_eq!(occupant_eco(Occupant::Structure, &t), None);
-        assert_eq!(structure_eco(TileKind::CoalPlant, &t), -8.0);
+        assert_eq!(structure_eco(BuildingKind::CoalPlant, &t), -8.0);
 
         // …and no route into the score may notice either.
         let mut s = grid(8, 8);
@@ -910,16 +928,16 @@ mod tests {
     fn coal_is_worse_than_wind_and_solar() {
         let t = WildernessTunables::default();
         assert!(
-            t.structure_eco[TileKind::CoalPlant as usize]
-                < t.structure_eco[TileKind::HydroPlant as usize]
+            t.structure_eco[BuildingKind::CoalPlant.dense_index()]
+                < t.structure_eco[BuildingKind::HydroPlant.dense_index()]
         );
         assert!(
-            t.structure_eco[TileKind::HydroPlant as usize]
-                < t.structure_eco[TileKind::WindTurbine as usize]
+            t.structure_eco[BuildingKind::HydroPlant.dense_index()]
+                < t.structure_eco[BuildingKind::WindTurbine.dense_index()]
         );
         assert_eq!(
-            t.structure_eco[TileKind::WindTurbine as usize],
-            t.structure_eco[TileKind::SolarFarm as usize]
+            t.structure_eco[BuildingKind::WindTurbine.dense_index()],
+            t.structure_eco[BuildingKind::SolarFarm.dense_index()]
         );
     }
 

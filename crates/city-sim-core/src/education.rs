@@ -6,6 +6,8 @@
 use crate::buildings::{get_building_template, BuildingStatus};
 use crate::occupants::Occupant;
 use crate::state::{EducationStats, GameState, ServiceKind};
+use city_sim_protocol::building_kind::BuildingKind;
+#[cfg(test)]
 use city_sim_protocol::tile_kind::TileKind;
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
@@ -35,8 +37,8 @@ fn compute_zone_loads(state: &GameState) -> ZoneLoads {
         }
         total_pop_cap += tmpl.population_capacity;
         match b.kind {
-            TileKind::Commercial => total_com_cap += tmpl.jobs_capacity,
-            TileKind::Industrial => total_ind_cap += tmpl.jobs_capacity,
+            BuildingKind::Commercial => total_com_cap += tmpl.jobs_capacity,
+            BuildingKind::Industrial => total_ind_cap += tmpl.jobs_capacity,
             _ => {}
         }
     }
@@ -76,14 +78,14 @@ fn compute_zone_loads(state: &GameState) -> ZoneLoads {
 
         if tmpl.jobs_capacity > 0 {
             let share = match b.kind {
-                TileKind::Commercial => {
+                BuildingKind::Commercial => {
                     if total_com_cap > 0 {
                         (tmpl.jobs_capacity as f32 / total_com_cap as f32) * jobs_in_commercial
                     } else {
                         0.0
                     }
                 }
-                TileKind::Industrial => {
+                BuildingKind::Industrial => {
                     if total_ind_cap > 0 {
                         (tmpl.jobs_capacity as f32 / total_ind_cap as f32) * jobs_in_industrial
                     } else {
@@ -379,7 +381,7 @@ mod tests {
         GameState::new(w, h, 0)
     }
 
-    fn place_building(s: &mut GameState, kind: TileKind, ox: u32, oy: u32) -> u32 {
+    fn place_building(s: &mut GameState, kind: BuildingKind, ox: u32, oy: u32) -> u32 {
         let id = s.next_building_id;
         let tmpl = get_building_template(kind).unwrap();
         let (fw, fh) = tmpl.footprint;
@@ -413,12 +415,12 @@ mod tests {
         // Layout: [School(0,0)(1,0)] [Road(2,0)] [Res(3,0)]
         //         [School(0,1)(1,1)] ...
         let mut s = gs(6, 2);
-        place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        place_building(&mut s, BuildingKind::ElementarySchool, 0, 0);
         set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
         // Place a residential zone building so it has load
-        place_building(&mut s, TileKind::Residential, 3, 0);
+        place_building(&mut s, BuildingKind::Residential, 3, 0);
         s.population = 14;
         update_building_states(&mut s, false);
         recompute_education(&mut s);
@@ -434,11 +436,11 @@ mod tests {
     #[test]
     fn active_school_records_seats_used_under_its_building_id() {
         let mut s = gs(6, 2);
-        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        let school_id = place_building(&mut s, BuildingKind::ElementarySchool, 0, 0);
         set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
-        place_building(&mut s, TileKind::Residential, 3, 0);
+        place_building(&mut s, BuildingKind::Residential, 3, 0);
         s.population = 14;
         update_building_states(&mut s, false);
         recompute_education(&mut s);
@@ -453,7 +455,7 @@ mod tests {
     #[test]
     fn inactive_school_records_no_seats_used() {
         let mut s = gs(4, 4);
-        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        let school_id = place_building(&mut s, BuildingKind::ElementarySchool, 0, 0);
         for dx in 0..2 {
             for dy in 0..2 {
                 s.tile_at_mut(dx, dy).unwrap().set_flag(FLAG_POWERED, false);
@@ -461,7 +463,7 @@ mod tests {
         }
         update_building_states(&mut s, false);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
-        place_building(&mut s, TileKind::Residential, 3, 0);
+        place_building(&mut s, BuildingKind::Residential, 3, 0);
         s.population = 14;
         recompute_education(&mut s);
         assert!(!s.education_seats_used.contains_key(&school_id));
@@ -470,11 +472,11 @@ mod tests {
     #[test]
     fn seats_used_is_dropped_once_its_school_is_demolished() {
         let mut s = gs(6, 2);
-        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        let school_id = place_building(&mut s, BuildingKind::ElementarySchool, 0, 0);
         set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
-        place_building(&mut s, TileKind::Residential, 3, 0);
+        place_building(&mut s, BuildingKind::Residential, 3, 0);
         s.population = 14;
         update_building_states(&mut s, false);
         recompute_education(&mut s);
@@ -491,11 +493,11 @@ mod tests {
         // share, so its load (300) exceeds the elementary school's 180-seat
         // capacity — `used` must clamp at capacity, not the raw load.
         let mut s = gs(6, 2);
-        let school_id = place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        let school_id = place_building(&mut s, BuildingKind::ElementarySchool, 0, 0);
         set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
-        place_building(&mut s, TileKind::Residential, 3, 0);
+        place_building(&mut s, BuildingKind::Residential, 3, 0);
         s.population = 300;
         update_building_states(&mut s, false);
         recompute_education(&mut s);
@@ -506,7 +508,7 @@ mod tests {
     #[test]
     fn inactive_school_does_not_serve() {
         let mut s = gs(4, 4);
-        place_building(&mut s, TileKind::ElementarySchool, 0, 0);
+        place_building(&mut s, BuildingKind::ElementarySchool, 0, 0);
         // Make school inactive (no power)
         for dx in 0..2 {
             for dy in 0..2 {
@@ -515,7 +517,7 @@ mod tests {
         }
         update_building_states(&mut s, false);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Residential);
-        place_building(&mut s, TileKind::Residential, 3, 0);
+        place_building(&mut s, BuildingKind::Residential, 3, 0);
         s.population = 14;
         recompute_education(&mut s);
         // School is inactive → no coverage (but load=0 still gives coverage=1 if no active buildings)
@@ -549,11 +551,11 @@ mod tests {
         // Layout: [HighSchool(0,0)(1,0)] [Road(2,0)] [Com(3,0)]
         //         [HighSchool(0,1)(1,1)]
         let mut s = gs(6, 2);
-        place_building(&mut s, TileKind::HighSchool, 0, 0);
+        place_building(&mut s, BuildingKind::HighSchool, 0, 0);
         set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
         set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Commercial);
         s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
-        place_building(&mut s, TileKind::Commercial, 3, 0);
+        place_building(&mut s, BuildingKind::Commercial, 3, 0);
         s.jobs = 8;
         update_building_states(&mut s, false);
         recompute_education(&mut s);

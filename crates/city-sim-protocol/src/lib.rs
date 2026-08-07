@@ -3,6 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
+pub mod building_kind;
 pub mod commands;
 pub mod events;
 pub mod legacy_tile_buffer;

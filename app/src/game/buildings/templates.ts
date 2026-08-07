@@ -7,7 +7,15 @@ import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from '../constants';
 import { Tool } from '../toolTypes';
 import { ServiceId } from '../services';
 
-export enum BuildingCategory {
+/**
+ * The coarse power/civic/zone bucket a template's upkeep lands in — the same
+ * trio the engine's budget ledger reports (`economy.rs`'s maintenance
+ * breakdown) and the debug/bylaw UI groups by. Distinct from Rust's
+ * `BuildingCategory` (`city-sim-protocol`'s `building_kind.rs`), the precise
+ * seven-member domain taxonomy carried in a `BuildingKind`'s high nibble —
+ * `Water`/`Education`/`Recreation` all land in `Civic` here.
+ */
+export enum LedgerGroup {
   Power = 'power',
   Civic = 'civic',
   Zone = 'zone'
@@ -42,7 +50,7 @@ export enum BuildingKind {
 export interface BuildingTemplate {
   id: string;
   name: string;
-  category: BuildingCategory;
+  category: LedgerGroup;
   footprint: { width: number; height: number };
   cost: number;
   maintenance: number;
@@ -75,7 +83,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   [PowerPlantType.Hydro]: {
     id: PowerPlantType.Hydro,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].name,
-    category: BuildingCategory.Power,
+    category: LedgerGroup.Power,
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].maintenancePerDay,
@@ -87,7 +95,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   [PowerPlantType.Coal]: {
     id: PowerPlantType.Coal,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Coal].name,
-    category: BuildingCategory.Power,
+    category: LedgerGroup.Power,
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Coal].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Coal].maintenancePerDay,
@@ -99,7 +107,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   [PowerPlantType.Wind]: {
     id: PowerPlantType.Wind,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Wind].name,
-    category: BuildingCategory.Power,
+    category: LedgerGroup.Power,
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Wind].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Wind].maintenancePerDay,
@@ -111,7 +119,7 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   [PowerPlantType.Solar]: {
     id: PowerPlantType.Solar,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Solar].name,
-    category: BuildingCategory.Power,
+    category: LedgerGroup.Power,
     footprint: POWER_PLANT_CONFIGS[PowerPlantType.Solar].footprint,
     cost: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
     maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Solar].maintenancePerDay,
@@ -126,7 +134,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.WaterPump]: {
     id: BuildingKind.WaterPump,
     name: 'Water Pump',
-    category: BuildingCategory.Civic,
+    category: LedgerGroup.Civic,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.WaterPump],
     maintenance: 5,
@@ -138,7 +146,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.WaterTower]: {
     id: BuildingKind.WaterTower,
     name: 'Water Tower',
-    category: BuildingCategory.Civic,
+    category: LedgerGroup.Civic,
     footprint: { width: 2, height: 2 },
     cost: BUILD_COST[Tool.WaterTower],
     maintenance: 12,
@@ -150,7 +158,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.Park]: {
     id: BuildingKind.Park,
     name: 'Small Park',
-    category: BuildingCategory.Civic,
+    category: LedgerGroup.Civic,
     footprint: { width: 1, height: 1 },
     cost: 10,
     maintenance: 0.05,
@@ -161,7 +169,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.ParkLarge]: {
     id: BuildingKind.ParkLarge,
     name: 'Large Park',
-    category: BuildingCategory.Civic,
+    category: LedgerGroup.Civic,
     footprint: { width: 2, height: 2 },
     cost: 32,
     maintenance: 0.16,
@@ -172,7 +180,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.ElementarySchool]: {
     id: BuildingKind.ElementarySchool,
     name: 'Elementary School',
-    category: BuildingCategory.Civic,
+    category: LedgerGroup.Civic,
     footprint: { width: 2, height: 2 },
     cost: BUILD_COST[Tool.ElementarySchool],
     maintenance: 40,
@@ -185,7 +193,7 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.HighSchool]: {
     id: BuildingKind.HighSchool,
     name: 'High School',
-    category: BuildingCategory.Civic,
+    category: LedgerGroup.Civic,
     footprint: { width: 2, height: 2 },
     cost: BUILD_COST[Tool.HighSchool],
     maintenance: 55,
@@ -201,7 +209,7 @@ export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.Residential]: {
     id: 'zone-residential',
     name: 'Residential Lot',
-    category: BuildingCategory.Zone,
+    category: LedgerGroup.Zone,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.Residential],
     maintenance: 1,
@@ -214,7 +222,7 @@ export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.Commercial]: {
     id: 'zone-commercial',
     name: 'Commercial Lot',
-    category: BuildingCategory.Zone,
+    category: LedgerGroup.Zone,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.Commercial],
     maintenance: 1.2,
@@ -227,7 +235,7 @@ export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.Industrial]: {
     id: 'zone-industrial',
     name: 'Industrial Lot',
-    category: BuildingCategory.Zone,
+    category: LedgerGroup.Zone,
     footprint: { width: 1, height: 1 },
     cost: BUILD_COST[Tool.Industrial],
     maintenance: 1.4,

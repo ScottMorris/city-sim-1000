@@ -1,4 +1,4 @@
-import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
+import { LedgerGroup, getBuildingTemplate } from './buildings/templates';
 import { BuildingStatus } from './buildings/state';
 import type { GameState } from './gameState';
 import {
@@ -19,19 +19,19 @@ export function computeLightingBaseStats(state: GameState): LightingBaseStats {
   for (const building of state.buildings) {
     const template = getBuildingTemplate(building.templateId);
     if (!template) continue;
-    if (template.category === BuildingCategory.Power) continue;
+    if (template.category === LedgerGroup.Power) continue;
 
     if (template.maintenance) {
-      if (template.category === BuildingCategory.Civic) base.maintenanceCivic += template.maintenance;
-      if (template.category === BuildingCategory.Zone) base.maintenanceZones += template.maintenance;
+      if (template.category === LedgerGroup.Civic) base.maintenanceCivic += template.maintenance;
+      if (template.category === LedgerGroup.Zone) base.maintenanceZones += template.maintenance;
     }
 
     const isActive = building.state.status === BuildingStatus.Active;
     if (!isActive) continue;
 
     if (template.powerUse) {
-      if (template.category === BuildingCategory.Civic) base.powerUseCivic += template.powerUse;
-      if (template.category === BuildingCategory.Zone) base.powerUseZones += template.powerUse;
+      if (template.category === LedgerGroup.Civic) base.powerUseCivic += template.powerUse;
+      if (template.category === LedgerGroup.Zone) base.powerUseZones += template.powerUse;
     }
   }
 

@@ -298,8 +298,8 @@ pub fn start(
                     Ok(SimCmd::SetPolicies(policies)) => {
                         sim.state.policies = policies.clamped();
                     }
-                    Ok(SimCmd::SetNaturalTerrain(kinds)) => {
-                        sim.state.seed_natural_terrain(&kinds);
+                    Ok(SimCmd::SetNaturalTerrain(terrain_bytes)) => {
+                        sim.state.seed_natural_terrain(&terrain_bytes);
                     }
                     Ok(SimCmd::GetSnapshot(tx)) => {
                         let result = snapshot::to_bytes(&sim.state).map_err(|e| e.to_string());
@@ -408,13 +408,17 @@ pub fn set_policies(state: State<'_, SimState>, policies: Policies) -> Result<()
     state.send(SimCmd::SetPolicies(policies))
 }
 
-/// Seed the natural terrain baseline (row-major `TileKind` u8 per tile).
+/// Seed the natural terrain baseline (row-major `Terrain as u8` byte per
+/// tile — `Land` = 0, `Water` = 1).
 ///
-/// Only `Water`/`Tree` kinds are applied onto untouched `Land` tiles — see
+/// Only `Water` is applied onto untouched `Land` tiles — see
 /// `GameState::seed_natural_terrain`. Call once, right after `start`.
 #[tauri::command]
-pub fn set_natural_terrain(state: State<'_, SimState>, kinds: Vec<u8>) -> Result<(), Error> {
-    state.send(SimCmd::SetNaturalTerrain(kinds))
+pub fn set_natural_terrain(
+    state: State<'_, SimState>,
+    terrain_bytes: Vec<u8>,
+) -> Result<(), Error> {
+    state.send(SimCmd::SetNaturalTerrain(terrain_bytes))
 }
 
 /// Stop the simulation thread. The `on_tick` channel will stop receiving events.
