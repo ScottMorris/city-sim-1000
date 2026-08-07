@@ -1,5 +1,17 @@
+// budgetInsightsRule.ts — turns one month-end CitySnapshot/deltas pair into the Budget modal's headline changes, drivers, risks, and recommendation.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import type { BudgetInsights, NarrativeInput } from '../types';
 import { formatCurrency } from '../../../utils/currency';
+import {
+  ABANDONMENT_HIGH_SEVERITY_THRESHOLD,
+  ABANDONMENT_WAVE_THRESHOLD,
+  POWER_DEFICIT_HIGH_SEVERITY_THRESHOLD_MW,
+  RUNWAY_DRIVER_THRESHOLD_MONTHS,
+  RUNWAY_WARN_THRESHOLD_MONTHS
+} from '../thresholds';
 
 const MAX_TOP_CHANGES = 3;
 const MAX_DRIVERS = 4;
@@ -180,7 +192,7 @@ export function generateBudgetInsights(input: NarrativeInput): BudgetInsights {
     });
   }
 
-  if (snapshot.economy.runwayMonths <= 6) {
+  if (snapshot.economy.runwayMonths <= RUNWAY_DRIVER_THRESHOLD_MONTHS) {
     drivers.push({
       label: 'Runway',
       explanation: `Runway sits at ${formatNumber(snapshot.economy.runwayMonths, 'months')} at the current burn.`
@@ -190,7 +202,7 @@ export function generateBudgetInsights(input: NarrativeInput): BudgetInsights {
   const trimmedDrivers = drivers.slice(0, MAX_DRIVERS);
 
   const risks: BudgetInsights['risks'] = [];
-  if (snapshot.economy.runwayMonths <= 3) {
+  if (snapshot.economy.runwayMonths <= RUNWAY_WARN_THRESHOLD_MONTHS) {
     risks.push({
       label: 'Short runway',
       severity: 'high',
@@ -199,7 +211,7 @@ export function generateBudgetInsights(input: NarrativeInput): BudgetInsights {
   }
 
   if (snapshot.utilities.powerBalance < 0) {
-    const severity = snapshot.utilities.powerBalance <= -5 ? 'high' : 'med';
+    const severity = snapshot.utilities.powerBalance <= POWER_DEFICIT_HIGH_SEVERITY_THRESHOLD_MW ? 'high' : 'med';
     risks.push({
       label: 'Power deficit',
       severity,
@@ -207,10 +219,10 @@ export function generateBudgetInsights(input: NarrativeInput): BudgetInsights {
     });
   }
 
-  if (deltas.abandonedCount >= 5) {
+  if (deltas.abandonedCount >= ABANDONMENT_WAVE_THRESHOLD) {
     risks.push({
       label: 'Abandonments',
-      severity: deltas.abandonedCount >= 10 ? 'high' : 'med',
+      severity: deltas.abandonedCount >= ABANDONMENT_HIGH_SEVERITY_THRESHOLD ? 'high' : 'med',
       note: `Abandonments rose by ${Math.round(deltas.abandonedCount)} this month.`
     });
   }
@@ -226,13 +238,13 @@ export function generateBudgetInsights(input: NarrativeInput): BudgetInsights {
   const trimmedRisks = risks.slice(0, MAX_RISKS);
 
   let recommendation = 'Maintain the current mix and watch net and runway as you expand.';
-  if (snapshot.economy.runwayMonths <= 3) {
+  if (snapshot.economy.runwayMonths <= RUNWAY_WARN_THRESHOLD_MONTHS) {
     recommendation =
       'Runway is short; stabilising monthly net will prevent forced cuts later.';
   } else if (snapshot.utilities.powerBalance < 0) {
     recommendation =
       'Power deficits are likely limiting growth; consider adding generation before expanding zoning.';
-  } else if (deltas.abandonedCount >= 5) {
+  } else if (deltas.abandonedCount >= ABANDONMENT_WAVE_THRESHOLD) {
     recommendation =
       'Recent abandonments suggest trouble spots; check power, roads, and demand balance before expanding.';
   } else if (snapshot.economy.netPerMonth < 0) {

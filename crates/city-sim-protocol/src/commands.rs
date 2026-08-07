@@ -37,6 +37,37 @@ pub enum Tool {
     ParkLarge = 22,
 }
 
+impl Tool {
+    /// Every variant, in ascending discriminant order — the single source of
+    /// truth `tool_try_from_u8_roundtrips` and the wire-parity fixture
+    /// (`wire_parity.rs`) iterate instead of each hand-rolling `0..=22`.
+    pub const ALL: &'static [Tool] = &[
+        Self::Inspect,
+        Self::TerraformRaise,
+        Self::TerraformLower,
+        Self::Water,
+        Self::Tree,
+        Self::Road,
+        Self::Rail,
+        Self::PowerLine,
+        Self::HydroPlant,
+        Self::CoalPlant,
+        Self::WindTurbine,
+        Self::SolarFarm,
+        Self::WaterPump,
+        Self::WaterTower,
+        Self::WaterPipe,
+        Self::ElementarySchool,
+        Self::HighSchool,
+        Self::Residential,
+        Self::Commercial,
+        Self::Industrial,
+        Self::Park,
+        Self::Bulldoze,
+        Self::ParkLarge,
+    ];
+}
+
 /// SimCity-style fiscal policy: per-class tax rates and per-department
 /// funding levels, adjustable from the budget screen.
 ///
@@ -158,6 +189,40 @@ impl LightingPolicy {
             LightingPolicy::CarbonArc => 1.05,
         }
     }
+
+    /// City-wide multiplier on the wilderness-driven happiness drift target
+    /// (`wilderness::apply_happiness_drift`'s `target`).
+    ///
+    /// **Normalized from the pre-mechanism TS display trio.** Before this
+    /// method existed, `app/src/game/bylaws.ts` carried a decorative
+    /// `happinessTarget` table — 1.02 / 0.96 / 1.12 for Mixed / Efficient /
+    /// CarbonArc — that was never applied to anything; the bylaws modal just
+    /// printed it as a preview. Copied verbatim, that table would have made
+    /// `Mixed` (the `#[default]` variant) a non-neutral +2% multiplier, which
+    /// breaks the contract every other policy default in this file keeps: an
+    /// unset bylaw must reproduce the pre-bylaw numbers bit-for-bit
+    /// (`golden_city.expected` must not move). So each figure here is the old
+    /// one divided by the old `Mixed` figure (1.02), which pins `Mixed` to
+    /// exactly `1.0` while preserving the *relative* spread between the three
+    /// (Efficient/Mixed and CarbonArc/Mixed ratios unchanged, just rebased off
+    /// `1.0` instead of `1.02`) — rounded to the same two decimal places the
+    /// old TS table used.
+    pub fn happiness_multiplier(self) -> f32 {
+        match self {
+            LightingPolicy::Mixed => 1.0,
+            LightingPolicy::Efficient => 0.94,
+            LightingPolicy::CarbonArc => 1.10,
+        }
+    }
+}
+
+/// Default for `Policies::pending_penalty_enabled` — both the field's plain
+/// [`Default`] (via the manual `impl Default for Policies` below, since
+/// `#[derive(Default)]` cannot spell a non-`false` bool default) and its
+/// `#[serde(default = ...)]` fallback for a payload written before this field
+/// existed. Named so both sites read the same source of truth.
+fn default_pending_penalty_enabled() -> bool {
+    true
 }
 
 /// Every player-adjustable policy, grouped under one roof.
@@ -167,7 +232,7 @@ impl LightingPolicy {
 /// `#[serde(default)]` so older payloads decode cleanly after a policy is
 /// added. Policies are deliberately *not* undoable — undo applies to tools;
 /// the live `Policies` value is carried across every history restore.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "Policies.ts")]
 pub struct Policies {
@@ -180,6 +245,23 @@ pub struct Policies {
     /// City-wide lighting standard (Bylaws screen).
     #[serde(default)]
     pub lighting: LightingPolicy,
+    /// Whether an over-zoned class's demand is suppressed by its backlog of
+    /// undeveloped pending lots (`demand.rs`'s `pending_penalty_*` terms).
+    /// Default-on so toggling it off is an opt-out, not an opt-in — matching
+    /// the pre-toggle behaviour the mechanism always had.
+    #[serde(default = "default_pending_penalty_enabled")]
+    pub pending_penalty_enabled: bool,
+}
+
+impl Default for Policies {
+    fn default() -> Self {
+        Self {
+            budget: BudgetPolicy::default(),
+            wilderness: WildernessPolicy::default(),
+            lighting: LightingPolicy::default(),
+            pending_penalty_enabled: default_pending_penalty_enabled(),
+        }
+    }
 }
 
 impl Policies {
@@ -189,6 +271,7 @@ impl Policies {
             budget: self.budget.clamped(),
             wilderness: self.wilderness,
             lighting: self.lighting,
+            pending_penalty_enabled: self.pending_penalty_enabled,
         }
     }
 }
@@ -329,6 +412,7 @@ mod tests {
                 green_industry: false,
             },
             lighting: LightingPolicy::CarbonArc,
+            pending_penalty_enabled: false,
         };
         let bytes = to_allocvec(&policies).unwrap();
         let back: Policies = from_bytes(&bytes).unwrap();
@@ -341,6 +425,28 @@ mod tests {
         assert_eq!(p.budget, BudgetPolicy::default());
         assert_eq!(p.wilderness, WildernessPolicy::default());
         assert_eq!(p.lighting, LightingPolicy::Mixed);
+        assert!(
+            p.pending_penalty_enabled,
+            "default-on: the toggle must reproduce the pre-toggle behaviour"
+        );
+    }
+
+    /// A `Policies` payload written before this field existed decodes with
+    /// the over-zoning penalty still on — the same default-on contract
+    /// `#[serde(default = "default_pending_penalty_enabled")]` promises.
+    /// JSON stands in for "a decoder that tolerates a missing field": postcard
+    /// is positional and cannot skip one, which is exactly why adding this
+    /// field bumped the CSIM snapshot `VERSION` instead of relying on this
+    /// attribute for the binary wire.
+    #[test]
+    fn a_policies_payload_missing_the_penalty_toggle_defaults_it_on() {
+        let json = serde_json::json!({
+            "budget": BudgetPolicy::default(),
+            "wilderness": WildernessPolicy::default(),
+            "lighting": "mixed",
+        });
+        let p: Policies = serde_json::from_value(json).unwrap();
+        assert!(p.pending_penalty_enabled);
     }
 
     #[test]
@@ -352,12 +458,16 @@ mod tests {
             },
             wilderness: WildernessPolicy::default(),
             lighting: LightingPolicy::Efficient,
+            pending_penalty_enabled: false,
         }
         .clamped();
         assert_eq!(p.budget.tax_residential, MAX_TAX_RATE);
         // `lighting` has no illegal range to clamp — `clamped()` must still
         // carry it through untouched rather than silently resetting it.
         assert_eq!(p.lighting, LightingPolicy::Efficient);
+        // Same for the penalty toggle: clamping is about numeric ranges, not
+        // about resetting booleans to their default.
+        assert!(!p.pending_penalty_enabled);
     }
 
     #[test]
@@ -366,6 +476,7 @@ mod tests {
         assert_eq!(p, LightingPolicy::Mixed);
         assert_eq!(p.power_use_multiplier(), 1.0);
         assert_eq!(p.maintenance_multiplier(), 1.0);
+        assert_eq!(p.happiness_multiplier(), 1.0);
     }
 
     #[test]
@@ -377,6 +488,12 @@ mod tests {
         assert_eq!(LightingPolicy::Efficient.maintenance_multiplier(), 0.9);
         assert_eq!(LightingPolicy::CarbonArc.power_use_multiplier(), 1.18);
         assert_eq!(LightingPolicy::CarbonArc.maintenance_multiplier(), 1.05);
+        // `happiness_multiplier` — normalized off the old TS-only preview
+        // trio (1.02 / 0.96 / 1.12) so `Mixed` lands on exactly `1.0`; see
+        // the method's own doc comment for the derivation.
+        assert_eq!(LightingPolicy::Mixed.happiness_multiplier(), 1.0);
+        assert_eq!(LightingPolicy::Efficient.happiness_multiplier(), 0.94);
+        assert_eq!(LightingPolicy::CarbonArc.happiness_multiplier(), 1.10);
     }
 
     #[test]

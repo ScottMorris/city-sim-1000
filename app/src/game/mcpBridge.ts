@@ -9,13 +9,13 @@
 
 import type { SimBridge } from './simBridge';
 import type { GameState, Tile, ViewStratum } from './gameState';
-import { createInitialState } from './gameState';
+import { createInitialState, getTile } from './gameState';
 import { Terrain } from './protocol/occupants';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
 import { nextStrokeId } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { occupantsByStratum } from './protocol/tileLabel';
+import { occupantsByStratum, type OccupantLabel } from './protocol/tileLabel';
 
 /** The wire spelling of `Terrain` at the MCP JSON boundary — the only two
  *  strings a script ever sees for it, via `terrainLabel` below. Internal
@@ -157,8 +157,12 @@ export function tileMatchesKind(state: GameState, tile: Tile, kind: string): boo
   if (kind === 'land' || kind === 'water') {
     return terrainLabel(tile.terrain) === (kind as TerrainLabel);
   }
+  // `kind` is caller-supplied (an MCP script's untyped filter string), so
+  // the comparison against the typed `OccupantLabel[]` breakdown below is
+  // deliberately a plain string membership check, not a cast into the type.
   const occupants = occupantsByStratum(state, tile);
-  return occupants.underground.includes(kind) || occupants.surface.includes(kind) || occupants.overhead.includes(kind);
+  const inAnyStratum = (labels: readonly OccupantLabel[]): boolean => (labels as readonly string[]).includes(kind);
+  return inAnyStratum(occupants.underground) || inAnyStratum(occupants.surface) || inAnyStratum(occupants.overhead);
 }
 
 // Use setTimeout rather than rAF — background/unfocused Chromium tabs throttle
@@ -390,9 +394,13 @@ export function initMcpBridge(
             templateId: b.templateId,
             x: b.origin.x,
             y: b.origin.y,
-            status: b.state.status as string,
+            status: b.state.status,
             health: b.state.health,
-            abandoned: b.state.abandoned,
+            // `abandoned` is a wire-populated tile flag, not part of the
+            // building mirror — joined here at display time off the
+            // building's origin tile (`BuildingState.abandoned` was deleted
+            // as dead, never-wire-populated state).
+            abandoned: getTile(s, b.origin.x, b.origin.y)?.abandoned ?? false,
           }));
           reply(id, list);
           break;

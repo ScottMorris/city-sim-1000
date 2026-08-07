@@ -39,6 +39,8 @@ export interface SimStats {
   demandResidential: number;
   demandCommercial: number;
   demandIndustrial: number;
+  /** Raw revenue − expenses, undiluted by the day/month accrual scaling — see `budget_net_per_day`/`budget_net_per_month`. */
+  budgetNet: number;
   budgetNetPerDay: number;
   budgetNetPerMonth: number;
   budgetRevenue: number;
@@ -107,6 +109,7 @@ export interface WorkerPolicies {
     greenIndustry: boolean;
   };
   lighting: LightingPolicy;
+  pendingPenaltyEnabled: boolean;
 }
 
 /** One-time legacy JSON-save import — see `city_sim_core::import`. */
@@ -230,6 +233,7 @@ function gatherStats(h: SimHost): SimStats {
     demandResidential:       h.demand_residential(),
     demandCommercial:        h.demand_commercial(),
     demandIndustrial:        h.demand_industrial(),
+    budgetNet:               h.budget_net(),
     budgetNetPerDay:         h.budget_net_per_day(),
     budgetNetPerMonth:       h.budget_net_per_month(),
     budgetRevenue:           h.budget_revenue(),

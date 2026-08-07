@@ -123,8 +123,7 @@
       "Power"
     ],
     "conflicts": [
-      "Structure",
-      "Trees"
+      "Structure"
     ]
   },
   {
@@ -132,8 +131,6 @@
     "bit": 10,
     "stratum": "Overhead",
     "conducts": [],
-    "conflicts": [
-      "PowerLine"
-    ]
+    "conflicts": []
   }
 ]

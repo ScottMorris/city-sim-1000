@@ -21,8 +21,7 @@ export interface SimBridge {
    * Flush pending engine updates into the display mirror. Engines drive
    * their own clocks (the WASM worker via a 20 Hz interval that keeps
    * running in hidden tabs; the Tauri plugin via its native thread), so
-   * this is a render-loop hook, not a simulation tick — `dt` is unused by
-   * current bridges and kept for interface stability.
+   * this is a render-loop hook, not a simulation tick.
    *
    * Returns true if the display mirror (`getState()`'s object) was actually
    * mutated since the last call to `step` — either during this call, or
@@ -31,7 +30,7 @@ export interface SimBridge {
    * `false` return means literally nothing happened, only that it's safe to
    * skip a redraw that only depends on the mirror's contents.
    */
-  step(dt: number): boolean;
+  step(): boolean;
 
   /**
    * Submit a player command. Returns optimistically — the CommandResult

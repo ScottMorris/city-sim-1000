@@ -9,16 +9,19 @@
 // come straight off the wire (`state.labour`, `state.abandonedCount`,
 // `state.avgHappiness`; `#200`'s wire-adoption follow-up).
 
-import { getCalendarPosition } from '../time';
+import { getCalendarPosition, DAYS_PER_MONTH } from '../time';
+import { computeRunwayDays } from '../economy';
 import type { GameState } from '../gameState';
 import type { CitySnapshot } from './types';
 
+/** Display cap for the narrative layer's runway figure — `computeRunwayDays` itself is uncapped (an idle city with a tiny deficit can run for years), but nobody needs to read "1,400 months" on a budget card. */
 const RUNWAY_CAP_MONTHS = 99;
 
-function computeRunwayMonths(money: number, netPerMonth: number) {
-  if (netPerMonth >= 0) return RUNWAY_CAP_MONTHS;
-  if (money <= 0) return 0;
-  return Math.min(RUNWAY_CAP_MONTHS, money / Math.abs(netPerMonth));
+/** One formula, `computeRunwayDays` (`economy.ts`) — converted to months and capped for display, not a second derivation. */
+function computeRunwayMonths(money: number, netPerDay: number): number {
+  const days = computeRunwayDays(money, netPerDay);
+  if (!Number.isFinite(days)) return RUNWAY_CAP_MONTHS;
+  return Math.min(RUNWAY_CAP_MONTHS, days / DAYS_PER_MONTH);
 }
 
 export function buildCitySnapshot(state: GameState): CitySnapshot {
@@ -34,7 +37,7 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
     economy: {
       cash: state.money,
       netPerMonth: state.budget?.netPerMonth ?? 0,
-      runwayMonths: computeRunwayMonths(state.money, state.budget?.netPerMonth ?? 0),
+      runwayMonths: computeRunwayMonths(state.money, state.budget?.netPerDay ?? 0),
       revenue: state.budget?.revenue ?? 0,
       expenses: state.budget?.expenses ?? 0,
       breakdown: {

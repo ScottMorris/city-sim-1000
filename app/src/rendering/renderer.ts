@@ -370,7 +370,7 @@ export class MapRenderer {
     for (let dy = 0; dy < footprint.height; dy++) {
       for (let dx = 0; dx < footprint.width; dx++) {
         const tile = getTile(state, origin.x + dx, origin.y + dy);
-        if (!tile || tile.buildingId !== undefined || tile.powerPlantType) return false;
+        if (!tile || tile.buildingId !== undefined) return false;
       }
     }
     return true;
@@ -403,7 +403,6 @@ export class MapRenderer {
       if (!tile) return null;
 
       if (overlay === 'power') {
-        if (tile.powerPlantType) return { color: 0x81e8ff, alpha: 0.35 };
         if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
           return { color: tile.powered ? 0x7bf0ff : 0xff99c2, alpha: 0.35 };
         }

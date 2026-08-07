@@ -566,4 +566,30 @@ mod tests {
         );
         assert!(s.education.high_coverage > 0.0);
     }
+
+    /// Mirrors `high_school_covers_commercial` for the third zone class —
+    /// `compute_zone_loads`'s `BuildingKind::Industrial` arms (the
+    /// `total_ind_cap` accumulation and the `jobs_in_industrial` share
+    /// split) never ran under any pre-existing test, unlike the Commercial
+    /// ones the test above already exercises.
+    #[test]
+    fn high_school_covers_industrial() {
+        // Layout: [HighSchool(0,0)(1,0)] [Road(2,0)] [Ind(3,0)]
+        //         [HighSchool(0,1)(1,1)]
+        let mut s = gs(6, 2);
+        place_building(&mut s, BuildingKind::HighSchool, 0, 0);
+        set_v4_kind(s.tile_at_mut(2, 0).unwrap(), TileKind::Road);
+        set_v4_kind(s.tile_at_mut(3, 0).unwrap(), TileKind::Industrial);
+        s.tile_at_mut(3, 0).unwrap().set_flag(FLAG_POWERED, true);
+        place_building(&mut s, BuildingKind::Industrial, 3, 0);
+        s.jobs = 12;
+        update_building_states(&mut s, false);
+        recompute_education(&mut s);
+        let tile = s.tile_at(3, 0).unwrap();
+        assert!(
+            tile.high_served,
+            "industrial should be served by high school"
+        );
+        assert!(s.education.high_coverage > 0.0);
+    }
 }

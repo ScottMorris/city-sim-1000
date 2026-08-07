@@ -46,7 +46,7 @@ function zeroStats(): SimStats {
     'powerBalance', 'powerProduced', 'powerUsed',
     'waterBalance', 'waterProduced', 'waterUsed',
     'demandResidential', 'demandCommercial', 'demandIndustrial',
-    'budgetNetPerDay', 'budgetNetPerMonth', 'budgetRevenue', 'budgetExpenses',
+    'budgetNet', 'budgetNetPerDay', 'budgetNetPerMonth', 'budgetRevenue', 'budgetExpenses',
     'budgetRevenueBase', 'budgetRevenuePop', 'budgetRevenueCommercial',
     'budgetRevenueIndustrial', 'budgetExpensesTransport', 'budgetExpensesBuildings',
     'budgetMaintPower', 'budgetMaintCivic', 'budgetMaintZones', 'budgetMaintRoads',
@@ -209,7 +209,7 @@ describe('WasmSimBridge undo/redo', () => {
     await pending;
     // step() would normally apply the pending buffers — the stale pre-undo
     // step_result must be gone, leaving the undone stats in place.
-    bridge.step(1 / 20);
+    bridge.step();
     expect(state.money).toBe(1111);
   });
 
@@ -233,7 +233,7 @@ describe('WasmSimBridge undo/redo', () => {
     // be able to discard a stale one before it ever reaches the player).
     expect(events.find(e => e.type === 'Alert')).toBeUndefined();
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     const alert = events.find(e => e.type === 'Alert');
     expect(alert).toMatchObject({
@@ -257,7 +257,7 @@ describe('WasmSimBridge undo/redo', () => {
       waterComponentsJson: '[]',
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.utilities.powerComponents).toEqual([
       { id: 1, produced: 60, used: 30, sourceCount: 1, utilisation: 0.5 },
@@ -274,13 +274,16 @@ describe('WasmSimBridge undo/redo', () => {
     };
     worker.emit({
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
-      buildingsJson: JSON.stringify([{ id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0 }]),
+      buildingsJson: JSON.stringify([{
+        id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0,
+        status: 0, health: 100,
+      }]),
       powerComponentsJson: '[]', waterComponentsJson: '[]',
       educationJson: JSON.stringify(educationStats),
       educationSeatsUsedJson: JSON.stringify([{ buildingId: 7, used: 12 }]),
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.education).toEqual(educationStats);
     expect(state.buildings[0].state.serviceLoad.slotsUsed[ServiceId.EducationElementary]).toBe(12);
@@ -293,7 +296,7 @@ describe('WasmSimBridge undo/redo', () => {
       budgetHistoryJson: JSON.stringify([{ day: 3, revenue: 100, expenses: 40, net: 60 }]),
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.budgetHistory).toEqual([{ day: 3, revenue: 100, expenses: 40, net: 60 }]);
   });
@@ -315,7 +318,7 @@ describe('WasmSimBridge undo/redo', () => {
       demandBreakdownJson: JSON.stringify({ demand, labour }),
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.demand.breakdown).toEqual(demand);
     expect(state.labour).toEqual(labour);
@@ -341,7 +344,7 @@ describe('WasmSimBridge undo/redo', () => {
       powerComponentsJson: '[]', waterComponentsJson: '[]',
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.buildings[0].state.status).toBe(expected);
   });
@@ -357,7 +360,7 @@ describe('WasmSimBridge undo/redo', () => {
       powerComponentsJson: '[]', waterComponentsJson: '[]',
     });
 
-    bridge.step(1 / 20);
+    bridge.step();
 
     expect(state.buildings[0].state.health).toBe(37);
   });
@@ -376,7 +379,7 @@ describe('WasmSimBridge undo/redo', () => {
     });
 
     return pending.then(() => {
-      bridge.step(1 / 20);
+      bridge.step();
       // The undo happened before the deficit-carrying step_result was ever
       // flushed — since the Rust engine resyncs its latch silently on
       // restore, no alert (deficit or restore) should surface for it.

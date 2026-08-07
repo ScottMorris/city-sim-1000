@@ -390,7 +390,6 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.kind : undefined;
 
     if (settings.overlay === 'power') {
-      if (tile.powerPlantType) return '#81e8ff';
       if (hasOccupant(tile.overhead, Occupant.PowerLine)) {
         return tile.powered ? '#7bf0ff' : '#ff99c2';
       }

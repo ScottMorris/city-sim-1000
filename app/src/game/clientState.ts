@@ -65,7 +65,6 @@ export function ensureSettingsShape(settings?: Partial<GameSettings>): GameSetti
     uiSettings.mode = 'auto';
   }
   return {
-    pendingPenaltyEnabled: settings?.pendingPenaltyEnabled ?? true,
     minimap: minimapSettings,
     input: { ...inputDefaults, ...(settings?.input ?? {}) },
     accessibility: { ...accessibilityDefaults, ...(settings?.accessibility ?? {}) },

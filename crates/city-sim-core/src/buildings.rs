@@ -32,6 +32,19 @@ pub enum BuildingStatus {
     InactiveDamaged = 4,
 }
 
+impl BuildingStatus {
+    /// Every variant, in ascending discriminant order — the single source of
+    /// truth the wire-parity fixture (`tests/wire_parity.rs`) iterates
+    /// instead of hand-rolling a copy of this list.
+    pub const ALL: &'static [BuildingStatus] = &[
+        Self::Active,
+        Self::InactiveNoPower,
+        Self::InactiveNoWater,
+        Self::InactiveNoSource,
+        Self::InactiveDamaged,
+    ];
+}
+
 // ---------------------------------------------------------------------------
 // BuildingTemplate (static per-kind data)
 // ---------------------------------------------------------------------------
@@ -134,7 +147,10 @@ pub fn get_building_template(kind: BuildingKind) -> Option<&'static BuildingTemp
         pop=0,  jobs=0,  maint=0.16,   zone=false, plant=false, civic=true,
         svc=ServiceKind::None, scap=0, scov=0
     };
-    // Elementary school: capacity=180, radius=8 (from services.ts DEFAULT_SERVICE_DEFINITIONS)
+    // Elementary school: capacity=180, radius=8 — Rust's own tuning constants; no
+    // longer mirrored from a TS `DEFAULT_SERVICE_DEFINITIONS` (deleted as dead,
+    // `app/src/game/services.ts`), which was a pre-migration TS shadow, not a
+    // source of truth.
     static ELEM_SCHOOL: BuildingTemplate = tmpl! {
         (2,2), pwr=true,  wat=false, wu=0.0,  wo=0,  pu=4.0,
         pop=0,  jobs=0,  maint=40.0,   zone=false, plant=false, civic=true,
@@ -597,6 +613,56 @@ mod tests {
         );
         assert!(s.tile_at(0, 0).unwrap().building_id.is_none());
         assert!(s.tile_at(0, 0).unwrap().is_abandoned());
+    }
+
+    /// `apply_building_decay`'s inline demand lookup keys off `kind`, not off
+    /// whichever class the existing tests above happen to use (all three:
+    /// `decay_increments_trouble_on_no_power`,
+    /// `decay_abandons_building_at_threshold`,
+    /// `decay_bleeds_trouble_when_conditions_are_good` — only ever build a
+    /// `Residential` lot). Table-driven over the three zone kinds, each run
+    /// with its OWN demand field low and the other two comfortably high —
+    /// if the lookup ever hard-coded `state.demand.residential` regardless
+    /// of `kind`, the Commercial/Industrial cases below would see a high
+    /// (not low) demand and stop accumulating trouble.
+    #[test]
+    fn decay_pressure_keys_off_each_zone_kind_s_own_demand() {
+        let cfg = DecayConfig::default();
+        for kind in [
+            BuildingKind::Residential,
+            BuildingKind::Commercial,
+            BuildingKind::Industrial,
+        ] {
+            let mut s = gs(1, 1);
+            place(&mut s, kind, 0, 0);
+            s.buildings[0].status = BuildingStatus::Active;
+            s.tile_at_mut(0, 0).unwrap().happiness = 0.0; // below threshold — unhappy
+            s.tile_at_mut(0, 0).unwrap().elementary_served = true;
+            s.tile_at_mut(0, 0).unwrap().high_served = true;
+            s.demand.residential = if kind == BuildingKind::Residential {
+                0.0
+            } else {
+                80.0
+            };
+            s.demand.commercial = if kind == BuildingKind::Commercial {
+                0.0
+            } else {
+                80.0
+            };
+            s.demand.industrial = if kind == BuildingKind::Industrial {
+                0.0
+            } else {
+                80.0
+            };
+
+            apply_building_decay(&mut s, &cfg);
+
+            assert_eq!(
+                s.buildings[0].trouble_ticks, cfg.trouble_increment,
+                "{kind:?}: low-demand-and-unhappy pressure should apply exactly \
+                 once, keyed off its own demand field"
+            );
+        }
     }
 
     #[test]

@@ -40,9 +40,6 @@ export enum Occupant {
   Trees = 10
 }
 
-/** Number of occupants defined. Bits 11-15 of an OccupantSet are spare. */
-export const OCCUPANT_COUNT = 11;
-
 /** Every occupant, in bit order. */
 export const ALL_OCCUPANTS: readonly Occupant[] = [
   Occupant.Pipe,
@@ -68,8 +65,6 @@ export const SURFACE_MASK =
   (1 << Occupant.ZoneCommercial) |
   (1 << Occupant.ZoneIndustrial) |
   (1 << Occupant.Structure);
-/** Bits 9-10. */
-export const OVERHEAD_MASK = (1 << Occupant.PowerLine) | (1 << Occupant.Trees);
 /** The three zone tags — a tile carries at most one. */
 export const ZONE_MASK = (1 << Occupant.ZoneResidential) | (1 << Occupant.ZoneCommercial) | (1 << Occupant.ZoneIndustrial);
 
@@ -122,21 +117,6 @@ export function setTileOccupant(strata: TileStrata, occupant: Occupant, on: bool
   }
 }
 
-/** Clear a whole stratum. Mirrors `Tile::clear_stratum` in Rust. */
-export function clearTileStratum(strata: TileStrata, stratum: Stratum): void {
-  switch (stratum) {
-    case Stratum.Underground:
-      strata.underground = 0;
-      return;
-    case Stratum.Surface:
-      strata.surface = 0;
-      return;
-    case Stratum.Overhead:
-      strata.overhead = 0;
-      return;
-  }
-}
-
 /**
  * Symmetric conflict masks, one per occupant — mirrors each `OccupantDef.conflicts`
  * entry in `OCCUPANT_DEFS` (`occupants.rs`). The set of occupants that cannot
@@ -152,8 +132,10 @@ const CONFLICTS: Record<Occupant, number> = {
   [Occupant.ZoneCommercial]: SURFACE_MASK & ~(1 << Occupant.ZoneCommercial),
   [Occupant.ZoneIndustrial]: SURFACE_MASK & ~(1 << Occupant.ZoneIndustrial),
   [Occupant.Structure]: (SURFACE_MASK & ~(1 << Occupant.Structure)) | (1 << Occupant.PowerLine),
-  [Occupant.PowerLine]: (1 << Occupant.Trees) | (1 << Occupant.Structure),
-  [Occupant.Trees]: 1 << Occupant.PowerLine
+  // Trees + PowerLine officially coexist — the overhead stratum's one exception,
+  // same shape as the level crossing on Surface. See `COMPAT_EXCEPTIONS` in `occupants.rs`.
+  [Occupant.PowerLine]: 1 << Occupant.Structure,
+  [Occupant.Trees]: 0
 };
 
 /**
@@ -229,17 +211,24 @@ export function tileOccupants(underground: number, surface: number, overhead: nu
  * conducts power/water by virtue of being developed — a property of the
  * development, not of any occupant — which is why `Structure` itself
  * declares `NET_NONE` in `OCCUPANT_DEFS` and this function still needs
- * `buildingId`/`isPowerPlant` passed in alongside the occupant bits.
+ * `buildingId` passed in alongside the occupant bits.
+ *
+ * Rust's `Tile::conducts` also checks `power_plant_mw > 0` for `Network::
+ * Power` — a real field on Rust's `Tile`. There is no TS equivalent: the
+ * wire buffer decodes `buildingId` per footprint tile (`tileBuffer.ts`), so
+ * a power plant's tiles already conduct via `buildingId !== undefined`
+ * before that check would ever matter; a TS-side `isPowerPlant` param would
+ * be constant-`false` at every call site (nothing wire-decodes it), so it
+ * doesn't exist here.
  */
 export function conducts(
   network: Network,
   occupants: number,
-  buildingId: number | undefined,
-  isPowerPlant: boolean
+  buildingId: number | undefined
 ): boolean {
   switch (network) {
     case Network.Power:
-      return isPowerPlant || buildingId !== undefined || (occupants & NET_POWER_MASK) !== 0;
+      return buildingId !== undefined || (occupants & NET_POWER_MASK) !== 0;
     case Network.Water:
       return buildingId !== undefined || (occupants & NET_WATER_MASK) !== 0;
     case Network.Traffic:

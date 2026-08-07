@@ -51,8 +51,7 @@ export function isPowerCarrier(tile: Tile | undefined): boolean {
   return conducts(
     Network.Power,
     tileOccupants(tile.underground, tile.surface, tile.overhead),
-    tile.buildingId,
-    !!tile.powerPlantType
+    tile.buildingId
   );
 }
 
@@ -72,7 +71,6 @@ export function isWaterCarrier(tile: Tile | undefined): boolean {
   return conducts(
     Network.Water,
     tileOccupants(tile.underground, tile.surface, tile.overhead),
-    tile.buildingId,
-    false
+    tile.buildingId
   );
 }

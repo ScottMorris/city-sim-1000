@@ -95,6 +95,4 @@ export const MAINTENANCE: Partial<Record<Occupant, number>> = {
   [Occupant.Pipe]: 0.04
 };
 
-export const BASE_INCOME = 120;
-
 export const LOCAL_STORAGE_KEY = 'city-sim-1000-save';

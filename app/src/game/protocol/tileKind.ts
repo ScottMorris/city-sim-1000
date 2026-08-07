@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * TileKind ↔ u8 wire mapping — TS mirror of crates/sim_protocol/src/tile_kind.rs.
+ * TileKind ↔ u8 wire mapping — TS mirror of crates/city-sim-protocol/src/tile_kind.rs.
  *
  * These values are serialised in the SharedArrayBuffer tile mirror and in
  * command-log replays. Do not change them without updating the Rust source

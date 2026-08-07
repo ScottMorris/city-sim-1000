@@ -41,7 +41,7 @@
 //! [`tile_from_v4`] across essentially the whole Rust test suite rather than
 //! by one migration test alone.
 
-use crate::occupants::{is_structure_kind, Occupant, Terrain};
+use crate::occupants::{Occupant, Terrain};
 use crate::state::{Tile, ZoneDensity, DERIVED_FLAG_MASK};
 use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::legacy_tile_buffer::legacy_flags as wire_flags;
@@ -160,6 +160,34 @@ pub(crate) fn building_kind_of(kind: TileKind) -> Option<BuildingKind> {
         | TileKind::PowerLine
         | TileKind::WaterPipe => None,
     }
+}
+
+/// The ten non-zone `TileKind`s that derive to the single `Structure`
+/// occupant when decoding a legacy v4 byte ([`tile_from_v4`]) — the three
+/// zone kinds decode to a zone tag instead, never to `Structure`. They behave
+/// identically under every compatibility rule — `place_footprint_building`
+/// applies one guard to all of them — so one tag suffices, and the per-kind
+/// data (eco, upkeep, category) is looked up rather than duplicated.
+///
+/// Legacy-decode-only: this asks the question of a v4 wire byte, not of a
+/// live `BuildingInstance` — see [`building_kind_of`] for the analogous
+/// question asked of the *current* alphabet. Lives beside it rather than in
+/// `occupants.rs` (its only non-test caller) so `TileKind` stays out of that
+/// file's production code, confined to this module's sanctioned boundary.
+pub const fn is_structure_kind(kind: TileKind) -> bool {
+    matches!(
+        kind,
+        TileKind::HydroPlant
+            | TileKind::CoalPlant
+            | TileKind::WindTurbine
+            | TileKind::SolarFarm
+            | TileKind::WaterPump
+            | TileKind::WaterTower
+            | TileKind::ElementarySchool
+            | TileKind::HighSchool
+            | TileKind::Park
+            | TileKind::ParkLarge
+    )
 }
 
 /// The inverse of [`building_kind_of`]: the legacy `TileKind` a live

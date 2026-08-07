@@ -67,16 +67,6 @@ export function clampBudgetPolicy(policy: BudgetPolicy): BudgetPolicy {
   };
 }
 
-/** Revenue multiplier for a tax rate (`rate / 9`, so 9% → 1.0). */
-export function taxMultiplier(rate: number): number {
-  return rate / NEUTRAL_TAX_RATE;
-}
-
-/** Cost/effect multiplier for a funding level (`level / 100`). */
-export function fundingMultiplier(level: number): number {
-  return level / MAX_FUNDING;
-}
-
 /** Wilderness score required before Nature Reserve can be enabled. */
 export const NATURE_RESERVE_UNLOCK_SCORE = 60;
 
@@ -92,11 +82,18 @@ export function createDefaultWildernessPolicy(): WildernessPolicy {
  */
 export const DEFAULT_LIGHTING_POLICY: LightingPolicy = 'mixed';
 
+/**
+ * Default-on so toggling it off is an opt-out, not an opt-in — mirrors
+ * `default_pending_penalty_enabled()` in `crates/city-sim-protocol/src/commands.rs`.
+ */
+export const DEFAULT_PENDING_PENALTY_ENABLED = true;
+
 export function createDefaultPolicies(): Policies {
   return {
     budget: createDefaultBudgetPolicy(),
     wilderness: createDefaultWildernessPolicy(),
-    lighting: DEFAULT_LIGHTING_POLICY
+    lighting: DEFAULT_LIGHTING_POLICY,
+    pendingPenaltyEnabled: DEFAULT_PENDING_PENALTY_ENABLED
   };
 }
 
@@ -105,7 +102,8 @@ export function clampPolicies(policies: Policies): Policies {
   return {
     budget: clampBudgetPolicy(policies.budget),
     wilderness: policies.wilderness,
-    lighting: policies.lighting
+    lighting: policies.lighting,
+    pendingPenaltyEnabled: policies.pendingPenaltyEnabled
   };
 }
 

@@ -52,7 +52,9 @@ export const BUILDING_KIND_TO_U8: ReadonlyMap<BuildingKind, number> = new Map(
   Array.from(BUILDING_KIND_BY_U8, ([u8, kind]) => [kind, u8])
 );
 
-/** Total number of building kinds — must match `BuildingKind::COUNT` in Rust. */
+/** Total number of building kinds — must match `BuildingKind::COUNT` in Rust.
+ *  Pinned against `wireParity.json`'s 13-entry `buildingKinds` table by
+ *  `wireParity.test.ts`, not just this file's own comment. */
 export const BUILDING_KIND_COUNT = 13;
 
 export function buildingKindFromU8(u8: number): BuildingKind | undefined {

@@ -127,7 +127,7 @@ Tiles include:
 ### 5.3 Power Network (v1)
 
 * Tiles carry a `powered` flag.
-* Power sources: any building/tile with `powerPlantType` set (Hydro, Coal, Wind, Solar).
+* Power sources: any building whose `BuildingKind` is a power plant (`HydroPlant`, `CoalPlant`, `WindTurbine`, `SolarFarm`) — the tile carries only the `Structure` occupant plus the `buildingId` pointing at it.
 * Network edges: any tile carrying a hydro line — whether the line owns the tile or rides it as an overlay (over a road or rail, or beneath trees or water painted on afterwards) — plus Road and Rail. If the wires are drawn, the tile conducts.
 * Connectivity: 4-directional BFS flood-fill from sources through power lines/roads/rail; reachable lines/plants are marked `powered: true`.
 * Production: `powerProduced` sums plant outputs from `BUILDING_TEMPLATES`.
@@ -137,7 +137,7 @@ Tiles include:
 
 * Tiles carry a `watered` flag.
 * Water sources: Pumps and Water Towers, both gated on power. Pumps are also gated on a source connection (`#200`): a pump's footprint must be orthogonally adjacent to a water tile to seed the network at all — a dry pump is `InactiveNoSource` and produces nothing. Towers are deliberately terrain-independent and carry no such gate.
-* Network edges: `TileKind.WaterPipe` (underground layer), Road, Rail, and Zones.
+* Network edges: `Occupant.Pipe` (underground layer), Road, Rail, and Zones.
 * Connectivity: BFS flood-fill from sources through pipes and surface transport/zones.
 * Production: `waterProduced` sums powered pump/tower outputs, and for pumps, source-connected ones only — the same predicate the BFS seeding uses, so the two can't disagree.
 * Maintenance: per-pipe upkeep plus per-building maintenance.

@@ -561,8 +561,8 @@ mod tests {
     ///
     /// Both tools are exercised because both rewrite `kind` over a tile whose
     /// line lives only in the flag — the water brush by design, since a line
-    /// over water is a pylon span, and the tree by the blindness
-    /// `known_defect_trees_are_planted_through_a_live_hydro_line` describes.
+    /// over water is a pylon span, and the tree by the official Trees +
+    /// PowerLine coexistence `trees_coexist_with_a_live_hydro_line` pins.
     /// The two terraform tools reach the same tile the same way. What neither
     /// leaves standing is the *surface*: a regrade takes the whole surface
     /// stratum with it, which is why this test strings its line over bare

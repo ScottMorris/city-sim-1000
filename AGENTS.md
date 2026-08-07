@@ -248,7 +248,7 @@ Prefer claims the build can check over claims a reader must trust.
 
 ## Project Notes
 
-- Water simulation is temporarily stubbed to a high balance; only power deficits gate growth until pipes/underground view ship.
+- Water simulation is fully live: pumps/towers seed a connected-component BFS over pipes/roads/rail/zones/buildings (`crates/city-sim-core/src/utilities.rs`), a pump only produces when its footprint borders `Terrain::Water` (`docs/features/water-source-gating.md`), and a water deficit gates demand the same way a power deficit does.
 - Roads and rail conduct power; power lines can overlay roads/rail without breaking access. Zoning cannot overwrite transport — bulldoze first.
 - Docs to keep aligned with behaviour changes, in the same commit:
   - `README.md`

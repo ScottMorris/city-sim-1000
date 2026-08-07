@@ -1,8 +1,14 @@
+// narrativeManager.ts — buffers SimEvents into an EventJournal, turns month-end snapshots into ticker items and budget insights, and tracks active start/end alert pairs.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { computeDeltas } from './deltas';
 import { EventJournal } from './eventJournal';
 import { generateBudgetInsights } from './channels/budgetInsightsRule';
 import { generateTickerItems } from './channels/tickerRule';
-import type { BudgetInsights, CitySnapshot, NarrativeInput, SimEvent, TickerItem } from './types';
+import { ABANDONMENT_WAVE_THRESHOLD, RUNWAY_WARN_THRESHOLD_MONTHS } from './thresholds';
+import type { BudgetInsights, CitySnapshot, NarrativeInput, SimEvent, SimEventType, TickerItem } from './types';
 
 export interface NarrativeSettings {
   enabled: boolean;
@@ -15,7 +21,7 @@ export class NarrativeManager {
   private readonly eventJournal: EventJournal;
   private tickerQueue: TickerItem[] = [];
   private lastTickerTexts = new Set<string>();
-  private activeAlertByType = new Map<string, string>();
+  private activeAlertByType = new Map<SimEventType, string>();
   private currentBudgetInsights?: BudgetInsights;
 
   constructor(settings: NarrativeSettings, eventJournal = new EventJournal()) {
@@ -124,7 +130,7 @@ export class NarrativeManager {
   private emitMonthlyEvents(snapshot: CitySnapshot, deltas: ReturnType<typeof computeDeltas>, now: number) {
     if (!this.lastSnapshot) return;
 
-    if (this.lastSnapshot.economy.runwayMonths > 3 && snapshot.economy.runwayMonths <= 3) {
+    if (this.lastSnapshot.economy.runwayMonths > RUNWAY_WARN_THRESHOLD_MONTHS && snapshot.economy.runwayMonths <= RUNWAY_WARN_THRESHOLD_MONTHS) {
       const event: SimEvent = {
         id: `runway-low-${now}`,
         type: 'runway_low',
@@ -135,7 +141,7 @@ export class NarrativeManager {
       };
       this.eventJournal.push(event);
       this.applyEventToTicker(event, now);
-    } else if (this.lastSnapshot.economy.runwayMonths <= 3 && snapshot.economy.runwayMonths > 3) {
+    } else if (this.lastSnapshot.economy.runwayMonths <= RUNWAY_WARN_THRESHOLD_MONTHS && snapshot.economy.runwayMonths > RUNWAY_WARN_THRESHOLD_MONTHS) {
       const event: SimEvent = {
         id: `runway-recovered-${now}`,
         type: 'runway_recovered',
@@ -148,7 +154,7 @@ export class NarrativeManager {
       this.applyEventToTicker(event, now);
     }
 
-    if (deltas.abandonedCount >= 5) {
+    if (deltas.abandonedCount >= ABANDONMENT_WAVE_THRESHOLD) {
       const event: SimEvent = {
         id: `abandonment-${now}`,
         type: 'abandonment_wave',
@@ -178,12 +184,12 @@ export class NarrativeManager {
 
   private applyEventToTicker(event: SimEvent, now: number) {
     if (!this.settings.tickerEnabled) return;
-    const startToEnd: Record<string, string> = {
+    const startToEnd: Partial<Record<SimEventType, SimEventType>> = {
       power_deficit_start: 'power_deficit_end',
       water_deficit_start: 'water_deficit_end',
       runway_low: 'runway_recovered'
     };
-    const endToStart: Record<string, string> = {
+    const endToStart: Partial<Record<SimEventType, SimEventType>> = {
       power_deficit_end: 'power_deficit_start',
       water_deficit_end: 'water_deficit_start',
       runway_recovered: 'runway_low'
@@ -191,7 +197,7 @@ export class NarrativeManager {
 
     if (event.type in endToStart) {
       const startType = endToStart[event.type];
-      this.removeAlertByType(startType);
+      if (startType) this.removeAlertByType(startType);
       return;
     }
 
@@ -230,7 +236,7 @@ export class NarrativeManager {
     this.capQueue();
   }
 
-  private removeAlertByType(type: string) {
+  private removeAlertByType(type: SimEventType) {
     if (!this.activeAlertByType.has(type)) return;
     this.tickerQueue = this.tickerQueue.filter((item) => item.sourceEventType !== type);
     this.activeAlertByType.delete(type);

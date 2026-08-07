@@ -17,7 +17,10 @@ use city_sim_protocol::tile_kind::TileKind;
 // ---------------------------------------------------------------------------
 
 const BASE_INCOME: f32 = 120.0;
-const DAYS_PER_MONTH: u32 = 30;
+/// Mirrors `time.ts`'s `DAYS_PER_MONTH` — pinned against it by the wire-parity
+/// fixture (`tests/wire_parity.rs`). `pub` for that fixture generator to read;
+/// no other external caller.
+pub const DAYS_PER_MONTH: u32 = 30;
 
 // Per-tile maintenance per day (from `constants.ts` MAINTENANCE table).
 // Only tiles with no building_id contribute transport maintenance.
@@ -760,13 +763,25 @@ mod tests {
         wind.status = BuildingStatus::Active;
         wind.maintenance_per_day = 30.0;
         s.buildings.push(wind);
+        let mut solar = BuildingInstance::new(4, BuildingKind::SolarFarm, (6, 0));
+        solar.status = BuildingStatus::Active;
+        solar.maintenance_per_day = 40.0;
+        s.buildings.push(solar);
+        // Non-default power funding, so the funding-scaling multiply below is
+        // exercised for solar too, not just accumulated at the neutral 1.0×
+        // every other assertion here would pass at regardless.
+        s.policies.budget.fund_power = 50;
         let b = compute_daily_budget(&s);
-        assert!((b.maint_power_hydro - 150.0).abs() < 0.001);
-        assert!((b.maint_power_coal - 300.0).abs() < 0.001);
-        assert!((b.maint_power_wind - 30.0).abs() < 0.001);
-        assert!((b.maint_power_solar).abs() < 0.001);
+        assert!((b.maint_power_hydro - 75.0).abs() < 0.001);
+        assert!((b.maint_power_coal - 150.0).abs() < 0.001);
+        assert!((b.maint_power_wind - 15.0).abs() < 0.001);
         assert!(
-            (b.maint_power - (150.0 + 300.0 + 30.0)).abs() < 0.001,
+            (b.maint_power_solar - 20.0).abs() < 0.001,
+            "SolarFarm must accumulate into maint_power_solar and be scaled \
+             by fund_power same as the other three plant types"
+        );
+        assert!(
+            (b.maint_power - (75.0 + 150.0 + 15.0 + 20.0)).abs() < 0.001,
             "per-type rows must sum to the power total"
         );
     }

@@ -46,11 +46,9 @@
 
 ## C. Bridge/mirror integrity
 
-### C1. Building mirror loses runtime state (P2)
-- `applyTileBuffer` rebuilds `state.buildings` every frame via `createBuildingState()` defaults (`wasmSimBridge.ts`): `troubleTicks`, `health`, and real statuses are invisible to the UI, re-derived from `powered`/`watered` flags only. Confirmed still true. The tile buffer's current layout (`underground|surface|overhead|status|happiness|elevation|building_id|wilderness`, `tile_buffer.rs`) still carries no per-tile service coverage.
-
-### C2. Education recomputed twice, in two languages (P2)
-- Rust computes education for demand/decay (`education.rs`, wired in `sim.rs`); the bridge *also* runs TS `recomputeEducation` against the mirror every buffer apply (`wasmSimBridge.ts:673`) to feed the HUD/overlay. Confirmed still called. Two implementations of the same coverage algorithm will drift.
+**Resolved:**
+- [x] ~~C1. Building mirror loses runtime state (P2)~~ — `#200`'s wire-adoption follow-up: `WireBuilding.status`/`.health` carry the engine's real per-building state, decoded by `buildingStatusFromU8` (both bridges, via the shared `buildBuildingMirror` helper, `app/src/game/buildings/wireMirror.ts`) instead of being re-derived from `powered`/`watered` flags. `BuildingState.troubleTicks`/`.abandoned` — never wire-populated in the first place — were deleted as dead fields; a building's `abandoned` state is read off its origin tile's wire-populated `abandoned` flag at display time instead (`mcpBridge.ts`).
+- [x] ~~C2. Education recomputed twice, in two languages (P2)~~ — `#228`: `education.ts`'s `recomputeEducation` is deleted; both bridges read `state.education` and each school's `serviceLoad.slotsUsed` straight off the wire (`docs/features/education-over-the-wire.md`).
 
 ---
 

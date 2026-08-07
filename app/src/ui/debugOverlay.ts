@@ -302,7 +302,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
         </div>
         <div class="debug-section">
           <div class="debug-heading">Demand</div>
-          <div class="debug-hint">Over-zoning penalty: ${state.settings?.pendingPenaltyEnabled ?? true ? 'On' : 'Off'}</div>
+          <div class="debug-hint">Over-zoning penalty: ${state.policies.pendingPenaltyEnabled ? 'On' : 'Off'}</div>
           <div class="debug-row"><span>Residential</span><strong>${stats.demand.residential.toFixed(1)}%</strong></div>
           <div class="debug-hint">${formatDemandHint(stats.demandDetails.residential)}</div>
           <div class="debug-row"><span>Commercial</span><strong>${stats.demand.commercial.toFixed(1)}%</strong></div>

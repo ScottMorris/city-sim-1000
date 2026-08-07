@@ -1,3 +1,8 @@
+// state.ts — runtime building mirror: status/health/service-load, wire-populated per building instance.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { createEmptyServiceLoad, ServiceLoad } from '../services';
 
 export enum BuildingStatus {
@@ -13,8 +18,6 @@ export interface BuildingState {
   status: BuildingStatus;
   health: number; // 0-100, v1 stub
   serviceLoad: ServiceLoad;
-  troubleTicks: number;
-  abandoned: boolean;
 }
 
 export interface BuildingInstance {
@@ -28,8 +31,6 @@ export function createBuildingState(): BuildingState {
   return {
     status: BuildingStatus.Active,
     health: 100,
-    serviceLoad: createEmptyServiceLoad(),
-    troubleTicks: 0,
-    abandoned: false
+    serviceLoad: createEmptyServiceLoad()
   };
 }

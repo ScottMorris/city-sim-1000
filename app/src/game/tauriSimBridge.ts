@@ -29,18 +29,16 @@
  * that could disagree with the engine's own.
  */
 
-import type { GameState, Tile, ViewStratum } from './gameState';
-import { createBuildingState } from './buildings/state';
-import { getBuildingTemplate } from './buildings/templates';
+import { createBlankTile, type GameState, type ViewStratum } from './gameState';
+import { PowerPlantType } from './constants';
+import { BuildingKind } from './buildings/templates';
+import { buildBuildingMirror } from './buildings/wireMirror';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { buildingKindFromU8 } from './protocol/buildingKind';
-import { buildingStatusFromU8 } from './protocol/buildingStatus';
-import { Terrain, ZoneDensity } from './protocol/occupants';
+import { Terrain } from './protocol/occupants';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
-import { createTileServiceState } from './services';
 import { Tool } from './toolTypes';
 import {
   start as pluginStart,
@@ -171,7 +169,7 @@ export class TauriSimBridge implements SimBridge {
   // asynchronously (onTick, below) — this per-frame call just reports
   // whether the mirror changed since the last call, via the `dirty` flag
   // onTick sets.
-  step(_dt: number): boolean {
+  step(): boolean {
     const changed = this.dirty;
     this.dirty = false;
     return changed;
@@ -324,21 +322,21 @@ export class TauriSimBridge implements SimBridge {
     b.breakdown.details.buildings.civic      = event.budget.maintCivic;
     b.breakdown.details.buildings.zones      = event.budget.maintZones;
     b.breakdown.details.buildings.powerByType = {
-      hydro: event.budget.maintPowerHydro,
-      coal:  event.budget.maintPowerCoal,
-      wind:  event.budget.maintPowerWind,
-      solar: event.budget.maintPowerSolar,
+      [PowerPlantType.Hydro]: event.budget.maintPowerHydro,
+      [PowerPlantType.Coal]:  event.budget.maintPowerCoal,
+      [PowerPlantType.Wind]:  event.budget.maintPowerWind,
+      [PowerPlantType.Solar]: event.budget.maintPowerSolar,
     };
     b.breakdown.details.buildings.civicByType = {
-      park:        event.budget.maintCivicPark,
-      pump:        event.budget.maintCivicPump,
-      water_tower: event.budget.maintCivicTower,
-      school:      event.budget.maintCivicSchool,
+      [BuildingKind.Park]:      event.budget.maintCivicPark,
+      [BuildingKind.WaterPump]: event.budget.maintCivicPump,
+      [BuildingKind.WaterTower]: event.budget.maintCivicTower,
+      school:                   event.budget.maintCivicSchool,
     };
     b.breakdown.details.buildings.zonesByType = {
-      residential: event.budget.maintZonesRes,
-      commercial:  event.budget.maintZonesCom,
-      industrial:  event.budget.maintZonesInd,
+      [BuildingKind.Residential]: event.budget.maintZonesRes,
+      [BuildingKind.Commercial]:  event.budget.maintZonesCom,
+      [BuildingKind.Industrial]:  event.budget.maintZonesInd,
     };
 
     // Demand — headline percentages plus the full per-class derivation
@@ -373,7 +371,7 @@ export class TauriSimBridge implements SimBridge {
     if (s.tiles.length !== n) {
       s.width  = event.width;
       s.height = event.height;
-      s.tiles = Array.from({ length: n }, () => makeBlankTile());
+      s.tiles = Array.from({ length: n }, () => createBlankTile());
     }
 
     // Tile strata, status, happiness, elevation, buildingId and wilderness —
@@ -387,33 +385,10 @@ export class TauriSimBridge implements SimBridge {
     // wire buffer above; `event.buildings` resolves each `building_id` to
     // its template kind (the HUD inspector's name) and, via `status`/
     // `health` (`#200`'s wire-adoption follow-up), its real runtime status —
-    // no client-side power/water-flag reconstruction needed.
-    const seatsUsedByBuildingId = new Map(event.educationSeatsUsed.map((e) => [e.buildingId, e.used]));
-    s.buildings = event.buildings.map((b) => {
-      // `b.kind` decodes via `BUILDING_KIND_BY_U8`; an unrecognised byte
-      // (should never happen against a matching engine build) falls back to
-      // the empty string, which `getBuildingTemplate` returns `undefined`
-      // for, same as the old `TileKind.Land` fallback did (Land has no
-      // building template either).
-      const kind: string = buildingKindFromU8(b.kind) ?? '';
-      const template = getBuildingTemplate(kind);
-      const bstate = createBuildingState();
-      bstate.status = buildingStatusFromU8(b.status);
-      bstate.health = b.health;
-      const origin = { x: b.originX, y: b.originY };
-      // `#228` — seats consumed, from the wire; only schools currently have
-      // an entry (Rust's `ServiceKind` has no other service ported yet).
-      const used = template?.service ? seatsUsedByBuildingId.get(b.id) : undefined;
-      if (template?.service && used !== undefined) {
-        bstate.serviceLoad.slotsUsed[template.service.id] = used;
-      }
-      return {
-        id: b.id,
-        templateId: kind,
-        origin,
-        state: bstate
-      };
-    });
+    // no client-side power/water-flag reconstruction needed. Shared with
+    // `wasmSimBridge.ts` via `buildBuildingMirror` so the two bridges can't
+    // independently drift on unrecognised-byte handling.
+    s.buildings = buildBuildingMirror(event.buildings, event.educationSeatsUsed);
 
     // `#228` — Rust-computed, replaces the old client-side recompute.
     s.education = event.education;
@@ -443,20 +418,4 @@ export class TauriSimBridge implements SimBridge {
       },
     });
   }
-}
-
-/** A bare land tile, for growing the mirror array when dimensions change — immediately overwritten by the decode loop. */
-function makeBlankTile(): Tile {
-  return {
-    elevation: 0,
-    happiness: 1,
-    powered: false,
-    watered: false,
-    services: createTileServiceState(),
-    terrain: Terrain.Land,
-    underground: 0,
-    surface: 0,
-    overhead: 0,
-    density: ZoneDensity.Low
-  };
 }
