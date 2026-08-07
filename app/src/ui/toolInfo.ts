@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 
 import { BUILD_COST, MAINTENANCE, POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
-import { getBuildingTemplate } from '../game/buildings/templates';
-import { TileKind } from '../game/gameState';
+import { BuildingKind, getBuildingTemplate } from '../game/buildings/templates';
+import { Occupant } from '../game/protocol/occupants';
 import { Tool } from '../game/toolTypes';
 import { formatCurrency } from '../utils/currency';
 import { defaultHotkeys, HotkeyAction } from './hotkeys';
@@ -153,17 +153,17 @@ export function getToolDetails(tool: Tool): ToolDetails {
 
   switch (tool) {
     case Tool.Road:
-      withMaintenanceRow(rows, MAINTENANCE[TileKind.Road]);
+      withMaintenanceRow(rows, MAINTENANCE[Occupant.Road]);
       rows.push({ label: 'Purpose', value: 'Access + conducts power' });
       hints.push('Bulldoze roads/rail first before zoning over them.');
       break;
     case Tool.Rail:
-      withMaintenanceRow(rows, MAINTENANCE[TileKind.Rail]);
+      withMaintenanceRow(rows, MAINTENANCE[Occupant.Rail]);
       rows.push({ label: 'Purpose', value: 'Freight/passenger routes' });
       hints.push('Rails conduct power and can cross roads.');
       break;
     case Tool.PowerLine: {
-      withMaintenanceRow(rows, MAINTENANCE[TileKind.PowerLine]);
+      withMaintenanceRow(rows, MAINTENANCE[Occupant.PowerLine]);
       rows.push({ label: 'Purpose', value: 'Carries power; can overlay roads/rail' });
       break;
     }
@@ -184,7 +184,7 @@ export function getToolDetails(tool: Tool): ToolDetails {
     }
     case Tool.WaterPump:
     case Tool.WaterTower: {
-      const template = getBuildingTemplate(tool === Tool.WaterPump ? TileKind.WaterPump : TileKind.WaterTower);
+      const template = getBuildingTemplate(tool === Tool.WaterPump ? BuildingKind.WaterPump : BuildingKind.WaterTower);
       if (template) {
         rows.push({ label: 'Output', value: `${template.waterOutput?.toFixed(0) ?? 0} m³ / day` });
         rows.push({ label: 'Footprint', value: formatFootprint(template.footprint.width, template.footprint.height) });
@@ -198,7 +198,7 @@ export function getToolDetails(tool: Tool): ToolDetails {
     case Tool.ElementarySchool:
     case Tool.HighSchool: {
       const template = getBuildingTemplate(
-        tool === Tool.ElementarySchool ? TileKind.ElementarySchool : TileKind.HighSchool
+        tool === Tool.ElementarySchool ? BuildingKind.ElementarySchool : BuildingKind.HighSchool
       );
       if (template) {
         rows.push({ label: 'Footprint', value: formatFootprint(template.footprint.width, template.footprint.height) });
@@ -217,7 +217,11 @@ export function getToolDetails(tool: Tool): ToolDetails {
     case Tool.Commercial:
     case Tool.Industrial: {
       const kind =
-        tool === Tool.Residential ? TileKind.Residential : tool === Tool.Commercial ? TileKind.Commercial : TileKind.Industrial;
+        tool === Tool.Residential
+          ? BuildingKind.Residential
+          : tool === Tool.Commercial
+            ? BuildingKind.Commercial
+            : BuildingKind.Industrial;
       const template = getBuildingTemplate(kind);
       if (template) {
         rows.push({ label: 'Maintenance', value: `${formatCurrency(template.maintenance)} / day` });
@@ -234,7 +238,7 @@ export function getToolDetails(tool: Tool): ToolDetails {
     }
     case Tool.Park:
     case Tool.ParkLarge: {
-      const template = getBuildingTemplate(tool === Tool.Park ? TileKind.Park : TileKind.ParkLarge);
+      const template = getBuildingTemplate(tool === Tool.Park ? BuildingKind.Park : BuildingKind.ParkLarge);
       if (template) {
         withMaintenanceRow(rows, template.maintenance);
         rows.push({ label: 'Footprint', value: formatFootprint(template.footprint.width, template.footprint.height) });

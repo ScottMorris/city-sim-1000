@@ -1,8 +1,13 @@
+// serviceDistribution.ts — per-zone population/job load shares and reachable-zone search for service allocators.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { getOrthogonalNeighbourCoords, isZone } from './adjacency';
 import { BuildingStatus } from './buildings/state';
-import { BuildingCategory, getBuildingTemplate } from './buildings/templates';
+import { BuildingCategory, BuildingKind, getBuildingTemplate } from './buildings/templates';
 import type { GameState, Tile } from './gameState';
-import { getTile, TileKind } from './gameState';
+import { getTile } from './gameState';
 import { Occupant, hasOccupant } from './protocol/occupants';
 import { ServiceId } from './services';
 
@@ -37,8 +42,8 @@ export function computeZoneLoads(state: GameState, workerShare = DEFAULT_WORKER_
     if (template.category !== BuildingCategory.Zone) continue;
     if (template.populationCapacity) totalPopCap += template.populationCapacity;
     if (template.jobsCapacity) {
-      if (template.tileKind === TileKind.Commercial) totalComCap += template.jobsCapacity;
-      if (template.tileKind === TileKind.Industrial) totalIndCap += template.jobsCapacity;
+      if (template.kind === BuildingKind.Commercial) totalComCap += template.jobsCapacity;
+      if (template.kind === BuildingKind.Industrial) totalIndCap += template.jobsCapacity;
     }
   }
 
@@ -60,10 +65,10 @@ export function computeZoneLoads(state: GameState, workerShare = DEFAULT_WORKER_
     }
 
     if (template.jobsCapacity) {
-      if (template.tileKind === TileKind.Commercial) {
+      if (template.kind === BuildingKind.Commercial) {
         const share = totalComCap > 0 ? (template.jobsCapacity / totalComCap) * jobsInCommercial : 0;
         jobs.set(idx, share);
-      } else if (template.tileKind === TileKind.Industrial) {
+      } else if (template.kind === BuildingKind.Industrial) {
         const share = totalIndCap > 0 ? (template.jobsCapacity / totalIndCap) * jobsInIndustrial : 0;
         jobs.set(idx, share);
       } else if (template.populationCapacity) {

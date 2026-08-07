@@ -4,10 +4,17 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { stratumParam, createCommandResultQueue, summarizeApplyResults, tileMatchesKind } from './mcpBridge';
+import { stratumParam, createCommandResultQueue, summariseApplyResults, terrainLabel, tileMatchesKind } from './mcpBridge';
 import { Tool } from './toolTypes';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { Occupant, Terrain, setTileOccupant } from './protocol/occupants';
+
+describe('terrainLabel', () => {
+  it('spells Terrain.Land as "land" and Terrain.Water as "water"', () => {
+    expect(terrainLabel(Terrain.Land)).toBe('land');
+    expect(terrainLabel(Terrain.Water)).toBe('water');
+  });
+});
 
 describe('stratumParam', () => {
   it('defaults to surface when the param is absent', () => {
@@ -71,9 +78,9 @@ describe('createCommandResultQueue', () => {
   });
 });
 
-describe('summarizeApplyResults', () => {
+describe('summariseApplyResults', () => {
   it('counts an all-success batch as fully placed, with no failure message', () => {
-    expect(summarizeApplyResults([{ success: true }, { success: true }])).toEqual({
+    expect(summariseApplyResults([{ success: true }, { success: true }])).toEqual({
       placed: 2, attempted: 2, firstFailureMessage: null,
     });
   });
@@ -84,45 +91,42 @@ describe('summarizeApplyResults', () => {
       { success: false, message: 'wrong stratum' },
       { success: false, message: 'insufficient funds' },
     ];
-    expect(summarizeApplyResults(results)).toEqual({
+    expect(summariseApplyResults(results)).toEqual({
       placed: 1, attempted: 3, firstFailureMessage: 'wrong stratum',
     });
   });
 
   it('handles an empty batch', () => {
-    expect(summarizeApplyResults([])).toEqual({ placed: 0, attempted: 0, firstFailureMessage: null });
+    expect(summariseApplyResults([])).toEqual({ placed: 0, attempted: 0, firstFailureMessage: null });
   });
 });
 
 describe('tileMatchesKind', () => {
-  it('without anyStratum, matches only the dominant (display) label — a road under a power line does not match "road"', () => {
-    const state = createInitialState(3, 3);
-    setTile(state, 1, 1, TileKind.Road);
-    const tile = getTile(state, 1, 1)!;
-    setTileOccupant(tile, Occupant.PowerLine, true);
-
-    expect(tileMatchesKind(state, tile, TileKind.PowerLine, false)).toBe(true);
-    expect(tileMatchesKind(state, tile, TileKind.Road, false)).toBe(false); // hidden behind the power line
-  });
-
-  it('with anyStratum, matches a kind present in any stratum, not just the dominant one', () => {
+  it('matches a kind present in any stratum — a road hidden under a power line still matches "road"', () => {
     const state = createInitialState(3, 3);
     setTile(state, 1, 1, TileKind.Road);
     const tile = getTile(state, 1, 1)!;
     setTileOccupant(tile, Occupant.PowerLine, true);
     setTileOccupant(tile, Occupant.Pipe, true);
 
-    expect(tileMatchesKind(state, tile, TileKind.PowerLine, true)).toBe(true);
-    expect(tileMatchesKind(state, tile, TileKind.Road, true)).toBe(true); // no longer hidden
-    expect(tileMatchesKind(state, tile, TileKind.WaterPipe, true)).toBe(true);
-    expect(tileMatchesKind(state, tile, TileKind.Rail, true)).toBe(false);
+    expect(tileMatchesKind(state, tile, TileKind.PowerLine)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Road)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.WaterPipe)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Rail)).toBe(false);
   });
 
-  it('anyStratum does not change the result for a tile with only one occupant', () => {
+  it('"land"/"water" match the tile\'s terrain, independent of any occupant on it', () => {
     const state = createInitialState(3, 3);
+    setTile(state, 1, 1, TileKind.Road); // setTile forces terrain to Land
     const tile = getTile(state, 1, 1)!;
-    tile.terrain = Terrain.Land; // procedural generation may have placed water here
-    expect(tileMatchesKind(state, tile, TileKind.Land, false)).toBe(true);
-    expect(tileMatchesKind(state, tile, TileKind.Land, true)).toBe(false); // "land" is the absence of occupants, not an occupant itself
+
+    expect(tileMatchesKind(state, tile, TileKind.Land)).toBe(true); // a road built on land still matches "land"
+    expect(tileMatchesKind(state, tile, TileKind.Water)).toBe(false);
+    // "land"/"water" describe terrain, not an occupant, so they never appear
+    // in `occupantsByStratum` — the terrain check must not fall through to
+    // an occupant-list match that would always say false for every tile.
+    tile.terrain = Terrain.Water;
+    expect(tileMatchesKind(state, tile, TileKind.Water)).toBe(true);
+    expect(tileMatchesKind(state, tile, TileKind.Land)).toBe(false);
   });
 });

@@ -6,11 +6,11 @@
 import type { Texture } from 'pixi.js';
 
 import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
-import { getBuildingTemplate } from '../game/buildings/templates';
-import { getTile, TileKind, type GameState } from '../game/gameState';
+import { BuildingKind, getBuildingTemplate } from '../game/buildings/templates';
+import { getTile, type GameState } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant, zoneOccupant } from '../game/protocol/occupants';
-import { legacyKind } from '../game/protocol/legacyProjection';
 import { BuildingStatus } from '../game/buildings/state';
+import { OCCUPANT_COLOURS, TERRAIN_COLOURS } from './sprites';
 import type { CarriagewayClass, HydroVariant, RoadVariant, TileTextures } from './tileAtlas';
 
 /**
@@ -92,19 +92,15 @@ function isDevelopedZone(tile: NonNullable<ReturnType<typeof getTile>>): boolean
 }
 
 /**
- * The tile's derived `TileKind` — the terminal fallback for `tileTextures`/
- * `palette` lookups once every dedicated branch above has passed. Computed
- * on demand via `legacyKind` rather than stored: there is no shim field
- * left to read it off.
+ * A resolved `Structure` occupant's template colour, or `undefined` if the
+ * tile carries no `Structure` occupant, has no `buildingId`, or the lookup
+ * can't resolve a template for it (a stale `buildingId`) — any of which
+ * falls through to the next rung, exactly as the deleted `legacyKind`'s
+ * structure branch did.
  */
-function fallbackKind(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): TileKind {
-  return legacyKind({
-    terrain: tile.terrain,
-    surface: tile.surface,
-    overhead: tile.overhead,
-    buildingId: tile.buildingId,
-    structureKindOf: (id) => buildingLookup.get(id)?.template?.tileKind
-  });
+export function structureColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number | undefined {
+  if (!hasOccupant(tile.surface, Occupant.Structure) || tile.buildingId === undefined) return undefined;
+  return buildingLookup.get(tile.buildingId)?.template?.colour;
 }
 
 /** True when hydro is strung over this tile and must be drawn as a separate
@@ -339,11 +335,11 @@ function resolveBaseTileSprite(
     if (fallbackTexture)
       return { texture: fallbackTexture, widthTiles: 1, heightTiles: 1, borderWidth: BUILDING_BORDER_WIDTH };
   }
-  // `template.tileKind` — the building-template key, not the per-tile shim —
-  // is the sanctioned surviving use of `TileKind` (see `occupants.ts`).
-  const templateKind = buildingEntry?.template?.tileKind;
+  // `template.kind` — the buildable-identity enum, not any per-tile field —
+  // is the sanctioned way to ask "is this building a school/park/...".
+  const templateKind = buildingEntry?.template?.kind;
   if (
-    (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) &&
+    (templateKind === BuildingKind.ElementarySchool || templateKind === BuildingKind.HighSchool) &&
     tile.buildingId !== undefined
   ) {
     const template = buildingEntry?.template;
@@ -353,7 +349,7 @@ function resolveBaseTileSprite(
       const height = template.footprint.height;
       if (x === origin.x && y === origin.y) {
         const texture =
-          templateKind === TileKind.ElementarySchool
+          templateKind === BuildingKind.ElementarySchool
             ? tileTextures.schools?.elementary
             : tileTextures.schools?.high;
         if (texture) {
@@ -365,7 +361,7 @@ function resolveBaseTileSprite(
     }
   }
   if (
-    (templateKind === TileKind.Park || templateKind === TileKind.ParkLarge) &&
+    (templateKind === BuildingKind.Park || templateKind === BuildingKind.ParkLarge) &&
     tile.buildingId !== undefined
   ) {
     const template = buildingEntry?.template;
@@ -374,7 +370,7 @@ function resolveBaseTileSprite(
       const width = template.footprint.width;
       const height = template.footprint.height;
       if (x === origin.x && y === origin.y) {
-        const texture = templateKind === TileKind.Park ? tileTextures.parks?.small : tileTextures.parks?.large;
+        const texture = templateKind === BuildingKind.Park ? tileTextures.parks?.small : tileTextures.parks?.large;
         if (texture) {
           // No borderWidth: unlike schools/power plants, parks are ground-cover —
           // the source art's grass edges are designed to abut seamlessly, like Tree.
@@ -389,7 +385,7 @@ function resolveBaseTileSprite(
   // branch above (e.g. a water pump/tower), or tree canopy always wins the
   // ground beneath it — mirrors the deleted `display.rs` precedence ladder's
   // zone/Structure/Trees tiers, all of which outrank hydro/rail/road. An
-  // undeveloped zoned lot has no base texture of its own (`tileTextures.tiles`
+  // undeveloped zoned lot has no base texture of its own (`tileTextures.terrain`
   // has no entry for a bare zone kind), so it still falls through to the
   // `undefined` return below — the caller composites hydro as an
   // `overlayOnly` layer in that case rather than this function drawing a
@@ -424,18 +420,59 @@ function resolveBaseTileSprite(
       if (roadTexture) return { texture: roadTexture, widthTiles: 1, heightTiles: 1 };
     }
   }
-  const baseTexture = tileTextures.tiles[fallbackKind(tile, buildingLookup)];
+  const baseTexture = baseGroundTexture(tile, buildingLookup, tileTextures);
   if (baseTexture) return { texture: baseTexture, widthTiles: 1, heightTiles: 1 };
   return undefined;
 }
 
-export function getTileColour(
-  tile: ReturnType<typeof getTile>,
-  palette: Record<TileKind, number>,
-  buildingLookup: BuildingLookup
-) {
+/**
+ * The terrain texture (`tileTextures.terrain`) for a tile with no dedicated
+ * sprite of its own — every branch above this one in `resolveBaseTileSprite`
+ * has already had its chance. `tileTextures.terrain` carries exactly three
+ * entries (grass/water/tree), so this reproduces the old `tiles[dominantKind(...)]`
+ * lookup exactly: every winner besides `Land`/`Water`/`Tree` missed that map
+ * and returned `undefined` too, it's just spelled as an explicit `undefined`
+ * return here instead of a failed map lookup.
+ */
+function baseGroundTexture(
+  tile: NonNullable<ReturnType<typeof getTile>>,
+  buildingLookup: BuildingLookup,
+  tileTextures: TileTextures
+): Texture | undefined {
+  if (tile.terrain === Terrain.Water) return tileTextures.terrain[Terrain.Water];
+  if (structureColour(tile, buildingLookup) !== undefined) return undefined;
+  if (zoneOccupant(tile.surface) !== undefined) return undefined;
+  if (hasOccupant(tile.overhead, Occupant.Trees)) return tileTextures.treeCanopy;
+  if (hasOccupant(tile.overhead, Occupant.PowerLine)) return undefined;
+  if (hasOccupant(tile.surface, Occupant.Rail)) return undefined;
+  if (hasOccupant(tile.surface, Occupant.Road)) return undefined;
+  return tileTextures.terrain[Terrain.Land];
+}
+
+/**
+ * The tile's flat display colour — the same precedence ladder the deleted
+ * `legacyKind` ran (terrain > structure > zone > trees > line > rail > road >
+ * land), computed directly as colours rather than via a `TileKind` detour.
+ * No underlay overrides here, unlike `minimapBaseColour` — this is the
+ * renderer's undeveloped-tile fill, and that ladder position/order is what
+ * the main-canvas goldens pin.
+ */
+export function dominantColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number {
+  if (tile.terrain === Terrain.Water) return TERRAIN_COLOURS[Terrain.Water];
+  const structure = structureColour(tile, buildingLookup);
+  if (structure !== undefined) return structure;
+  const zone = zoneOccupant(tile.surface);
+  if (zone !== undefined) return OCCUPANT_COLOURS[zone]!;
+  if (hasOccupant(tile.overhead, Occupant.Trees)) return OCCUPANT_COLOURS[Occupant.Trees]!;
+  if (hasOccupant(tile.overhead, Occupant.PowerLine)) return OCCUPANT_COLOURS[Occupant.PowerLine]!;
+  if (hasOccupant(tile.surface, Occupant.Rail)) return OCCUPANT_COLOURS[Occupant.Rail]!;
+  if (hasOccupant(tile.surface, Occupant.Road)) return OCCUPANT_COLOURS[Occupant.Road]!;
+  return TERRAIN_COLOURS[Terrain.Land];
+}
+
+export function getTileColour(tile: ReturnType<typeof getTile>, buildingLookup: BuildingLookup) {
   if (!tile) return 0x000000;
-  const base = palette[fallbackKind(tile, buildingLookup)];
+  const base = dominantColour(tile, buildingLookup);
   // `tile.powerPlantType` alone, matching `resolveBaseTileSprite`'s plant-type
   // derivation below — `placeBuilding`'s `decorateTile` callback sets it on
   // every tile of a plant's footprint, not just the origin, so there is no

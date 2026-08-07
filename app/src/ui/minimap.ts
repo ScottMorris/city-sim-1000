@@ -10,19 +10,18 @@ import {
   MinimapOverlay,
   MinimapSettings,
   MinimapSize,
-  TileKind,
   ViewStratum,
   createDefaultMinimapSettings,
   getTile
 } from '../game/gameState';
 import { BuildingStatus } from '../game/buildings/state';
 import { isPowerCarrier, isZone } from '../game/adjacency';
-import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
-import { legacyKind, legacyFlags } from '../game/protocol/legacyProjection';
+import { Occupant, Terrain, hasOccupant, zoneOccupant } from '../game/protocol/occupants';
 import { ECO_RANGE } from '../game/protocol/tileBuffer';
+import { BuildingKind } from '../game/buildings/templates';
 import { ServiceId } from '../game/services';
-import { TILE_SIZE, palette as tilePalette } from '../rendering/sprites';
-import { createBuildingLookup, type BuildingLookup } from '../rendering/tileRenderUtils';
+import { TILE_SIZE, OCCUPANT_COLOURS, TERRAIN_COLOURS } from '../rendering/sprites';
+import { createBuildingLookup, structureColour, type BuildingLookup } from '../rendering/tileRenderUtils';
 
 export interface MinimapOptions {
   root: HTMLElement;
@@ -32,7 +31,60 @@ export interface MinimapOptions {
   getViewportSize: () => { width: number; height: number };
   /** Stratum lives outside `ClientState` (see `ViewStratum`), so toggling it is a plain callback rather than a settings patch. */
   onStratumToggle: () => void;
-  palette?: Record<TileKind, number>;
+}
+
+/** Terrain/structure/zone/trees — the four rungs that outrank rail and road
+ *  in the deleted `legacyKind`'s precedence, factored out because
+ *  `minimapBaseColour` treats "one of these won" differently from "none of
+ *  these won" (see its own doc comment). `undefined` means none matched. */
+function groundOrDevelopmentColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number | undefined {
+  if (tile.terrain === Terrain.Water) return TERRAIN_COLOURS[Terrain.Water];
+  const structure = structureColour(tile, buildingLookup);
+  if (structure !== undefined) return structure;
+  const zone = zoneOccupant(tile.surface);
+  if (zone !== undefined) return OCCUPANT_COLOURS[zone];
+  if (hasOccupant(tile.overhead, Occupant.Trees)) return OCCUPANT_COLOURS[Occupant.Trees];
+  return undefined;
+}
+
+/**
+ * The minimap's base-mode pixel colour for one tile — pixel-identical to the
+ * deleted `legacyKind`+`legacyFlags` composition it replaces, by case
+ * analysis:
+ *
+ *   - `legacyFlags.powerOverlay` is unconditional whenever the `PowerLine`
+ *     occupant is present, regardless of what else is on the tile, so a
+ *     power line overhead always wins here too.
+ *   - Otherwise, if `groundOrDevelopmentColour` finds a winner (water,
+ *     structure, zone, or trees), that winner's `TileKind` could never have
+ *     been `Rail` or `Road`, so `legacyFlags.railUnderlay`/`.roadUnderlay`
+ *     reduce to a bare occupant check: rail present → rail colour, else road
+ *     present → road colour, else the winner's own colour.
+ *   - Otherwise (no winner, no power line): the tile's `legacyKind` could
+ *     only have been `Rail`, `Road`, or `Land`. Rail always outranks road in
+ *     `legacyKind` when both are present, so a rail+road tile (a plain level
+ *     crossing) has `kind = Rail` and `roadUnderlay = true` — the crossing
+ *     paints as ROAD, THE pinned pixel `e2e/visual.spec.ts`'s `d-minimap.png`
+ *     asserts at zero threshold. Rail alone paints rail; road alone paints
+ *     road; neither paints land.
+ */
+export function minimapBaseColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number {
+  if (hasOccupant(tile.overhead, Occupant.PowerLine)) return OCCUPANT_COLOURS[Occupant.PowerLine]!;
+
+  const rail = hasOccupant(tile.surface, Occupant.Rail);
+  const road = hasOccupant(tile.surface, Occupant.Road);
+
+  const winner = groundOrDevelopmentColour(tile, buildingLookup);
+  if (winner !== undefined) {
+    if (rail) return OCCUPANT_COLOURS[Occupant.Rail]!;
+    if (road) return OCCUPANT_COLOURS[Occupant.Road]!;
+    return winner;
+  }
+
+  if (rail && road) return OCCUPANT_COLOURS[Occupant.Road]!; // level crossing — the pinned pixel
+  if (rail) return OCCUPANT_COLOURS[Occupant.Rail]!;
+  if (road) return OCCUPANT_COLOURS[Occupant.Road]!;
+  return TERRAIN_COLOURS[Terrain.Land];
 }
 
 export interface MinimapController {
@@ -75,7 +127,6 @@ interface LayoutInfo {
 }
 
 export function initMinimap(options: MinimapOptions): MinimapController {
-  const palette = options.palette ?? tilePalette;
   const colorCache = new Map<number, string>();
   const colorToCss = (color: number) => {
     const cached = colorCache.get(color);
@@ -322,7 +373,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
     buildingLookup: BuildingLookup
   ) {
     if (!tile) return '#000';
-    const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.tileKind : undefined;
+    const templateKind = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId)?.template?.kind : undefined;
 
     if (settings.overlay === 'power') {
       if (tile.powerPlantType) return '#81e8ff';
@@ -337,7 +388,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
 
     if (settings.overlay === 'water') {
       if (tile.terrain === Terrain.Water) return '#1f68d6';
-      if (templateKind === TileKind.WaterPump || templateKind === TileKind.WaterTower) {
+      if (templateKind === BuildingKind.WaterPump || templateKind === BuildingKind.WaterTower) {
         return tile.powered ? '#7ad5ff' : '#ffcc70';
       }
       return tile.powered ? 'rgba(76, 195, 255, 0.25)' : 'rgba(16, 26, 42, 0.92)';
@@ -363,7 +414,7 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return 'rgba(255, 123, 123, 0.95)';
     }
     if (settings.overlay === 'education') {
-      if (templateKind === TileKind.ElementarySchool || templateKind === TileKind.HighSchool) {
+      if (templateKind === BuildingKind.ElementarySchool || templateKind === BuildingKind.HighSchool) {
         return '#8f7bff';
       }
       if (isZone(tile)) {
@@ -397,25 +448,10 @@ export function initMinimap(options: MinimapOptions): MinimapController {
       return 'rgba(16, 26, 42, 0.95)';
     }
 
-    // Base/default mode. `roadUnderlay`/`railUnderlay` are true only when
-    // that occupant did *not* win `kind` (e.g. a plain crossing's `kind` is
-    // always `Rail`, so `railUnderlay` is always false there and this falls
-    // through to the road colour) — order matters and is pinned by
-    // `e2e/visual.spec.ts`'s `d-minimap.png`, so this reuses `legacyKind`/
-    // `legacyFlags` rather than re-deriving that conjunct by hand.
-    const projectionInput = {
-      terrain: tile.terrain,
-      surface: tile.surface,
-      overhead: tile.overhead,
-      buildingId: tile.buildingId,
-      structureKindOf: (id: number) => buildingLookup.get(id)?.template?.tileKind
-    };
-    const derivedKind = legacyKind(projectionInput);
-    const flags = legacyFlags(projectionInput, derivedKind);
-    if (flags.powerOverlay) return colorToCss(palette[TileKind.PowerLine]);
-    if (flags.railUnderlay) return colorToCss(palette[TileKind.Rail]);
-    if (flags.roadUnderlay) return colorToCss(palette[TileKind.Road]);
-    return colorToCss(palette[derivedKind]);
+    // Base/default mode — see `minimapBaseColour`'s doc comment for the
+    // precedence this pins (order matters, and is pinned at zero threshold
+    // by `e2e/visual.spec.ts`'s `d-minimap.png`).
+    return colorToCss(minimapBaseColour(tile, buildingLookup));
   }
 
   function drawMap(state: GameState) {

@@ -10,11 +10,25 @@
 import type { SimBridge } from './simBridge';
 import type { GameState, Tile, ViewStratum } from './gameState';
 import { createInitialState } from './gameState';
+import { Terrain } from './protocol/occupants';
 import { Tool } from './toolTypes';
 import { getCalendarPosition } from './time';
 import { nextStrokeId } from './protocol/commands';
 import type { FromSim } from './protocol/events';
-import { dominantOccupantLabel, occupantsByStratum } from './protocol/tileLabel';
+import { occupantsByStratum } from './protocol/tileLabel';
+
+/** The wire spelling of `Terrain` at the MCP JSON boundary — the only two
+ *  strings a script ever sees for it, via `terrainLabel` below. Internal
+ *  code reads/compares `Terrain` itself; this type (and the strings it
+ *  names) exist only where the terrain crosses into JSON. */
+export type TerrainLabel = 'land' | 'water';
+
+/** `Terrain` → its MCP wire spelling. The one place `Terrain` is converted
+ *  to a string for `get_tile`/`get_adjacents`/`apply_tool` responses and
+ *  `get_tiles_where`'s `kind` matching. */
+export function terrainLabel(t: Terrain): TerrainLabel {
+  return t === Terrain.Water ? 'water' : 'land';
+}
 
 // Bresenham's line — returns all integer (x,y) pairs from (x0,y0) to (x1,y1).
 function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
@@ -97,7 +111,7 @@ export function createCommandResultQueue() {
  * enough to tell a script "some of this didn't land" without a result per
  * tile. Exported (only) so it's unit-testable — see `stratumParam`'s doc
  * comment. */
-export function summarizeApplyResults(results: CommandResultLike[]) {
+export function summariseApplyResults(results: CommandResultLike[]) {
   const failures = results.filter(r => !r.success);
   return {
     placed: results.length - failures.length,
@@ -107,16 +121,18 @@ export function summarizeApplyResults(results: CommandResultLike[]) {
 }
 
 /**
- * `get_tiles_where`'s matcher. By default matches `dominantOccupantLabel`
- * only — the same single collapsed label `get_tile`'s `kind` returns — so a
- * road hidden under a power line won't match `kind: "road"`. `anyStratum`
- * widens the check to `occupantsByStratum`'s full per-layer breakdown, so
- * a script can find every tile carrying a kind regardless of what's winning
- * the display slot. Exported (only) so it's unit-testable — see
- * `stratumParam`'s doc comment.
+ * `get_tiles_where`'s matcher. `kind: "land"`/`"water"` matches the tile's
+ * *terrain* — a road built on land still matches `"land"`, since terrain and
+ * occupants are independent axes (see `get_tile`'s `terrain` field). Every
+ * other `kind` matches `occupantsByStratum`'s full per-layer breakdown in ANY
+ * stratum — a road hidden under a power line still matches `kind: "road"`,
+ * unlike the old single-label `dominantOccupantLabel` this replaced. Exported
+ * (only) so it's unit-testable — see `stratumParam`'s doc comment.
  */
-export function tileMatchesKind(state: GameState, tile: Tile, kind: string, anyStratum: boolean): boolean {
-  if (!anyStratum) return dominantOccupantLabel(state, tile) === kind;
+export function tileMatchesKind(state: GameState, tile: Tile, kind: string): boolean {
+  if (kind === 'land' || kind === 'water') {
+    return terrainLabel(tile.terrain) === (kind as TerrainLabel);
+  }
   const occupants = occupantsByStratum(state, tile);
   return occupants.underground.includes(kind) || occupants.surface.includes(kind) || occupants.overhead.includes(kind);
 }
@@ -209,14 +225,14 @@ export function initMcpBridge(
     const t = s.tiles[y * s.width + x];
     if (!t) return null;
     return {
-      kind: dominantOccupantLabel(s, t),
-      // `kind` collapses to one label per the legacy display precedence
-      // (structure > zone > trees > power line > rail > road) — a tile can
-      // carry a road on the surface *and* a power line overhead *and* a
-      // pipe underground all at once. `occupants` is the same information
-      // without the collapse, so a script can tell "there's a road here,
-      // just hidden behind a power line" from "no road here" — e.g. to
-      // confirm a `water_pipe` placement actually landed underneath a road.
+      // `terrain` and `occupants` are independent axes: the ground itself
+      // (land/water) versus what's built on/over it. A tile can carry a road
+      // on the surface *and* a power line overhead *and* a pipe underground
+      // all at once — `occupants` lists every one of them, not just a single
+      // collapsed winner, so a script can tell "there's a road here, just
+      // hidden behind a power line" from "no road here" — e.g. to confirm a
+      // `water_pipe` placement actually landed underneath a road.
+      terrain: terrainLabel(t.terrain),
       occupants: occupantsByStratum(s, t),
       powered: t.powered,
       watered: t.watered,
@@ -245,9 +261,8 @@ export function initMcpBridge(
         case 'get_tiles_where': {
           const s = bridge.getState();
           const kind = params.kind as string;
-          const anyStratum = params.anyStratum === true;
           const hits = s.tiles.flatMap((t, i) =>
-            tileMatchesKind(s, t, kind, anyStratum) ? [{ x: i % s.width, y: Math.floor(i / s.width) }] : [],
+            tileMatchesKind(s, t, kind) ? [{ x: i % s.width, y: Math.floor(i / s.width) }] : [],
           );
           reply(id, hits);
           break;
@@ -316,7 +331,7 @@ export function initMcpBridge(
           const stratum = stratumParam(params);
           const pending = pts.map(([px, py]) => sendApplyTool(tool, px, py, lineStroke, stratum));
           await waitMs(150);
-          const summary = summarizeApplyResults(await Promise.all(pending));
+          const summary = summariseApplyResults(await Promise.all(pending));
           reply(id, { ...summary, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
           break;
         }
@@ -337,7 +352,7 @@ export function initMcpBridge(
             }
           }
           await waitMs(150);
-          const summary = summarizeApplyResults(await Promise.all(pending));
+          const summary = summariseApplyResults(await Promise.all(pending));
           reply(id, { ...summary, moneyBefore, moneyAfter: bridge.getState().money, state: simState() });
           break;
         }

@@ -6,7 +6,8 @@
 import { BuildingStatus } from '../game/buildings/state';
 import { getBuildingTemplate } from '../game/buildings/templates';
 import { GameState, getTile, ViewStratum } from '../game/gameState';
-import { dominantOccupantLabel } from '../game/protocol/tileLabel';
+import { Terrain } from '../game/protocol/occupants';
+import { occupantsByStratum } from '../game/protocol/tileLabel';
 import { Position } from '../rendering/renderer';
 import { Tool } from '../game/toolTypes';
 import { getToolDetails } from './toolInfo';
@@ -287,13 +288,33 @@ export function createHud(elements: HudElements) {
                     }`
                 : '';
 
+            // Per-stratum listing rather than a single collapsed "Type" label
+            // (the old `dominantOccupantLabel`) — a tile can carry, say, a
+            // road on the surface and a power line overhead at once, and the
+            // old single line only ever showed the winner. `Terrain` is
+            // always shown; each stratum line only appears once it has
+            // something to say.
+            const terrainLabel = hasTileSelection.terrain === Terrain.Water ? 'water' : 'land';
+            const strata = occupantsByStratum(state, hasTileSelection);
+            const strataLines = (
+              [
+                ['Under', strata.underground],
+                ['Surface', strata.surface],
+                ['Overhead', strata.overhead]
+              ] as const
+            )
+              .filter(([, values]) => values.length > 0)
+              .map(([label, values]) => `<div class="status-line"><span>${label}</span><strong>${values.join(' · ')}</strong></div>`)
+              .join('');
+
             return `
               <div class="info-section">
                 <div class="info-title">
                   <div class="info-label">Tile</div>
                   <div class="info-name">${selected.x},${selected.y}</div>
                 </div>
-                <div class="status-line"><span>Type</span><strong>${dominantOccupantLabel(state, hasTileSelection)}</strong></div>
+                <div class="status-line"><span>Terrain</span><strong>${terrainLabel}</strong></div>
+                ${strataLines}
                 <div class="status-line"><span>Happy</span><strong>${hasTileSelection.happiness.toFixed(2)}</strong></div>
                 <div class="status-line"><span>Power</span><strong>${hasTileSelection.powered ? 'On' : 'Off'}</strong></div>
                 <div class="status-line"><span>Water</span><strong>${hasTileSelection.watered ? 'Wet' : 'Dry'}</strong></div>

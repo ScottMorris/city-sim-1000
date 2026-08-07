@@ -3,7 +3,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { TileKind } from './gameState';
+import { Occupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
 
 export enum PowerPlantType {
@@ -85,11 +85,14 @@ export const BUILD_COST: Record<Tool, number> = {
   [Tool.ParkLarge]: 32
 };
 
-export const MAINTENANCE: Partial<Record<TileKind, number>> = {
-  [TileKind.Road]: 0.1,
-  [TileKind.Rail]: 0.2,
-  [TileKind.PowerLine]: 0.08,
-  [TileKind.WaterPipe]: 0.04
+/** Per-day upkeep for linear infrastructure, keyed by the occupant it is —
+ *  these were never kinds of tile, they're things a tile carries. Display
+ *  only (`toolInfo.ts`); the engine's own ledger lives in `economy.rs`. */
+export const MAINTENANCE: Partial<Record<Occupant, number>> = {
+  [Occupant.Road]: 0.1,
+  [Occupant.Rail]: 0.2,
+  [Occupant.PowerLine]: 0.08,
+  [Occupant.Pipe]: 0.04
 };
 
 export const BASE_INCOME = 120;
