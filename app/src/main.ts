@@ -440,8 +440,16 @@ function stopBootErrorWatch(): void {
   window.removeEventListener('unhandledrejection', onBootRejection);
 }
 
+// `SimBridge.onMessage` is single-subscriber (see its doc comment) — this
+// tap lets `initMcpBridge` observe every `FromSim` message (e.g.
+// `CommandResult`) without stealing the one slot `wireBridge` already holds
+// for alerts/toasts/narrative/history. Set once, below, before any message
+// can actually arrive (both calls happen synchronously during boot).
+let mcpMessageTap: ((msg: FromSim) => void) | null = null;
+
 function wireBridge(b: SimBridge): void {
   b.onMessage((msg: FromSim) => {
+    mcpMessageTap?.(msg);
     if (msg.type === 'Ready') {
       stopBootErrorWatch();
       loadingScreen.complete();
@@ -625,7 +633,7 @@ function startAutosave(): void {
 }
 
 wireBridge(bridge);
-initMcpBridge(bridge, state);
+initMcpBridge(bridge, state, tap => { mcpMessageTap = tap; });
 void bootLoadSave().finally(startAutosave);
 
 let debugOverlay: ReturnType<typeof initDebugOverlay> | null = null;
