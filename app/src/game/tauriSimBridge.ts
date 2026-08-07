@@ -322,6 +322,9 @@ export class TauriSimBridge implements SimBridge {
     s.wilderness.score = event.wildernessScore;
     s.wilderness.trend = event.wildernessTrend;
     s.wilderness.breakdown = event.wildernessBreakdown;
+    // A tick's stats confirm the lighting policy as applied — see
+    // `GameState.appliedLighting` and the matching line in `WasmSimBridge`.
+    s.appliedLighting = s.policies.lighting;
 
     // Undo/redo availability — emit HistoryChanged on transitions only.
     if (event.canUndo !== this.canUndoFlag || event.canRedo !== this.canRedoFlag) {

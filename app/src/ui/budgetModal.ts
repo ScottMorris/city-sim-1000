@@ -524,8 +524,10 @@ export function initBudgetModal(options: BudgetModalOptions) {
       // active bylaw is responsible for.
       const appliedPowerUse = state.utilities.powerUsed;
       const appliedMaintenance = budget.maintCivic + budget.maintZones;
+      // Rescale from `appliedLighting` (the policy the wire figures were
+      // computed under), not the optimistic `lighting` — see `bylawsModal.ts`.
       const neutralPreview = previewLightingPolicy(
-        lighting,
+        state.appliedLighting,
         DEFAULT_LIGHTING_POLICY,
         appliedPowerUse,
         appliedMaintenance

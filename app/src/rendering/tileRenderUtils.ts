@@ -97,7 +97,7 @@ function isDevelopedZone(tile: NonNullable<ReturnType<typeof getTile>>): boolean
  * falls through to the next rung, exactly as the deleted `legacyKind`'s
  * structure branch did.
  */
-function structureColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number | undefined {
+export function structureColour(tile: NonNullable<ReturnType<typeof getTile>>, buildingLookup: BuildingLookup): number | undefined {
   if (!hasOccupant(tile.surface, Occupant.Structure) || tile.buildingId === undefined) return undefined;
   return buildingLookup.get(tile.buildingId)?.template?.colour;
 }

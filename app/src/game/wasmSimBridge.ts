@@ -545,6 +545,11 @@ export class WasmSimBridge implements SimBridge {
   }
 
   private updateStats(stats: SimStats): void {
+    // These stats were computed under whatever policies the engine held at
+    // tick time — by the single-queue worker's ordering that is the same
+    // `policies` the mirror holds now, so this tick confirms the lighting
+    // policy as applied (see `GameState.appliedLighting`).
+    this.state.appliedLighting = this.state.policies.lighting;
     this.state.tick = stats.tick;
     this.state.day = stats.day;
     this.state.money = stats.money;
