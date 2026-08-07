@@ -1,3 +1,8 @@
+// dialogs.ts — save/load persistence controls, toasts, and the manual modal.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import {
   SaveFormatError,
   buildSaveFile,
@@ -7,6 +12,7 @@ import {
   downloadSave,
   encodeSave,
   isLegacyJsonSave,
+  type LegacySaveTranscode,
   type SaveContainer
 } from '../game/persistence';
 import { extractClientState } from '../game/clientState';
@@ -127,7 +133,7 @@ interface PersistenceOptions {
   /** Restore a decoded CSAV container into the engine + display mirror. */
   onContainerLoaded: (container: SaveContainer) => Promise<void>;
   /** One-time import of a legacy JSON save (pre-CSAV upload). */
-  onLegacyLoaded: (state: GameState) => Promise<void>;
+  onLegacyLoaded: (imp: LegacySaveTranscode) => Promise<void>;
   /** Current touch/mouse input mode — gates the Web Share export path to touch devices; desktop always downloads. */
   getInputMode: () => InputMode;
 }

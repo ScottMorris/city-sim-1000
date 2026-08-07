@@ -1,30 +1,43 @@
-// buildings.test.ts — legacy-save migration into BuildingInstance.
+// buildings.test.ts — legacy-save migration: minted civic building ids in the wire buffer.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { createInitialState, getTile, TileKind } from './gameState';
-import { deserialize } from './persistence';
-import { serialize } from './testSupport/legacyStateSerialize';
+import { TileKind } from './gameState';
+import { transcodeLegacySave } from './persistence';
+import { legacyTileBufferOffsets } from './protocol/legacyTileBuffer';
 
 describe('buildings — legacy save migration', () => {
-  it('rebuilds legacy civic tiles into building instances on load', () => {
-    const state = createInitialState(4, 4);
-    // Simulate a pre-migration save: `deserialize` branches on `terrain` being
-    // absent to decode a v4-shaped tile, so a live `Tile` (which has no `kind`
-    // field any more) can't stand in for one — spell the raw JSON directly.
-    const json = JSON.parse(serialize(state));
-    const idx = 1 * state.width + 1;
-    delete json.tiles[idx].terrain;
-    delete json.tiles[idx].underground;
-    delete json.tiles[idx].surface;
-    delete json.tiles[idx].overhead;
-    json.tiles[idx].kind = TileKind.WaterPump;
-    const restored = deserialize(JSON.stringify(json));
-    const pumpTile = getTile(restored, 1, 1)!;
-    expect(pumpTile.buildingId).toBeDefined();
-    const building = restored.buildings.find((b) => b.id === pumpTile.buildingId);
-    expect(building?.templateId).toBe(TileKind.WaterPump);
+  it('mints a building id for a legacy civic tile (no buildingId) into the wire buffer', () => {
+    const width = 4;
+    const height = 4;
+    const n = width * height;
+    const idx = 1 * width + 1;
+    const tiles = Array.from({ length: n }, () => ({ kind: TileKind.Land }));
+    tiles[idx] = { kind: TileKind.WaterPump } as any;
+    const raw = JSON.stringify({
+      width,
+      height,
+      seed: 1,
+      tiles,
+      money: 100000,
+      day: 1,
+      tick: 0,
+      population: 12,
+      jobs: 4
+    });
+
+    const { engine } = transcodeLegacySave(raw);
+    const o = legacyTileBufferOffsets(n);
+    const lo = engine.tiles[o.buildingId + idx * 2];
+    const hi = engine.tiles[o.buildingId + idx * 2 + 1];
+    const mintedId = lo | (hi << 8);
+
+    expect(mintedId).toBeGreaterThan(0);
+    // Rust's `import.rs` rebuilds the `BuildingInstance` straight off this
+    // kind byte (first-occurrence-per-id, see `from_tile_buffer`) — no TS
+    // `BuildingInstance` synthesis needed on this side any more.
+    expect(engine.tiles[o.kind + idx]).toBe(10); // TileKind.WaterPump's u8
   });
 });

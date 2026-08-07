@@ -73,7 +73,7 @@ export interface SimBridge {
 
   /**
    * One-time import of a legacy JSON save (pre-CSAV) into exact engine
-   * state — see `buildLegacyEngineImport` in `persistence.ts`.
+   * state — see `transcodeLegacySave` in `persistence.ts`.
    */
   importLegacy(imp: LegacyEngineImport): Promise<void>;
 

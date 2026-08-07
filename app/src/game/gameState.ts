@@ -455,13 +455,13 @@ export function getTile(state: GameState, x: number, y: number): Tile | undefine
  *
  * Replaces the whole surface and overhead stratum (a bare `TileKind` can
  * only ever mean one thing at a time) but leaves `underground` standing —
- * mirrors `tileFromV4`'s treatment of a v4 tile's buried pipe, which this
- * function cannot call directly: `protocol/legacyProjection.ts` imports
- * `TileKind` from this module at its own top level, so importing back from
- * it here would form a cycle whose evaluation order left `TileKind`
- * `undefined` the one time this was tried (see git history). Duplicated
- * instead of shared; the mapping is small and `Occupant`'s bit positions
- * are pinned "never reorder".
+ * a buried pipe is orthogonal to whatever sits on the surface, so stamping
+ * a new `kind` here shouldn't clear it. This is now the only TS-side
+ * `TileKind` → occupant-bits mapping left (Rust's `tile_from_v4`, via
+ * `city_sim_core::migrate`, is the sole place a v4 spelling gets decoded for
+ * real saves) — kept small and inline rather than imported from anywhere,
+ * since `Occupant`'s bit positions are pinned "never reorder" and there is
+ * no longer a TS module doing the equivalent decode to share this with.
  */
 export function setTile(state: GameState, x: number, y: number, kind: TileKind) {
   const tile = getTile(state, x, y);
