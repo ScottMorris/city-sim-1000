@@ -15,18 +15,10 @@ import { getBuildingTemplate } from './buildings/templates';
 import type { GameState } from './gameState';
 import { ServiceId } from './services';
 import { getReachableZoneCandidates } from './serviceDistribution';
+import type { WireEducationStats } from './protocol/generated/WireEducationStats';
 
-export interface EducationStats {
-  elementaryServed: number;
-  elementaryCapacity: number;
-  elementaryLoad: number;
-  highServed: number;
-  highCapacity: number;
-  highLoad: number;
-  score: number;
-  elementaryCoverage: number;
-  highCoverage: number;
-}
+/** The generated wire shape verbatim — see `WireEducationStats`. */
+export type EducationStats = WireEducationStats;
 
 /**
  * Ghost-preview reach for a school that ISN'T PLACED YET — a client BFS out

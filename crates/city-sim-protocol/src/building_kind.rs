@@ -8,8 +8,18 @@ use ts_rs::TS;
 /// Which category a [`BuildingKind`] belongs to — the high nibble of its
 /// discriminant. `Safety` and `Health` are reserved: declared here so the
 /// alphabet has room for them, but no [`BuildingKind`] carries either yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, TS)]
-#[ts(export_to = "BuildingCategory.ts")]
+///
+/// Rust-internal only — not `#[derive(TS)]`'d. No wire struct carries a
+/// `BuildingCategory` field (`WireBuilding.kind` is a raw `u8`, decoded on
+/// the TS side by `BUILDING_KIND_BY_U8`, not by category), and TS has its
+/// own, deliberately coarser three-way grouping for display
+/// (`buildings/templates.ts`'s `LedgerGroup`, which lumps `Water`/
+/// `Education`/`Recreation` into one `Civic` bucket) — mirroring this
+/// seven-way taxonomy into TS as well would just be a second grouping
+/// nothing reads. `category()` below exists to keep `BuildingKind`'s high
+/// nibble assignment self-checking (see this module's tests), not for any
+/// TS consumer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum BuildingCategory {
     Zone = 1,

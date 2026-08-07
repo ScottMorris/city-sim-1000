@@ -13,8 +13,6 @@
 import { recordEngineBuild } from '../buildInfo';
 import type { DemandStats, GameState, LabourStats, UtilityComponentStats, ViewStratum } from './gameState';
 import { createBlankTile } from './gameState';
-import { PowerPlantType } from './constants';
-import { BuildingKind } from './buildings/templates';
 import { buildBuildingMirror } from './buildings/wireMirror';
 import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
@@ -25,6 +23,7 @@ import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { Terrain } from './protocol/occupants';
 import { Tool } from './toolTypes';
+import { parseWire } from './protocol/wireParse';
 // `WireBuilding`/`WireEducationSeatsUsed` are decoded from the `buildingsJson`/
 // `educationSeatsUsedJson` payloads (see `SimHost::buildings_json`/
 // `SimHost::education_seats_used_json`, Rust) — `ts-rs`-generated mirrors of
@@ -567,58 +566,16 @@ export class WasmSimBridge implements SimBridge {
     this.state.demand.industrial  = stats.demandIndustrial;
     this.state.abandonedCount = stats.abandonedCount;
     this.state.avgHappiness   = stats.avgHappiness;
-    const b = this.state.budget;
-    b.netPerDay   = stats.budgetNetPerDay;
-    b.netPerMonth = stats.budgetNetPerMonth;
-    b.revenue     = stats.budgetRevenue;
-    b.expenses    = stats.budgetExpenses;
-    b.net         = stats.budgetNet;
-    b.breakdown.revenue.base        = stats.budgetRevenueBase;
-    b.breakdown.revenue.residents   = stats.budgetRevenuePop;
-    b.breakdown.revenue.commercial  = stats.budgetRevenueCommercial;
-    b.breakdown.revenue.industrial  = stats.budgetRevenueIndustrial;
-    b.breakdown.revenue.tourism     = stats.budgetRevenueTourism;
-    b.breakdown.expenses.transport  = stats.budgetExpensesTransport;
-    b.breakdown.expenses.buildings  = stats.budgetExpensesBuildings;
-    b.breakdown.expenses.policies   = stats.budgetExpensesPolicies;
-    b.breakdown.details.transport.roads      = stats.budgetMaintRoads;
-    b.breakdown.details.transport.rail       = stats.budgetMaintRail;
-    b.breakdown.details.transport.powerLines = stats.budgetMaintPowerLines;
-    b.breakdown.details.transport.waterPipes = stats.budgetMaintPipes;
-    b.breakdown.details.buildings.power      = stats.budgetMaintPower;
-    b.breakdown.details.buildings.civic      = stats.budgetMaintCivic;
-    b.breakdown.details.buildings.zones      = stats.budgetMaintZones;
-    b.breakdown.details.buildings.powerByType = {
-      [PowerPlantType.Hydro]: stats.budgetMaintPowerHydro,
-      [PowerPlantType.Coal]:  stats.budgetMaintPowerCoal,
-      [PowerPlantType.Wind]:  stats.budgetMaintPowerWind,
-      [PowerPlantType.Solar]: stats.budgetMaintPowerSolar,
-    };
-    b.breakdown.details.buildings.civicByType = {
-      [BuildingKind.Park]:      stats.budgetMaintCivicPark,
-      [BuildingKind.WaterPump]: stats.budgetMaintCivicPump,
-      [BuildingKind.WaterTower]: stats.budgetMaintCivicTower,
-      school:                   stats.budgetMaintCivicSchool,
-    };
-    b.breakdown.details.buildings.zonesByType = {
-      [BuildingKind.Residential]: stats.budgetMaintZonesRes,
-      [BuildingKind.Commercial]:  stats.budgetMaintZonesCom,
-      [BuildingKind.Industrial]:  stats.budgetMaintZonesInd,
-    };
+    // `WireBudgetStats` verbatim — the worker already gathers it into this
+    // exact shape (`gatherStats`), so the mirror just adopts it wholesale
+    // rather than copying each field into a hand-nested breakdown. Grouped
+    // display maps are derived from these flat fields at display time — see
+    // `budgetModal.ts`'s `deriveBudgetBreakdown`.
+    this.state.budget = stats.budget;
     const wild = this.state.wilderness;
-    wild.score = stats.wildernessScore;
-    wild.trend = stats.wildernessTrend;
-    wild.breakdown.forests       = stats.wildernessForests;
-    wild.breakdown.parks         = stats.wildernessParks;
-    wild.breakdown.openLand      = stats.wildernessOpenLand;
-    wild.breakdown.waterEdge     = stats.wildernessWaterEdge;
-    wild.breakdown.patch         = stats.wildernessPatch;
-    wild.breakdown.fragmentation = stats.wildernessFragmentation;
-    wild.breakdown.zones         = stats.wildernessZones;
-    wild.breakdown.industry      = stats.wildernessIndustry;
-    wild.breakdown.transport     = stats.wildernessTransport;
-    wild.breakdown.power         = stats.wildernessPower;
-    wild.breakdown.civic         = stats.wildernessCivic;
+    wild.score = stats.wilderness.score;
+    wild.trend = stats.wilderness.trend;
+    wild.breakdown = stats.wilderness.breakdown;
     this.handler?.({
       type: 'TickStats',
       data: {
@@ -647,30 +604,40 @@ export class WasmSimBridge implements SimBridge {
     // TS/wire follow-up) — a `Structure` occupant says only that a building
     // stands here, not which one. `buildings_json` is the only source for
     // that now.
-    const wireBuildings: WireBuilding[] = buildingsJson ? JSON.parse(buildingsJson) : [];
+    const wireBuildings: WireBuilding[] = buildingsJson
+      ? parseWire(buildingsJson, { requireArray: true })
+      : [];
     // `#230` — one entry per physically-connected segment; unrounded on the
     // wire, matching the engine (`UtilityComponent`'s doc comment).
     this.state.utilities.powerComponents = powerComponentsJson
-      ? (JSON.parse(powerComponentsJson) as UtilityComponentStats[])
+      ? parseWire<UtilityComponentStats[]>(powerComponentsJson, { requireArray: true })
       : [];
     this.state.utilities.waterComponents = waterComponentsJson
-      ? (JSON.parse(waterComponentsJson) as UtilityComponentStats[])
+      ? parseWire<UtilityComponentStats[]>(waterComponentsJson, { requireArray: true })
       : [];
     // `#228` — Rust-computed, replaces the old client-side recompute.
     if (educationJson) {
-      this.state.education = JSON.parse(educationJson) as GameState['education'];
+      this.state.education = parseWire<GameState['education']>(educationJson, {
+        requiredKeys: ['elementaryServed', 'highServed', 'score']
+      });
     }
     const seatsUsed: WireEducationSeatsUsed[] = educationSeatsUsedJson
-      ? JSON.parse(educationSeatsUsedJson)
+      ? parseWire(educationSeatsUsedJson, { requireArray: true })
       : [];
     // `#229` — Rust-computed, replaces the old client-side reconstruction.
     if (budgetHistoryJson) {
-      this.state.budgetHistory = JSON.parse(budgetHistoryJson) as BudgetHistoryEntry[];
+      this.state.budgetHistory = parseWire<BudgetHistoryEntry[]>(budgetHistoryJson, { requireArray: true });
     }
     // `#200`'s wire-adoption follow-up — replaces the TS demand shadow
-    // (`demand.ts`) and the `computeLabourStats.ts` recompute.
+    // (`demand.ts`) and the `computeLabourStats.ts` recompute. Not itself a
+    // `ts-rs`-generated type (`DemandBreakdownWire` in `city-sim-wasm/src/
+    // lib.rs` is a WASM-boundary-only bundling of two that are, so it costs
+    // callers one `GameState` scan instead of two) — its `demand`/`labour`
+    // fields are the generated shapes verbatim.
     if (demandBreakdownJson) {
-      const parsed = JSON.parse(demandBreakdownJson) as { demand: DemandStats['breakdown']; labour: LabourStats };
+      const parsed = parseWire<{ demand: DemandStats['breakdown']; labour: LabourStats }>(demandBreakdownJson, {
+        requiredKeys: ['demand', 'labour']
+      });
       this.state.demand.breakdown = parsed.demand;
       this.state.labour = parsed.labour;
     }

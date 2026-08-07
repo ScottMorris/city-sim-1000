@@ -19,10 +19,23 @@
 // this reason.
 import init, { SimHost, version as engineVersion, build_sha as engineSha } from '../wasm/sim_wasm/sim_wasm.js';
 import wasmUrl from '../wasm/sim_wasm/sim_wasm_bg.wasm?url';
-// `ts-rs`-generated mirror of `city_sim_protocol::events::SimAlert` — see
-// `take_alerts_json()` and `crates/city-sim-protocol/tests/export_bindings.rs`.
+// `ts-rs`-generated mirrors of `city_sim_protocol` wire types — see
+// `crates/city-sim-protocol/tests/export_bindings.rs`.
 import type { SimAlert } from '../game/protocol/generated/SimAlert';
 import type { LightingPolicy } from '../game/protocol/generated/LightingPolicy';
+import type { WireBudgetStats } from '../game/protocol/generated/WireBudgetStats';
+import type { WireWildernessBreakdown } from '../game/protocol/generated/WireWildernessBreakdown';
+
+/**
+ * Wilderness score display state gathered by `gatherStats` — `score`/`trend`
+ * and the per-category `breakdown` are separate `SimHost` getters, composed
+ * into one object here rather than reshaped later by each bridge.
+ */
+export interface SimWildernessStats {
+  score: number;
+  trend: number;
+  breakdown: WireWildernessBreakdown;
+}
 
 export interface SimStats {
   tick: number;
@@ -39,51 +52,14 @@ export interface SimStats {
   demandResidential: number;
   demandCommercial: number;
   demandIndustrial: number;
-  /** Raw revenue − expenses, undiluted by the day/month accrual scaling — see `budget_net_per_day`/`budget_net_per_month`. */
-  budgetNet: number;
-  budgetNetPerDay: number;
-  budgetNetPerMonth: number;
-  budgetRevenue: number;
-  budgetExpenses: number;
-  budgetRevenueBase: number;
-  budgetRevenuePop: number;
-  budgetRevenueCommercial: number;
-  budgetRevenueIndustrial: number;
-  budgetExpensesTransport: number;
-  budgetExpensesBuildings: number;
-  budgetMaintPower: number;
-  budgetMaintCivic: number;
-  budgetMaintZones: number;
-  budgetMaintRoads: number;
-  budgetMaintRail: number;
-  budgetMaintPowerLines: number;
-  budgetMaintPipes: number;
-  budgetMaintPowerHydro: number;
-  budgetMaintPowerCoal: number;
-  budgetMaintPowerWind: number;
-  budgetMaintPowerSolar: number;
-  budgetMaintCivicPark: number;
-  budgetMaintCivicPump: number;
-  budgetMaintCivicTower: number;
-  budgetMaintCivicSchool: number;
-  budgetMaintZonesRes: number;
-  budgetMaintZonesCom: number;
-  budgetMaintZonesInd: number;
-  budgetRevenueTourism: number;
-  budgetExpensesPolicies: number;
-  wildernessScore: number;
-  wildernessTrend: number;
-  wildernessForests: number;
-  wildernessParks: number;
-  wildernessOpenLand: number;
-  wildernessWaterEdge: number;
-  wildernessPatch: number;
-  wildernessFragmentation: number;
-  wildernessZones: number;
-  wildernessIndustry: number;
-  wildernessTransport: number;
-  wildernessPower: number;
-  wildernessCivic: number;
+  /**
+   * Full budget headline + breakdown, gathered from `SimHost`'s individual
+   * `budget_*` getters straight into the generated wire shape — see
+   * `WireBudgetStats`. `net` is the raw revenue − expenses, undiluted by the
+   * day/month accrual scaling `netPerDay`/`netPerMonth` apply.
+   */
+  budget: WireBudgetStats;
+  wilderness: SimWildernessStats;
   /** Number of tiles flagged abandoned — see `GameState::abandoned_count` (Rust). */
   abandonedCount: number;
   /** Mean tile happiness across the grid — see `GameState::avg_happiness` (Rust). */
@@ -219,66 +195,72 @@ function startStepLoop(): void {
 
 function gatherStats(h: SimHost): SimStats {
   return {
-    tick:                    h.tick_count(),
-    day:                     h.day(),
-    money:                   h.money(),
-    population:              h.population(),
-    jobs:                    h.jobs(),
-    powerBalance:            h.power_balance(),
-    powerProduced:           h.power_produced(),
-    powerUsed:               h.power_used(),
-    waterBalance:            h.water_balance(),
-    waterProduced:           h.water_produced(),
-    waterUsed:               h.water_used(),
-    demandResidential:       h.demand_residential(),
-    demandCommercial:        h.demand_commercial(),
-    demandIndustrial:        h.demand_industrial(),
-    budgetNet:               h.budget_net(),
-    budgetNetPerDay:         h.budget_net_per_day(),
-    budgetNetPerMonth:       h.budget_net_per_month(),
-    budgetRevenue:           h.budget_revenue(),
-    budgetExpenses:          h.budget_expenses(),
-    budgetRevenueBase:       h.budget_revenue_base(),
-    budgetRevenuePop:        h.budget_revenue_pop(),
-    budgetRevenueCommercial: h.budget_revenue_commercial(),
-    budgetRevenueIndustrial: h.budget_revenue_industrial(),
-    budgetExpensesTransport: h.budget_expenses_transport(),
-    budgetExpensesBuildings: h.budget_expenses_buildings(),
-    budgetMaintPower:        h.budget_maint_power(),
-    budgetMaintCivic:        h.budget_maint_civic(),
-    budgetMaintZones:        h.budget_maint_zones(),
-    budgetMaintRoads:        h.budget_maint_roads(),
-    budgetMaintRail:         h.budget_maint_rail(),
-    budgetMaintPowerLines:   h.budget_maint_power_lines(),
-    budgetMaintPipes:        h.budget_maint_pipes(),
-    budgetMaintPowerHydro:   h.budget_maint_power_hydro(),
-    budgetMaintPowerCoal:    h.budget_maint_power_coal(),
-    budgetMaintPowerWind:    h.budget_maint_power_wind(),
-    budgetMaintPowerSolar:   h.budget_maint_power_solar(),
-    budgetMaintCivicPark:    h.budget_maint_civic_park(),
-    budgetMaintCivicPump:    h.budget_maint_civic_pump(),
-    budgetMaintCivicTower:   h.budget_maint_civic_tower(),
-    budgetMaintCivicSchool:  h.budget_maint_civic_school(),
-    budgetMaintZonesRes:     h.budget_maint_zones_res(),
-    budgetMaintZonesCom:     h.budget_maint_zones_com(),
-    budgetMaintZonesInd:     h.budget_maint_zones_ind(),
-    budgetRevenueTourism:    h.budget_revenue_tourism(),
-    budgetExpensesPolicies:  h.budget_expenses_policies(),
-    wildernessScore:         h.wilderness_score(),
-    wildernessTrend:         h.wilderness_trend(),
-    wildernessForests:       h.wilderness_forests(),
-    wildernessParks:         h.wilderness_parks(),
-    wildernessOpenLand:      h.wilderness_open_land(),
-    wildernessWaterEdge:     h.wilderness_water_edge(),
-    wildernessPatch:         h.wilderness_patch(),
-    wildernessFragmentation: h.wilderness_fragmentation(),
-    wildernessZones:         h.wilderness_zones(),
-    wildernessIndustry:      h.wilderness_industry(),
-    wildernessTransport:     h.wilderness_transport(),
-    wildernessPower:         h.wilderness_power(),
-    wildernessCivic:         h.wilderness_civic(),
-    abandonedCount:          h.abandoned_count(),
-    avgHappiness:            h.avg_happiness(),
+    tick:              h.tick_count(),
+    day:               h.day(),
+    money:             h.money(),
+    population:        h.population(),
+    jobs:              h.jobs(),
+    powerBalance:      h.power_balance(),
+    powerProduced:     h.power_produced(),
+    powerUsed:         h.power_used(),
+    waterBalance:      h.water_balance(),
+    waterProduced:     h.water_produced(),
+    waterUsed:         h.water_used(),
+    demandResidential: h.demand_residential(),
+    demandCommercial:  h.demand_commercial(),
+    demandIndustrial:  h.demand_industrial(),
+    budget: {
+      revenue:           h.budget_revenue(),
+      expenses:          h.budget_expenses(),
+      net:               h.budget_net(),
+      netPerDay:         h.budget_net_per_day(),
+      netPerMonth:       h.budget_net_per_month(),
+      revenueBase:       h.budget_revenue_base(),
+      revenuePop:        h.budget_revenue_pop(),
+      revenueCommercial: h.budget_revenue_commercial(),
+      revenueIndustrial: h.budget_revenue_industrial(),
+      revenueTourism:    h.budget_revenue_tourism(),
+      expensesTransport: h.budget_expenses_transport(),
+      expensesBuildings: h.budget_expenses_buildings(),
+      expensesPolicies:  h.budget_expenses_policies(),
+      maintPower:        h.budget_maint_power(),
+      maintCivic:        h.budget_maint_civic(),
+      maintZones:        h.budget_maint_zones(),
+      maintRoads:        h.budget_maint_roads(),
+      maintRail:         h.budget_maint_rail(),
+      maintPowerLines:   h.budget_maint_power_lines(),
+      maintPipes:        h.budget_maint_pipes(),
+      maintPowerHydro:   h.budget_maint_power_hydro(),
+      maintPowerCoal:    h.budget_maint_power_coal(),
+      maintPowerWind:    h.budget_maint_power_wind(),
+      maintPowerSolar:   h.budget_maint_power_solar(),
+      maintCivicPark:    h.budget_maint_civic_park(),
+      maintCivicPump:    h.budget_maint_civic_pump(),
+      maintCivicTower:   h.budget_maint_civic_tower(),
+      maintCivicSchool:  h.budget_maint_civic_school(),
+      maintZonesRes:     h.budget_maint_zones_res(),
+      maintZonesCom:     h.budget_maint_zones_com(),
+      maintZonesInd:     h.budget_maint_zones_ind(),
+    },
+    wilderness: {
+      score: h.wilderness_score(),
+      trend: h.wilderness_trend(),
+      breakdown: {
+        forests:       h.wilderness_forests(),
+        parks:         h.wilderness_parks(),
+        openLand:      h.wilderness_open_land(),
+        waterEdge:     h.wilderness_water_edge(),
+        patch:         h.wilderness_patch(),
+        fragmentation: h.wilderness_fragmentation(),
+        zones:         h.wilderness_zones(),
+        industry:      h.wilderness_industry(),
+        transport:     h.wilderness_transport(),
+        power:         h.wilderness_power(),
+        civic:         h.wilderness_civic(),
+      },
+    },
+    abandonedCount: h.abandoned_count(),
+    avgHappiness:   h.avg_happiness(),
   };
 }
 

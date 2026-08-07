@@ -49,10 +49,15 @@ impl BuildingStatus {
 // BuildingTemplate (static per-kind data)
 // ---------------------------------------------------------------------------
 
-/// Static properties of a building kind.  Mirrors the `BuildingTemplate`
-/// interface in `buildings/templates.ts`.
-///
-/// Values are taken directly from the TS static template objects.
+/// Static properties of a building kind. This struct — not
+/// `buildings/templates.ts`'s `BuildingTemplate` interface it shares a name
+/// with — is the numbers' source of truth: `tests/template_data.rs` exports
+/// `footprint`/`maintenance`/`power_use`/`water_use`/`water_output`/
+/// `population_capacity`/`jobs_capacity`/`service_{capacity,coverage}` (plus
+/// `commands.rs`'s `tool_cost`) into `app/src/game/buildings/
+/// templateData.json`, which `templates.ts` reads for every numeric field.
+/// The TS interface keeps only display-only data (name, colour, sprite key,
+/// ledger category) hand-authored alongside it.
 pub struct BuildingTemplate {
     pub footprint: (u32, u32), // (width, height) in tiles
     pub requires_power: bool,
@@ -186,13 +191,27 @@ pub fn get_building_template(kind: BuildingKind) -> Option<&'static BuildingTemp
 }
 
 // ---------------------------------------------------------------------------
-// Power plant output constants (mirrors TS POWER_PLANT_CONFIGS outputMw)
+// Power plant output/maintenance constants
 // ---------------------------------------------------------------------------
+//
+// The single Rust source for these two numbers per power plant type — read
+// by `commands.rs`'s `apply_tool` (stamped onto the placed `BuildingInstance`,
+// since a shared `POWER_PLANT` static template can't hold four different
+// maintenance figures) and by `tests/template_data.rs`, which exports both
+// into `app/src/game/buildings/templateData.json` for `templates.ts` to
+// consume. `app/src/game/constants.ts`'s `POWER_PLANT_CONFIGS.outputMw`/
+// `.maintenancePerDay` used to hand-duplicate these; that duplication is
+// gone (`#11`'s generated-type-adoption follow-up).
 
 pub const HYDRO_PLANT_MW: u32 = 60;
 pub const COAL_PLANT_MW: u32 = 80;
 pub const WIND_TURBINE_MW: u32 = 8;
 pub const SOLAR_FARM_MW: u32 = 5;
+
+pub const HYDRO_PLANT_MAINT: f32 = 150.0;
+pub const COAL_PLANT_MAINT: f32 = 300.0;
+pub const WIND_TURBINE_MAINT: f32 = 30.0;
+pub const SOLAR_FARM_MAINT: f32 = 20.0;
 
 // ---------------------------------------------------------------------------
 // BuildingInstance

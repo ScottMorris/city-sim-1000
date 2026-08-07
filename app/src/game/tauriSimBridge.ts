@@ -30,8 +30,6 @@
  */
 
 import { createBlankTile, type GameState, type ViewStratum } from './gameState';
-import { PowerPlantType } from './constants';
-import { BuildingKind } from './buildings/templates';
 import { buildBuildingMirror } from './buildings/wireMirror';
 import type { SimBridge } from './simBridge';
 import type { SimCommand, CommandResult } from './protocol/commands';
@@ -298,46 +296,15 @@ export class TauriSimBridge implements SimBridge {
     // this bridge never had one (no `recordDailyBudget` call existed here).
     s.budgetHistory = event.budgetHistory;
 
-    // Budget — headline + full breakdown, previously never populated on this
-    // transport at all (the desktop budget modal/advisor showed zeros).
-    const b = s.budget;
-    b.revenue     = event.budget.revenue;
-    b.expenses    = event.budget.expenses;
-    b.net         = event.budget.net;
-    b.netPerDay   = event.budget.netPerDay;
-    b.netPerMonth = event.budget.netPerMonth;
-    b.breakdown.revenue.base       = event.budget.revenueBase;
-    b.breakdown.revenue.residents  = event.budget.revenuePop;
-    b.breakdown.revenue.commercial = event.budget.revenueCommercial;
-    b.breakdown.revenue.industrial = event.budget.revenueIndustrial;
-    b.breakdown.revenue.tourism    = event.budget.revenueTourism;
-    b.breakdown.expenses.transport = event.budget.expensesTransport;
-    b.breakdown.expenses.buildings = event.budget.expensesBuildings;
-    b.breakdown.expenses.policies  = event.budget.expensesPolicies;
-    b.breakdown.details.transport.roads      = event.budget.maintRoads;
-    b.breakdown.details.transport.rail       = event.budget.maintRail;
-    b.breakdown.details.transport.powerLines = event.budget.maintPowerLines;
-    b.breakdown.details.transport.waterPipes = event.budget.maintPipes;
-    b.breakdown.details.buildings.power      = event.budget.maintPower;
-    b.breakdown.details.buildings.civic      = event.budget.maintCivic;
-    b.breakdown.details.buildings.zones      = event.budget.maintZones;
-    b.breakdown.details.buildings.powerByType = {
-      [PowerPlantType.Hydro]: event.budget.maintPowerHydro,
-      [PowerPlantType.Coal]:  event.budget.maintPowerCoal,
-      [PowerPlantType.Wind]:  event.budget.maintPowerWind,
-      [PowerPlantType.Solar]: event.budget.maintPowerSolar,
-    };
-    b.breakdown.details.buildings.civicByType = {
-      [BuildingKind.Park]:      event.budget.maintCivicPark,
-      [BuildingKind.WaterPump]: event.budget.maintCivicPump,
-      [BuildingKind.WaterTower]: event.budget.maintCivicTower,
-      school:                   event.budget.maintCivicSchool,
-    };
-    b.breakdown.details.buildings.zonesByType = {
-      [BuildingKind.Residential]: event.budget.maintZonesRes,
-      [BuildingKind.Commercial]:  event.budget.maintZonesCom,
-      [BuildingKind.Industrial]:  event.budget.maintZonesInd,
-    };
+    // Budget — the wire mirror carries `WireBudgetStats` verbatim, so
+    // `event.budget` (already that exact shape — see `TickEvent`) is adopted
+    // wholesale rather than copied field-by-field into a hand-nested
+    // breakdown. Grouped display maps (`powerByType`/`civicByType`/
+    // `zonesByType`) are derived from these flat fields at display time —
+    // see `budgetModal.ts`'s `deriveBudgetBreakdown`. Previously never
+    // populated on this transport at all (the desktop budget modal/advisor
+    // showed zeros).
+    s.budget = event.budget;
 
     // Demand — headline percentages plus the full per-class derivation
     // (`#200`'s wire-adoption follow-up; replaces the TS `demand.ts` shadow).

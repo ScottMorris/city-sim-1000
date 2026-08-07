@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { WasmSimBridge } from './wasmSimBridge';
-import { createInitialState } from './gameState';
+import { createDefaultBudgetStats, createInitialState } from './gameState';
 import { applyToolCmd, nextStrokeId } from './protocol/commands';
 import { buildingKindToU8 } from './protocol/buildingKind';
 import { BuildingKind } from './buildings/templates';
@@ -40,30 +40,23 @@ const flags = (canUndo: boolean, canRedo: boolean) => ({ canUndo, canRedo });
 
 /** All-zero stats object — the bridge only assigns these onto the mirror. */
 function zeroStats(): SimStats {
-  const stats: Record<string, number> = {};
-  for (const key of [
-    'tick', 'day', 'money', 'population', 'jobs',
-    'powerBalance', 'powerProduced', 'powerUsed',
-    'waterBalance', 'waterProduced', 'waterUsed',
-    'demandResidential', 'demandCommercial', 'demandIndustrial',
-    'budgetNet', 'budgetNetPerDay', 'budgetNetPerMonth', 'budgetRevenue', 'budgetExpenses',
-    'budgetRevenueBase', 'budgetRevenuePop', 'budgetRevenueCommercial',
-    'budgetRevenueIndustrial', 'budgetExpensesTransport', 'budgetExpensesBuildings',
-    'budgetMaintPower', 'budgetMaintCivic', 'budgetMaintZones', 'budgetMaintRoads',
-    'budgetMaintRail', 'budgetMaintPowerLines', 'budgetMaintPipes',
-    'budgetMaintPowerHydro', 'budgetMaintPowerCoal', 'budgetMaintPowerWind',
-    'budgetMaintPowerSolar', 'budgetMaintCivicPark', 'budgetMaintCivicPump',
-    'budgetMaintCivicTower', 'budgetMaintCivicSchool', 'budgetMaintZonesRes',
-    'budgetMaintZonesCom', 'budgetMaintZonesInd', 'budgetRevenueTourism',
-    'budgetExpensesPolicies', 'wildernessScore', 'wildernessTrend',
-    'wildernessForests', 'wildernessParks', 'wildernessOpenLand',
-    'wildernessWaterEdge', 'wildernessPatch', 'wildernessFragmentation',
-    'wildernessZones', 'wildernessIndustry', 'wildernessTransport',
-    'wildernessPower', 'wildernessCivic', 'abandonedCount', 'avgHappiness'
-  ]) {
-    stats[key] = 0;
-  }
-  return stats as unknown as SimStats;
+  return {
+    tick: 0, day: 0, money: 0, population: 0, jobs: 0,
+    powerBalance: 0, powerProduced: 0, powerUsed: 0,
+    waterBalance: 0, waterProduced: 0, waterUsed: 0,
+    demandResidential: 0, demandCommercial: 0, demandIndustrial: 0,
+    budget: createDefaultBudgetStats(),
+    wilderness: {
+      score: 0,
+      trend: 0,
+      breakdown: {
+        forests: 0, parks: 0, openLand: 0, waterEdge: 0, patch: 0,
+        fragmentation: 0, zones: 0, industry: 0, transport: 0, power: 0, civic: 0
+      }
+    },
+    abandonedCount: 0,
+    avgHappiness: 0
+  };
 }
 
 function makeBridge() {

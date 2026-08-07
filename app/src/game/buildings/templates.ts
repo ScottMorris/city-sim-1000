@@ -6,6 +6,7 @@
 import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from '../constants';
 import { Tool } from '../toolTypes';
 import { ServiceId } from '../services';
+import { engineBuildingData } from './templateData';
 
 /**
  * The coarse power/civic/zone bucket a template's upkeep lands in — the same
@@ -47,6 +48,16 @@ export enum BuildingKind {
   Industrial = 'industrial'
 }
 
+/**
+ * A static building's display + numeric spec. `footprint`, `cost`,
+ * `maintenance`, `powerUse`, `waterUse`, `waterOutput`,
+ * `populationCapacity`, `jobsCapacity`, and `service.{coverageRadius,
+ * capacity}` all come from `templateData.json` (`engineBuildingData`/
+ * `BUILD_COST`) — Rust's own numbers, not a second hand-typed copy of them.
+ * What's left hand-authored below is display-only: `name`, `colour`,
+ * `spriteKey`, `category` (`LedgerGroup`), and the `requiresPower`/
+ * `requiresWater` capability flags.
+ */
 export interface BuildingTemplate {
   id: string;
   name: string;
@@ -79,14 +90,19 @@ export interface BuildingTemplate {
   colour?: number;
 }
 
+const hydroData = engineBuildingData('HydroPlant');
+const coalData = engineBuildingData('CoalPlant');
+const windData = engineBuildingData('WindTurbine');
+const solarData = engineBuildingData('SolarFarm');
+
 export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   [PowerPlantType.Hydro]: {
     id: PowerPlantType.Hydro,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].name,
     category: LedgerGroup.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].maintenancePerDay,
+    footprint: hydroData.footprint,
+    cost: BUILD_COST[Tool.HydroPlant],
+    maintenance: hydroData.maintenance,
     kind: BuildingKind.HydroPlant,
     colour: 0x50d1ff,
     requiresPower: false,
@@ -96,9 +112,9 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     id: PowerPlantType.Coal,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Coal].name,
     category: LedgerGroup.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Coal].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Coal].maintenancePerDay,
+    footprint: coalData.footprint,
+    cost: BUILD_COST[Tool.CoalPlant],
+    maintenance: coalData.maintenance,
     kind: BuildingKind.CoalPlant,
     colour: 0x888888,
     requiresPower: false,
@@ -108,9 +124,9 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     id: PowerPlantType.Wind,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Wind].name,
     category: LedgerGroup.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Wind].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Wind].maintenancePerDay,
+    footprint: windData.footprint,
+    cost: BUILD_COST[Tool.WindTurbine],
+    maintenance: windData.maintenance,
     kind: BuildingKind.WindTurbine,
     colour: 0xddeeff,
     requiresPower: false,
@@ -120,9 +136,9 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
     id: PowerPlantType.Solar,
     name: POWER_PLANT_CONFIGS[PowerPlantType.Solar].name,
     category: LedgerGroup.Power,
-    footprint: POWER_PLANT_CONFIGS[PowerPlantType.Solar].footprint,
-    cost: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
-    maintenance: POWER_PLANT_CONFIGS[PowerPlantType.Solar].maintenancePerDay,
+    footprint: solarData.footprint,
+    cost: BUILD_COST[Tool.SolarFarm],
+    maintenance: solarData.maintenance,
     kind: BuildingKind.SolarFarm,
     colour: 0xffdd44,
     requiresPower: false,
@@ -130,38 +146,45 @@ export const POWER_PLANT_TEMPLATES: Record<PowerPlantType, BuildingTemplate> = {
   }
 };
 
+const waterPumpData = engineBuildingData('WaterPump');
+const waterTowerData = engineBuildingData('WaterTower');
+const parkData = engineBuildingData('Park');
+const parkLargeData = engineBuildingData('ParkLarge');
+const elemSchoolData = engineBuildingData('ElementarySchool');
+const highSchoolData = engineBuildingData('HighSchool');
+
 export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.WaterPump]: {
     id: BuildingKind.WaterPump,
     name: 'Water Pump',
     category: LedgerGroup.Civic,
-    footprint: { width: 1, height: 1 },
+    footprint: waterPumpData.footprint,
     cost: BUILD_COST[Tool.WaterPump],
-    maintenance: 5,
+    maintenance: waterPumpData.maintenance,
     kind: BuildingKind.WaterPump,
     colour: 0x4ac6b7,
     requiresPower: true,
-    waterOutput: 50
+    waterOutput: waterPumpData.waterOutput
   },
   [BuildingKind.WaterTower]: {
     id: BuildingKind.WaterTower,
     name: 'Water Tower',
     category: LedgerGroup.Civic,
-    footprint: { width: 2, height: 2 },
+    footprint: waterTowerData.footprint,
     cost: BUILD_COST[Tool.WaterTower],
-    maintenance: 12,
+    maintenance: waterTowerData.maintenance,
     kind: BuildingKind.WaterTower,
     colour: 0x94d1ff,
     requiresPower: true,
-    waterOutput: 120
+    waterOutput: waterTowerData.waterOutput
   },
   [BuildingKind.Park]: {
     id: BuildingKind.Park,
     name: 'Small Park',
     category: LedgerGroup.Civic,
-    footprint: { width: 1, height: 1 },
-    cost: 10,
-    maintenance: 0.05,
+    footprint: parkData.footprint,
+    cost: BUILD_COST[Tool.Park],
+    maintenance: parkData.maintenance,
     kind: BuildingKind.Park,
     colour: 0x2fa05a,
     requiresPower: false
@@ -170,9 +193,9 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
     id: BuildingKind.ParkLarge,
     name: 'Large Park',
     category: LedgerGroup.Civic,
-    footprint: { width: 2, height: 2 },
-    cost: 32,
-    maintenance: 0.16,
+    footprint: parkLargeData.footprint,
+    cost: BUILD_COST[Tool.ParkLarge],
+    maintenance: parkLargeData.maintenance,
     kind: BuildingKind.ParkLarge,
     colour: 0x2fa05a,
     requiresPower: false
@@ -181,69 +204,81 @@ export const CIVIC_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
     id: BuildingKind.ElementarySchool,
     name: 'Elementary School',
     category: LedgerGroup.Civic,
-    footprint: { width: 2, height: 2 },
+    footprint: elemSchoolData.footprint,
     cost: BUILD_COST[Tool.ElementarySchool],
-    maintenance: 40,
+    maintenance: elemSchoolData.maintenance,
     kind: BuildingKind.ElementarySchool,
     colour: 0x6aa7ff,
     requiresPower: true,
-    powerUse: 4,
-    service: { id: ServiceId.EducationElementary, coverageRadius: 8, capacity: 180 }
+    powerUse: elemSchoolData.powerUse,
+    service: {
+      id: ServiceId.EducationElementary,
+      coverageRadius: elemSchoolData.service!.radius,
+      capacity: elemSchoolData.service!.capacity
+    }
   },
   [BuildingKind.HighSchool]: {
     id: BuildingKind.HighSchool,
     name: 'High School',
     category: LedgerGroup.Civic,
-    footprint: { width: 2, height: 2 },
+    footprint: highSchoolData.footprint,
     cost: BUILD_COST[Tool.HighSchool],
-    maintenance: 55,
+    maintenance: highSchoolData.maintenance,
     kind: BuildingKind.HighSchool,
     colour: 0x8f7bff,
     requiresPower: true,
-    powerUse: 5,
-    service: { id: ServiceId.EducationHigh, coverageRadius: 9, capacity: 160 }
+    powerUse: highSchoolData.powerUse,
+    service: {
+      id: ServiceId.EducationHigh,
+      coverageRadius: highSchoolData.service!.radius,
+      capacity: highSchoolData.service!.capacity
+    }
   }
 };
+
+const residentialData = engineBuildingData('Residential');
+const commercialData = engineBuildingData('Commercial');
+const industrialData = engineBuildingData('Industrial');
 
 export const ZONE_BUILDING_TEMPLATES: Record<string, BuildingTemplate> = {
   [BuildingKind.Residential]: {
     id: 'zone-residential',
     name: 'Residential Lot',
     category: LedgerGroup.Zone,
-    footprint: { width: 1, height: 1 },
+    footprint: residentialData.footprint,
     cost: BUILD_COST[Tool.Residential],
-    maintenance: 1,
+    maintenance: residentialData.maintenance,
     kind: BuildingKind.Residential,
     requiresPower: true,
-    powerUse: 1.5,
-    waterUse: 1,
-    populationCapacity: 14
+    powerUse: residentialData.powerUse,
+    waterUse: residentialData.waterUse,
+    populationCapacity: residentialData.populationCapacity
   },
   [BuildingKind.Commercial]: {
     id: 'zone-commercial',
     name: 'Commercial Lot',
     category: LedgerGroup.Zone,
-    footprint: { width: 1, height: 1 },
+    footprint: commercialData.footprint,
     cost: BUILD_COST[Tool.Commercial],
-    maintenance: 1.2,
+    maintenance: commercialData.maintenance,
     kind: BuildingKind.Commercial,
     requiresPower: true,
-    powerUse: 2.5,
-    waterUse: 1.5,
-    jobsCapacity: 8
+    powerUse: commercialData.powerUse,
+    waterUse: commercialData.waterUse,
+    jobsCapacity: commercialData.jobsCapacity
   },
   [BuildingKind.Industrial]: {
     id: 'zone-industrial',
     name: 'Industrial Lot',
     category: LedgerGroup.Zone,
-    footprint: { width: 1, height: 1 },
+    footprint: industrialData.footprint,
     cost: BUILD_COST[Tool.Industrial],
-    maintenance: 1.4,
+    maintenance: industrialData.maintenance,
     kind: BuildingKind.Industrial,
     requiresPower: true,
-    powerUse: 3,
-    waterUse: 2,
-    jobsCapacity: 12
+    powerUse: industrialData.powerUse,
+    waterUse: industrialData.waterUse,
+    jobsCapacity: industrialData.jobsCapacity
   }
 };
 
