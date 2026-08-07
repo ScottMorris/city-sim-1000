@@ -269,7 +269,7 @@ describe('WasmSimBridge undo/redo', () => {
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
       buildingsJson: JSON.stringify([{
         id: 7, kind: buildingKindToU8(BuildingKind.ElementarySchool), originX: 0, originY: 0,
-        status: 0, health: 100,
+        status: 0,
       }]),
       powerComponentsJson: '[]', waterComponentsJson: '[]',
       educationJson: JSON.stringify(educationStats),
@@ -317,22 +317,21 @@ describe('WasmSimBridge undo/redo', () => {
     expect(state.labour).toEqual(labour);
   });
 
-  // `#200`'s wire-adoption follow-up: building status/health used to be
+  // `#200`'s wire-adoption follow-up: building status used to be
   // reconstructed client-side from tile power/water flags. `buildings_json`
-  // now carries the engine's own real status/health directly.
+  // now carries the engine's own real status directly.
   it.each([
     [0, 'active'],
     [1, 'inactive_no_power'],
     [2, 'inactive_no_water'],
     [3, 'inactive_no_source'],
-    [4, 'inactive_damaged'],
   ] as const)('decodes WireBuilding.status byte %i as %s, verbatim off the wire', (statusByte, expected) => {
     const { worker, bridge, state } = makeBridge();
     worker.emit({
       type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
       buildingsJson: JSON.stringify([{
         id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0,
-        status: statusByte, health: 100,
+        status: statusByte,
       }]),
       powerComponentsJson: '[]', waterComponentsJson: '[]',
     });
@@ -340,22 +339,6 @@ describe('WasmSimBridge undo/redo', () => {
     bridge.step();
 
     expect(state.buildings[0].state.status).toBe(expected);
-  });
-
-  it('decodes WireBuilding.health verbatim', () => {
-    const { worker, bridge, state } = makeBridge();
-    worker.emit({
-      type: 'step_result', bytes: emptyTileBuffer(), stats: zeroStats(), mutationSeq: 0, alerts: [],
-      buildingsJson: JSON.stringify([{
-        id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0,
-        status: 0, health: 37,
-      }]),
-      powerComponentsJson: '[]', waterComponentsJson: '[]',
-    });
-
-    bridge.step();
-
-    expect(state.buildings[0].state.health).toBe(37);
   });
 
   it('discards a pending alert when an undo lands before step() flushes it', () => {

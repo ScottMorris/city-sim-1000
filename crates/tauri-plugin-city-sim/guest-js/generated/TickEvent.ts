@@ -109,7 +109,7 @@ tiles: Array<number>,
  * path, sent as real values rather than a JSON string since Tauri IPC
  * serialises the whole `TickEvent` natively. Used to resolve a
  * `building_id` to its template kind (the HUD inspector's building
- * name) and, via each entry's `status`/`health` (`#200`'s wire-adoption
+ * name) and, via each entry's `status` (`#200`'s wire-adoption
  * follow-up), the building's real runtime status — no longer
  * reconstructed client-side from tile power/water flags.
  */

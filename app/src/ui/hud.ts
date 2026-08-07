@@ -218,9 +218,7 @@ export function createHud(elements: HudElements) {
                     ? 'No Water'
                     : buildingStatus === BuildingStatus.InactiveNoSource
                       ? 'No Water Source — build next to water'
-                      : buildingStatus === BuildingStatus.InactiveDamaged
-                        ? 'Damaged'
-                        : '';
+                      : '';
             const powerUse =
               template && template.powerUse !== undefined ? `${template.powerUse.toFixed(1)} MW` : null;
             const waterUse =

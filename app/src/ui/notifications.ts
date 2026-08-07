@@ -1,6 +1,14 @@
-import { dismissToast, showToast, type ToastOptions } from './dialogs';
+// notifications.ts — a small publish/resolve facade over dialogs.ts's toast system.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
 
-export type NotificationSeverity = 'info' | 'warning' | 'success';
+import { dismissToast, showToast, type ToastOptions, type ToastSeverity } from './dialogs';
+
+/** Alias, not a second declaration — `ToastSeverity` (`dialogs.ts`) is the
+ *  one definition; this name stays for callers that think in terms of a
+ *  "notification" rather than a "toast". */
+export type NotificationSeverity = ToastSeverity;
 
 export interface Notification {
   id?: string;

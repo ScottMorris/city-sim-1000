@@ -311,7 +311,7 @@ Bulldoze
 * Hydro: must border ≥2 water tiles
 * Pump: must border ≥1 water tile
 * Water Tower: 2×2 footprint that boosts city water reserves, requires power and a network connection
-* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing. Enforced engine-side too (`#198`): `Tool::WaterPipe` refuses with "Water pipes must be laid from the Underground view." unless the command's `stratum` is `Underground`, so a client with no view state (`mcpBridge.ts`/the MCP server) can't lay a pipe from the surface either.
+* Water Pipe: Connects water network underground. Requires Underground View — selecting the tool switches the client's View there automatically, and a click is refused with a hint if the player manually toggles away before placing. Enforced engine-side too, as one case of the general rule every tool now follows: each `Tool`'s required `ViewStratum` is derived from the occupant it places (`commands::required_stratum`, `Occupant::Pipe` is `Underground`), and `apply_tool` refuses a mismatched stratum outright with "This tool needs the Underground view." — no `Tool::WaterPipe`-specific check left — so a client with no view state (`mcpBridge.ts`/the MCP server) can't lay a pipe from the surface either.
 * Power lines: graph-based connectivity
 
 #### Sound Effects

@@ -25,6 +25,7 @@
 //! copy it into `app/src/game/protocol/wireParity.json` verbatim.
 
 use city_sim_core::buildings::BuildingStatus;
+use city_sim_core::commands::required_stratum;
 use city_sim_core::economy::DAYS_PER_MONTH;
 use city_sim_core::wilderness::WildernessTunables;
 use city_sim_protocol::building_kind::BuildingKind;
@@ -67,10 +68,23 @@ struct WildernessTuning {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+struct ToolStratum {
+    name: String,
+    #[serde(rename = "requiredStratum")]
+    required_stratum: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct WireParityFixture {
     tools: Vec<NameU8>,
     #[serde(rename = "viewStrata")]
     view_strata: Vec<NameU8>,
+    /// `Tool → ViewStratum | null` ("Any"), from `commands::required_stratum`
+    /// — the engine-owned stratum rule (Option B). `null` for a tool with no
+    /// occupant to derive a requirement from (`Inspect`, the terrain
+    /// brushes, `Bulldoze`).
+    #[serde(rename = "toolRequiredStrata")]
+    tool_required_strata: Vec<ToolStratum>,
     #[serde(rename = "buildingStatuses")]
     building_statuses: Vec<NameU8>,
     #[serde(rename = "buildingKinds")]
@@ -103,6 +117,13 @@ fn expected_fixture() -> WireParityFixture {
             .map(|&s| NameU8 {
                 name: format!("{s:?}"),
                 u8: s as u8,
+            })
+            .collect(),
+        tool_required_strata: Tool::ALL
+            .iter()
+            .map(|&t| ToolStratum {
+                name: format!("{t:?}"),
+                required_stratum: required_stratum(t).map(|s| format!("{s:?}")),
             })
             .collect(),
         building_statuses: BuildingStatus::ALL

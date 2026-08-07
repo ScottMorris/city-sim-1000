@@ -27,8 +27,8 @@
 use std::collections::BTreeMap;
 
 use city_sim_core::buildings::{
-    get_building_template, COAL_PLANT_MAINT, HYDRO_PLANT_MAINT, SOLAR_FARM_MAINT,
-    WIND_TURBINE_MAINT,
+    get_building_template, COAL_PLANT_MAINT, COAL_PLANT_MW, HYDRO_PLANT_MAINT, HYDRO_PLANT_MW,
+    SOLAR_FARM_MAINT, SOLAR_FARM_MW, WIND_TURBINE_MAINT, WIND_TURBINE_MW,
 };
 use city_sim_core::commands::tool_cost;
 use city_sim_core::state::ServiceKind;
@@ -66,6 +66,13 @@ struct BuildingTemplateData {
     jobs_capacity: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     service: Option<ServiceSpec>,
+    /// A power plant's generation, in MW — `Some` only for the four plant
+    /// kinds. The engine consts (`HYDRO_PLANT_MW` &c., `buildings.rs`'s
+    /// "Power plant output/maintenance constants" section) are the source;
+    /// `constants.ts`'s `POWER_PLANT_CONFIGS.outputMw` reads this instead of
+    /// hand-duplicating the four literals.
+    #[serde(rename = "outputMw", skip_serializing_if = "Option::is_none")]
+    output_mw: Option<u32>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
@@ -101,6 +108,18 @@ fn is_power_plant(kind: BuildingKind) -> bool {
     )
 }
 
+/// Mirrors `commands.rs`'s `apply_tool` call sites, which pass these same
+/// named constants as `place_footprint_building`'s `power_output_mw`.
+fn power_plant_output_mw(kind: BuildingKind) -> u32 {
+    match kind {
+        BuildingKind::HydroPlant => HYDRO_PLANT_MW,
+        BuildingKind::CoalPlant => COAL_PLANT_MW,
+        BuildingKind::WindTurbine => WIND_TURBINE_MW,
+        BuildingKind::SolarFarm => SOLAR_FARM_MW,
+        other => unreachable!("{other:?} is not a power plant kind"),
+    }
+}
+
 fn expected_fixture() -> TemplateDataFixture {
     let mut buildings = BTreeMap::new();
     for &kind in BuildingKind::ALL {
@@ -117,6 +136,7 @@ fn expected_fixture() -> TemplateDataFixture {
                 capacity: tmpl.service_capacity,
             }),
         };
+        let output_mw = is_power_plant(kind).then(|| power_plant_output_mw(kind));
         buildings.insert(
             format!("{kind:?}"),
             BuildingTemplateData {
@@ -131,6 +151,7 @@ fn expected_fixture() -> TemplateDataFixture {
                 population_capacity: tmpl.population_capacity,
                 jobs_capacity: tmpl.jobs_capacity,
                 service,
+                output_mw,
             },
         );
     }

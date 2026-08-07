@@ -353,9 +353,9 @@ export class TauriSimBridge implements SimBridge {
     // Buildings — rebuild the display mirror from the wire list, mirroring
     // `applyTileBuffer` in `wasmSimBridge.ts`. Tile coverage came from the
     // wire buffer above; `event.buildings` resolves each `building_id` to
-    // its template kind (the HUD inspector's name) and, via `status`/
-    // `health` (`#200`'s wire-adoption follow-up), its real runtime status —
-    // no client-side power/water-flag reconstruction needed. Shared with
+    // its template kind (the HUD inspector's name) and, via `status`
+    // (`#200`'s wire-adoption follow-up), its real runtime status — no
+    // client-side power/water-flag reconstruction needed. Shared with
     // `wasmSimBridge.ts` via `buildBuildingMirror` so the two bridges can't
     // independently drift on unrecognised-byte handling.
     s.buildings = buildBuildingMirror(event.buildings, event.educationSeatsUsed);

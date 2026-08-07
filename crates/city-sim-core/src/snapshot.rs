@@ -27,6 +27,14 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// penalty toggle moved from the TS-only `GameSettings.pendingPenaltyEnabled`
 /// into engine-owned, simulated state (`demand.rs` reads it instead of a
 /// hardcoded `true`), the same move v7 made for the lighting bylaw.
+/// v9: `BuildingInstance` lost `health: u8` and `BuildingStatus` lost
+/// `InactiveDamaged` — the damage/health layer was a `#[serde]`d stub no
+/// tool, tick, or command ever wrote a non-default value into (see the issue
+/// filed alongside this PR for what a real damage feature needs). Removed
+/// rather than left dead, the same call v7/v8 made for policy fields moving
+/// the other direction — a struct field with a value nothing ever changes is
+/// exactly the kind of doc-vs-code drift `docs/features/docs-truth-sweep.md`
+/// exists to catch, and postcard has no way to skip a field it once wrote.
 ///
 /// **v4 and v5 are both refused outright now — a deliberate pre-release
 /// compatibility break, not an oversight.** A real `.citysim` download or
@@ -43,7 +51,7 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// legacy JSON save path (`import.rs`'s `from_tile_buffer`, driven by
 /// `persistence.ts`'s `transcodeLegacySave`) is untouched — it was never a
 /// *snapshot* — so an old save is still recoverable through that door.
-const VERSION: u32 = 8;
+const VERSION: u32 = 9;
 
 /// Serialise `state` to a compact postcard byte vector prefixed by a 8-byte
 /// header: magic `CSIM` (4 bytes) + version u32 (4 bytes, little-endian).
@@ -255,7 +263,6 @@ mod tests {
             kind: BuildingKind::Residential,
             origin: (0, 0),
             status: BuildingStatus::Active,
-            health: 80,
             trouble_ticks: 2.5,
             maintenance_per_day: 0.0,
         });
@@ -277,7 +284,6 @@ mod tests {
 
         assert_eq!(restored.buildings.len(), 1);
         assert_eq!(restored.buildings[0].id, 1);
-        assert_eq!(restored.buildings[0].health, 80);
         assert_eq!(restored.buildings[0].trouble_ticks, 2.5);
         assert_eq!(restored.buildings[0].status, BuildingStatus::Active);
         assert_eq!(restored.budget_history.len(), 2);

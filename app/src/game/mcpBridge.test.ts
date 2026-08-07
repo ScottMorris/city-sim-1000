@@ -4,10 +4,18 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from 'vitest';
-import { stratumParam, createCommandResultQueue, summariseApplyResults, terrainLabel, tileMatchesKind } from './mcpBridge';
+import {
+  stratumParam,
+  createCommandResultQueue,
+  summariseApplyResults,
+  terrainLabel,
+  tileMatchesKind,
+  summariseBuildingForMcp
+} from './mcpBridge';
 import { Tool } from './toolTypes';
 import { createInitialState, getTile, setTile, TileKind } from './gameState';
 import { Occupant, Terrain, setTileOccupant } from './protocol/occupants';
+import { BuildingStatus, createBuildingState, type BuildingInstance } from './buildings/state';
 
 describe('terrainLabel', () => {
   it('spells Terrain.Land as "land" and Terrain.Water as "water"', () => {
@@ -37,6 +45,18 @@ describe('stratumParam', () => {
 
   it('still honours an explicit "surface" override on water_pipe (the engine will refuse it)', () => {
     expect(stratumParam({ tool: Tool.WaterPipe, stratum: 'surface' })).toBe('surface');
+  });
+
+  it('defaults every other tool to its own required stratum, generalizing the water_pipe case', () => {
+    // Road requires Surface (`requiredStratumForTool`) — same default a
+    // real UI click would already be sitting on, spelled out explicitly so
+    // a script gets it without passing `stratum`.
+    expect(stratumParam({ tool: Tool.Road })).toBe('surface');
+  });
+
+  it('defaults an "Any" tool (no required stratum) to surface', () => {
+    expect(stratumParam({ tool: Tool.Bulldoze })).toBe('surface');
+    expect(stratumParam({ tool: Tool.TerraformRaise })).toBe('surface');
   });
 });
 
@@ -163,5 +183,53 @@ describe('tileMatchesKind', () => {
     tile.terrain = Terrain.Water;
     expect(tileMatchesKind(state, tile, TileKind.Water)).toBe(true);
     expect(tileMatchesKind(state, tile, TileKind.Land)).toBe(false);
+  });
+});
+
+describe('summariseBuildingForMcp', () => {
+  function building(overrides: Partial<BuildingInstance> = {}): BuildingInstance {
+    return {
+      id: 1,
+      templateId: 'residential',
+      origin: { x: 2, y: 3 },
+      state: createBuildingState(),
+      ...overrides
+    };
+  }
+
+  it('carries id, templateId (kind string), and origin verbatim', () => {
+    const state = createInitialState(4, 4);
+    const b = building({ id: 9, templateId: 'coal' });
+    const summary = summariseBuildingForMcp(state, b);
+    expect(summary.id).toBe(9);
+    expect(summary.templateId).toBe('coal');
+    expect(summary.x).toBe(2);
+    expect(summary.y).toBe(3);
+  });
+
+  it('carries the building\'s own status label, not a re-derived one', () => {
+    const state = createInitialState(4, 4);
+    const b = building();
+    b.state.status = BuildingStatus.InactiveNoPower;
+    expect(summariseBuildingForMcp(state, b).status).toBe(BuildingStatus.InactiveNoPower);
+  });
+
+  it('abandoned is joined in off the origin tile\'s flag, true when set', () => {
+    const state = createInitialState(4, 4);
+    const b = building({ origin: { x: 1, y: 1 } });
+    getTile(state, 1, 1)!.abandoned = true;
+    expect(summariseBuildingForMcp(state, b).abandoned).toBe(true);
+  });
+
+  it('abandoned is false when the origin tile\'s flag is unset or absent', () => {
+    const state = createInitialState(4, 4);
+    const b = building({ origin: { x: 1, y: 1 } });
+    expect(summariseBuildingForMcp(state, b).abandoned).toBe(false);
+  });
+
+  it('abandoned defaults to false for a building whose origin is out of bounds', () => {
+    const state = createInitialState(4, 4);
+    const b = building({ origin: { x: 99, y: 99 } });
+    expect(summariseBuildingForMcp(state, b).abandoned).toBe(false);
   });
 });

@@ -25,7 +25,6 @@ export interface WireBuildingLike {
   originX: number;
   originY: number;
   status: number;
-  health: number;
 }
 
 /** Structural subset of the generated `WireEducationSeatsUsed` shared by both bridges' wire types. */
@@ -66,7 +65,6 @@ export function buildBuildingMirror(
     const template = getBuildingTemplate(kind);
     const bstate: BuildingState = createBuildingState();
     bstate.status = status;
-    bstate.health = b.health;
 
     // `#228` — seats consumed, from the wire; only schools currently have an
     // entry (Rust's `ServiceKind` has no other service ported yet).

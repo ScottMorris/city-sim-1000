@@ -138,7 +138,6 @@ impl From<&BuildingInstance> for WireBuilding {
             origin_x: b.origin.0,
             origin_y: b.origin.1,
             status: b.status as u8,
-            health: b.health,
         }
     }
 }
@@ -266,10 +265,9 @@ mod tests {
     use city_sim_protocol::building_kind::BuildingKind;
 
     #[test]
-    fn wire_building_carries_status_and_health_verbatim() {
+    fn wire_building_carries_status_verbatim() {
         let mut b = BuildingInstance::new(9, BuildingKind::WaterPump, (3, 4));
         b.status = BuildingStatus::InactiveNoSource;
-        b.health = 42;
 
         let wire = WireBuilding::from(&b);
 
@@ -282,7 +280,6 @@ mod tests {
             wire.status, 3,
             "InactiveNoSource must be discriminant 3 — the TS decode table is order-sensitive"
         );
-        assert_eq!(wire.health, 42);
     }
 
     #[test]

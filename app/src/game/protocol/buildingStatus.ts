@@ -21,8 +21,7 @@ export const BUILDING_STATUS_TABLE: readonly BuildingStatus[] = [
   BuildingStatus.Active,
   BuildingStatus.InactiveNoPower,
   BuildingStatus.InactiveNoWater,
-  BuildingStatus.InactiveNoSource,
-  BuildingStatus.InactiveDamaged
+  BuildingStatus.InactiveNoSource
 ];
 
 /** `undefined` on an unrecognised byte (should never happen against a matching engine build) — callers decide the fallback explicitly, and are expected to warn. */

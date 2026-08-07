@@ -648,7 +648,7 @@ export class WasmSimBridge implements SimBridge {
     // authoritative; TS state.buildings is a display mirror only. No more
     // scanning tiles for first-occurrence origins: `buildings_json` already
     // carries id, kind, origin, and (`#200`'s wire-adoption follow-up)
-    // status/health — no client-side power/water-flag reconstruction needed.
+    // status — no client-side power/water-flag reconstruction needed.
     // Shared with `tauriSimBridge.ts` via `buildBuildingMirror` so the two
     // bridges can't independently drift on unrecognised-byte handling.
     this.state.buildings = buildBuildingMirror(wireBuildings, seatsUsed);

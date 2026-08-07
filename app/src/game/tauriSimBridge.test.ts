@@ -42,7 +42,6 @@ interface WireBuilding {
   originX: number;
   originY: number;
   status: number;
-  health: number;
 }
 
 interface WireUtilityComponent {
@@ -201,9 +200,9 @@ function baseTickEvent(overrides: Partial<TickEvent> = {}): TickEvent {
   };
 }
 
-/** A `WireBuilding` with `status`/`health` defaulted to Active/100 — override just what a test cares about. */
+/** A `WireBuilding` with `status` defaulted to Active — override just what a test cares about. */
 function wireBuilding(overrides: Partial<WireBuilding> & Pick<WireBuilding, 'id' | 'kind' | 'originX' | 'originY'>): WireBuilding {
-  return { status: 0, health: 100, ...overrides };
+  return { status: 0, ...overrides };
 }
 
 function makeFakePlugin(): TauriPluginBindings {
@@ -499,17 +498,16 @@ describe('TauriSimBridge onTick decode', () => {
     expect(s2.buildings).toHaveLength(0);
   });
 
-  // `#200`'s wire-adoption follow-up: building status/health used to be
+  // `#200`'s wire-adoption follow-up: building status used to be
   // reconstructed client-side from tile power/water flags (a ~40-line
   // derivation, tested above in prior revisions of this file). The engine
   // now computes the real status and sends it directly as `WireBuilding
-  // .status`/`.health` — this bridge's only remaining job is decoding the u8.
+  // .status` — this bridge's only remaining job is decoding the u8.
   it.each([
     [0, 'active'],
     [1, 'inactive_no_power'],
     [2, 'inactive_no_water'],
     [3, 'inactive_no_source'],
-    [4, 'inactive_damaged'],
   ] as const)('decodes WireBuilding.status byte %i as %s, verbatim off the wire', async (statusByte, expected) => {
     const { bridge, emit } = await makeBridge();
     const house = wireBuilding({
@@ -517,15 +515,6 @@ describe('TauriSimBridge onTick decode', () => {
     });
     emit(baseTickEvent({ buildings: [house] }));
     expect(bridge.getState().buildings[0].state.status).toBe(expected);
-  });
-
-  it('decodes WireBuilding.health verbatim', async () => {
-    const { bridge, emit } = await makeBridge();
-    const house = wireBuilding({
-      id: 1, kind: buildingKindToU8(BuildingKind.Residential), originX: 0, originY: 0, health: 37,
-    });
-    emit(baseTickEvent({ buildings: [house] }));
-    expect(bridge.getState().buildings[0].state.health).toBe(37);
   });
 
   it('emits HistoryChanged only on undo/redo flag transitions', async () => {

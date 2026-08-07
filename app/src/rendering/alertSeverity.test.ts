@@ -26,10 +26,6 @@ describe('computeAlertSeverity', () => {
     expect(computeAlertSeverity(tile(), BuildingStatus.InactiveNoSource, false)).toBe(2);
   });
 
-  it('InactiveDamaged is only a warning (1)', () => {
-    expect(computeAlertSeverity(tile(), BuildingStatus.InactiveDamaged, false)).toBe(1);
-  });
-
   it('an unpowered zone is critical (2), independent of building status', () => {
     expect(computeAlertSeverity(tile({ powered: false }), undefined, true)).toBe(2);
   });
@@ -47,9 +43,9 @@ describe('computeAlertSeverity', () => {
   });
 
   it('takes the worst of several simultaneous issues, not the last one checked', () => {
-    // InactiveDamaged (1) would be checked after the unpowered-zone case (2)
-    // in source order — the result must still be 2, proving this maxes
+    // The unhappy-zone warning (1) is checked after `abandoned`'s critical
+    // (2) in source order — the result must still be 2, proving this maxes
     // rather than overwrites.
-    expect(computeAlertSeverity(tile({ powered: false }), BuildingStatus.InactiveDamaged, true)).toBe(2);
+    expect(computeAlertSeverity(tile({ abandoned: true, happiness: 0.1 }), undefined, true)).toBe(2);
   });
 });

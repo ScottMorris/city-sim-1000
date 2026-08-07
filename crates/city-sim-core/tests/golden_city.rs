@@ -518,13 +518,12 @@ fn dump(script: &Script, r: &Replay) -> String {
     for b in buildings {
         writeln!(
             out,
-            "building {:<4} {:<17} at ({:>2},{:>2}) {:<16} health={:<3} trouble={}",
+            "building {:<4} {:<17} at ({:>2},{:>2}) {:<16} trouble={}",
             b.id,
             format!("{:?}", b.kind),
             b.origin.0,
             b.origin.1,
             format!("{:?}", b.status),
-            b.health,
             f(b.trouble_ticks)
         )
         .unwrap();
