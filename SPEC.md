@@ -374,7 +374,7 @@ Expenses:
 ### IndexedDB
 
 * Database `city-sim-1000`, store `saves`, one record per slot: `manual` (explicit Save) and `autosave` (periodic, see below)
-* Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard) + client JSON (settings/bylaws)
+* Records hold a binary **CSAV** container: magic + version + meta JSON + engine snapshot (CSIM postcard, includes `Policies` — budget, wilderness, and the lighting bylaw) + client JSON (settings)
 * Legacy LocalStorage key `city-sim-1000-save` (plain JSON) is imported once and cleared after a successful CSAV write
 * One deliberate exception: globally-scoped sound effect customizations (§6.4) live in `localStorage`, not IndexedDB — small, cross-save, non-critical if lost
 

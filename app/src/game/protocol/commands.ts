@@ -11,8 +11,8 @@
  * Not a mirror of any Rust type: `crates/city-sim-protocol`'s own
  * `SimCommand` drifted from what both bridges actually send (its `ApplyTool`
  * never gained `strokeId`) and was deleted as dead code. `BudgetPolicy`,
- * `WildernessPolicy`, `Policies`, and `CommandResult` below are re-exports of
- * the `ts-rs`-generated mirrors of the same names in
+ * `WildernessPolicy`, `LightingPolicy`, `Policies`, and `CommandResult` below
+ * are re-exports of the `ts-rs`-generated mirrors of the same names in
  * `crates/city-sim-protocol/src/commands.rs` (`./generated/`) — see
  * `crates/city-sim-protocol/tests/export_bindings.rs`. Hand-mirrored copies
  * of these shapes drifted three times in this repo's history before codegen
@@ -24,11 +24,13 @@ import type { ViewStratum } from '../gameState';
 
 export type { BudgetPolicy } from './generated/BudgetPolicy';
 export type { WildernessPolicy } from './generated/WildernessPolicy';
+export type { LightingPolicy } from './generated/LightingPolicy';
 export type { Policies } from './generated/Policies';
 export type { CommandResult } from './generated/CommandResult';
 
 import type { BudgetPolicy } from './generated/BudgetPolicy';
 import type { WildernessPolicy } from './generated/WildernessPolicy';
+import type { LightingPolicy } from './generated/LightingPolicy';
 import type { Policies } from './generated/Policies';
 
 /**
@@ -82,10 +84,19 @@ export function createDefaultWildernessPolicy(): WildernessPolicy {
   return { natureReserve: false, greenIndustry: false };
 }
 
+/**
+ * Neutral lighting bylaw — mirrors `LightingPolicy::default()` (Rust). Kept
+ * as a bare literal here (rather than importing `bylaws.ts`'s display table)
+ * the same way `createDefaultWildernessPolicy` doesn't reach into a domain
+ * file for its defaults.
+ */
+export const DEFAULT_LIGHTING_POLICY: LightingPolicy = 'mixed';
+
 export function createDefaultPolicies(): Policies {
   return {
     budget: createDefaultBudgetPolicy(),
-    wilderness: createDefaultWildernessPolicy()
+    wilderness: createDefaultWildernessPolicy(),
+    lighting: DEFAULT_LIGHTING_POLICY
   };
 }
 
@@ -93,7 +104,8 @@ export function createDefaultPolicies(): Policies {
 export function clampPolicies(policies: Policies): Policies {
   return {
     budget: clampBudgetPolicy(policies.budget),
-    wilderness: policies.wilderness
+    wilderness: policies.wilderness,
+    lighting: policies.lighting
   };
 }
 

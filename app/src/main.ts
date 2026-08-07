@@ -62,7 +62,6 @@ import { loadGlobalSfxOverrides, saveGlobalSfxOverrides } from './game/globalSfx
 import { initNewsTicker } from './ui/newsTicker';
 import type { RadioWidget } from './ui/radio';
 import { initLoadingScreen } from './ui/loadingScreen';
-import { DEFAULT_BYLAWS } from './game/bylaws';
 import { buildCitySnapshot } from './game/narrative/snapshot';
 import { NarrativeManager } from './game/narrative/narrativeManager';
 import { getCalendarPosition } from './game/time';
@@ -536,6 +535,12 @@ function performRedo(): void {
 
 /** Restore a decoded CSAV container into the engine and display mirror. */
 async function loadCityContainer(container: SaveContainer): Promise<void> {
+  // No client-JSON lighting migration here: any CSAV old enough to carry
+  // `bylaws.lighting` in its client slice also carries a pre-v7 CSIM engine
+  // snapshot, which the version-exact `loadSnapshot` above refuses outright
+  // (the deliberate pre-release compatibility break) — so such a save never
+  // reaches this line. The pre-CSAV legacy JSON path keeps its migration in
+  // `persistence.ts`'s `transcodeLegacySave`, which is genuinely reachable.
   await bridge.loadSnapshot(container.engineSnapshot);
   applyClientState(state, container.client);
   afterCityLoaded();
@@ -1216,8 +1221,8 @@ function gameLoop(renderer: MapRenderer, hud: ReturnType<typeof createHud>) {
   const bylawsModal = initBylawsModal({
     getState: () => state,
     onSelectLighting: (lighting) => {
-      state.bylaws = state.bylaws ?? { ...DEFAULT_BYLAWS };
-      state.bylaws.lighting = lighting;
+      state.policies = { ...state.policies, lighting };
+      bridge.send(setPoliciesCmd(state.policies));
     },
     onWildernessPolicyChange: (policy) => {
       state.policies = { ...state.policies, wilderness: policy };

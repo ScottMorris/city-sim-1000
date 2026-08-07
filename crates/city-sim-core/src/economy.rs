@@ -30,8 +30,9 @@ pub(crate) const MAINT_RAIL: f32 = 0.2;
 pub(crate) const MAINT_POWER_LINE: f32 = 0.08;
 pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 
-// Lighting bylaw scaling is not yet ported (P3-9+).  Default bylaw is neutral
-// (multiplier = 1.0), so civic/zone maintenance is unscaled here.
+// Lighting bylaw maintenance scaling lives in `Policies::lighting`
+// (`LightingPolicy::maintenance_multiplier`) — applied below, alongside the
+// department funding multipliers.
 
 // ---------------------------------------------------------------------------
 // compute_daily_budget — pure read of GameState → BudgetStats
@@ -46,8 +47,10 @@ pub(crate) const MAINT_WATER_PIPE: f32 = 0.04;
 /// - Building maintenance: summed from `state.buildings` templates.
 /// - Revenue: base + population + commercial zones + industrial zones.
 ///
-/// Lighting-bylaw scaling of civic/zone maintenance is stubbed to 1.0 until
-/// bylaws are ported (P3-9+).
+/// The lighting bylaw (`state.policies.lighting`) scales civic + zone
+/// building maintenance — never transport/pipes/power-line upkeep or power
+/// plant maintenance, matching the scope the TS `LIGHTING_POLICIES` display
+/// table always claimed.
 pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     // Per-tile upkeep, accumulated per `BudgetStats` line and before funding.
     let mut upkeep = [0.0_f32; LEDGER_LINE_COUNT];
@@ -190,6 +193,20 @@ pub fn compute_daily_budget(state: &GameState) -> BudgetStats {
     maint_civic_pump *= fund_civic;
     maint_civic_tower *= fund_civic;
     maint_civic_school *= fund_civic;
+
+    // Lighting bylaw — scales civic + zone maintenance on top of funding.
+    // `LightingPolicy::Mixed` (the default) multiplies by 1.0, so an unset
+    // bylaw reproduces the pre-bylaw numbers exactly.
+    let light_maint = state.policies.lighting.maintenance_multiplier();
+    maint_civic *= light_maint;
+    maint_civic_park *= light_maint;
+    maint_civic_pump *= light_maint;
+    maint_civic_tower *= light_maint;
+    maint_civic_school *= light_maint;
+    maint_zones *= light_maint;
+    maint_zones_res *= light_maint;
+    maint_zones_com *= light_maint;
+    maint_zones_ind *= light_maint;
 
     // Revenue
     let revenue_base = BASE_INCOME;
@@ -535,6 +552,85 @@ mod tests {
         assert!((b.maint_civic - 0.05).abs() < 0.001, "park maintenance");
         assert!((b.maint_power - 150.0).abs() < 0.001, "hydro maintenance");
         assert!((b.expenses_buildings - (1.0 + 0.05 + 150.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn lighting_bylaw_scales_civic_and_zone_maintenance_only() {
+        use city_sim_protocol::commands::LightingPolicy;
+
+        // One building of every civic + zone sub-type, so every by-type
+        // breakdown field (`maint_civic_park`/`_pump`/`_tower`/`_school`,
+        // `maint_zones_res`/`_com`/`_ind`) starts non-zero and mutation
+        // testing can catch a dropped scaling line on any single one of
+        // them — not just the `maint_civic`/`maint_zones` aggregates.
+        let mut s = gs(4, 4);
+        let active = |id: u32, kind: BuildingKind, origin: (u32, u32)| {
+            let mut b = BuildingInstance::new(id, kind, origin);
+            b.status = BuildingStatus::Active;
+            b
+        };
+        s.buildings
+            .push(active(1, BuildingKind::Residential, (0, 0)));
+        s.buildings
+            .push(active(2, BuildingKind::Commercial, (1, 0)));
+        s.buildings
+            .push(active(3, BuildingKind::Industrial, (2, 0)));
+        s.buildings.push(active(4, BuildingKind::Park, (3, 0)));
+        s.buildings.push(active(5, BuildingKind::WaterPump, (0, 1)));
+        s.buildings
+            .push(active(6, BuildingKind::WaterTower, (1, 1)));
+        s.buildings
+            .push(active(7, BuildingKind::ElementarySchool, (2, 1)));
+        s.buildings
+            .push(active(8, BuildingKind::HydroPlant, (3, 1)));
+
+        let neutral = compute_daily_budget(&s);
+        s.policies.lighting = LightingPolicy::Efficient;
+        let efficient = compute_daily_budget(&s);
+
+        let scaled = |field: fn(&BudgetStats) -> f32, name: &str| {
+            let base = field(&neutral);
+            assert!(
+                base > 0.0,
+                "{name} must be non-zero in the fixture to prove scaling"
+            );
+            assert!(
+                (field(&efficient) - base * 0.9).abs() < 0.0001,
+                "{name} should scale by the 0.9 efficient multiplier: {} vs expected {}",
+                field(&efficient),
+                base * 0.9
+            );
+        };
+        scaled(|b| b.maint_civic, "maint_civic");
+        scaled(|b| b.maint_civic_park, "maint_civic_park");
+        scaled(|b| b.maint_civic_pump, "maint_civic_pump");
+        scaled(|b| b.maint_civic_tower, "maint_civic_tower");
+        scaled(|b| b.maint_civic_school, "maint_civic_school");
+        scaled(|b| b.maint_zones, "maint_zones");
+        scaled(|b| b.maint_zones_res, "maint_zones_res");
+        scaled(|b| b.maint_zones_com, "maint_zones_com");
+        scaled(|b| b.maint_zones_ind, "maint_zones_ind");
+
+        assert_eq!(
+            efficient.maint_power, neutral.maint_power,
+            "power plant maintenance is untouched by the lighting bylaw"
+        );
+    }
+
+    #[test]
+    fn default_lighting_policy_reproduces_neutral_maintenance() {
+        // The neutral bylaw (`LightingPolicy::default()`, already the field's
+        // zero value) must not move `compute_daily_budget`'s numbers at all —
+        // the exact "golden hash doesn't move" contract this feature promises.
+        let mut s = gs(4, 4);
+        let mut res = BuildingInstance::new(1, BuildingKind::Residential, (0, 0));
+        res.status = BuildingStatus::Active;
+        s.buildings.push(res);
+        let before = compute_daily_budget(&s);
+        s.policies.lighting = Default::default();
+        let after = compute_daily_budget(&s);
+        assert_eq!(before.maint_zones, after.maint_zones);
+        assert_eq!(before.maint_civic, after.maint_civic);
     }
 
     #[test]

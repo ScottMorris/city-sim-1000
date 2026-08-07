@@ -38,21 +38,23 @@ function transcode(overrides: Record<string, unknown> = {}) {
 const o = legacyTileBufferOffsets(N);
 
 describe('client passthrough', () => {
-  it('passes settings/bylaws through untouched — ensureSettingsShape/applyClientState do the back-fill', () => {
-    const result = transcode({ settings: { pendingPenaltyEnabled: false }, bylaws: { lighting: true } });
+  it('passes settings through untouched — ensureSettingsShape/applyClientState do the back-fill', () => {
+    const result = transcode({ settings: { pendingPenaltyEnabled: false } });
     expect(result.client).toEqual({
-      settings: { pendingPenaltyEnabled: false },
-      bylaws: { lighting: true }
+      settings: { pendingPenaltyEnabled: false }
     });
   });
 
-  it('carries absent settings/bylaws through as undefined', () => {
+  it('carries absent settings through as undefined', () => {
     const raw = rawSave();
     delete (raw as any).settings;
-    delete (raw as any).bylaws;
     const result = transcodeLegacySave(JSON.stringify(raw));
     expect(result.client.settings).toBeUndefined();
-    expect(result.client.bylaws).toBeUndefined();
+  });
+
+  it('no longer carries a bylaws field — the lighting bylaw is folded into policies instead', () => {
+    const result = transcode({ bylaws: { lighting: 'carbonArc' } });
+    expect(result.client).not.toHaveProperty('bylaws');
   });
 });
 
@@ -125,6 +127,31 @@ describe('policy fold and clamp', () => {
     });
     expect(result.policies.budget.taxResidential).toBe(20);
     expect(result.policies.budget.fundPower).toBe(100);
+  });
+
+  it('back-fills the neutral lighting policy when absent', () => {
+    const result = transcode();
+    expect(result.policies.lighting).toBe('mixed');
+    expect(result.engine.policies.lighting).toBe('mixed');
+  });
+
+  it('folds a legacy bylaws.lighting field into policies.lighting', () => {
+    const result = transcode({ bylaws: { lighting: 'carbonArc' } });
+    expect(result.policies.lighting).toBe('carbonArc');
+    expect(result.engine.policies.lighting).toBe('carbonArc');
+  });
+
+  it('ignores an illegal legacy bylaws.lighting value and falls back to neutral', () => {
+    const result = transcode({ bylaws: { lighting: 'neon' } });
+    expect(result.policies.lighting).toBe('mixed');
+  });
+
+  it('prefers a legacy policies.lighting field over bylaws.lighting when both are present', () => {
+    const result = transcode({
+      policies: { lighting: 'efficient' },
+      bylaws: { lighting: 'carbonArc' }
+    });
+    expect(result.policies.lighting).toBe('efficient');
   });
 });
 

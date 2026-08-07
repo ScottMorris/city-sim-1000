@@ -22,6 +22,7 @@ import wasmUrl from '../wasm/sim_wasm/sim_wasm_bg.wasm?url';
 // `ts-rs`-generated mirror of `city_sim_protocol::events::SimAlert` — see
 // `take_alerts_json()` and `crates/city-sim-protocol/tests/export_bindings.rs`.
 import type { SimAlert } from '../game/protocol/generated/SimAlert';
+import type { LightingPolicy } from '../game/protocol/generated/LightingPolicy';
 
 export interface SimStats {
   tick: number;
@@ -105,6 +106,7 @@ export interface WorkerPolicies {
     natureReserve: boolean;
     greenIndustry: boolean;
   };
+  lighting: LightingPolicy;
 }
 
 /** One-time legacy JSON-save import — see `city_sim_core::import`. */

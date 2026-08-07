@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 import { LOCAL_STORAGE_KEY } from './constants';
-import type { BylawState } from './bylaws';
+import { DEFAULT_LIGHTING_POLICY, extractLegacyLightingPolicy, isLightingPolicy } from './bylaws';
 import { GameState, TileKind, type GameSettings } from './gameState';
 import { SeededRng } from './rng';
 import {
@@ -173,7 +173,7 @@ export function decodeLegacySave(json: string): LegacySaveTranscode {
 /** Result of a one-shot legacy JSON save transcode — see `transcodeLegacySave`. */
 export interface LegacySaveTranscode {
   engine: LegacyEngineImport;
-  client: { settings?: Partial<GameSettings>; bylaws?: Partial<BylawState> };
+  client: { settings?: Partial<GameSettings> };
   policies: Policies;
 }
 
@@ -186,12 +186,15 @@ export interface LegacySaveTranscode {
  * tile is decoded into strata now, so the same tile is no longer decoded
  * into strata here only to be re-derived back into v4 bytes for the wire.
  *
- * `client`/`policies` carry the TS-owned save slices untouched —
- * `applyClientState` (`clientState.ts`) normalises the partial settings/
- * bylaws itself, and `policies` here is folded/clamped the same way the old
+ * `client`/`policies` carry the TS-owned/engine-owned save slices untouched —
+ * `applyClientState` (`clientState.ts`) normalises the partial settings
+ * itself, and `policies` here is folded/clamped the same way the old
  * pre-refactor import path did (also embedded in `engine.policies` for the
  * one-time import, and returned again at the top level for `setPoliciesCmd`
- * — mirrors `importLegacyCity`'s two separate uses of it).
+ * — mirrors `importLegacyCity`'s two separate uses of it). A legacy save's
+ * `bylaws.lighting` (present in a save from before the lighting bylaw moved
+ * into engine `Policies`) is folded into `policies.lighting` here too, via
+ * `extractLegacyLightingPolicy` — see `bylaws.ts`.
  */
 export function transcodeLegacySave(json: string): LegacySaveTranscode {
   const raw = JSON.parse(json) as Record<string, any>;
@@ -259,11 +262,15 @@ export function transcodeLegacySave(json: string): LegacySaveTranscode {
 
   const legacyBudget = raw.policies?.budget ?? raw.budgetPolicy;
   const legacyWilderness = raw.policies?.wilderness ?? raw.wildernessPolicy;
+  const legacyLighting = isLightingPolicy(raw.policies?.lighting)
+    ? raw.policies.lighting
+    : extractLegacyLightingPolicy(raw);
   const policies: Policies = {
     budget: legacyBudget
       ? clampBudgetPolicy({ ...createDefaultBudgetPolicy(), ...legacyBudget })
       : createDefaultBudgetPolicy(),
-    wilderness: { ...createDefaultWildernessPolicy(), ...(legacyWilderness ?? {}) }
+    wilderness: { ...createDefaultWildernessPolicy(), ...(legacyWilderness ?? {}) },
+    lighting: legacyLighting ?? DEFAULT_LIGHTING_POLICY
   };
 
   return {
@@ -280,7 +287,7 @@ export function transcodeLegacySave(json: string): LegacySaveTranscode {
       jobs: Math.floor(raw.jobs ?? 0),
       policies
     },
-    client: { settings: raw.settings, bylaws: raw.bylaws },
+    client: { settings: raw.settings },
     policies
   };
 }

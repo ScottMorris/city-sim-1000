@@ -277,7 +277,8 @@ describe('TauriSimBridge command routing', () => {
         taxResidential: 10, taxCommercial: 10, taxIndustrial: 10,
         fundTransport: 100, fundPower: 100, fundCivic: 100
       },
-      wilderness: { natureReserve: false, greenIndustry: false }
+      wilderness: { natureReserve: false, greenIndustry: false },
+      lighting: 'mixed' as const
     };
     bridge.send({ type: 'SetPolicies', policies });
     expect(plugin.setPolicies).toHaveBeenCalledWith(policies);

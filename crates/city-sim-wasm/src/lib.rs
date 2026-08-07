@@ -267,7 +267,8 @@ impl SimHost {
         self.sim.state.wilderness.breakdown.civic
     }
     /// Replace the full set of player policies from a camelCase JSON object
-    /// (see `Policies` in `city-sim-protocol` — `{ budget: {...}, wilderness: {...} }`).
+    /// (see `Policies` in `city-sim-protocol` — `{ budget: {...}, wilderness:
+    /// {...}, lighting: "mixed" | "efficient" | "carbonArc" }`).
     /// Missing families keep their serde defaults; out-of-range values are
     /// clamped. Applies from the next tick / wilderness recompute.
     pub fn set_policies(&mut self, json: &str) -> Result<(), JsError> {

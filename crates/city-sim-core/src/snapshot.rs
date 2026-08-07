@@ -20,6 +20,9 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// v6: `BuildingInstance::kind` moved from the frozen `TileKind` alphabet to
 /// the new `BuildingKind` (`crates/city-sim-protocol/src/building_kind.rs`)
 /// — a building is an entity occupying a tile, not a kind of tile.
+/// v7: `Policies` gained `lighting: LightingPolicy` — the lighting bylaw
+/// moved from the TS-only `ClientState.bylaws` into engine-owned, simulated
+/// state (see `city_sim_protocol::commands::LightingPolicy`).
 ///
 /// **v4 and v5 are both refused outright now — a deliberate pre-release
 /// compatibility break, not an oversight.** `origin/main` currently ships
@@ -37,7 +40,7 @@ const MAGIC: &[u8; 4] = b"CSIM";
 /// legacy JSON save path (`import.rs`'s `from_tile_buffer`, driven by
 /// `persistence.ts`'s `transcodeLegacySave`) is untouched — it was never a
 /// *snapshot* — so an old save is still recoverable through that door.
-const VERSION: u32 = 6;
+const VERSION: u32 = 7;
 
 /// Serialise `state` to a compact postcard byte vector prefixed by a 8-byte
 /// header: magic `CSIM` (4 bytes) + version u32 (4 bytes, little-endian).

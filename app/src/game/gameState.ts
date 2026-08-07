@@ -4,8 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 import { PowerPlantType } from './constants';
-import { BylawState, DEFAULT_BYLAWS } from './bylaws';
-import { createDefaultPolicies, type Policies } from './protocol/commands';
+import { createDefaultPolicies, DEFAULT_LIGHTING_POLICY, type LightingPolicy, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
 import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupants';
@@ -314,9 +313,24 @@ export interface GameState {
   buildings: BuildingInstance[];
   nextBuildingId: number;
   education: EducationStats;
-  bylaws: BylawState;
-  /** Every player-adjustable policy family (budget, wilderness, ...). */
+  /**
+   * Every player-adjustable policy family (budget, wilderness, lighting —
+   * the Bylaws screen's lighting standard included). Fully engine-owned and
+   * persisted in the CSIM snapshot; `ClientState` carries no bylaws slice
+   * any more. Written optimistically by the UI the moment a policy is
+   * selected, so it can lead the engine by up to one tick.
+   */
   policies: Policies;
+  /**
+   * The lighting policy the engine's wire figures were computed under —
+   * refreshed to `policies.lighting` each time a tick's stats land, unlike
+   * the optimistic `policies` write itself. The Bylaws/ledger previews
+   * rescale wire figures by THIS policy's multipliers: while the game is
+   * paused after a switch, the wire still carries the old policy's numbers,
+   * and dividing them by the new policy's multiplier would inflate the
+   * recovered baseline.
+   */
+  appliedLighting: LightingPolicy;
   /** Wilderness score, trend, and breakdown — computed by the Rust sim. */
   wilderness: WildernessStats;
   settings: GameSettings;
@@ -529,8 +543,8 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       elementaryCoverage: 1,
       highCoverage: 1
     },
-    bylaws: { ...DEFAULT_BYLAWS },
     policies: createDefaultPolicies(),
+    appliedLighting: DEFAULT_LIGHTING_POLICY,
     wilderness: createDefaultWildernessStats(),
     settings: createDefaultSettings()
   };
