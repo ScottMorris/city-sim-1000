@@ -11,10 +11,10 @@
 // Tile-buffer transport: transferable ArrayBuffer (one copy per step).
 
 import { recordEngineBuild } from '../buildInfo';
-import type { GameState, UtilityComponentStats, ViewStratum } from './gameState';
+import type { DemandStats, GameState, LabourStats, UtilityComponentStats, ViewStratum } from './gameState';
 import { TileKind } from './gameState';
-import { BuildingStatus, createBuildingState } from './buildings/state';
-import { BuildingKind, getBuildingTemplate } from './buildings/templates';
+import { createBuildingState } from './buildings/state';
+import { getBuildingTemplate } from './buildings/templates';
 import { createTileServiceState } from './services';
 import type { LegacyEngineImport, SimBridge } from './simBridge';
 import type { BudgetPolicy, SimCommand, CommandResult } from './protocol/commands';
@@ -24,9 +24,9 @@ import type { SimStats } from '../workers/wasmSim.worker';
 import { deriveNarrativeEventFromAlert } from './protocol/deficitNarrative';
 import { decodeTileBuffer } from './protocol/tileBuffer';
 import { buildingKindFromU8 } from './protocol/buildingKind';
-import { Occupant, Terrain, ZoneDensity, hasOccupant } from './protocol/occupants';
+import { buildingStatusFromU8 } from './protocol/buildingStatus';
+import { Terrain, ZoneDensity } from './protocol/occupants';
 import { Tool } from './toolTypes';
-import { footprintTouchesWater } from './adjacency';
 // `WireBuilding`/`WireEducationSeatsUsed` are decoded from the `buildingsJson`/
 // `educationSeatsUsedJson` payloads (see `SimHost::buildings_json`/
 // `SimHost::education_seats_used_json`, Rust) — `ts-rs`-generated mirrors of
@@ -88,19 +88,19 @@ type WorkerToMain =
   /** Posted only when the WASM's `Last-Modified` changes under a live page. */
   | { type: 'build_update'; build: { lastModified: string | null } }
   | { type: 'init_error';   message: string }
-  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; alerts: SimAlert[] }
-  | { type: 'apply_result'; success: boolean; message: string | null; history: WorkerHistoryFlags }
+  | { type: 'step_result';  bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; demandBreakdownJson: string; mutationSeq: number; alerts: SimAlert[] }
+  | { type: 'apply_result'; success: boolean; message: string | null; strokeId: number; history: WorkerHistoryFlags }
   | { type: 'undo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'undo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; demandBreakdownJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'redo_result';  happened: false; history: WorkerHistoryFlags }
-  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags }
+  | { type: 'redo_result';  happened: true; bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; demandBreakdownJson: string; mutationSeq: number; history: WorkerHistoryFlags }
   | { type: 'snapshot_result'; requestId: number; bytes: Uint8Array }
   | { type: 'load_result'; requestId: number; ok: false; error?: string }
   | {
       type: 'load_result'; requestId: number; ok: true;
       width: number; height: number; seed: number;
       policies: GameState['policies'];
-      bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; mutationSeq: number; history: WorkerHistoryFlags;
+      bytes: Uint8Array; stats: SimStats; buildingsJson: string; powerComponentsJson: string; waterComponentsJson: string; educationJson: string; educationSeatsUsedJson: string; budgetHistoryJson: string; demandBreakdownJson: string; mutationSeq: number; history: WorkerHistoryFlags;
     };
 
 export interface WasmSimBridgeConfig {
@@ -125,6 +125,7 @@ export class WasmSimBridge implements SimBridge {
   private pendingEducationJson = '';
   private pendingEducationSeatsUsedJson = '';
   private pendingBudgetHistoryJson = '';
+  private pendingDemandBreakdownJson = '';
   private pendingStats: SimStats | null = null;
   private pendingMutationSeq = 0;
   /**
@@ -241,6 +242,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingEducationJson,
         this.pendingEducationSeatsUsedJson,
         this.pendingBudgetHistoryJson,
+        this.pendingDemandBreakdownJson,
       );
       this.pendingTileBuffer = null;
       this.dirtySinceLastStep = true;
@@ -292,7 +294,11 @@ export class WasmSimBridge implements SimBridge {
         }
         break;
     }
-    return { success: true, message: null };
+    // Optimistic synchronous ack — the real, strokeId-correlated result
+    // arrives later via `onMessage`'s `CommandResult` (see `apply_result`'s
+    // handling below). `strokeId` is 0 here for non-`ApplyTool` commands,
+    // which have no stroke to correlate.
+    return { success: true, message: null, strokeId: cmd.type === 'ApplyTool' ? cmd.strokeId : 0 };
   }
 
   onMessage(handler: (msg: FromSim) => void): void {
@@ -392,9 +398,6 @@ export class WasmSimBridge implements SimBridge {
 
   canRedo(): boolean { return this.canRedoFlag; }
 
-  // Returns null until Option B (Rust building_metadata() export) is implemented.
-  getMetadata() { return null; }
-
   dispose(): void {
     this.worker.terminate();
   }
@@ -434,6 +437,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingEducationJson = msg.educationJson;
         this.pendingEducationSeatsUsedJson = msg.educationSeatsUsedJson;
         this.pendingBudgetHistoryJson = msg.budgetHistoryJson;
+        this.pendingDemandBreakdownJson = msg.demandBreakdownJson;
         this.pendingStats = msg.stats;
         this.pendingMutationSeq = msg.mutationSeq;
         // Staged, not dispatched here — see pendingAlerts' field doc. Concat
@@ -442,7 +446,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingAlerts = this.pendingAlerts.concat(msg.alerts);
         break;
       case 'apply_result':
-        this.handler?.({ type: 'CommandResult', success: msg.success, message: msg.message ?? undefined });
+        this.handler?.({ type: 'CommandResult', success: msg.success, message: msg.message ?? undefined, strokeId: msg.strokeId });
         this.syncHistoryFlags(msg.history);
         break;
       case 'undo_result':
@@ -456,7 +460,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.pendingAlerts = [];
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson, msg.demandBreakdownJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -472,7 +476,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingStats = null;
         this.pendingAlerts = [];
         if (msg.happened) {
-          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson);
+          this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson, msg.demandBreakdownJson);
           this.updateStats(msg.stats);
           this.lastAppliedTick = msg.stats.tick;
           this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -502,7 +506,7 @@ export class WasmSimBridge implements SimBridge {
         this.pendingAlerts = [];
         this.adoptDimensions(msg.width, msg.height, msg.seed);
         this.state.policies = msg.policies;
-        this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson);
+        this.applyTileBuffer(msg.bytes, msg.buildingsJson, msg.powerComponentsJson, msg.waterComponentsJson, msg.educationJson, msg.educationSeatsUsedJson, msg.budgetHistoryJson, msg.demandBreakdownJson);
         this.updateStats(msg.stats);
         this.lastAppliedTick = msg.stats.tick;
         this.lastAppliedMutationSeq = msg.mutationSeq;
@@ -568,6 +572,8 @@ export class WasmSimBridge implements SimBridge {
     this.state.demand.residential = stats.demandResidential;
     this.state.demand.commercial  = stats.demandCommercial;
     this.state.demand.industrial  = stats.demandIndustrial;
+    this.state.abandonedCount = stats.abandonedCount;
+    this.state.avgHappiness   = stats.avgHappiness;
     const b = this.state.budget;
     b.netPerDay   = stats.budgetNetPerDay;
     b.netPerMonth = stats.budgetNetPerMonth;
@@ -642,9 +648,8 @@ export class WasmSimBridge implements SimBridge {
     educationJson: string,
     educationSeatsUsedJson: string,
     budgetHistoryJson: string,
+    demandBreakdownJson: string,
   ): void {
-    const n = this.state.tiles.length;
-
     // The live wire no longer carries a resolved kind byte per tile (#177's
     // TS/wire follow-up) — a `Structure` occupant says only that a building
     // stands here, not which one. `buildings_json` is the only source for
@@ -669,22 +674,21 @@ export class WasmSimBridge implements SimBridge {
     if (budgetHistoryJson) {
       this.state.budgetHistory = JSON.parse(budgetHistoryJson) as BudgetHistoryEntry[];
     }
+    // `#200`'s wire-adoption follow-up — replaces the TS demand shadow
+    // (`demand.ts`) and the `computeLabourStats.ts` recompute.
+    if (demandBreakdownJson) {
+      const parsed = JSON.parse(demandBreakdownJson) as { demand: DemandStats['breakdown']; labour: LabourStats };
+      this.state.demand.breakdown = parsed.demand;
+      this.state.labour = parsed.labour;
+    }
 
     decodeTileBuffer(this.state.tiles, bytes);
 
     // Rebuild state.buildings directly from the parsed list — Rust is
     // authoritative; TS state.buildings is a display mirror only. No more
     // scanning tiles for first-occurrence origins: `buildings_json` already
-    // carries id, kind and origin.
-    // Mirror of the engine's water opt-in gate (`GameState::has_water_system`):
-    // until a pump, tower, or pipe exists, buildings don't require water.
-    let hasWaterSystem = wireBuildings.some((b) => {
-      const kind = buildingKindFromU8(b.kind);
-      return kind === BuildingKind.WaterPump || kind === BuildingKind.WaterTower;
-    });
-    for (let i = 0; i < n && !hasWaterSystem; i++) {
-      if (hasOccupant(this.state.tiles[i].underground, Occupant.Pipe)) hasWaterSystem = true;
-    }
+    // carries id, kind, origin, and (`#200`'s wire-adoption follow-up)
+    // status/health — no client-side power/water-flag reconstruction needed.
     const seatsUsedByBuildingId = new Map(seatsUsed.map((e) => [e.buildingId, e.used]));
     this.state.buildings = wireBuildings.map((b) => {
       // `b.kind` decodes via `BUILDING_KIND_BY_U8` — an unrecognised byte
@@ -693,27 +697,11 @@ export class WasmSimBridge implements SimBridge {
       // for, same as the old `TileKind.Land` fallback did (Land has no
       // building template either).
       const kind: string = buildingKindFromU8(b.kind) ?? '';
-      // Status is derived from the tile flags the Rust buffer already set —
-      // `hasWaterSystem` gates the water check so buildings in cities without
-      // water infrastructure aren't misread as unwatered.
-      const originTile = this.state.tiles[b.originY * this.state.width + b.originX];
       const template = getBuildingTemplate(kind);
       const bstate = createBuildingState();
-      const needsPower = template ? template.requiresPower !== false : false;
-      const needsWater =
-        hasWaterSystem && template !== undefined && template.waterUse !== undefined && template.waterUse > 0;
-      // A pump only produces when its footprint touches water terrain (#200)
-      // — distinct from needsWater above, which gates a *consumer* on
-      // network coverage; a pump doesn't consume water.
-      const needsSource = kind === BuildingKind.WaterPump;
+      bstate.status = buildingStatusFromU8(b.status);
+      bstate.health = b.health;
       const origin = { x: b.originX, y: b.originY };
-      if (needsPower && !originTile?.powered) {
-        bstate.status = BuildingStatus.InactiveNoPower;
-      } else if (needsSource && template && !footprintTouchesWater(this.state, origin, template.footprint)) {
-        bstate.status = BuildingStatus.InactiveNoSource;
-      } else if (needsWater && !originTile?.watered) {
-        bstate.status = BuildingStatus.InactiveNoWater;
-      }
       // `#228` — seats consumed, from the wire; only schools currently have
       // an entry (Rust's `ServiceKind` has no other service ported yet).
       const used = template?.service ? seatsUsedByBuildingId.get(b.id) : undefined;

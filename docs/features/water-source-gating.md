@@ -21,9 +21,11 @@ The TS sim gated pump output on `hasWaterSourceConnection()` (`app/src/game/simu
 ## What shipped
 
 * `BuildingTemplate::requires_water_source` (`buildings.rs`) — `true` only for `WaterPump`; `WaterTower` and everything else stay `false`.
-* `footprint_touches_water` (`adjacency.rs`, mirrored in `app/src/game/adjacency.ts` for the two bridges' client-side status reconstruction) — **strict footprint adjacency**, not pipe-reachability. Chosen deliberately over the more flexible "plumbed in via pipes to a distant water tile" alternative: simpler (one O(1) check, no second flood-fill pass), and matches player intuition — build the pump on the shore. Pipe-reachability remains a legitimate future enhancement, not a fix.
+* `footprint_touches_water` (`adjacency.rs`) — **strict footprint adjacency**, not pipe-reachability. Chosen deliberately over the more flexible "plumbed in via pipes to a distant water tile" alternative: simpler (one O(1) check, no second flood-fill pass), and matches player intuition — build the pump on the shore. Pipe-reachability remains a legitimate future enhancement, not a fix.
 * `BuildingStatus::InactiveNoSource`, set by `update_building_states`, distinct from `InactiveNoWater` (a *consumer* failing to reach the network — a pump doesn't consume water, so it never takes that branch). Surfaced in the HUD inspector ("No Water Source — build next to water") and reuses the existing `noWater` map/minimap indicator icon rather than adding new art.
 * Golden-city fixture (`tests/fixtures/golden_city.script`) updated: the pump at (22,9) now has a one-tile lake at (23,9) so the reference city keeps a working water supply.
+
+**Wire-adoption follow-up:** `WireBuilding` (`city-sim-protocol`) now carries `status`/`health` directly, so both bridges read `InactiveNoSource` (and every other status) straight off the wire instead of reconstructing it client-side. The TS mirror of `footprint_touches_water` that used to live in `app/src/game/adjacency.ts` — along with the rest of that per-building power/water-flag reconstruction — was deleted as dead code once nothing called it.
 
 ## Non-goals
 

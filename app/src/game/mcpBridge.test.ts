@@ -41,53 +41,88 @@ describe('stratumParam', () => {
 });
 
 describe('createCommandResultQueue', () => {
-  it('resolves pending entries in FIFO order, matching send order to arrival order', async () => {
+  it('a batch sharing one strokeId (a line/rect stroke) resolves every send, in order, not just the last', async () => {
     const queue = createCommandResultQueue();
-    const first = queue.expectNext().promise;
-    const second = queue.expectNext().promise;
-    const third = queue.expectNext().promise;
-    // Arrival order mirrors send order (the worker is single-threaded and
-    // processes ApplyTool messages in the order it received them) — the
-    // queue doesn't need to see any id to match these correctly.
-    queue.resolveNext({ success: true });
-    queue.resolveNext({ success: false, message: 'no funds' });
-    queue.resolveNext({ success: true });
-    await expect(first).resolves.toEqual({ success: true });
-    await expect(second).resolves.toEqual({ success: false, message: 'no funds' });
-    await expect(third).resolves.toEqual({ success: true });
+    // apply_tool_line/_rect send every tile under a single stroke id — the
+    // queue must hold one slot per send, not one per id.
+    // Three DISTINCT results — with any two equal, an order-scrambling bug
+    // (e.g. LIFO instead of FIFO) could slip through unseen.
+    const a = queue.expectNext(7).promise;
+    const b = queue.expectNext(7).promise;
+    const c = queue.expectNext(7).promise;
+    queue.resolveNext({ success: true, message: null, strokeId: 7 });
+    queue.resolveNext({ success: false, message: 'no funds', strokeId: 7 });
+    queue.resolveNext({ success: false, message: 'wrong stratum', strokeId: 7 });
+    await expect(a).resolves.toEqual({ success: true, message: null, strokeId: 7 });
+    await expect(b).resolves.toEqual({ success: false, message: 'no funds', strokeId: 7 });
+    await expect(c).resolves.toEqual({ success: false, message: 'wrong stratum', strokeId: 7 });
   });
 
-  it('cancel() drops the entry so a later result skips it, not misattributes to it', async () => {
+  it('cancelling one send in a shared-id batch drops only that slot', async () => {
     const queue = createCommandResultQueue();
-    const { promise: dropped, cancel } = queue.expectNext();
-    const next = queue.expectNext().promise;
+    const a = queue.expectNext(9);
+    const b = queue.expectNext(9).promise;
+    a.cancel();
+    queue.resolveNext({ success: false, message: 'wrong stratum', strokeId: 9 });
+    await expect(b).resolves.toEqual({ success: false, message: 'wrong stratum', strokeId: 9 });
+  });
+
+  it('resolves each pending entry by its own strokeId, even when results arrive out of send order', async () => {
+    const queue = createCommandResultQueue();
+    const first = queue.expectNext(1).promise;
+    const second = queue.expectNext(2).promise;
+    const third = queue.expectNext(3).promise;
+    // Deliberately scrambled arrival order — Tauri's IPC gives no ordering
+    // guarantee across concurrent invoke() calls, and a human clicking the
+    // same tab can interleave their own sends. A queue that only tracked
+    // send order (the old FIFO design) would misattribute these.
+    queue.resolveNext({ success: false, message: 'no funds', strokeId: 2 });
+    queue.resolveNext({ success: true, message: null, strokeId: 3 });
+    queue.resolveNext({ success: true, message: null, strokeId: 1 });
+    await expect(first).resolves.toEqual({ success: true, message: null, strokeId: 1 });
+    await expect(second).resolves.toEqual({ success: false, message: 'no funds', strokeId: 2 });
+    await expect(third).resolves.toEqual({ success: true, message: null, strokeId: 3 });
+  });
+
+  it('cancel() drops the entry so a later result for a different id is unaffected', async () => {
+    const queue = createCommandResultQueue();
+    const { promise: dropped, cancel } = queue.expectNext(1);
+    const next = queue.expectNext(2).promise;
     cancel();
     // Only one real result arrives (as if `dropped`'s send timed out and was
     // cancelled) — it must resolve `next`, not the already-abandoned `dropped`.
-    queue.resolveNext({ success: true });
-    await expect(next).resolves.toEqual({ success: true });
+    queue.resolveNext({ success: true, message: null, strokeId: 2 });
+    await expect(next).resolves.toEqual({ success: true, message: null, strokeId: 2 });
     // `dropped` never resolves — proven indirectly: if resolveNext had
     // matched it instead of `next`, the assertion above would have failed
     // (there would be nothing left to resolve `next`).
     void dropped;
   });
 
-  it('resolveNext with nothing pending is a no-op, not a throw', () => {
+  it('resolveNext for an unknown strokeId is a no-op, not a throw', () => {
     const queue = createCommandResultQueue();
-    expect(() => queue.resolveNext({ success: true })).not.toThrow();
+    expect(() => queue.resolveNext({ success: true, message: null, strokeId: 99 })).not.toThrow();
+  });
+
+  it('resolveNext for an already-resolved strokeId is a no-op — it does not resolve a later reuse of the same id', async () => {
+    const queue = createCommandResultQueue();
+    queue.resolveNext({ success: true, message: null, strokeId: 1 }); // nothing pending yet — no-op
+    const late = queue.expectNext(1).promise;
+    queue.resolveNext({ success: false, message: 'the real one', strokeId: 1 });
+    await expect(late).resolves.toEqual({ success: false, message: 'the real one', strokeId: 1 });
   });
 });
 
 describe('summariseApplyResults', () => {
   it('counts an all-success batch as fully placed, with no failure message', () => {
-    expect(summariseApplyResults([{ success: true }, { success: true }])).toEqual({
+    expect(summariseApplyResults([{ success: true, message: null }, { success: true, message: null }])).toEqual({
       placed: 2, attempted: 2, firstFailureMessage: null,
     });
   });
 
   it('counts failures out of the placed total and surfaces the first failure message', () => {
     const results = [
-      { success: true },
+      { success: true, message: null },
       { success: false, message: 'wrong stratum' },
       { success: false, message: 'insufficient funds' },
     ];

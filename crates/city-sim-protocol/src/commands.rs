@@ -172,11 +172,24 @@ impl From<u8> for ViewStratum {
 }
 
 /// Result returned synchronously for `ApplyTool` commands.
+///
+/// `stroke_id` correlates this result back to the `ApplyTool` send that
+/// produced it — the drag-paint stroke id the caller already supplied. Both
+/// transports stamp it on at their command boundary (`SimHost::apply_tool`'s
+/// caller in the WASM worker; the Tauri `apply_tool` command) rather than
+/// inside `city_sim_core::commands::apply_tool` itself, which has no
+/// `stroke_id` parameter — every internal `CommandResult::ok()`/`fail()`
+/// call site is unaffected. Replaces `mcpBridge.ts`'s blind FIFO result
+/// queue, which mismatched results under Tauri's unordered IPC arrival and
+/// any interleaving with a human player's own `ApplyTool` sends.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(export_to = "CommandResult.ts")]
 pub struct CommandResult {
     pub success: bool,
     pub message: Option<String>,
+    #[serde(default)]
+    pub stroke_id: u32,
 }
 
 impl CommandResult {
@@ -184,13 +197,21 @@ impl CommandResult {
         Self {
             success: true,
             message: None,
+            stroke_id: 0,
         }
     }
     pub fn fail(msg: impl Into<String>) -> Self {
         Self {
             success: false,
             message: Some(msg.into()),
+            stroke_id: 0,
         }
+    }
+    /// Stamp the correlation id on at the transport boundary — see the
+    /// struct doc comment.
+    pub fn with_stroke_id(mut self, stroke_id: u32) -> Self {
+        self.stroke_id = stroke_id;
+        self
     }
 }
 

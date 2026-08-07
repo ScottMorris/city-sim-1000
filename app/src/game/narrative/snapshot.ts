@@ -1,32 +1,19 @@
+// snapshot.ts — assembles a periodic CitySnapshot for the narrative layer.
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+//
+// Population capacity/labour rates, abandoned-tile count, and mean happiness
+// used to be recomputed here from a TS shadow of the engine (a per-building
+// capacity walk, `computeLabourStats.ts`, a per-tile loop) — all four now
+// come straight off the wire (`state.labour`, `state.abandonedCount`,
+// `state.avgHappiness`; `#200`'s wire-adoption follow-up).
+
 import { getCalendarPosition } from '../time';
-import { BuildingStatus } from '../buildings/state';
-import { LedgerGroup, getBuildingTemplate } from '../buildings/templates';
 import type { GameState } from '../gameState';
-import { computeLabourStats } from '../computeLabourStats';
 import type { CitySnapshot } from './types';
 
 const RUNWAY_CAP_MONTHS = 99;
-
-function computeCapacities(state: GameState) {
-  let populationCapacity = 0;
-  let jobCapacity = 0;
-
-  for (const building of state.buildings) {
-    const template = getBuildingTemplate(building.templateId);
-    if (!template) continue;
-    const isActive = building.state.status === BuildingStatus.Active;
-    const contributesCapacity =
-      isActive ||
-      (template.category === LedgerGroup.Zone &&
-        (building.state.status === BuildingStatus.InactiveNoPower ||
-          building.state.status === BuildingStatus.InactiveNoWater));
-    if (!contributesCapacity) continue;
-    if (template.populationCapacity) populationCapacity += template.populationCapacity;
-    if (template.jobsCapacity) jobCapacity += template.jobsCapacity;
-  }
-
-  return { populationCapacity, jobCapacity };
-}
 
 function computeRunwayMonths(money: number, netPerMonth: number) {
   if (netPerMonth >= 0) return RUNWAY_CAP_MONTHS;
@@ -37,16 +24,6 @@ function computeRunwayMonths(money: number, netPerMonth: number) {
 export function buildCitySnapshot(state: GameState): CitySnapshot {
   const calendar = getCalendarPosition(state.day);
   const year = Math.floor((calendar.month - 1) / 12) + 1;
-  const { populationCapacity, jobCapacity } = computeCapacities(state);
-  const labourStats = computeLabourStats(state.population, populationCapacity, jobCapacity);
-  const tiles = state.tiles;
-  let abandonedCount = 0;
-  let happinessTotal = 0;
-
-  for (const tile of tiles) {
-    if (tile.abandoned) abandonedCount += 1;
-    happinessTotal += tile.happiness ?? 0;
-  }
 
   return {
     time: {
@@ -76,8 +53,8 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
     population: {
       pop: state.population,
       jobs: state.jobs,
-      unemploymentRate: labourStats.unemploymentRate,
-      vacancyRate: labourStats.vacancyRate
+      unemploymentRate: state.labour.unemploymentRate,
+      vacancyRate: state.labour.vacancyRate
     },
     demand: {
       residential: state.demand.residential,
@@ -90,8 +67,8 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
       powerBalance: state.utilities.power
     },
     map: {
-      abandonedCount,
-      avgHappiness: tiles.length > 0 ? happinessTotal / tiles.length : 0
+      abandonedCount: state.abandonedCount,
+      avgHappiness: state.avgHappiness
     }
   };
 }

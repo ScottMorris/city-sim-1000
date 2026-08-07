@@ -8,6 +8,7 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 use city_sim_core::commands::apply_tool as sim_apply_tool;
+use city_sim_core::demand::compute_city_demand_breakdown;
 use city_sim_core::history::{History, HistoryConfig};
 use city_sim_core::import::{from_tile_buffer, ImportStats};
 use city_sim_core::sim::Simulation;
@@ -18,8 +19,9 @@ use city_sim_core::wire::encode_tile_buffer;
 use city_sim_protocol::commands::{CommandResult, Policies, Tool, ViewStratum};
 use city_sim_protocol::events::SimAlert;
 use city_sim_protocol::wire_types::{
-    WireBudgetHistoryEntry, WireBuilding, WireEducationSeatsUsed, WireEducationStats,
-    WireUtilityComponent,
+    WireBudgetHistoryEntry, WireBudgetStats, WireBuilding, WireDemandBreakdown,
+    WireEducationSeatsUsed, WireEducationStats, WireLabourStats, WireUtilityComponent,
+    WireWildernessBreakdown,
 };
 use serde::Serialize;
 use tauri::{ipc::Channel, State};
@@ -46,6 +48,20 @@ pub struct TickEvent {
     pub water: i32,
     pub power_produced: i32,
     pub water_produced: i32,
+    /// `produced - balance`, matching the WASM path's `power_used()`/
+    /// `water_used()` getters — carried directly rather than re-derived by
+    /// subtraction in TS (desktop's `tauriSimBridge.ts` used to compute this
+    /// client-side; the WASM path never had to).
+    pub power_used: i32,
+    pub water_used: i32,
+    /// Full budget headline + breakdown — see `WireBudgetStats`. Absent from
+    /// this event before `#252`'s follow-up, which left the desktop budget
+    /// modal's ledger and advisor permanently zeroed.
+    pub budget: WireBudgetStats,
+    /// Per-category wilderness eco totals — see `WireWildernessBreakdown`.
+    /// Absent before `#252`'s follow-up, which left the desktop wilderness
+    /// tooltip's breakdown permanently zeroed.
+    pub wilderness_breakdown: WireWildernessBreakdown,
     /// Power network connected components (`#230`) — one entry per
     /// physically-connected segment reached by the last recompute.
     /// `produced`/`used` are left unrounded on the wire; round for display
@@ -60,14 +76,24 @@ pub struct TickEvent {
     /// `city_sim_core::state::GameState::education_seats_used`.
     pub education_seats_used: Vec<WireEducationSeatsUsed>,
     /// Rolling 200-day budget history (`#229`) — see
-    /// `city_sim_core::state::BudgetHistoryEntry`. Note this `TickEvent`
-    /// carries no headline `BudgetStats` fields (`revenue`/`expenses`/`net`)
-    /// at all yet — the desktop budget modal's ledger becomes real once this
-    /// ships, but its top-line numbers are a separate, pre-existing gap.
+    /// `city_sim_core::state::BudgetHistoryEntry`. Headline + breakdown
+    /// numbers (`revenue`/`expenses`/`net`/...) live on `budget`, above.
     pub budget_history: Vec<WireBudgetHistoryEntry>,
     pub demand_residential: f32,
     pub demand_commercial: f32,
     pub demand_industrial: f32,
+    /// Full per-class demand derivation (base/fill/labour/pending/floor
+    /// terms) — see `WireDemandBreakdown`. The debug overlay reads this
+    /// instead of running a parallel TS copy of the formula (the deleted
+    /// `app/src/game/demand.ts` shadow).
+    pub demand_breakdown: WireDemandBreakdown,
+    /// City-wide labour aggregates — see `WireLabourStats`. Replaces the
+    /// TS-side `computeLabourStats.ts` recompute.
+    pub labour: WireLabourStats,
+    /// Number of tiles flagged abandoned — see `GameState::abandoned_count`.
+    pub abandoned_count: u32,
+    /// Mean tile happiness across the grid — see `GameState::avg_happiness`.
+    pub avg_happiness: f32,
     /// Wilderness score 0–100 (see `city_sim_core::wilderness`).
     pub wilderness_score: f32,
     /// Fast EMA − slow EMA of the score; sign gives the HUD trend arrow.
@@ -87,9 +113,11 @@ pub struct TickEvent {
     /// but not a template kind (since #177's TS/wire follow-up, that lives
     /// here, not on the tile). Mirrors `SimHost::buildings_json` on the WASM
     /// path, sent as real values rather than a JSON string since Tauri IPC
-    /// serialises the whole `TickEvent` natively. No longer used to derive
-    /// per-tile coverage — only to resolve a `building_id` to its template
-    /// kind (power/water gating, the HUD inspector's building name).
+    /// serialises the whole `TickEvent` natively. Used to resolve a
+    /// `building_id` to its template kind (the HUD inspector's building
+    /// name) and, via each entry's `status`/`health` (`#200`'s wire-adoption
+    /// follow-up), the building's real runtime status — no longer
+    /// reconstructed client-side from tile power/water flags.
     pub buildings: Vec<WireBuilding>,
     /// Whether an undo/redo step is currently available — drives button state.
     pub can_undo: bool,
@@ -169,16 +197,10 @@ fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) 
     // Same encoder the WASM host's `tile_buffer()` calls — one wire format,
     // shared, so this transport cannot silently drift from that one.
     let tiles = encode_tile_buffer(s);
-    let buildings: Vec<WireBuilding> = s
-        .buildings
-        .iter()
-        .map(|b| WireBuilding {
-            id: b.id,
-            kind: b.kind as u8,
-            origin_x: b.origin.0,
-            origin_y: b.origin.1,
-        })
-        .collect();
+    let buildings: Vec<WireBuilding> = s.buildings.iter().map(WireBuilding::from).collect();
+    // One pass serving the debug overlay's demand section and the narrative
+    // snapshot's capacity/labour fields — see `DemandBreakdown`'s doc comment.
+    let demand_breakdown = compute_city_demand_breakdown(s);
     TickEvent {
         tick: s.tick,
         day: s.day,
@@ -189,6 +211,10 @@ fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) 
         water: s.utilities.water,
         power_produced: s.utilities.power_produced,
         water_produced: s.utilities.water_produced,
+        power_used: s.utilities.power_used,
+        water_used: s.utilities.water_used,
+        budget: WireBudgetStats::from(&s.budget),
+        wilderness_breakdown: WireWildernessBreakdown::from(&s.wilderness.breakdown),
         power_components: s
             .utility_networks
             .components(UtilityKind::Power)
@@ -219,6 +245,10 @@ fn build_tick_event(sim: &Simulation, history: &History, alerts: Vec<SimAlert>) 
         demand_residential: s.demand.residential,
         demand_commercial: s.demand.commercial,
         demand_industrial: s.demand.industrial,
+        demand_breakdown: WireDemandBreakdown::from(&demand_breakdown),
+        labour: WireLabourStats::from(&demand_breakdown.labour),
+        abandoned_count: s.abandoned_count(),
+        avg_happiness: s.avg_happiness(),
         wilderness_score: s.wilderness.score,
         wilderness_trend: s.wilderness.trend,
         width: s.width,
@@ -389,11 +419,17 @@ pub fn apply_tool(
     let stratum = ViewStratum::from(stratum);
     let (tx, rx) = mpsc::sync_channel(0);
     state.send(SimCmd::ApplyTool(tool, x, y, stroke_id as u64, stratum, tx))?;
-    rx.recv_timeout(Duration::from_secs(2))
+    let result = rx
+        .recv_timeout(Duration::from_secs(2))
         .map_err(|e| match e {
             RecvTimeoutError::Timeout => Error::ApplyToolTimeout,
             RecvTimeoutError::Disconnected => Error::ChannelClosed,
-        })
+        })?;
+    // The sim thread's `CommandResult` doesn't know its own stroke id (see
+    // `CommandResult::with_stroke_id`'s doc comment) — stamp it here, at the
+    // one place both the id and the result are in scope, so `mcpBridge.ts`'s
+    // result queue can key on it instead of assuming IPC arrival order.
+    Ok(result.with_stroke_id(stroke_id))
 }
 
 /// Adjust simulation speed. `multiplier` is relative to the base 20 Hz rate.

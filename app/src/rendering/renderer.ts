@@ -10,13 +10,14 @@ import { Occupant, Terrain, hasOccupant } from '../game/protocol/occupants';
 import { ECO_RANGE } from '../game/protocol/tileBuffer';
 import { BuildingStatus } from '../game/buildings/state';
 import { BuildingKind, getBuildingTemplate, getToolCost } from '../game/buildings/templates';
-import { computeEducationReach } from '../game/education';
+import { computeEducationReach, servedZoneTiles } from '../game/education';
 import type { TileTextures } from './tileAtlas';
 import { createBuildingLookup, getTileColour, resolveIndicatorKey, resolveTileSprite } from './tileRenderUtils';
 import { GridDrawer } from './gridDrawer';
 import { isPowerCarrier, isZone, isWaterCarrier } from '../game/adjacency';
 import { Tool } from '../game/toolTypes';
 import { ServiceId } from '../game/services';
+import { computeAlertSeverity } from './alertSeverity';
 
 const GRID_LINE_WIDTH = 1;
 const GRID_LINE_COLOUR = 0x123a63;
@@ -430,14 +431,7 @@ export class MapRenderer {
       if (overlay === 'alerts') {
         const zone = isZone(tile);
         const buildingStatus = tile.buildingId !== undefined ? buildingStatuses.get(tile.buildingId) : undefined;
-        let severity = 0;
-        if (tile.abandoned) severity = 2;
-        if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2);
-        if (buildingStatus === BuildingStatus.InactiveNoWater) severity = Math.max(severity, 2);
-        if (buildingStatus === BuildingStatus.InactiveNoSource) severity = Math.max(severity, 2);
-        if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1);
-        if (zone && !tile.powered) severity = Math.max(severity, 2);
-        if (zone && tile.happiness < 0.55) severity = Math.max(severity, 1);
+        const severity = computeAlertSeverity(tile, buildingStatus, zone);
 
         if (severity === 0) {
           if (zone) return { color: 0x7bffb7, alpha: 0.16 };
@@ -548,11 +542,17 @@ export class MapRenderer {
     origin: Position,
     templateId: string,
     size: number,
-    skipFitCheck = false
+    /** True for an already-placed school (selection), false for the
+     *  not-yet-placed hover/ghost preview — also skips the footprint-fit
+     *  check, since a placed building is already known to fit. */
+    existing = false
   ) {
     const footprint = this.getToolFootprint(templateId as Tool);
-    if (!skipFitCheck && !this.footprintFits(state, origin, footprint)) return;
-    const reach = computeEducationReach(state, origin, templateId);
+    if (!existing && !this.footprintFits(state, origin, footprint)) return;
+    // Placed: the engine's own real, capacity-adjusted reach off the wire.
+    // Not yet placed: no engine equivalent exists yet, so fall back to a
+    // client BFS — see both functions' doc comments.
+    const reach = existing ? servedZoneTiles(state, templateId) : computeEducationReach(state, origin, templateId);
     if (!reach.size) return;
     // `templateId` is either a `BuildingTemplate.id` (an existing school) or a
     // `Tool` (the hover preview before one's placed) — the same string either

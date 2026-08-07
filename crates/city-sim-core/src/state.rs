@@ -544,6 +544,23 @@ impl GameState {
             || self.tiles.iter().any(|t| t.has_occupant(Occupant::Pipe))
     }
 
+    /// Number of tiles currently flagged `FLAG_ABANDONED` — the narrative
+    /// snapshot's map-condition aggregate (`narrative/snapshot.ts`'s
+    /// `abandonedCount`, formerly a per-tile TS loop).
+    pub fn abandoned_count(&self) -> u32 {
+        self.tiles.iter().filter(|t| t.is_abandoned()).count() as u32
+    }
+
+    /// Mean tile happiness across the whole grid, 0 on an empty grid — the
+    /// narrative snapshot's `avgHappiness` aggregate (formerly a per-tile TS
+    /// loop over the same field this already carries per-tile on the wire).
+    pub fn avg_happiness(&self) -> f32 {
+        if self.tiles.is_empty() {
+            return 0.0;
+        }
+        self.tiles.iter().map(|t| t.happiness).sum::<f32>() / self.tiles.len() as f32
+    }
+
     pub fn tile_at_mut(&mut self, x: u32, y: u32) -> Option<&mut Tile> {
         self.tile_index(x, y).map(|i| &mut self.tiles[i])
     }
@@ -617,6 +634,26 @@ mod tests {
         assert!(s.has_water_system(), "a tower opts in");
         s.buildings[0].kind = BuildingKind::Residential;
         assert!(!s.has_water_system(), "zones alone do not opt in");
+    }
+
+    #[test]
+    fn abandoned_count_tallies_only_flagged_tiles() {
+        let mut s = GameState::new(4, 1, 0);
+        assert_eq!(s.abandoned_count(), 0, "fresh city has no abandoned tiles");
+        s.tiles[1].flags |= FLAG_ABANDONED;
+        s.tiles[3].flags |= FLAG_ABANDONED;
+        assert_eq!(s.abandoned_count(), 2);
+    }
+
+    #[test]
+    fn avg_happiness_is_the_mean_and_zero_on_an_empty_grid() {
+        let mut s = GameState::new(2, 1, 0);
+        s.tiles[0].happiness = 1.0;
+        s.tiles[1].happiness = 0.0;
+        assert!((s.avg_happiness() - 0.5).abs() < 1e-6);
+
+        let empty = GameState::new(0, 0, 0);
+        assert_eq!(empty.avg_happiness(), 0.0);
     }
 
     #[test]

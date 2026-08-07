@@ -1,6 +1,11 @@
+// debugOverlay.ts — the in-game debug panel (build info, perf, sim stats).
+//
+// (c) Copyright 2026 Liminal HQ, Scott Morris
+// SPDX-License-Identifier: MIT
+
 import { getBuildInfo, isBuildMismatched, isEngineStale } from '../buildInfo';
-import { DemandDetails, getSimulationDebugStats } from '../game/debugStats';
-import { GameState } from '../game/gameState';
+import { getSimulationDebugStats } from '../game/debugStats';
+import { DemandClassBreakdown, GameState } from '../game/gameState';
 import { DAYS_PER_MONTH, getCalendarPosition } from '../game/time';
 import { showToast } from './dialogs';
 import { DEFAULT_COMPACT_BREAKPOINT_PX, DEFAULT_COMPACT_HEIGHT_BREAKPOINT_PX } from './deviceMode';
@@ -256,7 +261,7 @@ export function initDebugOverlay(options: DebugOverlayOptions) {
       const stats = getSimulationDebugStats(state);
       const calendar = getCalendarPosition(stats.day);
       const totalDays = Math.floor(stats.day);
-      const formatDemandHint = (details: DemandDetails) =>
+      const formatDemandHint = (details: DemandClassBreakdown) =>
         details.seeded
           ? 'Starter seed'
           : `${details.base}×(1 - fill ${Math.round(details.fillFraction * 100)}%) = ${details.fillTerm.toFixed(

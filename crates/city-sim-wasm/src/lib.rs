@@ -16,11 +16,22 @@ use city_sim_protocol::{
     commands::{Policies, Tool, ViewStratum},
     tile_buffer::BYTES_PER_TILE,
     wire_types::{
-        WireBudgetHistoryEntry, WireBuilding, WireEducationSeatsUsed, WireEducationStats,
-        WireUtilityComponent,
+        WireBudgetHistoryEntry, WireBuilding, WireDemandBreakdown, WireEducationSeatsUsed,
+        WireEducationStats, WireLabourStats, WireUtilityComponent,
     },
 };
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
+
+/// `demand_breakdown_json`'s payload — the per-class derivation plus the
+/// labour aggregates the same city-count pass produces, bundled as one
+/// object so callers don't pay for two separate `GameState` scans.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DemandBreakdownWire {
+    demand: WireDemandBreakdown,
+    labour: WireLabourStats,
+}
 
 #[wasm_bindgen]
 pub fn version() -> String {
@@ -462,29 +473,47 @@ impl SimHost {
 
     /// The building list as JSON (`Vec<WireBuilding>`) — `id`, template
     /// `kind` (as the `BuildingKind` u8 — decode with `BUILDING_KIND_BY_U8`
-    /// in TS), and footprint origin.
+    /// in TS), footprint origin, and `status`/`health` (`#200`'s wire-adoption
+    /// follow-up — decode `status` with `BUILDING_STATUS_BY_U8`).
     ///
     /// The live tile buffer's `Structure` occupant bit says only that a
     /// building stands on a tile, not which one — since #177's TS/wire
     /// follow-up, a structure's `BuildingKind` lives on its `BuildingInstance`,
     /// not on the tile. TS needs this list to resolve `building_id` to a
-    /// template; call it alongside `tile_buffer()`. Status/health/trouble are
-    /// deliberately not carried here — TS derives building status locally
-    /// from the tile's `POWERED`/`WATERED` flags, as it already did before
-    /// this method existed.
+    /// template; call it alongside `tile_buffer()`.
     pub fn buildings_json(&self) -> String {
         let wire: Vec<WireBuilding> = self
             .sim
             .state
             .buildings
             .iter()
-            .map(|b| WireBuilding {
-                id: b.id,
-                kind: b.kind as u8,
-                origin_x: b.origin.0,
-                origin_y: b.origin.1,
-            })
+            .map(WireBuilding::from)
             .collect();
+        serde_json::to_string(&wire).unwrap_or_default()
+    }
+
+    /// City-wide aggregates the narrative snapshot needs — abandoned tile
+    /// count and mean tile happiness. See `GameState::abandoned_count`/
+    /// `avg_happiness`.
+    pub fn abandoned_count(&self) -> u32 {
+        self.sim.state.abandoned_count()
+    }
+    pub fn avg_happiness(&self) -> f32 {
+        self.sim.state.avg_happiness()
+    }
+
+    /// Per-class demand derivation (`WireDemandBreakdown`) plus labour
+    /// aggregates (`WireLabourStats`) as one JSON object — the debug
+    /// overlay's demand section and the narrative snapshot's capacity/labour
+    /// fields both read this instead of re-deriving it in TS (`#200`'s
+    /// wire-adoption follow-up; replaces `app/src/game/demand.ts` and
+    /// `computeLabourStats.ts`).
+    pub fn demand_breakdown_json(&self) -> String {
+        let breakdown = city_sim_core::demand::compute_city_demand_breakdown(&self.sim.state);
+        let wire = DemandBreakdownWire {
+            labour: WireLabourStats::from(&breakdown.labour),
+            demand: WireDemandBreakdown::from(&breakdown),
+        };
         serde_json::to_string(&wire).unwrap_or_default()
     }
 

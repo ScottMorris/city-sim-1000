@@ -1,35 +1,21 @@
-// debugStats.ts — derived debug-overlay figures (demand breakdown, job capacity by zone type).
+// debugStats.ts — derived debug-overlay figures (zone tile counts, utility use by building).
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
+//
+// Demand and labour/capacity figures used to be recomputed here from a TS
+// shadow of the engine's formula (`demand.ts`, `computeLabourStats.ts`, both
+// deleted) — they now come straight off the wire (`state.demand`,
+// `state.labour`; `#200`'s wire-adoption follow-up). What remains is display
+// aggregation that cannot drift from the engine because it only counts bits
+// the wire already decoded (zoned tiles) or reads static template data
+// (per-building power/water use) — not a parallel copy of simulation math.
 
 import { BuildingStatus } from './buildings/state';
-import { LedgerGroup, BuildingKind, getBuildingTemplate } from './buildings/templates';
-import { GameState } from './gameState';
-import { computeDemand } from './demand';
-import { computeLabourStats, LabourStats } from './computeLabourStats';
-import { ServiceId } from './services';
+import { getBuildingTemplate } from './buildings/templates';
+import { DemandClassBreakdown, GameState, LabourStats } from './gameState';
 import { hasWaterSourceConnection } from './utilities/water';
 import { Occupant, hasOccupant } from './protocol/occupants';
-
-export interface DemandDetails {
-  base: number;
-  fillFraction: number;
-  fillTerm: number;
-    pendingZones: number;
-    pendingPenaltyRaw: number;
-    pendingPenaltyCapped: number;
-    pendingPenaltyApplied: number;
-    pressureRelief: number;
-    labourTerm: number;
-    workforceGap: number;
-    workforceTerm: number;
-    utilityPenalty: number;
-    demandBeforeUtilities: number;
-    floorApplied: boolean;
-  seeded: boolean;
-  final: number;
-}
 
 export interface SimulationDebugStats {
   tick: number;
@@ -65,151 +51,57 @@ export interface SimulationDebugStats {
     industrial: number;
   };
   demandDetails: {
-    residential: DemandDetails;
-    commercial: DemandDetails;
-    industrial: DemandDetails;
+    residential: DemandClassBreakdown;
+    commercial: DemandClassBreakdown;
+    industrial: DemandClassBreakdown;
   };
 }
 
 /**
- * Computes a read-only snapshot of the simulation inputs without mutating state.
+ * Computes a read-only snapshot of the debug-overlay's display figures
+ * without mutating state. Demand, labour, and capacity figures are read
+ * straight off `state` (wire-sourced); only zone tile counts and per-building
+ * utility totals are aggregated here.
  */
 export function getSimulationDebugStats(state: GameState): SimulationDebugStats {
   let residentialZones = 0;
   let commercialZones = 0;
   let industrialZones = 0;
-  let populationCapacity = 0;
-  let jobCapacity = 0;
-  let commercialJobCapacity = 0;
-  let industrialJobCapacity = 0;
   let buildingPowerUse = 0;
   let buildingWaterUse = 0;
   let buildingWaterOutput = 0;
-  let developedResidentialZones = 0;
-  let developedCommercialZones = 0;
-  let developedIndustrialZones = 0;
   const educationScore = state.education?.score ?? 0;
   const elementaryCoverage = state.education?.elementaryCoverage ?? 0;
   const highCoverage = state.education?.highCoverage ?? 0;
 
-  for (let index = 0; index < state.tiles.length; index++) {
-    const tile = state.tiles[index];
-    if (hasOccupant(tile.surface, Occupant.ZoneResidential)) {
-      residentialZones++;
-      if (tile.buildingId !== undefined) developedResidentialZones++;
-    }
-    if (hasOccupant(tile.surface, Occupant.ZoneCommercial)) {
-      commercialZones++;
-      if (tile.buildingId !== undefined) developedCommercialZones++;
-    }
-    if (hasOccupant(tile.surface, Occupant.ZoneIndustrial)) {
-      industrialZones++;
-      if (tile.buildingId !== undefined) developedIndustrialZones++;
-    }
+  for (const tile of state.tiles) {
+    if (hasOccupant(tile.surface, Occupant.ZoneResidential)) residentialZones++;
+    if (hasOccupant(tile.surface, Occupant.ZoneCommercial)) commercialZones++;
+    if (hasOccupant(tile.surface, Occupant.ZoneIndustrial)) industrialZones++;
   }
 
   for (const building of state.buildings) {
     const template = getBuildingTemplate(building.templateId);
     if (!template) continue;
-    const isActive = building.state.status === BuildingStatus.Active;
-    const contributesCapacity =
-      isActive ||
-      (template.category === LedgerGroup.Zone &&
-        (building.state.status === BuildingStatus.InactiveNoPower ||
-          building.state.status === BuildingStatus.InactiveNoWater));
-    if (!isActive && !contributesCapacity) continue;
-    if (isActive) {
-      if (
-        template.waterOutput &&
-        hasWaterSourceConnection(state, building.origin, template.footprint, building.id)
-      ) {
-        buildingWaterOutput += template.waterOutput;
-      }
-      if (template.powerUse) buildingPowerUse += template.powerUse;
-      if (template.waterUse) buildingWaterUse += template.waterUse;
+    if (building.state.status !== BuildingStatus.Active) continue;
+    if (
+      template.waterOutput &&
+      hasWaterSourceConnection(state, building.origin, template.footprint, building.id)
+    ) {
+      buildingWaterOutput += template.waterOutput;
     }
-    if (contributesCapacity) {
-      if (template.populationCapacity) populationCapacity += template.populationCapacity;
-      if (template.jobsCapacity) {
-        jobCapacity += template.jobsCapacity;
-        if (template.kind === BuildingKind.Commercial) commercialJobCapacity += template.jobsCapacity;
-        if (template.kind === BuildingKind.Industrial) industrialJobCapacity += template.jobsCapacity;
-      }
-    }
+    if (template.powerUse) buildingPowerUse += template.powerUse;
+    if (template.waterUse) buildingWaterUse += template.waterUse;
   }
-
-  const labourStats = computeLabourStats(state.population, populationCapacity, jobCapacity);
-  const pendingResidentialZones = Math.max(0, residentialZones - developedResidentialZones);
-  const pendingCommercialZones = Math.max(0, commercialZones - developedCommercialZones);
-  const pendingIndustrialZones = Math.max(0, industrialZones - developedIndustrialZones);
-  const fillResidential =
-    populationCapacity > 0 ? Math.min(1, state.population / populationCapacity) : 0;
-  const jobsInCommercial =
-    jobCapacity > 0 ? (commercialJobCapacity / Math.max(jobCapacity, 1)) * state.jobs : 0;
-  const jobsInIndustrial =
-    jobCapacity > 0 ? (industrialJobCapacity / Math.max(jobCapacity, 1)) * state.jobs : 0;
-  const fillCommercial =
-    commercialJobCapacity > 0 ? Math.min(1, jobsInCommercial / commercialJobCapacity) : 1;
-  const fillIndustrial =
-    industrialJobCapacity > 0 ? Math.min(1, jobsInIndustrial / industrialJobCapacity) : 1;
-  const workforceGap = Math.max(0, state.population - state.jobs);
-  const jobsOverPopulation = Math.max(0, state.jobs - state.population);
-  const utilityPenalty =
-    (state.utilities.power < 0 ? 15 : 0) + (state.utilities.water < 0 ? 15 : 0);
-  const pendingPenaltyEnabled = state.settings?.pendingPenaltyEnabled ?? true;
-
-  const seeded = state.population === 0 && state.jobs === 0;
-
-  const residentialDemand = computeDemand({
-    base: 70,
-    fillFraction: fillResidential,
-    workforceTerm: 0,
-    labourTerm: labourStats.vacancyRate * 60 - labourStats.unemploymentRate * 80,
-    pendingZones: pendingResidentialZones,
-    pendingSlope: 0.45,
-    utilityPenalty,
-    seeded,
-    seededValue: 50,
-    pendingPenaltyEnabled
-  });
-
-  const commercialDemand = computeDemand({
-    base: 50,
-    fillFraction: fillCommercial,
-    workforceTerm:
-      labourStats.unemploymentRate * 30 +
-      Math.min(1, state.population / Math.max(populationCapacity, 1)) * 20,
-    labourTerm: 0,
-    pendingZones: pendingCommercialZones,
-    pendingSlope: 0.35,
-    utilityPenalty: utilityPenalty * 0.5,
-    seeded,
-    seededValue: 30,
-    pendingPenaltyEnabled
-  });
-
-  const industrialDemand = computeDemand({
-    base: 55,
-    fillFraction: fillIndustrial,
-    workforceTerm:
-      labourStats.unemploymentRate * 80 + Math.max(0, 0.95 - fillIndustrial) * 20,
-    labourTerm: labourStats.vacancyRate * -5,
-    pendingZones: pendingIndustrialZones,
-    pendingSlope: 0.35,
-    utilityPenalty: utilityPenalty * 0.5,
-    seeded,
-    seededValue: 30,
-    pendingPenaltyEnabled
-  });
 
   return {
     tick: state.tick,
     day: state.day,
     population: state.population,
     jobs: state.jobs,
-    labour: labourStats,
+    labour: state.labour,
     zones: { residential: residentialZones, commercial: commercialZones, industrial: industrialZones },
-    capacities: { population: populationCapacity, jobs: jobCapacity },
+    capacities: { population: state.labour.resCapacity, jobs: state.labour.jobCapacity },
     utilities: {
       powerProduced: state.utilities.powerProduced,
       powerUsed: buildingPowerUse,
@@ -224,65 +116,10 @@ export function getSimulationDebugStats(state: GameState): SimulationDebugStats 
       highCoverage
     },
     demand: {
-      residential: residentialDemand.value,
-      commercial: commercialDemand.value,
-      industrial: industrialDemand.value
+      residential: state.demand.residential,
+      commercial: state.demand.commercial,
+      industrial: state.demand.industrial
     },
-    demandDetails: {
-      residential: {
-        base: 70,
-        fillFraction: residentialDemand.fillFraction,
-        fillTerm: residentialDemand.fillTerm,
-        pendingZones: residentialDemand.pendingZones,
-        pendingPenaltyRaw: residentialDemand.pendingPenaltyRaw,
-        pendingPenaltyCapped: residentialDemand.pendingPenaltyCapped,
-        pendingPenaltyApplied: residentialDemand.pendingPenaltyApplied,
-        pressureRelief: residentialDemand.pressureRelief,
-        labourTerm: residentialDemand.labourTerm ?? 0,
-        workforceGap: jobsOverPopulation,
-        workforceTerm: residentialDemand.workforceTerm,
-        utilityPenalty: residentialDemand.utilityPenalty,
-        demandBeforeUtilities: residentialDemand.demandBeforeUtilities,
-        floorApplied: residentialDemand.floorApplied,
-        seeded,
-        final: residentialDemand.value
-      },
-      commercial: {
-        base: 50,
-        fillFraction: commercialDemand.fillFraction,
-        fillTerm: commercialDemand.fillTerm,
-        pendingZones: commercialDemand.pendingZones,
-        pendingPenaltyRaw: commercialDemand.pendingPenaltyRaw,
-        pendingPenaltyCapped: commercialDemand.pendingPenaltyCapped,
-        pendingPenaltyApplied: commercialDemand.pendingPenaltyApplied,
-        pressureRelief: commercialDemand.pressureRelief,
-        labourTerm: commercialDemand.labourTerm ?? 0,
-        workforceGap,
-        workforceTerm: commercialDemand.workforceTerm,
-        utilityPenalty: commercialDemand.utilityPenalty,
-        demandBeforeUtilities: commercialDemand.demandBeforeUtilities,
-        floorApplied: commercialDemand.floorApplied,
-        seeded,
-        final: commercialDemand.value
-      },
-      industrial: {
-        base: 55,
-        fillFraction: industrialDemand.fillFraction,
-        fillTerm: industrialDemand.fillTerm,
-        pendingZones: industrialDemand.pendingZones,
-        pendingPenaltyRaw: industrialDemand.pendingPenaltyRaw,
-        pendingPenaltyCapped: industrialDemand.pendingPenaltyCapped,
-        pendingPenaltyApplied: industrialDemand.pendingPenaltyApplied,
-        pressureRelief: industrialDemand.pressureRelief,
-        labourTerm: industrialDemand.labourTerm ?? 0,
-        workforceGap,
-        workforceTerm: industrialDemand.workforceTerm,
-        utilityPenalty: industrialDemand.utilityPenalty,
-        demandBeforeUtilities: industrialDemand.demandBeforeUtilities,
-        floorApplied: industrialDemand.floorApplied,
-        seeded,
-        final: industrialDemand.value
-      }
-    }
+    demandDetails: state.demand.breakdown
   };
 }

@@ -81,6 +81,10 @@ export interface SimStats {
   wildernessTransport: number;
   wildernessPower: number;
   wildernessCivic: number;
+  /** Number of tiles flagged abandoned — see `GameState::abandoned_count` (Rust). */
+  abandonedCount: number;
+  /** Mean tile happiness across the grid — see `GameState::avg_happiness` (Rust). */
+  avgHappiness: number;
 }
 
 /**
@@ -199,9 +203,10 @@ function startStepLoop(): void {
     const educationJson = host.education_json();
     const educationSeatsUsedJson = host.education_seats_used_json();
     const budgetHistoryJson = host.budget_history_json();
+    const demandBreakdownJson = host.demand_breakdown_json();
     const alerts: SimAlert[] = JSON.parse(host.take_alerts_json() || '[]');
     self.postMessage(
-      { type: 'step_result', bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, mutationSeq, alerts },
+      { type: 'step_result', bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, demandBreakdownJson, mutationSeq, alerts },
       { transfer: [bytes.buffer as ArrayBuffer] },
     );
   }, STEP_INTERVAL_MS);
@@ -266,6 +271,8 @@ function gatherStats(h: SimHost): SimStats {
     wildernessTransport:     h.wilderness_transport(),
     wildernessPower:         h.wilderness_power(),
     wildernessCivic:         h.wilderness_civic(),
+    abandonedCount:          h.abandoned_count(),
+    avgHappiness:            h.avg_happiness(),
   };
 }
 
@@ -368,7 +375,13 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
       // simple; a rejected placement just costs one extra harmless apply on
       // the main thread instead of a missed one.
       mutationSeq++;
-      self.postMessage({ type: 'apply_result', success, message, history: historyFlags(host) });
+      // `strokeId` is echoed straight from the payload that triggered this
+      // `apply_tool` call — the worker is single-threaded, so it's always
+      // the id of the command that just ran, no Rust round trip needed
+      // (unlike the Tauri path, where the result crosses an IPC boundary
+      // and `CommandResult` itself carries the id — see `commands.rs`'s
+      // `CommandResult::with_stroke_id`).
+      self.postMessage({ type: 'apply_result', success, message, strokeId: msg.payload.strokeId, history: historyFlags(host) });
       break;
     }
     case 'set_speed': {
@@ -393,8 +406,9 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         const educationJson = host.education_json();
         const educationSeatsUsedJson = host.education_seats_used_json();
         const budgetHistoryJson = host.budget_history_json();
+    const demandBreakdownJson = host.demand_breakdown_json();
         self.postMessage(
-          { type: 'undo_result', happened: true, bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, mutationSeq, history: historyFlags(host) },
+          { type: 'undo_result', happened: true, bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, demandBreakdownJson, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -414,8 +428,9 @@ self.onmessage = async (e: MessageEvent<MainToWorker>) => {
         const educationJson = host.education_json();
         const educationSeatsUsedJson = host.education_seats_used_json();
         const budgetHistoryJson = host.budget_history_json();
+    const demandBreakdownJson = host.demand_breakdown_json();
         self.postMessage(
-          { type: 'redo_result', happened: true, bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, mutationSeq, history: historyFlags(host) },
+          { type: 'redo_result', happened: true, bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, demandBreakdownJson, mutationSeq, history: historyFlags(host) },
           { transfer: [bytes.buffer as ArrayBuffer] },
         );
       } else {
@@ -490,6 +505,7 @@ function postLoadResult(h: SimHost, requestId: number): void {
       educationJson: h.education_json(),
       educationSeatsUsedJson: h.education_seats_used_json(),
       budgetHistoryJson: h.budget_history_json(),
+      demandBreakdownJson: h.demand_breakdown_json(),
       mutationSeq,
       history: historyFlags(h),
     },

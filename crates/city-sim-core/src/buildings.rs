@@ -13,17 +13,23 @@ use city_sim_protocol::building_kind::BuildingKind;
 
 /// Runtime status of a building.  Mirrors `BuildingStatus` in
 /// `app/src/game/buildings/state.ts`.
+///
+/// `#[repr(u8)]` with explicit discriminants — this is `WireBuilding.status`
+/// on the wire (`#200`'s wire-adoption follow-up); the TS mirror decodes it
+/// with `BUILDING_STATUS_BY_U8` (`protocol/buildingStatus.ts`), which must
+/// stay in the same order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
 pub enum BuildingStatus {
-    Active,
-    InactiveNoPower,
-    InactiveNoWater,
+    Active = 0,
+    InactiveNoPower = 1,
+    InactiveNoWater = 2,
     /// A water source (pump) whose footprint doesn't touch `Terrain::Water`
     /// (`#200`). Distinct from `InactiveNoWater`, which is about a building
     /// *consuming* water it can't reach — a pump doesn't consume water, it
     /// fails to produce it.
-    InactiveNoSource,
-    InactiveDamaged,
+    InactiveNoSource = 3,
+    InactiveDamaged = 4,
 }
 
 // ---------------------------------------------------------------------------

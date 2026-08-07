@@ -22,8 +22,9 @@ use city_sim_protocol::building_kind::{BuildingCategory, BuildingKind};
 use city_sim_protocol::commands::{CommandResult, Policies};
 use city_sim_protocol::events::SimAlert;
 use city_sim_protocol::wire_types::{
-    WireBudgetHistoryEntry, WireBuilding, WireEducationSeatsUsed, WireEducationStats,
-    WireUtilityComponent,
+    WireBudgetHistoryEntry, WireBudgetStats, WireBuilding, WireDemandBreakdown,
+    WireEducationSeatsUsed, WireEducationStats, WireLabourStats, WireUtilityComponent,
+    WireWildernessBreakdown,
 };
 use ts_rs::{Config, TS};
 
@@ -59,6 +60,11 @@ fn export_bindings() {
     WireEducationStats::export_all(&cfg).expect("export WireEducationStats");
     WireEducationSeatsUsed::export_all(&cfg).expect("export WireEducationSeatsUsed");
     WireBudgetHistoryEntry::export_all(&cfg).expect("export WireBudgetHistoryEntry");
+    WireBudgetStats::export_all(&cfg).expect("export WireBudgetStats");
+    WireWildernessBreakdown::export_all(&cfg).expect("export WireWildernessBreakdown");
+    WireLabourStats::export_all(&cfg).expect("export WireLabourStats");
+    // Pulls in `WireDemandClassBreakdown` as a structural dependency.
+    WireDemandBreakdown::export_all(&cfg).expect("export WireDemandBreakdown");
     // Not a structural dependency of `BuildingKind` (`category()` is a method, not a
     // field), so it needs its own explicit call.
     BuildingKind::export_all(&cfg).expect("export BuildingKind");

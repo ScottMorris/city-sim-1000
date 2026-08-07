@@ -67,41 +67,65 @@ export function stratumParam(params: Record<string, unknown>): ViewStratum {
  * so this file stays testable without importing the full protocol union. */
 export interface CommandResultLike {
   success: boolean;
-  message?: string;
+  /** `null` (not absent) when the engine sent no message — matches the wire
+   *  shape of the generated `CommandResult` exactly. */
+  message: string | null;
 }
 
 /**
- * Correlates `ApplyTool` sends to the `CommandResult`s the worker reports
- * back for them. The wire message carries no id (`{ type: 'CommandResult',
- * success, message }` — see `protocol/events.ts`), but the worker posts
- * exactly one `apply_result` per `apply_tool` message it receives, in the
- * order received (`wasmSim.worker.ts`'s `case 'apply_tool'`), so matching
- * each pending send to the oldest still-unresolved entry is reliable *as
- * long as MCP mode is the only source of `ApplyTool` commands* — true for
- * scripted play, not for a human clicking the same tab at the same time.
- * Exported (only) so it's unit-testable — see `stratumParam`'s doc comment.
+ * Correlates `ApplyTool` sends to the `CommandResult`s the bridges report
+ * back for them, keyed by `strokeId` (both bridges now stamp one onto every
+ * `CommandResult` — see `protocol/events.ts`'s `FromSim` doc comment).
+ *
+ * Used to be a blind FIFO queue matching sends to results in arrival order —
+ * reliable only "as long as MCP mode is the only source of `ApplyTool`
+ * commands and results arrive in send order". Neither held: a human clicking
+ * the same tab interleaves their own `ApplyTool` sends with MCP's, and
+ * Tauri's IPC gives no ordering guarantee across concurrent `invoke()` calls
+ * — either could shift an unrelated result into the wrong pending slot.
+ * Keying by id removes both assumptions. Exported (only) so it's
+ * unit-testable — see `stratumParam`'s doc comment.
  */
 export function createCommandResultQueue() {
-  const pending: Array<(result: CommandResultLike) => void> = [];
+  // One FIFO of resolvers *per stroke id* — a line/rect stroke sends many
+  // `ApplyTool`s under a single id, so a flat `Map<strokeId, resolver>`
+  // would overwrite all but the last send in the batch. Within one stroke
+  // the engine answers in send order (the worker is single-threaded and the
+  // Tauri plugin serialises on its state mutex), so per-stroke FIFO is
+  // exact; across strokes the id does the matching, which is what fixes
+  // the misattribution the old blind global FIFO allowed.
+  const pending = new Map<number, Array<(result: CommandResultLike) => void>>();
   return {
     /**
-     * Call once per `ApplyTool` send, in send order. `cancel` drops the
-     * entry without resolving it — callers that give up waiting (a timeout)
-     * must call it, or a later, unrelated `CommandResult` would shift into
-     * this slot and resolve the wrong send.
+     * Call once per `ApplyTool` send, with the exact `strokeId` it was sent
+     * with. `cancel` drops the entry without resolving it — callers that
+     * give up waiting (a timeout) must call it, or a later result for the
+     * same stroke would resolve the abandoned slot instead of its own.
      */
-    expectNext(): { promise: Promise<CommandResultLike>; cancel: () => void } {
+    expectNext(strokeId: number): { promise: Promise<CommandResultLike>; cancel: () => void } {
       let resolve!: (result: CommandResultLike) => void;
       const promise = new Promise<CommandResultLike>(res => { resolve = res; });
-      pending.push(resolve);
+      const queue = pending.get(strokeId) ?? [];
+      queue.push(resolve);
+      pending.set(strokeId, queue);
       return { promise, cancel: () => {
-        const i = pending.indexOf(resolve);
-        if (i !== -1) pending.splice(i, 1);
+        const q = pending.get(strokeId);
+        if (!q) return;
+        const i = q.indexOf(resolve);
+        if (i !== -1) q.splice(i, 1);
+        if (q.length === 0) pending.delete(strokeId);
       } };
     },
-    /** Call once per `CommandResult` message received, in arrival order. */
-    resolveNext(result: CommandResultLike): void {
-      pending.shift()?.(result);
+    /**
+     * Call once per `CommandResult` message received. A no-op for an id with
+     * nothing pending — already resolved, cancelled, or never ours.
+     */
+    resolveNext(result: CommandResultLike & { strokeId: number }): void {
+      const queue = pending.get(result.strokeId);
+      const resolve = queue?.shift();
+      if (!queue || !resolve) return;
+      if (queue.length === 0) pending.delete(result.strokeId);
+      resolve(result);
     },
   };
 }
@@ -157,7 +181,9 @@ export function initMcpBridge(
   const replyOverrides = new Map<string, (result: unknown, error?: string) => void>();
   const commandResults = createCommandResultQueue();
   tapSimMessages(msg => {
-    if (msg.type === 'CommandResult') commandResults.resolveNext(msg);
+    if (msg.type === 'CommandResult') {
+      commandResults.resolveNext({ success: msg.success, message: msg.message ?? null, strokeId: msg.strokeId });
+    }
   });
 
   // Fire an ApplyTool command and resolve once its CommandResult arrives —
@@ -167,11 +193,11 @@ export function initMcpBridge(
   function sendApplyTool(
     tool: Tool, x: number, y: number, strokeId: number, stratum: ViewStratum,
   ): Promise<CommandResultLike> {
-    const { promise, cancel } = commandResults.expectNext();
+    const { promise, cancel } = commandResults.expectNext(strokeId);
     bridge.send({ type: 'ApplyTool', tool, x, y, strokeId, stratum });
     return Promise.race([
       promise,
-      new Promise<CommandResultLike>(resolve => setTimeout(() => { cancel(); resolve({ success: true }); }, 2000)),
+      new Promise<CommandResultLike>(resolve => setTimeout(() => { cancel(); resolve({ success: true, message: null }); }, 2000)),
     ]);
   }
 
