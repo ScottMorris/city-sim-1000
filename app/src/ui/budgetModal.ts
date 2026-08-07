@@ -4,7 +4,7 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { GameState } from '../game/gameState';
+import { GameState, type BudgetStats } from '../game/gameState';
 import { PowerPlantType } from '../game/constants';
 import { BuildingKind } from '../game/buildings/templates';
 import { formatCurrency } from '../utils/currency';
@@ -20,6 +20,110 @@ import {
   NEUTRAL_TAX_RATE,
   type BudgetPolicy
 } from '../game/protocol/commands';
+
+/**
+ * Civic-building maintenance categories in a derived breakdown's
+ * `details.buildings.civicByType`. Matches `BuildingKind` values except
+ * `'school'`, which is not a `BuildingKind` — the Rust side combines
+ * Elementary + High School maintenance into one bucket
+ * (`maint_civic_school`, `economy.rs`) rather than splitting per building
+ * kind.
+ */
+export type CivicBudgetCategory = BuildingKind.Park | BuildingKind.WaterPump | BuildingKind.WaterTower | 'school';
+
+/**
+ * The grouped/nested shape the ledger UI renders from — derived at display
+ * time (`deriveBudgetBreakdown`) from `state.budget`'s flat wire fields.
+ * `state.budget` itself carries `WireBudgetStats` verbatim; this grouping
+ * used to live nested inside the mirror (`BudgetStats.breakdown`) — moved
+ * here so the mirror holds wire shapes verbatim and reshaping happens only
+ * where it's consumed.
+ */
+export interface BudgetBreakdown {
+  revenue: {
+    base: number;
+    residents: number;
+    commercial: number;
+    industrial: number;
+    tourism: number;
+  };
+  expenses: {
+    transport: number;
+    buildings: number;
+    /** Daily cost of active wilderness programmes. */
+    policies: number;
+  };
+  details: {
+    transport: {
+      roads: number;
+      rail: number;
+      powerLines: number;
+      waterPipes: number;
+    };
+    buildings: {
+      power: number;
+      civic: number;
+      zones: number;
+      powerByType: Partial<Record<PowerPlantType, number>>;
+      civicByType: Partial<Record<CivicBudgetCategory, number>>;
+      zonesByType: Partial<Record<BuildingKind, number>>;
+    };
+  };
+}
+
+/**
+ * Groups `state.budget`'s flat wire fields into the nested shape the ledger
+ * UI renders from — a pure function so it's unit-testable without a DOM.
+ * The wire mirror (`gameState.ts`'s `BudgetStats`) stays flat; grouping is
+ * a display-time concern, not something either bridge should reshape into
+ * the mirror.
+ */
+export function deriveBudgetBreakdown(budget: BudgetStats): BudgetBreakdown {
+  return {
+    revenue: {
+      base: budget.revenueBase,
+      residents: budget.revenuePop,
+      commercial: budget.revenueCommercial,
+      industrial: budget.revenueIndustrial,
+      tourism: budget.revenueTourism
+    },
+    expenses: {
+      transport: budget.expensesTransport,
+      buildings: budget.expensesBuildings,
+      policies: budget.expensesPolicies
+    },
+    details: {
+      transport: {
+        roads: budget.maintRoads,
+        rail: budget.maintRail,
+        powerLines: budget.maintPowerLines,
+        waterPipes: budget.maintPipes
+      },
+      buildings: {
+        power: budget.maintPower,
+        civic: budget.maintCivic,
+        zones: budget.maintZones,
+        powerByType: {
+          [PowerPlantType.Hydro]: budget.maintPowerHydro,
+          [PowerPlantType.Coal]: budget.maintPowerCoal,
+          [PowerPlantType.Wind]: budget.maintPowerWind,
+          [PowerPlantType.Solar]: budget.maintPowerSolar
+        },
+        civicByType: {
+          [BuildingKind.Park]: budget.maintCivicPark,
+          [BuildingKind.WaterPump]: budget.maintCivicPump,
+          [BuildingKind.WaterTower]: budget.maintCivicTower,
+          school: budget.maintCivicSchool
+        },
+        zonesByType: {
+          [BuildingKind.Residential]: budget.maintZonesRes,
+          [BuildingKind.Commercial]: budget.maintZonesCom,
+          [BuildingKind.Industrial]: budget.maintZonesInd
+        }
+      }
+    }
+  };
+}
 
 interface BudgetModalOptions {
   triggerBtn?: HTMLButtonElement;
@@ -60,8 +164,8 @@ interface LedgerRow {
   subrows?: LedgerRow[];
 }
 
-function revenueRows(state: GameState): LedgerRow[] {
-  const r = state.budget.breakdown.revenue;
+function revenueRows(breakdown: BudgetBreakdown): LedgerRow[] {
+  const r = breakdown.revenue;
   const rows: LedgerRow[] = [
     { label: 'Base stipend', value: toNumber(r.base), colour: '#7bffb7' },
     { label: 'Residential taxes', value: toNumber(r.residents), colour: '#5ee6a0' },
@@ -76,8 +180,8 @@ function revenueRows(state: GameState): LedgerRow[] {
   return rows;
 }
 
-function expenseRows(state: GameState): LedgerRow[] {
-  const d = state.budget.breakdown.details;
+function expenseRows(breakdown: BudgetBreakdown): LedgerRow[] {
+  const d = breakdown.details;
   const powerBy = d.buildings.powerByType ?? {};
   const civicBy = d.buildings.civicByType ?? {};
   const zonesBy = d.buildings.zonesByType ?? {};
@@ -133,10 +237,10 @@ function expenseRows(state: GameState): LedgerRow[] {
       ]
     },
     // Only present while a wilderness programme is active (Bylaws screen).
-    ...(toNumber(state.budget.breakdown.expenses.policies) > 0
+    ...(toNumber(breakdown.expenses.policies) > 0
       ? [{
           label: '🌿 Wilderness programmes',
-          value: toNumber(state.budget.breakdown.expenses.policies),
+          value: toNumber(breakdown.expenses.policies),
           colour: '#8ee08e'
         }]
       : [])
@@ -419,8 +523,7 @@ export function initBudgetModal(options: BudgetModalOptions) {
       // neutral bylaw would have produced, purely to show the delta the
       // active bylaw is responsible for.
       const appliedPowerUse = state.utilities.powerUsed;
-      const appliedMaintenance =
-        state.budget.breakdown.details.buildings.civic + state.budget.breakdown.details.buildings.zones;
+      const appliedMaintenance = budget.maintCivic + budget.maintZones;
       const neutralPreview = previewLightingPolicy(
         lighting,
         DEFAULT_LIGHTING_POLICY,
@@ -453,8 +556,9 @@ export function initBudgetModal(options: BudgetModalOptions) {
         </div>
       `;
 
-      const revenue = revenueRows(state);
-      const expenses = expenseRows(state);
+      const breakdown = deriveBudgetBreakdown(budget);
+      const revenue = revenueRows(breakdown);
+      const expenses = expenseRows(breakdown);
       // Headline totals read the wire (`state.budget.revenue`/`expenses`)
       // rather than re-summing the display rows below, so they can't drift
       // from the engine if a breakdown category is added on one side only.

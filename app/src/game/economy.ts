@@ -5,22 +5,19 @@
 
 import { GameState } from './gameState';
 import { getCalendarPosition, DAYS_PER_MONTH } from './time';
+import type { WireBudgetHistoryEntry } from './protocol/generated/WireBudgetHistoryEntry';
 
 export const MONTHS_PER_QUARTER = 3;
 
 /**
- * `#229`: mirrors `city_sim_core::state::BudgetHistoryEntry` exactly. Rust
- * is the sole source now — the ring buffer, its 200-day cap, and the
- * day-boundary dedup this used to need client-side all live in
- * `economy::record_daily_budget`; the wire's `budgetHistory` array is
- * adopted verbatim by both bridges, see `wasmSimBridge.ts`/`tauriSimBridge.ts`.
+ * `#229`: the generated wire shape verbatim — see `WireBudgetHistoryEntry`,
+ * which mirrors `city_sim_core::state::BudgetHistoryEntry`. Rust is the sole
+ * source now — the ring buffer, its 200-day cap, and the day-boundary dedup
+ * this used to need client-side all live in `economy::record_daily_budget`;
+ * the wire's `budgetHistory` array is adopted verbatim by both bridges, see
+ * `wasmSimBridge.ts`/`tauriSimBridge.ts`.
  */
-export interface BudgetHistoryEntry {
-  day: number;
-  revenue: number;
-  expenses: number;
-  net: number;
-}
+export type BudgetHistoryEntry = WireBudgetHistoryEntry;
 
 export interface BudgetBucket {
   label: string;

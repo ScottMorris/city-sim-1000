@@ -174,9 +174,16 @@ export function getToolDetails(tool: Tool): ToolDetails {
       const plantType = powerPlantToolToType[tool];
       if (!plantType) break;
       const config = POWER_PLANT_CONFIGS[plantType];
+      // `outputMw` is display-only (`constants.ts`'s `PowerPlantConfig` doc
+      // comment); footprint/maintenance come from the building template,
+      // which is templateData.json-sourced — same pattern as the
+      // WaterPump/WaterTower case below.
+      const template = getBuildingTemplate(tool);
       rows.push({ label: 'Output', value: `${config.outputMw} MW` });
-      rows.push({ label: 'Footprint', value: formatFootprint(config.footprint.width, config.footprint.height) });
-      withMaintenanceRow(rows, config.maintenancePerDay);
+      if (template) {
+        rows.push({ label: 'Footprint', value: formatFootprint(template.footprint.width, template.footprint.height) });
+        withMaintenanceRow(rows, template.maintenance);
+      }
       if (tool === Tool.HydroPlant && config.requiresWaterEdge) {
         hints.push('Place along water edges for flavour; placement rules will tighten with pipes.');
       }

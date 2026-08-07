@@ -5,6 +5,7 @@
 
 import { Occupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
+import { engineToolCost } from './buildings/templateData';
 
 export enum PowerPlantType {
   Hydro = 'hydro',
@@ -13,13 +14,18 @@ export enum PowerPlantType {
   Solar = 'solar'
 }
 
+/**
+ * Display-only power plant config. `outputMw` mirrors Rust's `HYDRO_PLANT_MW`
+ * &c. (`crates/city-sim-core/src/buildings.rs`) but is display-only here
+ * (the toolbar tooltip in `ui/toolInfo.ts`) — nothing client-side computes
+ * with it, unlike `footprint`/build cost/maintenance, which used to live
+ * here too and now come from `templateData.json` (`buildings/templates.ts`,
+ * `BUILD_COST` below) since the engine actually charges/enforces them.
+ */
 export interface PowerPlantConfig {
   id: PowerPlantType;
   name: string;
   outputMw: number;
-  buildCost: number;
-  maintenancePerDay: number;
-  footprint: { width: number; height: number };
   requiresWaterEdge?: boolean;
 }
 
@@ -28,62 +34,36 @@ export const POWER_PLANT_CONFIGS: Record<PowerPlantType, PowerPlantConfig> = {
     id: PowerPlantType.Hydro,
     name: 'Hydro Plant',
     outputMw: 60,
-    buildCost: 20000,
-    maintenancePerDay: 150,
-    footprint: { width: 2, height: 2 },
     requiresWaterEdge: true
   },
   [PowerPlantType.Coal]: {
     id: PowerPlantType.Coal,
     name: 'Coal Plant',
-    outputMw: 80,
-    buildCost: 25000,
-    maintenancePerDay: 300,
-    footprint: { width: 2, height: 2 }
+    outputMw: 80
   },
   [PowerPlantType.Wind]: {
     id: PowerPlantType.Wind,
     name: 'Wind Turbine',
-    outputMw: 8,
-    buildCost: 5000,
-    maintenancePerDay: 30,
-    footprint: { width: 2, height: 2 }
+    outputMw: 8
   },
   [PowerPlantType.Solar]: {
     id: PowerPlantType.Solar,
     name: 'Solar Farm',
-    outputMw: 5,
-    buildCost: 4000,
-    maintenancePerDay: 20,
-    footprint: { width: 2, height: 2 }
+    outputMw: 5
   }
 };
 
-export const BUILD_COST: Record<Tool, number> = {
-  [Tool.Inspect]: 0,
-  [Tool.TerraformRaise]: 10,
-  [Tool.TerraformLower]: 10,
-  [Tool.Water]: 12,
-  [Tool.Tree]: 8,
-  [Tool.Road]: 5,
-  [Tool.Rail]: 15,
-  [Tool.PowerLine]: 6,
-  [Tool.HydroPlant]: POWER_PLANT_CONFIGS[PowerPlantType.Hydro].buildCost,
-  [Tool.CoalPlant]: POWER_PLANT_CONFIGS[PowerPlantType.Coal].buildCost,
-  [Tool.WindTurbine]: POWER_PLANT_CONFIGS[PowerPlantType.Wind].buildCost,
-  [Tool.SolarFarm]: POWER_PLANT_CONFIGS[PowerPlantType.Solar].buildCost,
-  [Tool.WaterPump]: 400,
-  [Tool.WaterTower]: 1200,
-  [Tool.WaterPipe]: 4,
-  [Tool.ElementarySchool]: 4500,
-  [Tool.HighSchool]: 7000,
-  [Tool.Residential]: 40,
-  [Tool.Commercial]: 60,
-  [Tool.Industrial]: 80,
-  [Tool.Bulldoze]: 1,
-  [Tool.Park]: 10,
-  [Tool.ParkLarge]: 32
-};
+/**
+ * The HUD/toolbar display cost for every `Tool`, read from
+ * `templateData.json`'s `toolCost` — generated from Rust's own `tool_cost`
+ * (`crates/city-sim-core/src/commands.rs`), the function that actually
+ * charges the player. `BUILD_COST` used to be a hand-typed literal table
+ * `tool_cost` was copied from by hand; now there is exactly one number per
+ * tool, and Rust owns it.
+ */
+export const BUILD_COST: Record<Tool, number> = Object.fromEntries(
+  (Object.keys(Tool) as (keyof typeof Tool)[]).map((key) => [Tool[key], engineToolCost(key)])
+) as Record<Tool, number>;
 
 /** Per-day upkeep for linear infrastructure, keyed by the occupant it is —
  *  these were never kinds of tile, they're things a tile carries. Display

@@ -1,0 +1,193 @@
+{
+  "buildings": {
+    "CoalPlant": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 300.0,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "Commercial": {
+      "footprint": {
+        "width": 1,
+        "height": 1
+      },
+      "maintenance": 1.2,
+      "powerUse": 2.5,
+      "waterUse": 1.5,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 8
+    },
+    "ElementarySchool": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 40.0,
+      "powerUse": 4.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0,
+      "service": {
+        "radius": 8,
+        "capacity": 180
+      }
+    },
+    "HighSchool": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 55.0,
+      "powerUse": 5.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0,
+      "service": {
+        "radius": 9,
+        "capacity": 160
+      }
+    },
+    "HydroPlant": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 150.0,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "Industrial": {
+      "footprint": {
+        "width": 1,
+        "height": 1
+      },
+      "maintenance": 1.4,
+      "powerUse": 3.0,
+      "waterUse": 2.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 12
+    },
+    "Park": {
+      "footprint": {
+        "width": 1,
+        "height": 1
+      },
+      "maintenance": 0.05,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "ParkLarge": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 0.16,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "Residential": {
+      "footprint": {
+        "width": 1,
+        "height": 1
+      },
+      "maintenance": 1.0,
+      "powerUse": 1.5,
+      "waterUse": 1.0,
+      "waterOutput": 0,
+      "populationCapacity": 14,
+      "jobsCapacity": 0
+    },
+    "SolarFarm": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 20.0,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "WaterPump": {
+      "footprint": {
+        "width": 1,
+        "height": 1
+      },
+      "maintenance": 5.0,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 50,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "WaterTower": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 12.0,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 120,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    },
+    "WindTurbine": {
+      "footprint": {
+        "width": 2,
+        "height": 2
+      },
+      "maintenance": 30.0,
+      "powerUse": 0.0,
+      "waterUse": 0.0,
+      "waterOutput": 0,
+      "populationCapacity": 0,
+      "jobsCapacity": 0
+    }
+  },
+  "toolCost": {
+    "Bulldoze": 1,
+    "CoalPlant": 25000,
+    "Commercial": 60,
+    "ElementarySchool": 4500,
+    "HighSchool": 7000,
+    "HydroPlant": 20000,
+    "Industrial": 80,
+    "Inspect": 0,
+    "Park": 10,
+    "ParkLarge": 32,
+    "PowerLine": 6,
+    "Rail": 15,
+    "Residential": 40,
+    "Road": 5,
+    "SolarFarm": 4000,
+    "TerraformLower": 10,
+    "TerraformRaise": 10,
+    "Tree": 8,
+    "Water": 12,
+    "WaterPipe": 4,
+    "WaterPump": 400,
+    "WaterTower": 1200,
+    "WindTurbine": 5000
+  }
+}

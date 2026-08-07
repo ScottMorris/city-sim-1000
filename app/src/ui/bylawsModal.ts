@@ -254,8 +254,7 @@ export function initBylawsModal(options: BylawsModalOptions) {
       const currentLighting = state.policies.lighting;
       const currentPolicy = LIGHTING_POLICIES[currentLighting];
       const appliedPowerUse = state.utilities.powerUsed;
-      const appliedMaintenance =
-        state.budget.breakdown.details.buildings.civic + state.budget.breakdown.details.buildings.zones;
+      const appliedMaintenance = state.budget.maintCivic + state.budget.maintZones;
       lightingOptions.innerHTML = '';
       Object.values(LIGHTING_POLICIES).forEach((policy) => {
         const projection = previewLightingPolicy(currentLighting, policy.id, appliedPowerUse, appliedMaintenance);

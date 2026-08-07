@@ -5,7 +5,6 @@
 
 import type { Texture } from 'pixi.js';
 
-import { POWER_PLANT_CONFIGS, PowerPlantType } from '../game/constants';
 import { BuildingKind, getBuildingTemplate } from '../game/buildings/templates';
 import { getTile, type GameState } from '../game/gameState';
 import { Occupant, Terrain, hasOccupant, zoneOccupant } from '../game/protocol/occupants';
@@ -318,7 +317,11 @@ function resolveBaseTileSprite(
   const buildingEntry = tile.buildingId !== undefined ? buildingLookup.get(tile.buildingId) : undefined;
   const plantType = buildingEntry?.template?.power?.type;
   if (plantType) {
-    const footprint = buildingEntry?.template?.footprint ?? POWER_PLANT_CONFIGS[plantType]?.footprint;
+    // `plantType` is only set when `buildingEntry.template` resolved (it
+    // reads `.template?.power?.type`), so `.footprint` is always present
+    // here too — no `POWER_PLANT_CONFIGS` fallback needed (that config is
+    // display-only now; see its doc comment in `constants.ts`).
+    const footprint = buildingEntry?.template?.footprint;
     const origin = buildingEntry?.origin ?? (footprint ? { x, y } : undefined);
     if (footprint && origin) {
       const { width, height } = footprint;

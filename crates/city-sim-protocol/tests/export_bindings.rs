@@ -18,7 +18,7 @@
 
 use std::path::PathBuf;
 
-use city_sim_protocol::building_kind::{BuildingCategory, BuildingKind};
+use city_sim_protocol::building_kind::BuildingKind;
 use city_sim_protocol::commands::{CommandResult, Policies};
 use city_sim_protocol::events::SimAlert;
 use city_sim_protocol::wire_types::{
@@ -65,8 +65,9 @@ fn export_bindings() {
     WireLabourStats::export_all(&cfg).expect("export WireLabourStats");
     // Pulls in `WireDemandClassBreakdown` as a structural dependency.
     WireDemandBreakdown::export_all(&cfg).expect("export WireDemandBreakdown");
-    // Not a structural dependency of `BuildingKind` (`category()` is a method, not a
-    // field), so it needs its own explicit call.
     BuildingKind::export_all(&cfg).expect("export BuildingKind");
-    BuildingCategory::export_all(&cfg).expect("export BuildingCategory");
+    // `BuildingCategory` is deliberately NOT exported: no wire struct carries
+    // one (`WireBuilding.kind` is a raw `u8`) and TS has its own coarser
+    // three-way grouping for display (`LedgerGroup`) — see that enum's doc
+    // comment in `building_kind.rs`.
 }

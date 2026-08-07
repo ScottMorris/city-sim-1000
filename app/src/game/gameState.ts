@@ -3,7 +3,6 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
-import { PowerPlantType } from './constants';
 import { createDefaultPolicies, type Policies } from './protocol/commands';
 import { defaultHotkeys, type HotkeyBindings } from '../ui/hotkeys';
 import { createDefaultSfxOverrides, type SfxOverrides } from './sfxOverrides';
@@ -11,19 +10,15 @@ import { Occupant, Terrain, ZoneDensity, withOccupant } from './protocol/occupan
 import type { BudgetHistoryEntry } from './economy';
 import type { EducationStats } from './education';
 import type { BuildingInstance } from './buildings/state';
-import { BuildingKind } from './buildings/templates';
 import type { TileServiceState } from './services';
 import { createTileServiceState } from './services';
 import { SeededRng } from './rng';
-
-/**
- * Civic-building maintenance categories in `BudgetStats.breakdown.details.
- * buildings.civicByType`. Matches `BuildingKind` values except `'school'`,
- * which is not a `BuildingKind` — the Rust side combines Elementary + High
- * School maintenance into one bucket (`maint_civic_school`, `economy.rs`)
- * rather than splitting per building kind.
- */
-export type CivicBudgetCategory = BuildingKind.Park | BuildingKind.WaterPump | BuildingKind.WaterTower | 'school';
+import type { WireBudgetStats } from './protocol/generated/WireBudgetStats';
+import type { WireLabourStats } from './protocol/generated/WireLabourStats';
+import type { WireWildernessBreakdown } from './protocol/generated/WireWildernessBreakdown';
+import type { WireDemandBreakdown } from './protocol/generated/WireDemandBreakdown';
+import type { WireDemandClassBreakdown } from './protocol/generated/WireDemandClassBreakdown';
+import type { WireUtilityComponent } from './protocol/generated/WireUtilityComponent';
 
 export enum TileKind {
   Land = 'land',
@@ -147,20 +142,13 @@ export interface GameSettings {
 }
 
 /**
- * One physically-connected segment of a power or water network. Mirrors
- * Rust's `UtilityComponent` (`crates/city-sim-core/src/utilities.rs`) —
- * `produced`/`used` are left unrounded on the wire; round for display here,
- * not in the engine. `id` is stable only within one tick's recompute — a
- * grid edit can renumber every component on the next one.
+ * One physically-connected segment of a power or water network — the
+ * generated wire shape verbatim (`crates/city-sim-core/src/utilities.rs`'s
+ * `UtilityComponent`). `produced`/`used` are left unrounded on the wire;
+ * round for display, not here. `id` is stable only within one tick's
+ * recompute — a grid edit can renumber every component on the next one.
  */
-export interface UtilityComponentStats {
-  id: number;
-  produced: number;
-  used: number;
-  sourceCount: number;
-  /** `used / produced`, clamped to `[0, 1]`. */
-  utilisation: number;
-}
+export type UtilityComponentStats = WireUtilityComponent;
 
 export interface UtilityStats {
   power: number;
@@ -177,74 +165,43 @@ export interface UtilityStats {
 
 /**
  * Every intermediate value the engine's demand formula derives for one zone
- * class on the way to its final clamped percentage — mirrors Rust's
- * `DemandComputation` (`crates/city-sim-core/src/demand.rs`), wired as
- * `WireDemandClassBreakdown`. Replaces the TS shadow model that used to
- * recompute these locally (`app/src/game/demand.ts`, deleted).
+ * class on the way to its final clamped percentage — the generated wire
+ * shape verbatim (`crates/city-sim-core/src/demand.rs`'s
+ * `DemandComputation`, wired as `WireDemandClassBreakdown`). Replaces the TS
+ * shadow model that used to recompute these locally (`app/src/game/
+ * demand.ts`, deleted).
  */
-export interface DemandClassBreakdown {
-  base: number;
-  fillFraction: number;
-  fillTerm: number;
-  workforceTerm: number;
-  labourTerm: number;
-  pendingZones: number;
-  pendingPenaltyRaw: number;
-  pendingPenaltyCapped: number;
-  pendingPenaltyApplied: number;
-  pressureRelief: number;
-  utilityPenalty: number;
-  demandBeforeUtilities: number;
-  floorApplied: boolean;
-  seeded: boolean;
-  value: number;
-}
+export type DemandClassBreakdown = WireDemandClassBreakdown;
 
 export interface DemandStats {
   residential: number;
   commercial: number;
   industrial: number;
-  breakdown: {
-    residential: DemandClassBreakdown;
-    commercial: DemandClassBreakdown;
-    industrial: DemandClassBreakdown;
-  };
+  /** Per-class derivation, one entry per zone class — the generated wire
+   *  shape verbatim; see `DemandClassBreakdown`. */
+  breakdown: WireDemandBreakdown;
 }
 
 /**
- * City-wide labour aggregates — mirrors Rust's `LabourStats`
- * (`crates/city-sim-core/src/demand.rs`), wired as `WireLabourStats`.
- * Replaces the TS-side `computeLabourStats.ts` recompute (including its
- * hard-coded 0.55 worker-share constant).
+ * City-wide labour aggregates — the generated wire shape verbatim (Rust's
+ * `LabourStats`, `crates/city-sim-core/src/demand.rs`). Replaces the
+ * TS-side `computeLabourStats.ts` recompute (including its hard-coded 0.55
+ * worker-share constant).
  */
-export interface LabourStats {
-  population: number;
-  resCapacity: number;
-  jobCapacity: number;
-  workers: number;
-  employed: number;
-  unemployed: number;
-  unemploymentRate: number;
-  vacancyRate: number;
-}
+export type LabourStats = WireLabourStats;
 
-/** Per-category eco totals for the wilderness tooltip — mirrors
- *  `WildernessBreakdown` in `crates/city-sim-core/src/wilderness.rs`. */
-export interface WildernessBreakdown {
-  forests: number;
-  parks: number;
-  openLand: number;
-  waterEdge: number;
-  patch: number;
-  fragmentation: number;
-  zones: number;
-  industry: number;
-  transport: number;
-  power: number;
-  civic: number;
-}
+/** Per-category eco totals for the wilderness tooltip — the generated wire
+ *  shape verbatim (Rust's `WildernessBreakdown`,
+ *  `crates/city-sim-core/src/wilderness.rs`). */
+export type WildernessBreakdown = WireWildernessBreakdown;
 
-/** Wilderness score display state — mirrors the Rust `WildernessStats`. */
+/**
+ * Wilderness score display state — `score`/`trend` and `breakdown` arrive
+ * as three separately-wired values (see `wasmSim.worker.ts`'s `gatherStats`/
+ * `tauriSimBridge.ts`'s `onTick`), assembled into one mirror object here
+ * rather than reshaped from a single wire struct, so this stays a small
+ * composition rather than a hand-duplicated parallel of one.
+ */
 export interface WildernessStats {
   /** Global score, 0–100. */
   score: number;
@@ -253,44 +210,14 @@ export interface WildernessStats {
   breakdown: WildernessBreakdown;
 }
 
-export interface BudgetStats {
-  revenue: number;
-  expenses: number;
-  net: number;
-  netPerDay: number;
-  netPerMonth: number;
-  breakdown: {
-    revenue: {
-      base: number;
-      residents: number;
-      commercial: number;
-      industrial: number;
-      tourism: number;
-    };
-    expenses: {
-      transport: number;
-      buildings: number;
-      /** Daily cost of active wilderness programmes. */
-      policies: number;
-    };
-    details: {
-      transport: {
-        roads: number;
-        rail: number;
-        powerLines: number;
-        waterPipes: number;
-      };
-      buildings: {
-        power: number;
-        civic: number;
-        zones: number;
-        powerByType: Partial<Record<PowerPlantType, number>>;
-        civicByType: Partial<Record<CivicBudgetCategory, number>>;
-        zonesByType: Partial<Record<BuildingKind, number>>;
-      };
-    };
-  };
-}
+/**
+ * Full headline + breakdown budget snapshot — the generated wire shape
+ * verbatim (`WireBudgetStats`), flat fields and all. The grouped display
+ * maps (`powerByType`/`civicByType`/`zonesByType`) that used to live nested
+ * under `breakdown.details.buildings` here are derived at display time from
+ * these flat fields instead — see `budgetModal.ts`'s `deriveBudgetBreakdown`.
+ */
+export type BudgetStats = WireBudgetStats;
 
 export interface GameState {
   width: number;
@@ -434,6 +361,42 @@ export function createDefaultWildernessStats(): WildernessStats {
   };
 }
 
+export function createDefaultBudgetStats(): BudgetStats {
+  return {
+    revenue: 0,
+    expenses: 0,
+    net: 0,
+    netPerDay: 0,
+    netPerMonth: 0,
+    revenueBase: 0,
+    revenuePop: 0,
+    revenueCommercial: 0,
+    revenueIndustrial: 0,
+    revenueTourism: 0,
+    expensesTransport: 0,
+    expensesBuildings: 0,
+    expensesPolicies: 0,
+    maintPower: 0,
+    maintCivic: 0,
+    maintZones: 0,
+    maintRoads: 0,
+    maintRail: 0,
+    maintPowerLines: 0,
+    maintPipes: 0,
+    maintPowerHydro: 0,
+    maintPowerCoal: 0,
+    maintPowerWind: 0,
+    maintPowerSolar: 0,
+    maintCivicPark: 0,
+    maintCivicPump: 0,
+    maintCivicTower: 0,
+    maintCivicSchool: 0,
+    maintZonesRes: 0,
+    maintZonesCom: 0,
+    maintZonesInd: 0
+  };
+}
+
 export function createDefaultSettings(): GameSettings {
   return {
     minimap: createDefaultMinimapSettings(),
@@ -496,21 +459,7 @@ export function createInitialState(width = 64, height = 64, seed?: number): Game
       powerComponents: [],
       waterComponents: []
     },
-    budget: {
-      revenue: 0,
-      expenses: 0,
-      net: 0,
-      netPerDay: 0,
-      netPerMonth: 0,
-      breakdown: {
-        revenue: { base: 0, residents: 0, commercial: 0, industrial: 0, tourism: 0 },
-        expenses: { transport: 0, buildings: 0, policies: 0 },
-        details: {
-          transport: { roads: 0, rail: 0, powerLines: 0, waterPipes: 0 },
-          buildings: { power: 0, civic: 0, zones: 0, powerByType: {}, civicByType: {}, zonesByType: {} }
-        }
-      }
-    },
+    budget: createDefaultBudgetStats(),
     budgetHistory: [],
     demand: {
       residential: 30,

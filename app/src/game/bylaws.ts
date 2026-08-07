@@ -104,7 +104,7 @@ export interface LightingPreview {
  * Preview what `candidate` would cost, computed at display time from the
  * engine's already-applied wire figures (`appliedPowerUse`/
  * `appliedMaintenance` — the real numbers `state.utilities.powerUsed` and
- * `state.budget.breakdown.details.buildings.civic + .zones` carry under
+ * `state.budget.maintCivic + .maintZones` carry under
  * `current`) and the known multiplier ratio between `current` and
  * `candidate`. This is display-time arithmetic on wire values, never a
  * re-simulation — the engine remains the sole source of the *applied*

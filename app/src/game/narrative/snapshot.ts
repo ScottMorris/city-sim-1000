@@ -42,14 +42,14 @@ export function buildCitySnapshot(state: GameState): CitySnapshot {
       expenses: state.budget?.expenses ?? 0,
       breakdown: {
         revenue: {
-          base: state.budget?.breakdown.revenue.base ?? 0,
-          residents: state.budget?.breakdown.revenue.residents ?? 0,
-          commercial: state.budget?.breakdown.revenue.commercial ?? 0,
-          industrial: state.budget?.breakdown.revenue.industrial ?? 0
+          base: state.budget?.revenueBase ?? 0,
+          residents: state.budget?.revenuePop ?? 0,
+          commercial: state.budget?.revenueCommercial ?? 0,
+          industrial: state.budget?.revenueIndustrial ?? 0
         },
         expenses: {
-          transport: state.budget?.breakdown.expenses.transport ?? 0,
-          buildings: state.budget?.breakdown.expenses.buildings ?? 0
+          transport: state.budget?.expensesTransport ?? 0,
+          buildings: state.budget?.expensesBuildings ?? 0
         }
       }
     },

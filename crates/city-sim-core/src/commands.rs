@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::{
-    get_building_template, BuildingInstance, COAL_PLANT_MW, HYDRO_PLANT_MW, SOLAR_FARM_MW,
-    WIND_TURBINE_MW,
+    get_building_template, BuildingInstance, COAL_PLANT_MAINT, COAL_PLANT_MW, HYDRO_PLANT_MAINT,
+    HYDRO_PLANT_MW, SOLAR_FARM_MAINT, SOLAR_FARM_MW, WIND_TURBINE_MAINT, WIND_TURBINE_MW,
 };
 use crate::occupants::{
     iter_set, pair_conflicts, Occupant, OccupantSet, Stratum, Terrain, ZONE_MASK,
@@ -339,7 +339,7 @@ pub fn apply_tool(
             y,
             cost,
             HYDRO_PLANT_MW,
-            150.0,
+            HYDRO_PLANT_MAINT,
         ),
         Tool::CoalPlant => place_footprint_building(
             state,
@@ -348,7 +348,7 @@ pub fn apply_tool(
             y,
             cost,
             COAL_PLANT_MW,
-            300.0,
+            COAL_PLANT_MAINT,
         ),
         Tool::WindTurbine => place_footprint_building(
             state,
@@ -357,7 +357,7 @@ pub fn apply_tool(
             y,
             cost,
             WIND_TURBINE_MW,
-            30.0,
+            WIND_TURBINE_MAINT,
         ),
         Tool::SolarFarm => place_footprint_building(
             state,
@@ -366,7 +366,7 @@ pub fn apply_tool(
             y,
             cost,
             SOLAR_FARM_MW,
-            20.0,
+            SOLAR_FARM_MAINT,
         ),
         Tool::WaterPump => {
             place_footprint_building(state, BuildingKind::WaterPump, x, y, cost, 0, 0.0)
