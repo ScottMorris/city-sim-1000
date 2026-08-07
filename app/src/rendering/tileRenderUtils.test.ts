@@ -531,6 +531,5 @@ describe('resolveIndicatorKey', () => {
     expect(resolveIndicatorKey(BuildingStatus.InactiveNoPower)).toBe('noPower');
     expect(resolveIndicatorKey(BuildingStatus.InactiveNoWater)).toBe('noWater');
     expect(resolveIndicatorKey(BuildingStatus.Active)).toBeNull();
-    expect(resolveIndicatorKey(BuildingStatus.InactiveDamaged)).toBeNull();
   });
 });

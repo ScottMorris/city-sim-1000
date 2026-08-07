@@ -14,7 +14,7 @@ import { describe, it, expect } from 'vitest';
 import rawTemplateData from './templateData.json';
 import { engineBuildingData, engineToolCost } from './templateData';
 import { getToolCost } from './templates';
-import { BUILD_COST } from '../constants';
+import { BUILD_COST, POWER_PLANT_CONFIGS, PowerPlantType } from '../constants';
 import { Tool } from '../toolTypes';
 
 describe('engineBuildingData', () => {
@@ -53,6 +53,26 @@ describe('BUILD_COST / getToolCost — no drift from templateData.json toolCost'
   it('getToolCost (the HUD/toolbar display value) matches BUILD_COST for every tool', () => {
     for (const tool of Object.values(Tool)) {
       expect(getToolCost(tool), `getToolCost(${tool})`).toBe(BUILD_COST[tool]);
+    }
+  });
+});
+
+describe('POWER_PLANT_CONFIGS.outputMw — no drift from templateData.json outputMw', () => {
+  // Kept parallel to constants.ts's own literal-to-BuildingKind-member-name
+  // mapping (`engineBuildingData('HydroPlant')` &c.) rather than derived
+  // from it, so a bug in `constants.ts`'s own key spelling shows up here too.
+  const KIND_NAME: Record<PowerPlantType, string> = {
+    [PowerPlantType.Hydro]: 'HydroPlant',
+    [PowerPlantType.Coal]: 'CoalPlant',
+    [PowerPlantType.Wind]: 'WindTurbine',
+    [PowerPlantType.Solar]: 'SolarFarm'
+  };
+
+  it('every plant type\'s outputMw matches templateData.json, not a hand-duplicated literal', () => {
+    for (const plantType of Object.values(PowerPlantType)) {
+      expect(POWER_PLANT_CONFIGS[plantType].outputMw, `POWER_PLANT_CONFIGS.${plantType}.outputMw`).toBe(
+        engineBuildingData(KIND_NAME[plantType]).outputMw
+      );
     }
   });
 });

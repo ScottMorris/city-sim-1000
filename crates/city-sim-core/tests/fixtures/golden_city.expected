@@ -115,38 +115,38 @@ power -62.0000
 civic -9.0000
 
 [buildings]
-building 1    CoalPlant         at (21,12) Active           health=100 trouble=0.0000
-building 2    WindTurbine       at ( 0,12) Active           health=100 trouble=0.0000
-building 3    WaterPump         at (22, 9) Active           health=100 trouble=0.0000
-building 4    ElementarySchool  at (10, 4) Active           health=100 trouble=0.0000
-building 5    HighSchool        at (13, 4) Active           health=100 trouble=0.0000
-building 6    ParkLarge         at (18, 6) Active           health=100 trouble=0.0000
-building 7    Park              at (20, 6) Active           health=100 trouble=0.0000
-building 8    Residential       at (11, 1) Active           health=100 trouble=0.0000
-building 9    Residential       at ( 0, 1) Active           health=100 trouble=0.0000
-building 10   Commercial        at (17, 3) Active           health=100 trouble=0.0000
-building 11   Industrial        at (18, 1) Active           health=100 trouble=0.0000
-building 12   Residential       at (14, 3) Active           health=100 trouble=0.0000
-building 13   Commercial        at ( 7, 1) Active           health=100 trouble=0.0000
-building 14   Industrial        at ( 5, 3) Active           health=100 trouble=0.0000
-building 17   Residential       at (14, 1) Active           health=100 trouble=0.0000
-building 18   Commercial        at ( 2, 3) Active           health=100 trouble=0.0000
-building 19   Residential       at ( 8, 3) Active           health=100 trouble=0.0000
-building 20   Commercial        at (18, 3) Active           health=100 trouble=0.0000
-building 22   Residential       at ( 1, 1) Active           health=100 trouble=0.0000
-building 23   Commercial        at ( 1, 3) Active           health=100 trouble=0.0000
-building 24   Industrial        at ( 3, 3) Active           health=100 trouble=0.0000
-building 25   Residential       at (12, 1) Active           health=100 trouble=0.0000
-building 26   Commercial        at (17, 1) Active           health=100 trouble=0.0000
-building 27   Industrial        at (20, 1) Active           health=100 trouble=0.0000
-building 28   Residential       at ( 5, 1) Active           health=100 trouble=0.0000
-building 29   Commercial        at (15, 1) Active           health=100 trouble=0.0000
-building 30   Residential       at ( 2, 1) Active           health=100 trouble=0.0000
-building 31   Residential       at ( 3, 1) Active           health=100 trouble=0.0000
-building 32   Industrial        at (19, 3) Active           health=100 trouble=0.0000
-building 33   Residential       at ( 4, 1) Active           health=100 trouble=0.0000
-building 34   Commercial        at (16, 3) Active           health=100 trouble=0.0000
-building 35   Industrial        at ( 4, 3) Active           health=100 trouble=0.0000
+building 1    CoalPlant         at (21,12) Active           trouble=0.0000
+building 2    WindTurbine       at ( 0,12) Active           trouble=0.0000
+building 3    WaterPump         at (22, 9) Active           trouble=0.0000
+building 4    ElementarySchool  at (10, 4) Active           trouble=0.0000
+building 5    HighSchool        at (13, 4) Active           trouble=0.0000
+building 6    ParkLarge         at (18, 6) Active           trouble=0.0000
+building 7    Park              at (20, 6) Active           trouble=0.0000
+building 8    Residential       at (11, 1) Active           trouble=0.0000
+building 9    Residential       at ( 0, 1) Active           trouble=0.0000
+building 10   Commercial        at (17, 3) Active           trouble=0.0000
+building 11   Industrial        at (18, 1) Active           trouble=0.0000
+building 12   Residential       at (14, 3) Active           trouble=0.0000
+building 13   Commercial        at ( 7, 1) Active           trouble=0.0000
+building 14   Industrial        at ( 5, 3) Active           trouble=0.0000
+building 17   Residential       at (14, 1) Active           trouble=0.0000
+building 18   Commercial        at ( 2, 3) Active           trouble=0.0000
+building 19   Residential       at ( 8, 3) Active           trouble=0.0000
+building 20   Commercial        at (18, 3) Active           trouble=0.0000
+building 22   Residential       at ( 1, 1) Active           trouble=0.0000
+building 23   Commercial        at ( 1, 3) Active           trouble=0.0000
+building 24   Industrial        at ( 3, 3) Active           trouble=0.0000
+building 25   Residential       at (12, 1) Active           trouble=0.0000
+building 26   Commercial        at (17, 1) Active           trouble=0.0000
+building 27   Industrial        at (20, 1) Active           trouble=0.0000
+building 28   Residential       at ( 5, 1) Active           trouble=0.0000
+building 29   Commercial        at (15, 1) Active           trouble=0.0000
+building 30   Residential       at ( 2, 1) Active           trouble=0.0000
+building 31   Residential       at ( 3, 1) Active           trouble=0.0000
+building 32   Industrial        at (19, 3) Active           trouble=0.0000
+building 33   Residential       at ( 4, 1) Active           trouble=0.0000
+building 34   Commercial        at (16, 3) Active           trouble=0.0000
+building 35   Industrial        at ( 4, 3) Active           trouble=0.0000
 
 [tiles]
 tile 0     ( 0, 0) terrain=Land  flags=[---] density=Low    bid=-     occ=-

@@ -5,7 +5,7 @@
 
 import { Occupant } from './protocol/occupants';
 import { Tool } from './toolTypes';
-import { engineToolCost } from './buildings/templateData';
+import { engineBuildingData, engineToolCost } from './buildings/templateData';
 
 export enum PowerPlantType {
   Hydro = 'hydro',
@@ -15,12 +15,14 @@ export enum PowerPlantType {
 }
 
 /**
- * Display-only power plant config. `outputMw` mirrors Rust's `HYDRO_PLANT_MW`
- * &c. (`crates/city-sim-core/src/buildings.rs`) but is display-only here
- * (the toolbar tooltip in `ui/toolInfo.ts`) — nothing client-side computes
- * with it, unlike `footprint`/build cost/maintenance, which used to live
- * here too and now come from `templateData.json` (`buildings/templates.ts`,
- * `BUILD_COST` below) since the engine actually charges/enforces them.
+ * Display-only power plant config. `outputMw` reads `templateData.json`'s
+ * `outputMw` — generated from Rust's own `HYDRO_PLANT_MW` &c. constants
+ * (`crates/city-sim-core/src/buildings.rs`, `tests/template_data.rs`) — but
+ * is display-only here (the toolbar tooltip in `ui/toolInfo.ts`) — nothing
+ * client-side computes with it, unlike `footprint`/build cost/maintenance,
+ * which used to live here too and now come from `templateData.json`
+ * (`buildings/templates.ts`, `BUILD_COST` below) since the engine actually
+ * charges/enforces them.
  */
 export interface PowerPlantConfig {
   id: PowerPlantType;
@@ -33,23 +35,23 @@ export const POWER_PLANT_CONFIGS: Record<PowerPlantType, PowerPlantConfig> = {
   [PowerPlantType.Hydro]: {
     id: PowerPlantType.Hydro,
     name: 'Hydro Plant',
-    outputMw: 60,
+    outputMw: engineBuildingData('HydroPlant').outputMw!,
     requiresWaterEdge: true
   },
   [PowerPlantType.Coal]: {
     id: PowerPlantType.Coal,
     name: 'Coal Plant',
-    outputMw: 80
+    outputMw: engineBuildingData('CoalPlant').outputMw!
   },
   [PowerPlantType.Wind]: {
     id: PowerPlantType.Wind,
     name: 'Wind Turbine',
-    outputMw: 8
+    outputMw: engineBuildingData('WindTurbine').outputMw!
   },
   [PowerPlantType.Solar]: {
     id: PowerPlantType.Solar,
     name: 'Solar Farm',
-    outputMw: 5
+    outputMw: engineBuildingData('SolarFarm').outputMw!
   }
 };
 

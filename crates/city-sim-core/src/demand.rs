@@ -36,7 +36,11 @@ const DEMAND_FLOOR: f32 = 8.0;
 const FLOOR_FILL_THRESHOLD: f32 = 0.92;
 const PRESSURE_THRESHOLD: f32 = 60.0;
 const PRESSURE_RELIEF_FACTOR: f32 = 0.5;
-const DEFAULT_WORKER_SHARE: f32 = 0.55;
+
+/// Fraction of a tile's `population` assumed to be working-age — shared with
+/// `education.rs`'s school-catchment population/job-share estimates, which
+/// used to carry their own byte-identical copy of this figure.
+pub const DEFAULT_WORKER_SHARE: f32 = 0.55;
 
 // ---------------------------------------------------------------------------
 // Labour stats (mirrors `computeLabourStats.ts`)
@@ -707,20 +711,20 @@ mod tests {
             .unwrap()
             .status = BuildingStatus::InactiveNoPower;
 
-        // A third residential building, `InactiveDamaged` — the "still
+        // A third residential building, `InactiveNoSource` — the "still
         // occupies" rule names only `InactiveNoPower`/`InactiveNoWater`
         // (count_city's `matches!`), so this one must NOT contribute despite
         // being the same zone kind as the lot above. No tile needed:
         // `count_city`'s capacity pass reads `state.buildings` directly.
         s.buildings.push({
-            let mut damaged = crate::buildings::BuildingInstance::new(
+            let mut unreached = crate::buildings::BuildingInstance::new(
                 s.next_building_id,
                 BuildingKind::Residential,
                 (7, 7),
             );
             s.next_building_id += 1;
-            damaged.status = BuildingStatus::InactiveDamaged;
-            damaged
+            unreached.status = BuildingStatus::InactiveNoSource;
+            unreached
         });
 
         // `count_city` itself, not just the demand it feeds — this is what
@@ -746,7 +750,7 @@ mod tests {
         let industrial_jobs_cap = get_building_template(BuildingKind::Industrial)
             .unwrap()
             .jobs_capacity;
-        let pop_cap = (residential_pop_cap * 2) as f32; // Active + InactiveNoPower; InactiveDamaged excluded
+        let pop_cap = (residential_pop_cap * 2) as f32; // Active + InactiveNoPower; InactiveNoSource excluded
         let job_cap = (commercial_jobs_cap + industrial_jobs_cap) as f32;
         assert_eq!(counts.population_capacity as f32, pop_cap);
         assert_eq!(counts.commercial_job_capacity, commercial_jobs_cap);
@@ -763,7 +767,7 @@ mod tests {
         assert!(
             (breakdown.residential.fill_fraction - 0.25).abs() < 0.01,
             "residential fill should reflect pop_cap including the still-occupied \
-             InactiveNoPower lot but not the InactiveDamaged one: {}",
+             InactiveNoPower lot but not the InactiveNoSource one: {}",
             breakdown.residential.fill_fraction
         );
         assert!(

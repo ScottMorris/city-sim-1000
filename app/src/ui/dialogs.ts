@@ -23,7 +23,12 @@ import type { InputMode } from './deviceMode';
 let toastRoot: HTMLDivElement | null = null;
 const toastsById = new Map<string, HTMLDivElement>();
 
-type ToastSeverity = 'info' | 'warning' | 'success';
+// Also `NotificationSeverity` in `notifications.ts` — that module imports
+// this one rather than re-declaring the same three-string union, since the
+// two vocabularies are the same concept (a toast's severity) reached through
+// two call paths (`showToast` directly, or `createNotificationCenter`'s
+// `publish`), not two different things that happen to share a shape.
+export type ToastSeverity = 'info' | 'warning' | 'success';
 
 export interface ToastOptions {
   severity?: ToastSeverity;

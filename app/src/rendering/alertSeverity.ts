@@ -33,7 +33,6 @@ export function computeAlertSeverity(
   if (buildingStatus === BuildingStatus.InactiveNoPower) severity = Math.max(severity, 2) as AlertSeverity;
   if (buildingStatus === BuildingStatus.InactiveNoWater) severity = Math.max(severity, 2) as AlertSeverity;
   if (buildingStatus === BuildingStatus.InactiveNoSource) severity = Math.max(severity, 2) as AlertSeverity;
-  if (buildingStatus === BuildingStatus.InactiveDamaged) severity = Math.max(severity, 1) as AlertSeverity;
   if (zone && !tile.powered) severity = Math.max(severity, 2) as AlertSeverity;
   if (zone && tile.happiness < UNHAPPY_ZONE_THRESHOLD) severity = Math.max(severity, 1) as AlertSeverity;
   return severity;

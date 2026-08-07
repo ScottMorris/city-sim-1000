@@ -16,7 +16,8 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "postinstall": "rollup -c"
+    "postinstall": "rollup -c",
+    "test": "bun test"
   },
   "files": [
     "dist-js",

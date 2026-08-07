@@ -33,8 +33,6 @@ pub struct WireBuilding {
     /// in TS. Replaces the client-side power/water-flag reconstruction both
     /// bridges used to run per building.
     pub status: u8,
-    /// 0–100; see `city_sim_core::buildings::BuildingInstance::health`.
-    pub health: u8,
 }
 
 /// One row of the power/water network component list sent by both hosts

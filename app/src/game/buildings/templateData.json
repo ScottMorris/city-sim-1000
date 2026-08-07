@@ -10,7 +10,8 @@
       "waterUse": 0.0,
       "waterOutput": 0,
       "populationCapacity": 0,
-      "jobsCapacity": 0
+      "jobsCapacity": 0,
+      "outputMw": 80
     },
     "Commercial": {
       "footprint": {
@@ -66,7 +67,8 @@
       "waterUse": 0.0,
       "waterOutput": 0,
       "populationCapacity": 0,
-      "jobsCapacity": 0
+      "jobsCapacity": 0,
+      "outputMw": 60
     },
     "Industrial": {
       "footprint": {
@@ -126,7 +128,8 @@
       "waterUse": 0.0,
       "waterOutput": 0,
       "populationCapacity": 0,
-      "jobsCapacity": 0
+      "jobsCapacity": 0,
+      "outputMw": 5
     },
     "WaterPump": {
       "footprint": {
@@ -162,7 +165,8 @@
       "waterUse": 0.0,
       "waterOutput": 0,
       "populationCapacity": 0,
-      "jobsCapacity": 0
+      "jobsCapacity": 0,
+      "outputMw": 8
     }
   },
   "toolCost": {

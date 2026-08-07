@@ -29,7 +29,6 @@ pub enum BuildingStatus {
     /// *consuming* water it can't reach — a pump doesn't consume water, it
     /// fails to produce it.
     InactiveNoSource = 3,
-    InactiveDamaged = 4,
 }
 
 impl BuildingStatus {
@@ -41,7 +40,6 @@ impl BuildingStatus {
         Self::InactiveNoPower,
         Self::InactiveNoWater,
         Self::InactiveNoSource,
-        Self::InactiveDamaged,
     ];
 }
 
@@ -227,8 +225,6 @@ pub struct BuildingInstance {
     /// Top-left corner of the building footprint.
     pub origin: (u32, u32),
     pub status: BuildingStatus,
-    /// 0–100; reaches 0 → InactiveDamaged (not yet implemented in the Rust sim).
-    pub health: u8,
     /// Pressure counter — see `apply_building_decay`.  Float to accumulate fractional
     /// increments matching the TS implementation.
     pub trouble_ticks: f32,
@@ -246,7 +242,6 @@ impl BuildingInstance {
             kind,
             origin,
             status: BuildingStatus::Active,
-            health: 100,
             trouble_ticks: 0.0,
             maintenance_per_day: 0.0,
         }
@@ -289,16 +284,10 @@ pub fn update_building_states(state: &mut GameState, water_enabled: bool) {
     for i in 0..state.buildings.len() {
         let bid = state.buildings[i].kind;
         let (ox, oy) = state.buildings[i].origin;
-        let health = state.buildings[i].health;
 
         let Some(tmpl) = get_building_template(bid) else {
             continue;
         };
-
-        if health == 0 {
-            state.buildings[i].status = BuildingStatus::InactiveDamaged;
-            continue;
-        }
 
         let (w, h) = tmpl.footprint;
 

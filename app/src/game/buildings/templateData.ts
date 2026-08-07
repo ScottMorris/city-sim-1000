@@ -21,6 +21,9 @@ export interface EngineBuildingData {
   populationCapacity: number;
   jobsCapacity: number;
   service?: { radius: number; capacity: number };
+  /** A power plant's generation, in MW — present only for the four plant
+   *  kinds (`HydroPlant`/`CoalPlant`/`WindTurbine`/`SolarFarm`). */
+  outputMw?: number;
 }
 
 interface TemplateData {

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::buildings::{get_building_template, BuildingStatus};
+use crate::demand::DEFAULT_WORKER_SHARE;
 use crate::occupants::Occupant;
 use crate::state::{EducationStats, GameState, ServiceKind};
 use city_sim_protocol::building_kind::BuildingKind;
@@ -15,8 +16,6 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 // ---------------------------------------------------------------------------
 // Zone load maps (mirrors `computeZoneLoads` in serviceDistribution.ts)
 // ---------------------------------------------------------------------------
-
-const DEFAULT_WORKER_SHARE: f32 = 0.55;
 
 struct ZoneLoads {
     population: HashMap<usize, f32>,

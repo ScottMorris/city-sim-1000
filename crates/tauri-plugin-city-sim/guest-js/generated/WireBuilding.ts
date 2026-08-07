@@ -14,8 +14,4 @@ kind: number, originX: number, originY: number,
  * in TS. Replaces the client-side power/water-flag reconstruction both
  * bridges used to run per building.
  */
-status: number, 
-/**
- * 0–100; see `city_sim_core::buildings::BuildingInstance::health`.
- */
-health: number, };
+status: number, };

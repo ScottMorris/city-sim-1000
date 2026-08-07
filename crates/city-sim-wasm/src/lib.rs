@@ -477,8 +477,8 @@ impl SimHost {
 
     /// The building list as JSON (`Vec<WireBuilding>`) — `id`, template
     /// `kind` (as the `BuildingKind` u8 — decode with `BUILDING_KIND_BY_U8`
-    /// in TS), footprint origin, and `status`/`health` (`#200`'s wire-adoption
-    /// follow-up — decode `status` with `BUILDING_STATUS_BY_U8`).
+    /// in TS), footprint origin, and `status` (`#200`'s wire-adoption
+    /// follow-up — decode with `BUILDING_STATUS_BY_U8`).
     ///
     /// The live tile buffer's `Structure` occupant bit says only that a
     /// building stands on a tile, not which one — since #177's TS/wire

@@ -8,7 +8,7 @@ use crate::buildings::{
     HYDRO_PLANT_MW, SOLAR_FARM_MAINT, SOLAR_FARM_MW, WIND_TURBINE_MAINT, WIND_TURBINE_MW,
 };
 use crate::occupants::{
-    iter_set, pair_conflicts, Occupant, OccupantSet, Stratum, Terrain, ZONE_MASK,
+    iter_set, occupant_def, pair_conflicts, Occupant, OccupantSet, Stratum, Terrain, ZONE_MASK,
 };
 use crate::state::{GameState, Tile, FLAG_ABANDONED};
 use city_sim_protocol::{
@@ -46,6 +46,75 @@ pub fn tool_cost(tool: Tool) -> i64 {
         Tool::Bulldoze => 1,
         Tool::ParkLarge => 32,
     }
+}
+
+// ---------------------------------------------------------------------------
+// required_stratum — engine-owned view-stratum rule
+// ---------------------------------------------------------------------------
+//
+// Option B from the design note: a tool's required view isn't a fact anyone
+// declares, it's a consequence of what the tool places. `tool_occupant` names
+// the one `Occupant` each placing tool stamps — the same knowledge
+// `apply_tool`'s match arms below already encode, just factored out so it can
+// be asked without placing anything — and `required_stratum` reads that
+// occupant's own `OCCUPANT_DEFS` stratum. A tool that places nothing
+// (`Inspect`, the terrain brushes, `Bulldoze`) has no occupant to derive from
+// and returns `None` — "Any" — rather than a hand-picked default.
+
+/// The one [`Occupant`] `tool` stamps onto a tile, if placing is what it does.
+///
+/// `None` for `Inspect` and the terrain brushes (`TerraformRaise`,
+/// `TerraformLower`, `Tool::Water` — grouped with the terraform tools in
+/// `apply_tool`'s own dispatch, since none of the three place an occupant,
+/// only rewrite `terrain`) and for `Bulldoze`, which clears rather than
+/// places and keeps its own stratum-scoped semantics (see [`bulldoze`]).
+fn tool_occupant(tool: Tool) -> Option<Occupant> {
+    match tool {
+        Tool::Inspect
+        | Tool::TerraformRaise
+        | Tool::TerraformLower
+        | Tool::Water
+        | Tool::Bulldoze => None,
+        Tool::Tree => Some(Occupant::Trees),
+        Tool::Road => Some(Occupant::Road),
+        Tool::Rail => Some(Occupant::Rail),
+        Tool::PowerLine => Some(Occupant::PowerLine),
+        Tool::WaterPipe => Some(Occupant::Pipe),
+        Tool::Residential => Some(Occupant::ZoneResidential),
+        Tool::Commercial => Some(Occupant::ZoneCommercial),
+        Tool::Industrial => Some(Occupant::ZoneIndustrial),
+        // Every footprint building — power plants, water/civic/education
+        // buildings, both park sizes — stamps `Occupant::Structure`.
+        Tool::HydroPlant
+        | Tool::CoalPlant
+        | Tool::WindTurbine
+        | Tool::SolarFarm
+        | Tool::WaterPump
+        | Tool::WaterTower
+        | Tool::ElementarySchool
+        | Tool::HighSchool
+        | Tool::Park
+        | Tool::ParkLarge => Some(Occupant::Structure),
+    }
+}
+
+/// The [`ViewStratum`] a player must be looking at for `tool`'s click to
+/// land — `None` means "Any": the tool works from either view and selecting
+/// it never auto-switches (see `app/src/game/viewStratum.ts`, the TS mirror
+/// this fixture-pins). Derived from [`tool_occupant`] and that occupant's own
+/// declared `Stratum` (`OCCUPANT_DEFS`) — never hand-picked — so a new
+/// occupant's stratum can't drift from the tool that places it.
+///
+/// `Stratum::Surface` and `Stratum::Overhead` both answer `ViewStratum::
+/// Surface`: the surface *view* is one client toggle covering two tile
+/// strata at once (see `ViewStratum`'s own doc comment), so a hydro line or a
+/// tree canopy — both overhead — still needs the ordinary surface view, not
+/// a third view that doesn't exist.
+pub fn required_stratum(tool: Tool) -> Option<ViewStratum> {
+    tool_occupant(tool).map(|o| match occupant_def(o).stratum {
+        Stratum::Underground => ViewStratum::Underground,
+        Stratum::Surface | Stratum::Overhead => ViewStratum::Surface,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -124,11 +193,12 @@ fn regrade_refusal(tile: &Tile) -> Option<&'static str> {
 /// Apply a player tool at tile (x, y) on `state`.
 ///
 /// `stratum` names the layer the player is looking at, filled from the
-/// client's active view. Only `Tool::Bulldoze` (see `bulldoze`) and
-/// `Tool::WaterPipe` (refuses outright unless `Underground`) read it today —
-/// every other tool ignores it, but it is threaded through every call site so
-/// the field travels on the wire for every command, not just the ones that
-/// currently read it (`docs/features/layer-scoped-bulldozer.md`).
+/// client's active view. Every tool with a [`required_stratum`] is refused
+/// outright from the wrong one — `Bulldoze` is the one exception, threading
+/// `stratum` through to [`bulldoze`] instead for its own stratum-*scoped*
+/// clearing semantics rather than a pass/refuse gate — so the field travels
+/// on the wire for every command, not just the ones that read it
+/// (`docs/features/layer-scoped-bulldozer.md`).
 ///
 /// Validates funds and placement rules, modifies state on success, and returns
 /// a `CommandResult` indicating success or a human-readable failure reason.
@@ -148,6 +218,23 @@ pub fn apply_tool(
     let cost = tool_cost(tool);
     if state.money < cost {
         return CommandResult::fail("Not enough funds");
+    }
+
+    // Stratum guard — engine-owned (Option B of the design note). Replaces
+    // the bespoke check `Tool::WaterPipe`'s match arm used to carry: every
+    // tool whose `required_stratum` names a layer now refuses the same way,
+    // derived from what it places rather than hand-picked per tool.
+    // `Bulldoze` (and `Inspect`/the terrain brushes) return `None` here and
+    // fall straight through — `bulldoze` reads `stratum` itself, to clear
+    // one layer rather than to refuse a mismatched one.
+    if let Some(required) = required_stratum(tool) {
+        if stratum != required {
+            let view = match required {
+                ViewStratum::Underground => "Underground",
+                ViewStratum::Surface => "Surface",
+            };
+            return CommandResult::fail(format!("This tool needs the {view} view."));
+        }
     }
 
     match tool {
@@ -279,17 +366,19 @@ pub fn apply_tool(
         }
 
         Tool::WaterPipe => {
-            // Belt-and-suspenders: `#197`'s client-side click-guard already
-            // switches the view to Underground the moment this tool is
-            // selected and refuses a click if the player manually toggles
+            // The stratum guard above already refused this call unless
+            // `stratum == Underground` — `required_stratum(Tool::WaterPipe)`
+            // derives `Underground` from `Occupant::Pipe`'s own
+            // `OCCUPANT_DEFS` entry, so there is nothing left to check here.
+            // Belt-and-suspenders history: `#197`'s client-side click-guard
+            // already switches the view to Underground the moment this tool
+            // is selected and refuses a click if the player manually toggles
             // away before placing (`SPEC.md`'s Utilities section), so this
-            // should be unreachable from the ordinary UI. It is reachable
-            // from `mcpBridge.ts`/the MCP server, though, which have no view
-            // state and default `stratum` to `Surface` — so the engine needs
-            // its own refusal rather than trusting the client entirely.
-            if stratum != ViewStratum::Underground {
-                return CommandResult::fail("Water pipes must be laid from the Underground view.");
-            }
+            // was already unreachable from the ordinary UI. It stayed
+            // reachable from `mcpBridge.ts`/the MCP server, which have no
+            // view state — `stratumParam` now defaults every tool's stratum
+            // to its own `required_stratum`, so a script gets this for free
+            // too.
             state.money -= cost;
             let idx = state.tile_index(x, y).unwrap();
             state.tiles[idx].set_occupant(Occupant::Pipe, true);
@@ -752,12 +841,13 @@ mod tests {
         assert!(s.tile_at(1, 1).unwrap().has_occupant(Occupant::Pipe));
     }
 
-    /// **`#198`'s engine-side belt-and-suspenders.** The client-side click
-    /// guard (`#197`) already keeps this unreachable from the ordinary UI —
-    /// selecting `Tool::WaterPipe` switches the view to Underground, and a
-    /// manual toggle away refuses the click before it's ever sent — but
-    /// `mcpBridge.ts`/the MCP server have no view state and default `stratum`
-    /// to `Surface`, so the engine needs its own refusal too.
+    /// **`#198`'s engine-side belt-and-suspenders, now the general stratum
+    /// guard (Option B).** The client-side click guard (`#197`) already keeps
+    /// this unreachable from the ordinary UI — selecting `Tool::WaterPipe`
+    /// switches the view to Underground, and a manual toggle away refuses the
+    /// click before it's ever sent — but `mcpBridge.ts`/the MCP server have
+    /// no view state and default `stratum` to `Surface`, so the engine needs
+    /// its own refusal too.
     #[test]
     fn water_pipe_refuses_from_the_surface_view() {
         let mut s = gs(4, 4);
@@ -766,10 +856,101 @@ mod tests {
         assert!(!r.success);
         assert_eq!(
             r.message.as_deref(),
-            Some("Water pipes must be laid from the Underground view.")
+            Some("This tool needs the Underground view.")
         );
         assert!(!s.tile_at(1, 1).unwrap().has_occupant(Occupant::Pipe));
         assert_eq!(s.money, before, "a refused pipe must not charge");
+    }
+
+    /// The other half of the general rule: a *surface* tool refuses the
+    /// Underground view exactly the way `Tool::WaterPipe` refuses `Surface`
+    /// above — `required_stratum` derives `Surface` from `Occupant::Road`,
+    /// there is nothing WaterPipe-specific left in `apply_tool`.
+    #[test]
+    fn a_surface_tool_refuses_the_underground_view() {
+        let mut s = gs(4, 4);
+        let before = s.money;
+        let r = apply_tool(&mut s, Tool::Road, 1, 1, ViewStratum::Underground);
+        assert!(!r.success);
+        assert_eq!(
+            r.message.as_deref(),
+            Some("This tool needs the Surface view.")
+        );
+        assert!(!s.tile_at(1, 1).unwrap().has_occupant(Occupant::Road));
+        assert_eq!(s.money, before, "a refused road must not charge");
+    }
+
+    /// `required_stratum` is a derivation, not a hand-picked table: every
+    /// tool's answer must match the `Stratum` its own `tool_occupant` names
+    /// in `OCCUPANT_DEFS` (`Underground`→`Underground`, `Surface`/`Overhead`
+    /// →`Surface`), and a tool with no occupant to place must answer `None`
+    /// ("Any"). Walking `Tool::ALL` against `tool_occupant` — the same
+    /// function `required_stratum` itself calls — means this test would only
+    /// catch `required_stratum` disagreeing with its own stated source, not
+    /// a case neither knows about; the per-tool expectations spelled out
+    /// below are what actually pin the mapping against the design note.
+    #[test]
+    fn required_stratum_agrees_with_the_occupant_each_tool_places() {
+        use crate::occupants::Stratum;
+
+        let expected_any = [
+            Tool::Inspect,
+            Tool::TerraformRaise,
+            Tool::TerraformLower,
+            Tool::Water,
+            Tool::Bulldoze,
+        ];
+        let expected_underground = [Tool::WaterPipe];
+        let expected_surface = [
+            Tool::Tree,
+            Tool::Road,
+            Tool::Rail,
+            Tool::PowerLine,
+            Tool::HydroPlant,
+            Tool::CoalPlant,
+            Tool::WindTurbine,
+            Tool::SolarFarm,
+            Tool::WaterPump,
+            Tool::WaterTower,
+            Tool::ElementarySchool,
+            Tool::HighSchool,
+            Tool::Residential,
+            Tool::Commercial,
+            Tool::Industrial,
+            Tool::Park,
+            Tool::ParkLarge,
+        ];
+        assert_eq!(
+            expected_any.len() + expected_underground.len() + expected_surface.len(),
+            Tool::ALL.len(),
+            "every Tool must appear in exactly one expectation list"
+        );
+
+        for &tool in &expected_any {
+            assert_eq!(required_stratum(tool), None, "{tool:?} should be Any");
+            assert_eq!(tool_occupant(tool), None, "{tool:?} places no occupant");
+        }
+        for &tool in &expected_underground {
+            assert_eq!(
+                required_stratum(tool),
+                Some(ViewStratum::Underground),
+                "{tool:?} should require Underground"
+            );
+            let occupant = tool_occupant(tool).expect("names an occupant");
+            assert_eq!(occupant_def(occupant).stratum, Stratum::Underground);
+        }
+        for &tool in &expected_surface {
+            assert_eq!(
+                required_stratum(tool),
+                Some(ViewStratum::Surface),
+                "{tool:?} should require Surface"
+            );
+            let occupant = tool_occupant(tool).expect("names an occupant");
+            assert!(matches!(
+                occupant_def(occupant).stratum,
+                Stratum::Surface | Stratum::Overhead
+            ));
+        }
     }
 
     #[test]

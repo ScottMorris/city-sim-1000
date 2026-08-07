@@ -16,6 +16,8 @@ import { getCalendarPosition } from './time';
 import { nextStrokeId } from './protocol/commands';
 import type { FromSim } from './protocol/events';
 import { occupantsByStratum, type OccupantLabel } from './protocol/tileLabel';
+import { requiredStratumForTool } from './viewStratum';
+import type { BuildingInstance, BuildingStatus } from './buildings/state';
 
 /** The wire spelling of `Terrain` at the MCP JSON boundary — the only two
  *  strings a script ever sees for it, via `terrainLabel` below. Internal
@@ -50,9 +52,11 @@ function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number,
 const MCP_WS_PORT = 5174;
 
 // The MCP bridge has no view state of its own — scripted commands default to
-// the surface, with an explicit `stratum` param letting a script override it.
-// `Tool.WaterPipe` defaults to underground instead: the engine refuses it
-// outright from any other stratum (`#198`), same as the real UI auto-switches
+// `tool`'s own required stratum (`requiredStratumForTool`, generalizing what
+// used to be a `Tool.WaterPipe`-only default), falling back to the surface
+// for an "Any" tool. An explicit `stratum` param lets a script override
+// either. The engine refuses a mismatched stratum outright for any tool that
+// has one (`commands::required_stratum`), same as the real UI auto-switches
 // the view the moment the tool is selected (`SPEC.md`'s Water Pipe entry).
 // Exported (only) so it's unit-testable — everything else here needs a live
 // WebSocket connection to exercise.
@@ -60,7 +64,7 @@ export function stratumParam(params: Record<string, unknown>): ViewStratum {
   if (params.stratum === 'underground' || params.stratum === 'surface') {
     return params.stratum;
   }
-  return params.tool === Tool.WaterPipe ? 'underground' : 'surface';
+  return requiredStratumForTool(params.tool as Tool) ?? 'surface';
 }
 
 /** The bits of `CommandResult` a caller needs — kept separate from `FromSim`
@@ -163,6 +167,37 @@ export function tileMatchesKind(state: GameState, tile: Tile, kind: string): boo
   const occupants = occupantsByStratum(state, tile);
   const inAnyStratum = (labels: readonly OccupantLabel[]): boolean => (labels as readonly string[]).includes(kind);
   return inAnyStratum(occupants.underground) || inAnyStratum(occupants.surface) || inAnyStratum(occupants.overhead);
+}
+
+/** `get_buildings`' response shape for one building. */
+export interface McpBuildingSummary {
+  id: number;
+  templateId: string;
+  x: number;
+  y: number;
+  status: BuildingStatus;
+  abandoned: boolean;
+}
+
+/**
+ * Serializes one building for the MCP `get_buildings` response: id, template
+ * kind string, origin, the engine's own status label, and `abandoned` —
+ * joined in from the building's *origin tile*, not the building mirror
+ * itself. `abandoned` is a wire-populated tile flag, not part of the
+ * building state (`BuildingState.abandoned` was deleted as dead, never-wire-
+ * populated state), so it has to be read off `state.tiles` at display time
+ * rather than off `b.state` directly. Exported (only) so it's unit-testable
+ * — see `stratumParam`'s doc comment.
+ */
+export function summariseBuildingForMcp(state: GameState, b: BuildingInstance): McpBuildingSummary {
+  return {
+    id: b.id,
+    templateId: b.templateId,
+    x: b.origin.x,
+    y: b.origin.y,
+    status: b.state.status,
+    abandoned: getTile(state, b.origin.x, b.origin.y)?.abandoned ?? false,
+  };
 }
 
 // Use setTimeout rather than rAF — background/unfocused Chromium tabs throttle
@@ -389,20 +424,7 @@ export function initMcpBridge(
 
         case 'get_buildings': {
           const s = bridge.getState();
-          const list = s.buildings.map(b => ({
-            id: b.id,
-            templateId: b.templateId,
-            x: b.origin.x,
-            y: b.origin.y,
-            status: b.state.status,
-            health: b.state.health,
-            // `abandoned` is a wire-populated tile flag, not part of the
-            // building mirror — joined here at display time off the
-            // building's origin tile (`BuildingState.abandoned` was deleted
-            // as dead, never-wire-populated state).
-            abandoned: getTile(s, b.origin.x, b.origin.y)?.abandoned ?? false,
-          }));
-          reply(id, list);
+          reply(id, s.buildings.map(b => summariseBuildingForMcp(s, b)));
           break;
         }
 

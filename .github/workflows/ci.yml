@@ -630,6 +630,20 @@ jobs:
         id: tauri_plugin_build
         run: cargo build -p tauri-plugin-city-sim
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # `guest-js/index.test.ts` pins `TOOL_ID`/`VIEW_STRATUM_ID` — the last
+      # unpinned hand-copies in `guest-js/` — against `app/src/game/protocol/
+      # wireParity.json`'s Rust source of truth, via the relative path from
+      # `crates/tauri-plugin-city-sim/guest-js/`.
+      - name: Run guest-js tests
+        id: guest_js_test
+        run: bun run --cwd crates/tauri-plugin-city-sim test
+
       - name: Write summary
         if: always()
         run: |
@@ -639,6 +653,7 @@ jobs:
             echo "- Runner: \`ubuntu-24.04\`"
             echo "- Result: \`${{ steps.tauri_plugin_build.outcome }}\`"
             echo "- Command: \`cargo build -p tauri-plugin-city-sim\`"
+            echo "- guest-js tests: \`${{ steps.guest_js_test.outcome }}\` (\`bun run --cwd crates/tauri-plugin-city-sim test\`)"
             echo "- Run URL: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
 

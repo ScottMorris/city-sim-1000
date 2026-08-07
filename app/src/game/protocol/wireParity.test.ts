@@ -28,6 +28,7 @@ import {
   NATURE_RESERVE_COST_PER_DAY,
   GREEN_INDUSTRY_SUBSIDY_PER_ZONE
 } from '../bylaws';
+import { requiredStratumForTool } from '../viewStratum';
 import wireParityFixture from './wireParity.json';
 
 interface NameU8 {
@@ -35,9 +36,15 @@ interface NameU8 {
   u8: number;
 }
 
+interface ToolRequiredStratum {
+  name: string;
+  requiredStratum: 'Surface' | 'Underground' | null;
+}
+
 interface WireParityFixture {
   tools: NameU8[];
   viewStrata: NameU8[];
+  toolRequiredStrata: ToolRequiredStratum[];
   buildingStatuses: NameU8[];
   buildingKinds: NameU8[];
   daysPerMonth: number;
@@ -85,6 +92,21 @@ describe('wireParity: ViewStratum ↔ u8', () => {
 
   it('fixture count matches STRATUM_TO_U8 size', () => {
     expect(fixture.viewStrata.length).toBe(Object.keys(STRATUM_TO_U8).length);
+  });
+});
+
+describe('wireParity: Tool → required ViewStratum (engine-owned stratum rule)', () => {
+  it('every fixture entry matches requiredStratumForTool', () => {
+    fixture.toolRequiredStrata.forEach(({ name, requiredStratum }) => {
+      const tool = Tool[name as keyof typeof Tool];
+      expect(tool, `Tool.${name} should exist`).toBeDefined();
+      const expected = requiredStratum === null ? null : (requiredStratum.toLowerCase() as ViewStratum);
+      expect(requiredStratumForTool(tool), `requiredStratumForTool(Tool.${name})`).toBe(expected);
+    });
+  });
+
+  it('fixture covers every Tool exactly once', () => {
+    expect(fixture.toolRequiredStrata.length).toBe(fixture.tools.length);
   });
 });
 

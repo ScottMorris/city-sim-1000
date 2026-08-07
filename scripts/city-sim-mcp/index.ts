@@ -242,7 +242,7 @@ const RECT_TOOLS = [
 const STRATA = ['surface', 'underground'] as const;
 
 const STRATUM_DESCRIPTION =
-  'Which layer to act on. `bulldoze` clears only this stratum; `water_pipe` refuses outright unless this is "underground" (and defaults there automatically if omitted). Every other tool ignores it. Defaults to surface otherwise.';
+  'Which layer to act on. `bulldoze` clears only this stratum. Every other tool has its own required stratum derived from what it places — `water_pipe` requires "underground", most tools (anything that builds) require "surface" — and the engine refuses outright if this doesn\'t match; if omitted, it defaults to the tool\'s own required stratum (falling back to "surface" for a stratum-neutral tool like `inspect`/`terraform_raise`/`terraform_lower`/`water`/`bulldoze`).';
 
 /** Every `get_tiles_where`/`get_tile` "kind" spelling — terrain, occupants, zones, and building kinds, all in one flat vocabulary. */
 const TILE_KINDS = [
