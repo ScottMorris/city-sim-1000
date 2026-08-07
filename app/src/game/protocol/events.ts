@@ -1,4 +1,4 @@
-// events.ts — FromSim and the TS mirror of Rust's AlertKind/SimAlert.
+// events.ts — FromSim and re-exports of the generated AlertKind/SimAlert.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -8,24 +8,14 @@
  *
  * Not a mirror of any Rust type: `crates/city-sim-protocol`'s own `FromSim`
  * was never constructed anywhere in the engine and was deleted as dead code.
- * `AlertKind` and `SimAlert` below still mirror the Rust types of the same
- * names in `crates/city-sim-protocol/src/events.rs`.
+ * `AlertKind` and `SimAlert` below are re-exports of the `ts-rs`-generated
+ * mirrors of the same names in `crates/city-sim-protocol/src/events.rs`
+ * (`./generated/`) — see `crates/city-sim-protocol/tests/export_bindings.rs`.
  */
 
-export type AlertKind =
-  | 'PowerDeficit'
-  | 'PowerRestored'
-  | 'WaterDeficit'
-  | 'WaterRestored'
-  | 'BudgetWarning'
-  | 'Abandonment'
-  | 'Info';
-
-export interface SimAlert {
-  kind: AlertKind;
-  message: string;
-  sticky: boolean;
-}
+export type { AlertKind } from './generated/AlertKind';
+export type { SimAlert } from './generated/SimAlert';
+import type { SimAlert } from './generated/SimAlert';
 
 export type NarrativeKind = 'MonthEnd' | 'Milestone' | 'Alert';
 

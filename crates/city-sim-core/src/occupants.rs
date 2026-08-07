@@ -3998,4 +3998,86 @@ mod tests {
             assert_eq!(zone_template_kind(o), None, "{o:?}");
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Occupant-table TS parity fixture
+    // -----------------------------------------------------------------------
+    //
+    // `OCCUPANT_DEFS` (bit positions/strata, the conflict matrix, the
+    // conductance masks) is byte-layout knowledge, not a JSON-shaped type —
+    // `ts-rs` cannot generate it (see `crates/city-sim-protocol/tests/export_bindings.rs`
+    // for what codegen *does* cover). This is a parity fixture instead, the
+    // same pattern `parity_fixture_matches_tile_kinds`
+    // (`crates/city-sim-protocol/src/tile_kind.rs`) uses for `TileKind`: a
+    // committed JSON fixture, asserted here against the real table, printing
+    // the regenerated JSON on mismatch so fixing drift is a paste, not a
+    // rederivation. `app/src/game/protocol/protocol.test.ts` asserts the same
+    // fixture against `occupants.ts`'s mirrors.
+
+    /// One row of `app/src/game/protocol/occupantParity.json`.
+    #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+    struct OccupantParityEntry {
+        name: String,
+        bit: u8,
+        stratum: String,
+        /// Networks this occupant conducts by its own nature — `OccupantDef::conducts`,
+        /// as sorted `Network` names (`Network::ALL` order).
+        conducts: Vec<String>,
+        /// Occupants this one cannot share a tile with — `OccupantDef::conflicts`,
+        /// as `Occupant` names in bit order (`ALL_OCCUPANTS` order).
+        conflicts: Vec<String>,
+    }
+
+    fn expected_occupant_parity() -> Vec<OccupantParityEntry> {
+        ALL_OCCUPANTS
+            .iter()
+            .map(|&o| {
+                let def = occupant_def(o);
+                OccupantParityEntry {
+                    name: format!("{o:?}"),
+                    bit: o as u8,
+                    stratum: format!("{:?}", def.stratum),
+                    conducts: Network::ALL
+                        .iter()
+                        .filter(|&&n| def.conducts & (1 << n as u8) != 0)
+                        .map(|n| format!("{n:?}"))
+                        .collect(),
+                    conflicts: iter_set(def.conflicts).map(|c| format!("{c:?}")).collect(),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn occupant_parity_fixture_matches_occupant_defs() {
+        const FIXTURE: &str = include_str!("../../../app/src/game/protocol/occupantParity.json");
+
+        let expected = expected_occupant_parity();
+        let expected_json = serde_json::to_string_pretty(&expected).unwrap();
+
+        let fixture: Vec<OccupantParityEntry> = serde_json::from_str(FIXTURE).unwrap_or_else(|e| {
+            panic!(
+                "app/src/game/protocol/occupantParity.json failed to parse: {e}\n\n\
+                 Regenerate it with this content:\n{expected_json}"
+            )
+        });
+
+        let regen_msg = || {
+            format!(
+                "app/src/game/protocol/occupantParity.json is out of sync with \
+                 OCCUPANT_DEFS. Regenerate it with this content:\n{expected_json}"
+            )
+        };
+
+        assert_eq!(fixture.len(), expected.len(), "{}", regen_msg());
+        for (i, (want, got)) in expected.iter().zip(fixture.iter()).enumerate() {
+            assert_eq!(
+                want,
+                got,
+                "fixture entry {i} ({}): {}",
+                want.name,
+                regen_msg()
+            );
+        }
+    }
 }

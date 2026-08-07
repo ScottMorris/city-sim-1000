@@ -3,6 +3,8 @@
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
 
+use ts_rs::TS;
+
 /// All tools the player can apply to the map.
 ///
 /// Mirrors `Tool` in `src/game/toolTypes.ts`. Keep in sync — values are
@@ -43,8 +45,9 @@ pub enum Tool {
 /// pre-policy economy exactly. Funding levels are whole percentages (0–100)
 /// with 100 as the fully-funded default; underfunding trims upkeep but has
 /// consequences (brownouts, crowded schools, commuter frustration).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "BudgetPolicy.ts")]
 pub struct BudgetPolicy {
     pub tax_residential: u8,
     pub tax_commercial: u8,
@@ -101,8 +104,9 @@ impl BudgetPolicy {
 /// softens the fragmentation penalty for a flat daily cost.
 /// `green_industry`: industrial tiles do reduced wilderness damage in return
 /// for a per-zone daily subsidy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WildernessPolicy.ts")]
 pub struct WildernessPolicy {
     pub nature_reserve: bool,
     pub green_industry: bool,
@@ -115,8 +119,9 @@ pub struct WildernessPolicy {
 /// `#[serde(default)]` so older payloads decode cleanly after a policy is
 /// added. Policies are deliberately *not* undoable — undo applies to tools;
 /// the live `Policies` value is carried across every history restore.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "Policies.ts")]
 pub struct Policies {
     /// Tax rates and department funding levels (budget screen).
     #[serde(default)]
@@ -167,7 +172,8 @@ impl From<u8> for ViewStratum {
 }
 
 /// Result returned synchronously for `ApplyTool` commands.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, TS)]
+#[ts(export_to = "CommandResult.ts")]
 pub struct CommandResult {
     pub success: bool,
     pub message: Option<String>,

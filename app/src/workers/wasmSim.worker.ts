@@ -19,13 +19,9 @@
 // this reason.
 import init, { SimHost, version as engineVersion, build_sha as engineSha } from '../wasm/sim_wasm/sim_wasm.js';
 import wasmUrl from '../wasm/sim_wasm/sim_wasm_bg.wasm?url';
-
-/** Mirrors `city_sim_protocol::events::SimAlert` — see `take_alerts_json()`. */
-export interface SimAlertWire {
-  kind: 'PowerDeficit' | 'PowerRestored' | 'WaterDeficit' | 'WaterRestored' | 'BudgetWarning' | 'Abandonment' | 'Info';
-  message: string;
-  sticky: boolean;
-}
+// `ts-rs`-generated mirror of `city_sim_protocol::events::SimAlert` — see
+// `take_alerts_json()` and `crates/city-sim-protocol/tests/export_bindings.rs`.
+import type { SimAlert } from '../game/protocol/generated/SimAlert';
 
 export interface SimStats {
   tick: number;
@@ -203,7 +199,7 @@ function startStepLoop(): void {
     const educationJson = host.education_json();
     const educationSeatsUsedJson = host.education_seats_used_json();
     const budgetHistoryJson = host.budget_history_json();
-    const alerts: SimAlertWire[] = JSON.parse(host.take_alerts_json() || '[]');
+    const alerts: SimAlert[] = JSON.parse(host.take_alerts_json() || '[]');
     self.postMessage(
       { type: 'step_result', bytes, stats, buildingsJson, powerComponentsJson, waterComponentsJson, educationJson, educationSeatsUsedJson, budgetHistoryJson, mutationSeq, alerts },
       { transfer: [bytes.buffer as ArrayBuffer] },

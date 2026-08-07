@@ -16,10 +16,13 @@
 //! depend on `city-sim-core`, so this crate can only own the wire shapes
 //! themselves.
 
+use ts_rs::TS;
+
 /// One row of the building list sent by both hosts (`SimHost::buildings_json`
 /// on the WASM path, `TickEvent::buildings` on the Tauri path).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WireBuilding.ts")]
 pub struct WireBuilding {
     pub id: u32,
     /// `BuildingKind as u8` — decode with `BUILDING_KIND_BY_U8` in TS.
@@ -31,8 +34,9 @@ pub struct WireBuilding {
 /// One row of the power/water network component list sent by both hosts
 /// (`SimHost::power_components_json`/`water_components_json` on the WASM
 /// path, `TickEvent::power_components`/`water_components` on the Tauri path).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WireUtilityComponent.ts")]
 pub struct WireUtilityComponent {
     pub id: u16,
     pub produced: f32,
@@ -47,8 +51,9 @@ pub struct WireUtilityComponent {
 /// on the Tauri path). Mirrors `city_sim_core::state::EducationStats`
 /// field-for-field; kept as a separate type rather than deriving `Serialize`
 /// directly on the engine struct, so the engine's own types stay wire-agnostic.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WireEducationStats.ts")]
 pub struct WireEducationStats {
     pub elementary_served: f32,
     pub elementary_capacity: f32,
@@ -64,8 +69,9 @@ pub struct WireEducationStats {
 /// One row of the per-school seats-used list sent by both hosts
 /// (`SimHost::education_seats_used_json` on the WASM path,
 /// `TickEvent::education_seats_used` on the Tauri path).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WireEducationSeatsUsed.ts")]
 pub struct WireEducationSeatsUsed {
     pub building_id: u32,
     pub used: f32,
@@ -74,8 +80,9 @@ pub struct WireEducationSeatsUsed {
 /// One row of the rolling 200-day budget history sent by both hosts
 /// (`SimHost::budget_history_json` on the WASM path, `TickEvent::budget_history`
 /// on the Tauri path) — see `city_sim_core::state::BudgetHistoryEntry` (`#229`).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export_to = "WireBudgetHistoryEntry.ts")]
 pub struct WireBudgetHistoryEntry {
     pub day: u32,
     pub revenue: f32,

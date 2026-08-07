@@ -1,0 +1,139 @@
+[
+  {
+    "name": "Pipe",
+    "bit": 0,
+    "stratum": "Underground",
+    "conducts": [
+      "Water"
+    ],
+    "conflicts": []
+  },
+  {
+    "name": "Subway",
+    "bit": 1,
+    "stratum": "Underground",
+    "conducts": [],
+    "conflicts": []
+  },
+  {
+    "name": "Fibre",
+    "bit": 2,
+    "stratum": "Underground",
+    "conducts": [],
+    "conflicts": []
+  },
+  {
+    "name": "Road",
+    "bit": 3,
+    "stratum": "Surface",
+    "conducts": [
+      "Power",
+      "Water",
+      "Traffic"
+    ],
+    "conflicts": [
+      "ZoneResidential",
+      "ZoneCommercial",
+      "ZoneIndustrial",
+      "Structure"
+    ]
+  },
+  {
+    "name": "Rail",
+    "bit": 4,
+    "stratum": "Surface",
+    "conducts": [
+      "Power",
+      "Water"
+    ],
+    "conflicts": [
+      "ZoneResidential",
+      "ZoneCommercial",
+      "ZoneIndustrial",
+      "Structure"
+    ]
+  },
+  {
+    "name": "ZoneResidential",
+    "bit": 5,
+    "stratum": "Surface",
+    "conducts": [
+      "Power",
+      "Water"
+    ],
+    "conflicts": [
+      "Road",
+      "Rail",
+      "ZoneCommercial",
+      "ZoneIndustrial",
+      "Structure"
+    ]
+  },
+  {
+    "name": "ZoneCommercial",
+    "bit": 6,
+    "stratum": "Surface",
+    "conducts": [
+      "Power",
+      "Water"
+    ],
+    "conflicts": [
+      "Road",
+      "Rail",
+      "ZoneResidential",
+      "ZoneIndustrial",
+      "Structure"
+    ]
+  },
+  {
+    "name": "ZoneIndustrial",
+    "bit": 7,
+    "stratum": "Surface",
+    "conducts": [
+      "Power",
+      "Water"
+    ],
+    "conflicts": [
+      "Road",
+      "Rail",
+      "ZoneResidential",
+      "ZoneCommercial",
+      "Structure"
+    ]
+  },
+  {
+    "name": "Structure",
+    "bit": 8,
+    "stratum": "Surface",
+    "conducts": [],
+    "conflicts": [
+      "Road",
+      "Rail",
+      "ZoneResidential",
+      "ZoneCommercial",
+      "ZoneIndustrial",
+      "PowerLine"
+    ]
+  },
+  {
+    "name": "PowerLine",
+    "bit": 9,
+    "stratum": "Overhead",
+    "conducts": [
+      "Power"
+    ],
+    "conflicts": [
+      "Structure",
+      "Trees"
+    ]
+  },
+  {
+    "name": "Trees",
+    "bit": 10,
+    "stratum": "Overhead",
+    "conducts": [],
+    "conflicts": [
+      "PowerLine"
+    ]
+  }
+]

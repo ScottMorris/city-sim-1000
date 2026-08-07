@@ -1,4 +1,4 @@
-// commands.ts — SimCommand, fiscal/wilderness policy types, and the TS mirror of Rust's BudgetPolicy/WildernessPolicy/Policies.
+// commands.ts — SimCommand, policy clamp/default helpers, and re-exports of the generated BudgetPolicy/WildernessPolicy/Policies/CommandResult.
 //
 // (c) Copyright 2026 Liminal HQ, Scott Morris
 // SPDX-License-Identifier: MIT
@@ -11,31 +11,32 @@
  * Not a mirror of any Rust type: `crates/city-sim-protocol`'s own
  * `SimCommand` drifted from what both bridges actually send (its `ApplyTool`
  * never gained `strokeId`) and was deleted as dead code. `BudgetPolicy`,
- * `WildernessPolicy`, and `Policies` below still mirror the Rust types of
- * the same names in `crates/city-sim-protocol/src/commands.rs`.
+ * `WildernessPolicy`, `Policies`, and `CommandResult` below are re-exports of
+ * the `ts-rs`-generated mirrors of the same names in
+ * `crates/city-sim-protocol/src/commands.rs` (`./generated/`) — see
+ * `crates/city-sim-protocol/tests/export_bindings.rs`. Hand-mirrored copies
+ * of these shapes drifted three times in this repo's history before codegen
+ * replaced them; do not reintroduce a hand-written copy.
  */
 
 import { Tool } from '../toolTypes';
 import type { ViewStratum } from '../gameState';
 
-/**
- * SimCity-style fiscal policy — TS mirror of `BudgetPolicy` in
- * `crates/city-sim-protocol/src/commands.rs`.
- *
- * Tax rates are whole percentages (0–20, neutral default 9 — revenue scales
- * by `rate / 9`). Funding levels are whole percentages (0–100, default 100);
- * underfunding trims upkeep but causes brownouts, crowded schools, and
- * commuter frustration.
- */
-export interface BudgetPolicy {
-  taxResidential: number;
-  taxCommercial: number;
-  taxIndustrial: number;
-  fundTransport: number;
-  fundPower: number;
-  fundCivic: number;
-}
+export type { BudgetPolicy } from './generated/BudgetPolicy';
+export type { WildernessPolicy } from './generated/WildernessPolicy';
+export type { Policies } from './generated/Policies';
+export type { CommandResult } from './generated/CommandResult';
 
+import type { BudgetPolicy } from './generated/BudgetPolicy';
+import type { WildernessPolicy } from './generated/WildernessPolicy';
+import type { Policies } from './generated/Policies';
+
+/**
+ * Neutral tax rate and legal ranges for `BudgetPolicy` fields — not
+ * `#[ts(export)]`-able (`ts-rs` mirrors types, not `const` values), so these
+ * stay hand-mirrored against `crates/city-sim-protocol/src/commands.rs`'s
+ * `NEUTRAL_TAX_RATE`/`MAX_TAX_RATE`/`MAX_FUNDING`.
+ */
 export const NEUTRAL_TAX_RATE = 9;
 export const MAX_TAX_RATE = 20;
 export const MAX_FUNDING = 100;
@@ -74,31 +75,11 @@ export function fundingMultiplier(level: number): number {
   return level / MAX_FUNDING;
 }
 
-/**
- * Wilderness programmes — TS mirror of `WildernessPolicy` in
- * `crates/city-sim-protocol/src/commands.rs`. Toggled from the Bylaws screen.
- */
-export interface WildernessPolicy {
-  natureReserve: boolean;
-  greenIndustry: boolean;
-}
-
 /** Wilderness score required before Nature Reserve can be enabled. */
 export const NATURE_RESERVE_UNLOCK_SCORE = 60;
 
 export function createDefaultWildernessPolicy(): WildernessPolicy {
   return { natureReserve: false, greenIndustry: false };
-}
-
-/**
- * Every player-adjustable policy family, grouped under one roof — TS mirror
- * of `Policies` in `crates/city-sim-protocol/src/commands.rs` (camelCase
- * serialisation). New policy families are added here as fields rather than as
- * new top-level state or new wire commands.
- */
-export interface Policies {
-  budget: BudgetPolicy;
-  wilderness: WildernessPolicy;
 }
 
 export function createDefaultPolicies(): Policies {
@@ -120,11 +101,6 @@ export type SimCommand =
   | { type: 'ApplyTool'; tool: Tool; x: number; y: number; strokeId: number; stratum: ViewStratum }
   | { type: 'SetSpeed'; multiplier: number }
   | { type: 'SetPolicies'; policies: Policies };
-
-export interface CommandResult {
-  success: boolean;
-  message?: string;
-}
 
 /**
  * `strokeId` groups the many `ApplyTool` commands of one drag-paint gesture
