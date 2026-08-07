@@ -252,7 +252,13 @@ export function initBylawsModal(options: BylawsModalOptions) {
         state.budget.breakdown.details.buildings.civic + state.budget.breakdown.details.buildings.zones;
       lightingOptions.innerHTML = '';
       Object.values(LIGHTING_POLICIES).forEach((policy) => {
-        const projection = previewLightingPolicy(currentLighting, policy.id, appliedPowerUse, appliedMaintenance);
+        // Rescale from `appliedLighting` — the policy the wire figures were
+        // actually computed under — not the optimistic `currentLighting`:
+        // after a switch while paused, no tick has re-priced the city yet,
+        // and dividing old figures by the new multiplier would inflate the
+        // recovered baseline (~22% for Efficient). `currentLighting` still
+        // drives which option renders as active.
+        const projection = previewLightingPolicy(state.appliedLighting, policy.id, appliedPowerUse, appliedMaintenance);
         const monthlyDelta = projection.maintenanceDelta * DAYS_PER_MONTH;
         const moodDelta = policy.happinessTarget - currentPolicy.happinessTarget;
 
