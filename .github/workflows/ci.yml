@@ -362,6 +362,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Restore Rust cache
+        uses: swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      # `wasmSim.worker.ts` imports the wasm-pack output directly (no
+      # `@ts-ignore`), so `tsc --noEmit` needs `app/src/wasm/` on disk the
+      # same way a fresh clone/worktree does — see the comment above that
+      # import.
+      - name: Build WASM target
+        run: bun run build:wasm
+
       - name: Run TypeScript typecheck
         id: ts_typecheck
         run: bun run lint

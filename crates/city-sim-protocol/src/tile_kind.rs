@@ -6,7 +6,10 @@
 /// Canonical TileKind ↔ u8 mapping — single source of truth for the wire protocol.
 ///
 /// The TS side (`src/game/protocol/tileKind.ts`) mirrors this table. If you add a
-/// variant here you MUST update the TS mirror and bump the parity test fixture.
+/// variant here you MUST update the TS mirror and the parity fixture
+/// (`app/src/game/protocol/tileKindParity.json`) — `parity_fixture_matches_tile_kinds`
+/// below asserts the fixture against `TileKind::ALL` and fails loudly, printing the
+/// JSON to paste in, if the two drift.
 ///
 /// Values are intentionally explicit and must never be reordered — old saves
 /// contain u8s and old replays contain these values in command logs.
@@ -152,15 +155,65 @@ mod tests {
         assert_eq!(TileKind::COUNT, TileKind::ALL.len());
     }
 
-    /// Emit the parity JSON so CI can diff it against the committed fixture.
-    /// Run with: cargo test -p sim_protocol dump_parity_json -- --nocapture
+    /// Pins the committed TS fixture (`app/src/game/protocol/tileKindParity.json`)
+    /// against `TileKind::ALL` — a real assertion, not a manual copy-paste
+    /// step. On mismatch this prints the JSON the fixture should contain so
+    /// regenerating it is a paste, not a rederivation.
     #[test]
-    fn dump_parity_json() {
-        let entries: Vec<_> = TileKind::ALL
+    fn parity_fixture_matches_tile_kinds() {
+        #[derive(serde::Deserialize)]
+        struct Entry {
+            u8: u8,
+            ts: String,
+        }
+
+        const FIXTURE: &str = include_str!("../../../app/src/game/protocol/tileKindParity.json");
+
+        let expected: Vec<_> = TileKind::ALL
             .iter()
             .map(|&k| serde_json::json!({ "u8": k.to_u8(), "ts": k.ts_string() }))
             .collect();
-        let json = serde_json::to_string_pretty(&entries).unwrap();
-        println!("{json}");
+        let expected_json = serde_json::to_string_pretty(&expected).unwrap();
+
+        let fixture: Vec<Entry> = serde_json::from_str(FIXTURE).unwrap_or_else(|e| {
+            panic!(
+                "app/src/game/protocol/tileKindParity.json failed to parse: {e}\n\n\
+                 Regenerate it with this content:\n{expected_json}"
+            )
+        });
+
+        let regen_msg = || {
+            format!(
+                "app/src/game/protocol/tileKindParity.json is out of sync with \
+                 TileKind::ALL. Regenerate it with this content:\n{expected_json}"
+            )
+        };
+
+        assert_eq!(fixture.len(), TileKind::ALL.len(), "{}", regen_msg());
+
+        for (i, (&kind, entry)) in TileKind::ALL.iter().zip(fixture.iter()).enumerate() {
+            assert_eq!(
+                entry.u8,
+                kind.to_u8(),
+                "fixture entry {i}: u8 mismatch.\n{}",
+                regen_msg()
+            );
+            assert_eq!(
+                entry.ts,
+                kind.ts_string(),
+                "fixture entry {i}: ts mismatch.\n{}",
+                regen_msg()
+            );
+            // Both directions: the fixture's u8 must decode back to this
+            // exact variant, and its ts string must be reachable from the
+            // fixture's own u8 too.
+            assert_eq!(
+                TileKind::from_u8(entry.u8),
+                Some(kind),
+                "fixture entry {i}: u8 {} does not round-trip to {kind:?}.\n{}",
+                entry.u8,
+                regen_msg()
+            );
+        }
     }
 }
