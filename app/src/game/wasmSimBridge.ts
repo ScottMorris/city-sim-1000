@@ -341,7 +341,11 @@ export class WasmSimBridge implements SimBridge {
   /** Start a fresh city from a newly generated mirror state. */
   async newCity(fresh: GameState): Promise<void> {
     await this.readyPromise;
-    this.state = fresh;
+    // Copy fresh's fields onto the existing state object rather than
+    // rebinding `this.state` — main.ts holds the same reference for
+    // rendering/HUD (see constructor), and rebinding here would orphan
+    // that reference on the pre-reset city forever.
+    Object.assign(this.state, fresh);
     return this.requestLoad(requestId => {
       this.worker.postMessage({
         type: 'new_city',
